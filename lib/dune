@@ -1,0 +1,4 @@
+(library
+ (name hegel)
+ (public_name hegel)
+ (libraries unix))
