@@ -9,3 +9,12 @@
  (depends
   (ocaml (>= 5.0))
   (dune (>= 3.0))))
+
+(package
+ (name ppx_hegel)
+ (synopsis "PPX deriver for Hegel generators")
+ (depends
+  (ocaml (>= 5.0))
+  (dune (>= 3.0))
+  (ppxlib (>= 0.28.0))
+  (hegel (= :version))))
