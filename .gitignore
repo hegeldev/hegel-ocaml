@@ -5,3 +5,6 @@ _build/
 *.native
 .hegel/
 .hypothesis/
+.claude-reliability
+.claude/reliability-config.yml
+.clause/*.local.*
