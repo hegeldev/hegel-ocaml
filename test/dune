@@ -1,3 +1,3 @@
 (executables
- (names test_hegel test_failing test_generators)
+ (names test_hegel test_failing test_generators test_docs)
  (libraries hegel))
