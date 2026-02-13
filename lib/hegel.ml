@@ -9,3 +9,4 @@ let assume condition =
   if not condition then raise Assume_rejected
 
 let note = Gen.note
+let target = Gen.target

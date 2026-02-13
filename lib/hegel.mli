@@ -20,5 +20,10 @@ val note : string -> unit
 (** [note msg] records a message that will be displayed with any failing
     test case. Only prints on the final replay. *)
 
+val target : ?label:string -> float -> unit
+(** [target value ~label] guides the test engine toward higher values
+    of a numeric metric. The engine will try to maximize the target value,
+    which can help find edge cases. *)
+
 exception Assume_rejected
 (** Raised internally when [assume false] is called. *)
