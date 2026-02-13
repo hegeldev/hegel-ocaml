@@ -1,5 +1,3 @@
-let reject_marker = "HEGEL_REJECT"
-
 let find_hegel_path () =
   let path = Sys.getenv_opt "PATH" |> Option.value ~default:"" in
   let dirs = String.split_on_char ':' path in
@@ -179,7 +177,6 @@ and run_test_case tc_channel test_fn is_final got_interesting =
       `Valid
     with
     | Gen.Assume_rejected -> `Invalid
-    | Failure msg when msg = reject_marker -> `Invalid
     | exn -> `Interesting exn
   in
   let status, origin =
