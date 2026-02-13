@@ -52,11 +52,11 @@ let send_request command payload =
   in
   let request = Cbor.Map entries in
   if is_debug () then
-    Printf.eprintf "REQUEST: %s\n%!" (Cbor.encode_to_string request);
+    Printf.eprintf "REQUEST: %s\n%!" (Cbor.to_diagnostic request);
   let ch = State.get_channel () in
   let result = Protocol.Channel.request_cbor ch request in
   if is_debug () then
-    Printf.eprintf "RESPONSE: %s\n%!" (Cbor.encode_to_string result);
+    Printf.eprintf "RESPONSE: %s\n%!" (Cbor.to_diagnostic result);
   result
 
 let string_contains haystack needle =
@@ -74,7 +74,7 @@ let string_contains haystack needle =
 let send_request_no_fail command payload =
   try send_request command payload
   with Failure msg ->
-    if string_contains msg "overflow" || string_contains msg "StopTest" then begin
+    if string_contains msg "StopTest" || string_contains msg "overflow" || string_contains msg "Overrun" then begin
       State.set_test_aborted true;
       raise Assume_rejected
     end
@@ -84,6 +84,7 @@ let send_request_no_fail command payload =
     end
 
 let generate_raw schema =
+  if State.get_test_aborted () then raise Assume_rejected;
   let result = send_request_no_fail "generate" (Cbor.Map [ (Cbor.Text "schema", schema) ]) in
   if State.get_last_run () then begin
     let s =
@@ -94,6 +95,7 @@ let generate_raw schema =
   result
 
 let start_span label =
+  if State.get_test_aborted () then raise Assume_rejected;
   State.increment_span_depth ();
   (try
      let _ =
@@ -106,16 +108,33 @@ let start_span label =
      raise Assume_rejected)
 
 let stop_span discard =
-  State.decrement_span_depth ();
-  let _ =
-    try
-      send_request "stop_span" (Cbor.Map [ (Cbor.Text "discard", Cbor.Bool discard) ])
-    with _ -> Cbor.Null
-  in
-  ()
+  if State.get_test_aborted () then begin
+    State.decrement_span_depth ();
+    ()
+  end
+  else begin
+    State.decrement_span_depth ();
+    let _ =
+      try
+        send_request "stop_span" (Cbor.Map [ (Cbor.Text "discard", Cbor.Bool discard) ])
+      with _ -> Cbor.Null
+    in
+    ()
+  end
 
 let note message =
   if State.get_last_run () then Printf.eprintf "%s\n%!" message
+
+let target ?(label = "") value =
+  let _ =
+    send_request_no_fail "target"
+      (Cbor.Map
+         [
+           (Cbor.Text "value", Cbor.Float value);
+           (Cbor.Text "label", Cbor.Text label);
+         ])
+  in
+  ()
 
 (* ================================================================ *)
 (* Span grouping helpers                                            *)
@@ -123,15 +142,17 @@ let note message =
 
 let group label f =
   start_span label;
-  let result = f () in
-  stop_span false;
-  result
+  Fun.protect ~finally:(fun () -> stop_span false) f
 
 let _discardable_group label f =
   start_span label;
-  let result = f () in
-  stop_span (result = None);
-  result
+  match f () with
+  | result ->
+    stop_span (Option.is_none result);
+    result
+  | exception exn ->
+    stop_span true;
+    raise exn
 
 (* ================================================================ *)
 (* Server-managed collections                                       *)
@@ -244,26 +265,26 @@ let cbor_int_value = function
   | Cbor.Unsigned n -> n
   | Cbor.Negative n -> n
   | Cbor.Float f when Float.is_integer f -> Float.to_int f
-  | v -> failwith (Printf.sprintf "Expected integer, got %s" (Cbor.encode_to_string v))
+  | v -> failwith (Printf.sprintf "Expected integer, got %s" (Cbor.to_diagnostic v))
 
 let cbor_float_value = function
   | Cbor.Float f -> f
   | Cbor.Unsigned n -> Float.of_int n
   | Cbor.Negative n -> Float.of_int n
-  | v -> failwith (Printf.sprintf "Expected float, got %s" (Cbor.encode_to_string v))
+  | v -> failwith (Printf.sprintf "Expected float, got %s" (Cbor.to_diagnostic v))
 
 let cbor_text_value = function
   | Cbor.Text s -> s
-  | v -> failwith (Printf.sprintf "Expected text, got %s" (Cbor.encode_to_string v))
+  | v -> failwith (Printf.sprintf "Expected text, got %s" (Cbor.to_diagnostic v))
 
 let cbor_bool_value = function
   | Cbor.Bool b -> b
-  | v -> failwith (Printf.sprintf "Expected bool, got %s" (Cbor.encode_to_string v))
+  | v -> failwith (Printf.sprintf "Expected bool, got %s" (Cbor.to_diagnostic v))
 
 let cbor_array_value = function
   | Cbor.Array a -> a
   | Cbor.Tag (258, Cbor.Array a) -> a (* CBOR set tag *)
-  | v -> failwith (Printf.sprintf "Expected array, got %s" (Cbor.encode_to_string v))
+  | v -> failwith (Printf.sprintf "Expected array, got %s" (Cbor.to_diagnostic v))
 
 (* ================================================================ *)
 (* Primitives                                                       *)
@@ -290,17 +311,14 @@ let bool () =
         Some { schema; parse = cbor_bool_value });
   }
 
-let just cbor_value value =
-  let schema = Cbor.Map [ (Cbor.Text "const", cbor_value) ] in
+let just value =
+  let schema = Cbor.Map [ (Cbor.Text "const", Cbor.Null) ] in
   {
     generate = (fun () -> let _ = generate_raw schema in value);
     as_basic =
       (fun () ->
         Some { schema; parse = (fun _ -> value) });
   }
-
-let just_any value =
-  { generate = (fun () -> value); as_basic = (fun () -> None) }
 
 (* ================================================================ *)
 (* Numeric                                                          *)
@@ -730,90 +748,9 @@ let one_of gens =
     }
 
 let optional gen =
-  {
-    generate =
-      (fun () ->
-        match gen.as_basic () with
-        | Some basic ->
-          let null_schema =
-            Cbor.Map
-              [
-                (Cbor.Text "type", Cbor.Text "tuple");
-                ( Cbor.Text "elements",
-                  Cbor.Array
-                    [
-                      Cbor.Map [ (Cbor.Text "const", Cbor.Unsigned 0) ];
-                      Cbor.Map [ (Cbor.Text "type", Cbor.Text "null") ];
-                    ] );
-              ]
-          in
-          let value_schema =
-            Cbor.Map
-              [
-                (Cbor.Text "type", Cbor.Text "tuple");
-                ( Cbor.Text "elements",
-                  Cbor.Array
-                    [
-                      Cbor.Map [ (Cbor.Text "const", Cbor.Unsigned 1) ];
-                      basic.schema;
-                    ] );
-              ]
-          in
-          let schema =
-            Cbor.Map
-              [ (Cbor.Text "one_of", Cbor.Array [ null_schema; value_schema ]) ]
-          in
-          let raw = generate_raw schema in
-          let arr = cbor_array_value raw in
-          let tag = cbor_int_value (List.nth arr 0) in
-          if tag = 0 then None else Some (basic.parse (List.nth arr 1))
-        | None ->
-          group Labels.optional (fun () ->
-              let is_some = (bool ()).generate () in
-              if is_some then Some (gen.generate ()) else None));
-    as_basic =
-      (fun () ->
-        match gen.as_basic () with
-        | Some basic ->
-          let null_schema =
-            Cbor.Map
-              [
-                (Cbor.Text "type", Cbor.Text "tuple");
-                ( Cbor.Text "elements",
-                  Cbor.Array
-                    [
-                      Cbor.Map [ (Cbor.Text "const", Cbor.Unsigned 0) ];
-                      Cbor.Map [ (Cbor.Text "type", Cbor.Text "null") ];
-                    ] );
-              ]
-          in
-          let value_schema =
-            Cbor.Map
-              [
-                (Cbor.Text "type", Cbor.Text "tuple");
-                ( Cbor.Text "elements",
-                  Cbor.Array
-                    [
-                      Cbor.Map [ (Cbor.Text "const", Cbor.Unsigned 1) ];
-                      basic.schema;
-                    ] );
-              ]
-          in
-          let schema =
-            Cbor.Map
-              [ (Cbor.Text "one_of", Cbor.Array [ null_schema; value_schema ]) ]
-          in
-          Some
-            {
-              schema;
-              parse =
-                (fun raw ->
-                  let arr = cbor_array_value raw in
-                  let tag = cbor_int_value (List.nth arr 0) in
-                  if tag = 0 then None else Some (basic.parse (List.nth arr 1)));
-            }
-        | None -> None);
-  }
+  let just_none = just None in
+  let some_gen = map Option.some gen in
+  one_of [ just_none; some_gen ]
 
 let sampled_from elements =
   match elements with

@@ -16,8 +16,7 @@ type 'a t = {
 
 val unit : unit -> unit t
 val bool : unit -> bool t
-val just : Cbor.t -> 'a -> 'a t
-val just_any : 'a -> 'a t
+val just : 'a -> 'a t
 
 (** {2 Numeric} *)
 
@@ -64,12 +63,18 @@ val date : unit -> string t
 val time : unit -> string t
 val datetime : unit -> string t
 
+(** {2 Helpers for generated code} *)
+
+val group : int -> (unit -> 'a) -> 'a
+val cbor_array_value : Cbor.t -> Cbor.t list
+
 (** {2 Low-level} *)
 
 val generate_raw : Cbor.t -> Cbor.t
 val start_span : int -> unit
 val stop_span : bool -> unit
 val note : string -> unit
+val target : ?label:string -> float -> unit
 
 (** {2 Span labels} *)
 

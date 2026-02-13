@@ -321,27 +321,13 @@ let color = (Gen.sampled_from ["red"; "green"; "blue"]).generate ()
 #### `just`
 
 ```ocaml
-val just : Cbor.t -> 'a -> 'a t
+val just : 'a -> 'a t
 ```
 
-Always returns the same value. Requires providing the CBOR representation for
-the schema:
+Always returns the same value:
 
 ```ocaml
-let always_42 = Gen.just (Cbor.Unsigned 42) 42
-```
-
-#### `just_any`
-
-```ocaml
-val just_any : 'a -> 'a t
-```
-
-Always returns the same value, without a schema (cannot participate in
-server-side optimization):
-
-```ocaml
-let always_hello = Gen.just_any "hello"
+let always_42 = Gen.just 42
 ```
 
 ### Format Strings

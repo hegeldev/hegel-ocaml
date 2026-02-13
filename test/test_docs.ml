@@ -96,13 +96,8 @@ let () =
 
   (* just always returns same value *)
   Hegel.run (fun () ->
-      let v = (Hegel.Gen.just (Hegel.Cbor.Unsigned 42) 42).generate () in
+      let v = (Hegel.Gen.just 42).generate () in
       assert (v = 42));
-
-  (* just_any always returns same value *)
-  Hegel.run (fun () ->
-      let v = (Hegel.Gen.just_any "hello").generate () in
-      assert (v = "hello"));
 
   (* url generates valid-looking URLs *)
   Hegel.run (fun () ->
