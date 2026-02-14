@@ -197,7 +197,8 @@ let rec decode s off =
       let f = Int32.float_of_bits bits in
       (Float f, off + 5)
     else failwith (Printf.sprintf "CBOR: unsupported simple value %d" additional)
-  | _ -> failwith (Printf.sprintf "CBOR: unsupported major type %d" major)
+  | _ -> (* major = (byte lsr 5) land 7 is always 0-7, all handled above *)
+    assert false
 
 let decode_string s =
   let v, _ = decode s 0 in

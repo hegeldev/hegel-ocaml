@@ -48,7 +48,7 @@ let is_debug () = Sys.getenv_opt "HEGEL_DEBUG" <> None
 let send_request command payload =
   let entries =
     (Cbor.Text "command", Cbor.Text command)
-    :: (match payload with Cbor.Map pairs -> pairs | _ -> [])
+    :: (match payload with Cbor.Map pairs -> pairs | _ -> assert false)
   in
   let request = Cbor.Map entries in
   if is_debug () then
@@ -144,16 +144,6 @@ let group label f =
   start_span label;
   Fun.protect ~finally:(fun () -> stop_span false) f
 
-let _discardable_group label f =
-  start_span label;
-  match f () with
-  | result ->
-    stop_span (Option.is_none result);
-    result
-  | exception exn ->
-    stop_span true;
-    raise exn
-
 (* ================================================================ *)
 (* Server-managed collections                                       *)
 (* ================================================================ *)
@@ -192,8 +182,9 @@ let ensure_initialized coll =
     name
 
 let collection_more coll =
-  if coll.finished then false
-  else begin
+  (* Only called from while loop condition, which exits on false *)
+  assert (not coll.finished);
+  begin
     let name = ensure_initialized coll in
     let response =
       send_request_no_fail "collection_more"
@@ -206,19 +197,6 @@ let collection_more coll =
     in
     if not result then coll.finished <- true;
     result
-  end
-
-let _collection_reject coll why =
-  if not coll.finished then begin
-    let name = ensure_initialized coll in
-    let pairs =
-      [ (Cbor.Text "collection", Cbor.Text name) ]
-      @ (match why with
-        | Some reason -> [ (Cbor.Text "why", Cbor.Text reason) ]
-        | None -> [])
-    in
-    let _ = try send_request "collection_reject" (Cbor.Map pairs) with _ -> Cbor.Null in
-    ()
   end
 
 (* ================================================================ *)
@@ -356,7 +334,7 @@ let int32 ?(min = Int32.min_int) ?(max = Int32.max_int) () =
         Some { schema; parse = (fun v -> Int32.of_int (cbor_int_value v)) });
   }
 
-let int64 ?(min = Int64.min_int) ?(max = Int64.max_int) () =
+let int64 ?(min = Int64.of_int min_int) ?(max = Int64.of_int max_int) () =
   let min_i = Int64.to_int min in
   let max_i = Int64.to_int max in
   let schema =

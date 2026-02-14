@@ -21,7 +21,8 @@ let write_all fd s =
   let written = ref 0 in
   while !written < len do
     let n = Unix.write_substring fd s !written (len - !written) in
-    if n = 0 then failwith "write_all: connection closed";
+    (* Blocking sockets never return 0 from write — they write or raise *)
+    assert (n > 0);
     written := !written + n
   done
 
@@ -180,44 +181,27 @@ module Channel = struct
     Connection.send_packet conn
       { channel = chan_id; message_id = msg_id; is_reply = true; payload }
 
-  let receive_response (conn, chan_id) msg_id =
-    let rec loop () =
-      let pkt = Connection.receive_packet_for_channel conn chan_id in
-      if pkt.is_reply && pkt.message_id = msg_id then pkt.payload
-      else begin
-        (* Put back non-matching packets *)
-        let q =
-          match Hashtbl.find_opt conn.pending pkt.channel with
-          | Some q -> q
-          | None ->
-            let q = Queue.create () in
-            Hashtbl.replace conn.pending pkt.channel q;
-            q
-        in
-        Queue.push pkt q;
-        loop ()
-      end
-    in
-    loop ()
+  let receive_response (conn, _chan_id) msg_id =
+    let pkt = Connection.receive_packet_for_channel conn _chan_id in
+    if pkt.is_reply && pkt.message_id = msg_id then pkt.payload
+    else
+      (* receive_packet_for_channel always returns same-channel packets,
+         so re-queuing and looping would be infinite. Fail fast instead. *)
+      failwith
+        (Printf.sprintf
+           "receive_response: unexpected packet (is_reply=%b, msg_id=%d, expected=%d)"
+           pkt.is_reply pkt.message_id msg_id)
 
-  let receive_request (conn, chan_id) =
-    let rec loop () =
-      let pkt = Connection.receive_packet_for_channel conn chan_id in
-      if not pkt.is_reply then (pkt.message_id, pkt.payload)
-      else begin
-        let q =
-          match Hashtbl.find_opt conn.pending pkt.channel with
-          | Some q -> q
-          | None ->
-            let q = Queue.create () in
-            Hashtbl.replace conn.pending pkt.channel q;
-            q
-        in
-        Queue.push pkt q;
-        loop ()
-      end
-    in
-    loop ()
+  let receive_request (conn, _chan_id) =
+    let pkt = Connection.receive_packet_for_channel conn _chan_id in
+    if not pkt.is_reply then (pkt.message_id, pkt.payload)
+    else
+      (* receive_packet_for_channel always returns same-channel packets,
+         so re-queuing a reply and looping would be infinite. Fail fast. *)
+      failwith
+        (Printf.sprintf
+           "receive_request: unexpected reply (msg_id=%d) on channel %d"
+           pkt.message_id _chan_id)
 
   let request_cbor ((_, _) as ch) message =
     let payload = Cbor.encode_to_string message in

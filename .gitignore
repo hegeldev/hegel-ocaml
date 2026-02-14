@@ -8,3 +8,6 @@ _build/
 .claude-reliability
 .claude/reliability-config.yml
 .clause/*.local.*
+_coverage/
+bisect*.coverage
+.venv/

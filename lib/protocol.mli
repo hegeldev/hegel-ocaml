@@ -5,6 +5,9 @@ type packet = {
   payload : string;
 }
 
+val write_packet : Unix.file_descr -> packet -> unit
+val read_packet : Unix.file_descr -> packet
+
 module Channel : sig
   type t
 

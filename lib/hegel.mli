@@ -6,11 +6,20 @@
 
 module Gen = Gen
 module Cbor = Cbor
+module Protocol = Protocol
+module Crc32 = Crc32
+module State = State
 
 val run : ?test_cases:int -> ?hegel_path:string -> (unit -> unit) -> unit
 (** Run a property-based test. The test function is called repeatedly with
     generated data. If any invocation raises an exception, Hegel will shrink
     the inputs and report the minimal failing case. *)
+
+val find_hegel_path : unit -> string option
+(** Search PATH for the hegel binary. Returns [None] if not found. *)
+
+val extract_channel_id : Cbor.t -> int
+(** Extract the channel ID from a CBOR event map. Raises [Failure] if missing or invalid. *)
 
 val assume : bool -> unit
 (** [assume cond] rejects the current test input if [cond] is false.

@@ -75,6 +75,12 @@ val start_span : int -> unit
 val stop_span : bool -> unit
 val note : string -> unit
 val target : ?label:string -> float -> unit
+val base64_decode : string -> string
+val string_contains : string -> string -> bool
+val cbor_int_value : Cbor.t -> int
+val cbor_float_value : Cbor.t -> float
+val cbor_text_value : Cbor.t -> string
+val cbor_bool_value : Cbor.t -> bool
 
 (** {2 Span labels} *)
 

@@ -61,14 +61,14 @@ let rec run ?(test_cases = 100) ?hegel_path test_fn =
        end
        else if !fd = None then Unix.sleepf 0.1
      done
-   with _ -> ());
+   with _ -> () [@coverage off]);
   let sock =
     match !fd with
     | Some s -> s
-    | None ->
+    | None -> (
       cleanup_process ();
       cleanup_temp ();
-      failwith "Timeout waiting for hegel socket"
+      failwith "Timeout waiting for hegel socket") [@coverage off]
   in
   let conn = Protocol.Connection.create sock in
   let cleanup () =
@@ -159,10 +159,11 @@ let rec run ?(test_cases = 100) ?hegel_path test_fn =
        | Some (Cbor.Bool b) -> b
        | _ -> true
      in
-     (try Protocol.Channel.close test_channel with _ -> ());
-     (try Protocol.Channel.close control with _ -> ());
+     let test_failed = (not passed) || !got_interesting in
+     (try Protocol.Channel.close test_channel with _ -> () [@coverage off]);
+     (try Protocol.Channel.close control with _ -> () [@coverage off]);
      cleanup ();
-     if (not passed) || !got_interesting then failwith "Property test failed"
+     if test_failed then failwith "Property test failed"
    with exn ->
      cleanup ();
      raise exn)
@@ -209,8 +210,10 @@ and run_test_case tc_channel test_fn is_final got_interesting =
           ]
       in
       let ch = State.get_channel () in
-      (try ignore (Protocol.Channel.request_cbor ch mark_complete) with _ -> ());
-      (try Protocol.Channel.close ch with _ -> ())
-    | None -> ())
+      (try ignore (Protocol.Channel.request_cbor ch mark_complete)
+       with _ -> () [@coverage off]);
+      (try Protocol.Channel.close ch with _ -> () [@coverage off])
+    | None -> (* set_connection called at top of run_test_case *)
+      assert false)
   end;
   State.clear_connection ()
