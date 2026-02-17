@@ -32,6 +32,7 @@ jobs:
       - uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: '5.2'
+          dune-cache: true
       - run: opam install . --deps-only --with-test
       - uses: actions/setup-python@v5
         with:
