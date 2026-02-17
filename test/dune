@@ -1,3 +1,7 @@
-(executables
- (names test_hegel test_failing test_generators test_docs test_coverage mock_hegel)
+(tests
+ (names test_hegel test_failing test_generators test_docs test_coverage)
+ (libraries hegel))
+
+(executable
+ (name mock_hegel)
  (libraries hegel))
