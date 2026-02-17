@@ -573,9 +573,9 @@ let ordered_pair =
 
 ## Debugging
 
-Set `HEGEL_DEBUG=1` to see the raw CBOR requests and responses between the SDK
+Set `HEGEL_PROTOCOL_DEBUG=1` to see the raw CBOR requests and responses between the SDK
 and the Hegel server:
 
 ```bash
-HEGEL_DEBUG=1 dune exec test/my_tests.exe
+HEGEL_PROTOCOL_DEBUG=1 dune exec test/my_tests.exe
 ```

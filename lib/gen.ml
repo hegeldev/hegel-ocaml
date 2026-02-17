@@ -36,7 +36,7 @@ type 'a t = { generate : unit -> 'a; as_basic : unit -> 'a basic option }
 (* Protocol helpers                                                 *)
 (* ================================================================ *)
 
-let is_debug () = Sys.getenv_opt "HEGEL_DEBUG" <> None
+let is_debug () = Sys.getenv_opt "HEGEL_PROTOCOL_DEBUG" <> None
 
 let send_request command payload =
   let entries =

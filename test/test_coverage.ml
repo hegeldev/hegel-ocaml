@@ -598,9 +598,9 @@ let () =
       in
       List.iter (fun s -> ignore (int_of_string s)) xs);
 
-  (* HEGEL_DEBUG: exercises debug output in send_request.
+  (* HEGEL_PROTOCOL_DEBUG: exercises debug output in send_request.
      This must be the LAST test since we can't unsetenv in OCaml. *)
-  Unix.putenv "HEGEL_DEBUG" "1";
+  Unix.putenv "HEGEL_PROTOCOL_DEBUG" "1";
   Hegel.run ~test_cases:1 (fun () ->
       let n = (Hegel.Gen.int ~min:0 ~max:10 ()).generate () in
       assert (n >= 0));
