@@ -1,7 +1,3 @@
-setup:
-    uv venv .venv
-    uv pip install --python .venv/bin/python 'hegel @ git+ssh://git@github.com/antithesishq/hegel.git'
-
 format:
     dune fmt
 

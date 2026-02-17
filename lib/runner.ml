@@ -34,14 +34,7 @@ let rec run ?(test_cases = 100) ?hegel_path test_fn =
   in
   let pid =
     Unix.create_process hegel_path
-      [|
-        hegel_path;
-        socket_path;
-        "--verbosity";
-        "normal";
-        "--test-cases";
-        string_of_int test_cases;
-      |]
+      [| hegel_path; socket_path; "--verbosity"; "normal" |]
       Unix.stdin Unix.stdout Unix.stderr
   in
   let cleanup_process () =

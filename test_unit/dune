@@ -1,3 +1,4 @@
 (test
  (name test_unit)
- (libraries hegel))
+ (libraries hegel)
+ (deps (:_ ../test/mock_hegel.exe)))
