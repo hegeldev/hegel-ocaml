@@ -1439,6 +1439,7 @@ let mock_hegel_path () =
     [
       "_build/default/test/mock_hegel.exe";
       Filename.concat (Sys.getcwd ()) "_build/default/test/mock_hegel.exe";
+      "../test/mock_hegel.exe";
     ]
   in
   match List.find_opt Sys.file_exists candidates with
