@@ -3,12 +3,10 @@
    argv: mock_hegel socket_path [--verbosity normal --test-cases N]
    Behavior controlled by MOCK_HEGEL_MODE environment variable. *)
 
-let mode () =
-  try Sys.getenv "MOCK_HEGEL_MODE" with Not_found -> "normal"
+let mode () = try Sys.getenv "MOCK_HEGEL_MODE" with Not_found -> "normal"
 
 let cbor_result v =
-  Hegel.Cbor.encode_to_string
-    (Hegel.Cbor.Map [ (Hegel.Cbor.Text "result", v) ])
+  Hegel.Cbor.encode_to_string (Hegel.Cbor.Map [ (Hegel.Cbor.Text "result", v) ])
 
 let send_request fd channel payload =
   let msg_id = 1 in
@@ -54,7 +52,10 @@ let send_test_case fd test_channel_id =
 let send_test_done fd test_channel_id results =
   let fields =
     [ (Hegel.Cbor.Text "event", Hegel.Cbor.Text "test_done") ]
-    @ (match results with Some r -> [ (Hegel.Cbor.Text "results", r) ] | None -> [])
+    @
+    match results with
+    | Some r -> [ (Hegel.Cbor.Text "results", r) ]
+    | None -> []
   in
   let event = Hegel.Cbor.encode_to_string (Hegel.Cbor.Map fields) in
   let _msg_id = send_request fd test_channel_id event in
@@ -67,11 +68,10 @@ let () =
   let m = mode () in
   (* slow_start: create a regular file first so the runner's connect attempt
      fails with Unix.Unix_error, exercising the retry loop *)
-  if m = "slow_start" then begin
+  if m = "slow_start" then (
     let oc = open_out socket_path in
     close_out oc;
-    Unix.sleepf 0.3
-  end;
+    Unix.sleepf 0.3);
   (try Sys.remove socket_path with Sys_error _ -> ());
   let sock = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   Unix.bind sock (Unix.ADDR_UNIX socket_path);
@@ -79,8 +79,9 @@ let () =
   let client, _ = Unix.accept sock in
   (* Version negotiation *)
   let pkt = Hegel.Protocol.read_packet client in
-  assert (pkt.Hegel.Protocol.payload = Hegel.Protocol.version_negotiation_message);
-  if m = "version_fail" then begin
+  assert (
+    pkt.Hegel.Protocol.payload = Hegel.Protocol.version_negotiation_message);
+  if m = "version_fail" then (
     Hegel.Protocol.write_packet client
       {
         Hegel.Protocol.channel = 0;
@@ -90,8 +91,7 @@ let () =
       };
     Unix.close client;
     Unix.close sock;
-    exit 0
-  end;
+    exit 0);
   Hegel.Protocol.write_packet client
     {
       Hegel.Protocol.channel = 0;
@@ -105,7 +105,9 @@ let () =
   let test_channel_id =
     match Hegel.Cbor.map_get run_test "channel" with
     | Some v -> (
-        match Hegel.Cbor.as_int v with Some n -> n | _ -> failwith "bad channel")
+        match Hegel.Cbor.as_int v with
+        | Some n -> n
+        | _ -> failwith "bad channel")
     | None -> failwith "missing channel"
   in
   (* Ack run_test *)
@@ -118,107 +120,108 @@ let () =
     };
   (match m with
   | "unknown_event" ->
-    (* Send unknown event first *)
-    let unk_event =
-      Hegel.Cbor.encode_to_string
-        (Hegel.Cbor.Map
-           [ (Hegel.Cbor.Text "event", Hegel.Cbor.Text "something_weird") ])
-    in
-    let _msg_id = send_request client test_channel_id unk_event in
-    let _ack = Hegel.Protocol.read_packet client in
-    (* Then send 1 normal test_case *)
-    let tc_id = send_test_case client test_channel_id in
-    handle_test_case client tc_id;
-    (* test_done with normal results *)
-    send_test_done client test_channel_id
-      (Some
-         (Hegel.Cbor.Map
-            [
-              (Hegel.Cbor.Text "passed", Hegel.Cbor.Bool true);
-              (Hegel.Cbor.Text "interesting_test_cases", Hegel.Cbor.Unsigned 0);
-            ]))
+      (* Send unknown event first *)
+      let unk_event =
+        Hegel.Cbor.encode_to_string
+          (Hegel.Cbor.Map
+             [ (Hegel.Cbor.Text "event", Hegel.Cbor.Text "something_weird") ])
+      in
+      let _msg_id = send_request client test_channel_id unk_event in
+      let _ack = Hegel.Protocol.read_packet client in
+      (* Then send 1 normal test_case *)
+      let tc_id = send_test_case client test_channel_id in
+      handle_test_case client tc_id;
+      (* test_done with normal results *)
+      send_test_done client test_channel_id
+        (Some
+           (Hegel.Cbor.Map
+              [
+                (Hegel.Cbor.Text "passed", Hegel.Cbor.Bool true);
+                (Hegel.Cbor.Text "interesting_test_cases", Hegel.Cbor.Unsigned 0);
+              ]))
   | "no_results" ->
-    (* Send 1 test_case, then test_done without results *)
-    let tc_id = send_test_case client test_channel_id in
-    handle_test_case client tc_id;
-    send_test_done client test_channel_id None
+      (* Send 1 test_case, then test_done without results *)
+      let tc_id = send_test_case client test_channel_id in
+      handle_test_case client tc_id;
+      send_test_done client test_channel_id None
   | "failed" ->
-    (* Send 1 test_case, then test_done with passed=false *)
-    let tc_id = send_test_case client test_channel_id in
-    handle_test_case client tc_id;
-    send_test_done client test_channel_id
-      (Some
-         (Hegel.Cbor.Map
-            [ (Hegel.Cbor.Text "passed", Hegel.Cbor.Bool false) ]))
+      (* Send 1 test_case, then test_done with passed=false *)
+      let tc_id = send_test_case client test_channel_id in
+      handle_test_case client tc_id;
+      send_test_done client test_channel_id
+        (Some
+           (Hegel.Cbor.Map [ (Hegel.Cbor.Text "passed", Hegel.Cbor.Bool false) ]))
   | "with_replay" ->
-    (* Send 1 test_case, then test_done with interesting_test_cases=1, then replay *)
-    let tc_id = send_test_case client test_channel_id in
-    handle_test_case client tc_id;
-    send_test_done client test_channel_id
-      (Some
-         (Hegel.Cbor.Map
-            [
-              (Hegel.Cbor.Text "passed", Hegel.Cbor.Bool false);
-              (Hegel.Cbor.Text "interesting_test_cases", Hegel.Cbor.Unsigned 1);
-            ]));
-    (* Send replay test_case *)
-    let tc_id2 = send_test_case client test_channel_id in
-    handle_test_case client tc_id2
+      (* Send 1 test_case, then test_done with interesting_test_cases=1, then replay *)
+      let tc_id = send_test_case client test_channel_id in
+      handle_test_case client tc_id;
+      send_test_done client test_channel_id
+        (Some
+           (Hegel.Cbor.Map
+              [
+                (Hegel.Cbor.Text "passed", Hegel.Cbor.Bool false);
+                (Hegel.Cbor.Text "interesting_test_cases", Hegel.Cbor.Unsigned 1);
+              ]));
+      (* Send replay test_case *)
+      let tc_id2 = send_test_case client test_channel_id in
+      handle_test_case client tc_id2
   | "no_event_key" ->
-    (* Send event without "event" key, then normal test_case, then test_done *)
-    let bad_event =
-      Hegel.Cbor.encode_to_string
-        (Hegel.Cbor.Map [ (Hegel.Cbor.Text "data", Hegel.Cbor.Unsigned 99) ])
-    in
-    let _msg_id = send_request client test_channel_id bad_event in
-    let _ack = Hegel.Protocol.read_packet client in
-    let tc_id = send_test_case client test_channel_id in
-    handle_test_case client tc_id;
-    send_test_done client test_channel_id
-      (Some (Hegel.Cbor.Map [ (Hegel.Cbor.Text "passed", Hegel.Cbor.Bool true) ]))
+      (* Send event without "event" key, then normal test_case, then test_done *)
+      let bad_event =
+        Hegel.Cbor.encode_to_string
+          (Hegel.Cbor.Map [ (Hegel.Cbor.Text "data", Hegel.Cbor.Unsigned 99) ])
+      in
+      let _msg_id = send_request client test_channel_id bad_event in
+      let _ack = Hegel.Protocol.read_packet client in
+      let tc_id = send_test_case client test_channel_id in
+      handle_test_case client tc_id;
+      send_test_done client test_channel_id
+        (Some
+           (Hegel.Cbor.Map [ (Hegel.Cbor.Text "passed", Hegel.Cbor.Bool true) ]))
   | "non_int_interesting" ->
-    (* test_done with interesting_test_cases as non-integer (Text) *)
-    let tc_id = send_test_case client test_channel_id in
-    handle_test_case client tc_id;
-    send_test_done client test_channel_id
-      (Some
-         (Hegel.Cbor.Map
-            [
-              (Hegel.Cbor.Text "passed", Hegel.Cbor.Bool true);
-              (Hegel.Cbor.Text "interesting_test_cases", Hegel.Cbor.Text "not_a_number");
-            ]))
+      (* test_done with interesting_test_cases as non-integer (Text) *)
+      let tc_id = send_test_case client test_channel_id in
+      handle_test_case client tc_id;
+      send_test_done client test_channel_id
+        (Some
+           (Hegel.Cbor.Map
+              [
+                (Hegel.Cbor.Text "passed", Hegel.Cbor.Bool true);
+                ( Hegel.Cbor.Text "interesting_test_cases",
+                  Hegel.Cbor.Text "not_a_number" );
+              ]))
   | "early_close" ->
-    (* Send test_case, handle it, send test_done, then shutdown+close
-       immediately — forces the runner's close calls to hit EPIPE *)
-    let tc_id = send_test_case client test_channel_id in
-    handle_test_case client tc_id;
-    send_test_done client test_channel_id (Some (Hegel.Cbor.Map []));
-    (* Aggressive shutdown to ensure runner gets EPIPE *)
-    (try Unix.shutdown client Unix.SHUTDOWN_ALL with Unix.Unix_error _ -> ());
-    Unix.close client;
-    Unix.close sock;
-    exit 0
+      (* Send test_case, handle it, send test_done, then shutdown+close
+         immediately — forces the runner's close calls to hit EPIPE *)
+      let tc_id = send_test_case client test_channel_id in
+      handle_test_case client tc_id;
+      send_test_done client test_channel_id (Some (Hegel.Cbor.Map []));
+      (* Aggressive shutdown to ensure runner gets EPIPE *)
+      (try Unix.shutdown client Unix.SHUTDOWN_ALL with Unix.Unix_error _ -> ());
+      Unix.close client;
+      Unix.close sock;
+      exit 0
   | "interesting_pass" ->
-    (* test_fn raises but server says passed=true.
-       This exercises got_interesting=true with passed=true,
-       covering the || !got_interesting branch *)
-    let tc_id = send_test_case client test_channel_id in
-    handle_test_case client tc_id;
-    send_test_done client test_channel_id
-      (Some
-         (Hegel.Cbor.Map
-            [
-              (Hegel.Cbor.Text "passed", Hegel.Cbor.Bool true);
-              (Hegel.Cbor.Text "interesting_test_cases", Hegel.Cbor.Unsigned 1);
-            ]));
-    (* Replay test_case *)
-    let tc_id2 = send_test_case client test_channel_id in
-    handle_test_case client tc_id2
+      (* test_fn raises but server says passed=true.
+         This exercises got_interesting=true with passed=true,
+         covering the || !got_interesting branch *)
+      let tc_id = send_test_case client test_channel_id in
+      handle_test_case client tc_id;
+      send_test_done client test_channel_id
+        (Some
+           (Hegel.Cbor.Map
+              [
+                (Hegel.Cbor.Text "passed", Hegel.Cbor.Bool true);
+                (Hegel.Cbor.Text "interesting_test_cases", Hegel.Cbor.Unsigned 1);
+              ]));
+      (* Replay test_case *)
+      let tc_id2 = send_test_case client test_channel_id in
+      handle_test_case client tc_id2
   | _ ->
-    (* "normal": 1 test_case, test_done with empty results *)
-    let tc_id = send_test_case client test_channel_id in
-    handle_test_case client tc_id;
-    send_test_done client test_channel_id (Some (Hegel.Cbor.Map [])));
+      (* "normal": 1 test_case, test_done with empty results *)
+      let tc_id = send_test_case client test_channel_id in
+      handle_test_case client tc_id;
+      send_test_done client test_channel_id (Some (Hegel.Cbor.Map [])));
   (* Drain any remaining close packets *)
   (try
      while true do

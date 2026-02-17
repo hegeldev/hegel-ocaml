@@ -7,7 +7,11 @@ let () =
 
   (* float *)
   Hegel.run (fun () ->
-      let f = (Hegel.Gen.float ~min:0.0 ~max:1.0 ~allow_nan:false ~allow_infinity:false ()).generate () in
+      let f =
+        (Hegel.Gen.float ~min:0.0 ~max:1.0 ~allow_nan:false
+           ~allow_infinity:false ())
+          .generate ()
+      in
       assert (f >= 0.0 && f <= 1.0));
 
   (* string *)
@@ -17,7 +21,9 @@ let () =
 
   (* pair *)
   Hegel.run (fun () ->
-      let (a, b) = (Hegel.Gen.pair (Hegel.Gen.int ()) (Hegel.Gen.bool ())).generate () in
+      let a, b =
+        (Hegel.Gen.pair (Hegel.Gen.int ()) (Hegel.Gen.bool ())).generate ()
+      in
       ignore (a, b));
 
   (* optional *)
@@ -27,20 +33,29 @@ let () =
 
   (* sampled_from *)
   Hegel.run (fun () ->
-      let color = (Hegel.Gen.sampled_from ["red"; "green"; "blue"]).generate () in
+      let color =
+        (Hegel.Gen.sampled_from [ "red"; "green"; "blue" ]).generate ()
+      in
       assert (color = "red" || color = "green" || color = "blue"));
 
   (* one_of *)
   Hegel.run (fun () ->
-      let n = (Hegel.Gen.one_of [
-        Hegel.Gen.int ~min:0 ~max:10 ();
-        Hegel.Gen.int ~min:100 ~max:110 ();
-      ]).generate () in
+      let n =
+        (Hegel.Gen.one_of
+           [
+             Hegel.Gen.int ~min:0 ~max:10 (); Hegel.Gen.int ~min:100 ~max:110 ();
+           ])
+          .generate
+          ()
+      in
       assert (n >= 0 && n <= 110));
 
   (* map *)
   Hegel.run (fun () ->
-      let s = (Hegel.Gen.map string_of_int (Hegel.Gen.int ~min:0 ~max:100 ())).generate () in
+      let s =
+        (Hegel.Gen.map string_of_int (Hegel.Gen.int ~min:0 ~max:100 ()))
+          .generate ()
+      in
       let n = int_of_string s in
       assert (n >= 0 && n <= 100));
 

@@ -40,7 +40,9 @@ let () =
 
   (* float ~allow_infinity:false never produces infinity *)
   Hegel.run (fun () ->
-      let f = (Hegel.Gen.float ~allow_infinity:false ~allow_nan:false ()).generate () in
+      let f =
+        (Hegel.Gen.float ~allow_infinity:false ~allow_nan:false ()).generate ()
+      in
       assert (Float.is_finite f));
 
   (* string ~min_size respects minimum (codepoints) *)
@@ -67,7 +69,9 @@ let () =
 
   (* list ~min_size ~max_size respects bounds *)
   Hegel.run (fun () ->
-      let xs = (Hegel.Gen.list ~min_size:2 ~max_size:5 (Hegel.Gen.int ())).generate () in
+      let xs =
+        (Hegel.Gen.list ~min_size:2 ~max_size:5 (Hegel.Gen.int ())).generate ()
+      in
       assert (List.length xs >= 2);
       assert (List.length xs <= 5));
 
@@ -79,19 +83,33 @@ let () =
 
   (* triple works *)
   Hegel.run (fun () ->
-      let (a, b, c) = (Hegel.Gen.triple (Hegel.Gen.int ()) (Hegel.Gen.bool ()) (Hegel.Gen.string ())).generate () in
+      let a, b, c =
+        (Hegel.Gen.triple (Hegel.Gen.int ()) (Hegel.Gen.bool ())
+           (Hegel.Gen.string ()))
+          .generate
+          ()
+      in
       ignore (a, b, c));
 
   (* filter rejects non-matching values *)
   Hegel.run (fun () ->
-      let even = (Hegel.Gen.filter (fun n -> n mod 2 = 0) (Hegel.Gen.int ~min:0 ~max:100 ())).generate () in
+      let even =
+        (Hegel.Gen.filter
+           (fun n -> n mod 2 = 0)
+           (Hegel.Gen.int ~min:0 ~max:100 ()))
+          .generate ()
+      in
       assert (even mod 2 = 0));
 
   (* flat_map chains generators *)
   Hegel.run (fun () ->
-      let s = (Hegel.Gen.flat_map
-        (fun n -> Hegel.Gen.string ~min_size:n ~max_size:n ())
-        (Hegel.Gen.int ~min:1 ~max:5 ())).generate () in
+      let s =
+        (Hegel.Gen.flat_map
+           (fun n -> Hegel.Gen.string ~min_size:n ~max_size:n ())
+           (Hegel.Gen.int ~min:1 ~max:5 ()))
+          .generate
+          ()
+      in
       assert (String.length s >= 1));
 
   (* just always returns same value *)
@@ -166,7 +184,6 @@ let () =
          let n = (Hegel.Gen.int ~min:0 ~max:100 ()).generate () in
          assert (n < 0));
      assert false
-   with Failure msg ->
-     assert (msg = "Property test failed"));
+   with Failure msg -> assert (msg = "Property test failed"));
 
   Printf.printf "All doc tests passed!\n"

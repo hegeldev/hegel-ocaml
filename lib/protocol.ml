@@ -45,10 +45,10 @@ let put_u32_be buf off v =
   Bytes.set buf (off + 3) (Char.chr (v land 0xff))
 
 let get_u32_be s off =
-  ((Char.code s.[off] lsl 24)
+  (Char.code s.[off] lsl 24)
   lor (Char.code s.[off + 1] lsl 16)
   lor (Char.code s.[off + 2] lsl 8)
-  lor Char.code s.[off + 3])
+  lor Char.code s.[off + 3]
   land 0xFFFFFFFF
 
 let write_packet fd pkt =
@@ -75,7 +75,8 @@ let read_packet fd =
   let pkt_magic = get_u32_be header 0 in
   if pkt_magic <> magic then
     failwith
-      (Printf.sprintf "Invalid magic: expected 0x%08X, got 0x%08X" magic pkt_magic);
+      (Printf.sprintf "Invalid magic: expected 0x%08X, got 0x%08X" magic
+         pkt_magic);
   let checksum = get_u32_be header 4 in
   let channel = get_u32_be header 8 in
   let message_id_raw = get_u32_be header 12 in
@@ -86,16 +87,20 @@ let read_packet fd =
   let term = read_exact fd 1 in
   if Char.code term.[0] <> terminator then
     failwith
-      (Printf.sprintf "Invalid terminator: expected 0x%02X, got 0x%02X" terminator
+      (Printf.sprintf "Invalid terminator: expected 0x%02X, got 0x%02X"
+         terminator
          (Char.code term.[0]));
   (* verify checksum *)
   let header_for_check =
     String.sub header 0 4 ^ "\x00\x00\x00\x00" ^ String.sub header 8 12
   in
-  let computed = Int32.to_int (Crc32.compute (header_for_check ^ payload)) land 0xFFFFFFFF in
+  let computed =
+    Int32.to_int (Crc32.compute (header_for_check ^ payload)) land 0xFFFFFFFF
+  in
   if computed <> checksum then
     failwith
-      (Printf.sprintf "Checksum mismatch: expected 0x%08X, got 0x%08X" checksum computed);
+      (Printf.sprintf "Checksum mismatch: expected 0x%08X, got 0x%08X" checksum
+         computed);
   { channel; message_id; is_reply; payload }
 
 (* ---- Connection ---- *)
@@ -118,8 +123,9 @@ module Connection = struct
 
   let send_packet conn pkt =
     Mutex.lock conn.lock;
-    Fun.protect ~finally:(fun () -> Mutex.unlock conn.lock) (fun () ->
-        write_packet conn.fd pkt)
+    Fun.protect
+      ~finally:(fun () -> Mutex.unlock conn.lock)
+      (fun () -> write_packet conn.fd pkt)
 
   let receive_packet_for_channel conn channel_id =
     (* check pending first *)
@@ -129,25 +135,25 @@ module Connection = struct
     |> function
     | Some pkt -> pkt
     | None ->
-      let rec loop () =
-        let pkt = read_packet conn.fd in
-        if pkt.channel = channel_id then pkt
-        else begin
-          let q =
-            match Hashtbl.find_opt conn.pending pkt.channel with
-            | Some q -> q
-            | None ->
-              let q = Queue.create () in
-              Hashtbl.replace conn.pending pkt.channel q;
-              q
-          in
-          Queue.push pkt q;
-          loop ()
-        end
-      in
-      loop ()
+        let rec loop () =
+          let pkt = read_packet conn.fd in
+          if pkt.channel = channel_id then pkt
+          else
+            let q =
+              match Hashtbl.find_opt conn.pending pkt.channel with
+              | Some q -> q
+              | None ->
+                  let q = Queue.create () in
+                  Hashtbl.replace conn.pending pkt.channel q;
+                  q
+            in
+            Queue.push pkt q;
+            loop ()
+        in
+        loop ()
 
   let control_channel conn = (conn, 0)
+
   let new_channel conn =
     let next = conn.next_channel_id in
     conn.next_channel_id <- next + 1;
@@ -167,7 +173,6 @@ module Channel = struct
   type t = Connection.t * int
 
   let channel_id (_, id) = id
-
   let next_msg_id = ref 1
 
   let send_request (conn, chan_id) payload =
@@ -189,7 +194,8 @@ module Channel = struct
          so re-queuing and looping would be infinite. Fail fast instead. *)
       failwith
         (Printf.sprintf
-           "receive_response: unexpected packet (is_reply=%b, msg_id=%d, expected=%d)"
+           "receive_response: unexpected packet (is_reply=%b, msg_id=%d, \
+            expected=%d)"
            pkt.is_reply pkt.message_id msg_id)
 
   let receive_request (conn, _chan_id) =
@@ -211,15 +217,15 @@ module Channel = struct
     (* check for error response *)
     (match Cbor.map_get response "error" with
     | Some err ->
-      let error_type =
-        match Cbor.map_get response "type" with
-        | Some (Cbor.Text s) -> s
-        | _ -> "unknown"
-      in
-      let err_str =
-        match err with Cbor.Text s -> s | _ -> Cbor.encode_to_string err
-      in
-      failwith (Printf.sprintf "Server error (%s): %s" error_type err_str)
+        let error_type =
+          match Cbor.map_get response "type" with
+          | Some (Cbor.Text s) -> s
+          | _ -> "unknown"
+        in
+        let err_str =
+          match err with Cbor.Text s -> s | _ -> Cbor.encode_to_string err
+        in
+        failwith (Printf.sprintf "Server error (%s): %s" error_type err_str)
     | None -> ());
     (* extract result field if present *)
     match Cbor.map_get response "result" with

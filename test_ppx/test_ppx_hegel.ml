@@ -1,16 +1,13 @@
 (* Test PPX-derived generators *)
 
 (* Simple record *)
-type point = { x: int; y: int } [@@deriving hegel]
+type point = { x : int; y : int } [@@deriving hegel]
 
 (* Variant with different constructor types *)
 type color = Red | Green | Blue [@@deriving hegel]
 
 (* Variant with data *)
-type shape =
-  | Circle of float
-  | Rectangle of int * int
-  | Point of point
+type shape = Circle of float | Rectangle of int * int | Point of point
 [@@deriving hegel]
 
 (* Parametric type *)
@@ -22,29 +19,25 @@ type person = {
   age : int;
   email : string option;
   scores : int list;
-} [@@deriving hegel]
+}
+[@@deriving hegel]
 
 (* Type alias *)
 type int_pair = int * int [@@deriving hegel]
 
 (* Recursive type *)
-type tree =
-  | Leaf
-  | Node of int * tree * tree
-[@@deriving hegel]
+type tree = Leaf | Node of int * tree * tree [@@deriving hegel]
 
 (* Variant with inline record *)
-type event =
-  | Click of { x: int; y: int }
-  | KeyPress of { key: string }
+type event = Click of { x : int; y : int } | KeyPress of { key : string }
 [@@deriving hegel]
 
 (* Nested derived types compose *)
-type name = { first: string; last: string } [@@deriving hegel]
-type employee = { name: name; department: string } [@@deriving hegel]
+type name = { first : string; last : string } [@@deriving hegel]
+type employee = { name : name; department : string } [@@deriving hegel]
 
 (* Multiple type parameters *)
-type ('a, 'b) pair_box = { left: 'a; right: 'b } [@@deriving hegel]
+type ('a, 'b) pair_box = { left : 'a; right : 'b } [@@deriving hegel]
 
 let () =
   (* Test point generation *)
@@ -60,7 +53,8 @@ let () =
   (* Test shape generation *)
   Hegel.run (fun () ->
       let s = gen_shape.generate () in
-      ignore (match s with
+      ignore
+        (match s with
         | Circle r -> r
         | Rectangle (w, h) -> Float.of_int (w * h)
         | Point p -> Float.of_int (p.x + p.y)));
@@ -80,7 +74,7 @@ let () =
 
   (* Test type alias *)
   Hegel.run (fun () ->
-      let (a, b) = gen_int_pair.generate () in
+      let a, b = gen_int_pair.generate () in
       ignore (a + b));
 
   (* Test recursive tree *)
@@ -95,7 +89,8 @@ let () =
   (* Test variant with inline record *)
   Hegel.run (fun () ->
       let e = gen_event.generate () in
-      ignore (match e with
+      ignore
+        (match e with
         | Click { x; y } -> x + y
         | KeyPress { key } -> String.length key));
 
@@ -107,7 +102,9 @@ let () =
 
   (* Test multiple type parameters *)
   Hegel.run (fun () ->
-      let pb = (gen_pair_box (Hegel.Gen.int ()) (Hegel.Gen.string ())).generate () in
+      let pb =
+        (gen_pair_box (Hegel.Gen.int ()) (Hegel.Gen.string ())).generate ()
+      in
       ignore (pb.left + String.length pb.right));
 
   Printf.printf "All PPX generator tests passed!\n"

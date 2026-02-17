@@ -2,4 +2,5 @@
  (name hegel)
  (public_name hegel)
  (libraries unix)
- (instrumentation (backend bisect_ppx)))
+ (instrumentation
+  (backend bisect_ppx)))

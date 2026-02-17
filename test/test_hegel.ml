@@ -15,9 +15,7 @@ let () =
 
   (* Test: list reverse is involution *)
   Hegel.run (fun () ->
-      let xs =
-        (Hegel.Gen.list ~max_size:20 (Hegel.Gen.int ())).generate ()
-      in
+      let xs = (Hegel.Gen.list ~max_size:20 (Hegel.Gen.int ())).generate () in
       assert (List.rev (List.rev xs) = xs));
 
   Printf.printf "All tests passed!\n"

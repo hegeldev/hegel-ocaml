@@ -1,4 +1,5 @@
 (test
  (name test_ppx_hegel)
  (libraries hegel)
- (preprocess (pps ppx_hegel)))
+ (preprocess
+  (pps ppx_hegel)))

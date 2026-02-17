@@ -10,8 +10,11 @@ let () =
   Hegel.run ~hegel_path (fun () ->
       let xs =
         (Hegel.Gen.list ~min_size:1 ~max_size:5
-           (Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ())))
-          .generate ()
+           (Hegel.Gen.filter
+              (fun x -> x > 0)
+              (Hegel.Gen.int ~min:(-10) ~max:10 ())))
+          .generate
+          ()
       in
       List.iter (fun x -> assert (x > 0)) xs);
 
@@ -19,30 +22,38 @@ let () =
   Hegel.run ~hegel_path (fun () ->
       let arr =
         (Hegel.Gen.array ~min_size:1 ~max_size:5
-           (Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ())))
-          .generate ()
+           (Hegel.Gen.filter
+              (fun x -> x > 0)
+              (Hegel.Gen.int ~min:(-10) ~max:10 ())))
+          .generate
+          ()
       in
       Array.iter (fun x -> assert (x > 0)) arr);
 
   (* Composite pair: one non-basic element forces the composite tuple path *)
   Hegel.run ~hegel_path (fun () ->
-      let (a, b) =
+      let a, b =
         (Hegel.Gen.pair
-           (Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ()))
+           (Hegel.Gen.filter
+              (fun x -> x > 0)
+              (Hegel.Gen.int ~min:(-10) ~max:10 ()))
            (Hegel.Gen.int ()))
-          .generate ()
+          .generate
+          ()
       in
       assert (a > 0);
       ignore b);
 
   (* Composite triple: one non-basic element forces the composite tuple path *)
   Hegel.run ~hegel_path (fun () ->
-      let (a, b, c) =
+      let a, b, c =
         (Hegel.Gen.triple
-           (Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ()))
-           (Hegel.Gen.int ())
-           (Hegel.Gen.bool ()))
-          .generate ()
+           (Hegel.Gen.filter
+              (fun x -> x > 0)
+              (Hegel.Gen.int ~min:(-10) ~max:10 ()))
+           (Hegel.Gen.int ()) (Hegel.Gen.bool ()))
+          .generate
+          ()
       in
       assert (a > 0);
       ignore (b, c));
@@ -51,8 +62,11 @@ let () =
   Hegel.run ~hegel_path (fun () ->
       let s =
         (Hegel.Gen.map string_of_int
-           (Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ())))
-          .generate ()
+           (Hegel.Gen.filter
+              (fun x -> x > 0)
+              (Hegel.Gen.int ~min:(-10) ~max:10 ())))
+          .generate
+          ()
       in
       let n = int_of_string s in
       assert (n > 0));
@@ -62,10 +76,13 @@ let () =
       let n =
         (Hegel.Gen.one_of
            [
-             Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ());
+             Hegel.Gen.filter
+               (fun x -> x > 0)
+               (Hegel.Gen.int ~min:(-10) ~max:10 ());
              Hegel.Gen.int ~min:1 ~max:100 ();
            ])
-          .generate ()
+          .generate
+          ()
       in
       assert (n > 0));
 
@@ -73,8 +90,11 @@ let () =
   Hegel.run ~hegel_path (fun () ->
       let v =
         (Hegel.Gen.optional
-           (Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ())))
-          .generate ()
+           (Hegel.Gen.filter
+              (fun x -> x > 0)
+              (Hegel.Gen.int ~min:(-10) ~max:10 ())))
+          .generate
+          ()
       in
       match v with Some x -> assert (x > 0) | None -> ());
 
@@ -84,7 +104,8 @@ let () =
         (Hegel.Gen.flat_map
            (fun x -> Hegel.Gen.int ~min:x ~max:(x + 10) ())
            (Hegel.Gen.int ~min:0 ~max:100 ()))
-          .generate ()
+          .generate
+          ()
       in
       assert (n >= 0 && n <= 110));
 
@@ -95,8 +116,7 @@ let () =
          Hegel.note (Printf.sprintf "Value: %d" n);
          assert (n < 50));
      assert false
-   with Failure msg ->
-     assert (msg = "Property test failed"));
+   with Failure msg -> assert (msg = "Property test failed"));
 
   (* assume false: exercises Assume_rejected handling *)
   Hegel.run ~hegel_path (fun () ->
@@ -140,15 +160,18 @@ let () =
   Hegel.run ~hegel_path (fun () ->
       let xs =
         (Hegel.Gen.list ~max_size:3
-           (Hegel.Gen.float ~min:0.0 ~max:1.0 ~allow_nan:false ~allow_infinity:false ()))
-          .generate ()
+           (Hegel.Gen.float ~min:0.0 ~max:1.0 ~allow_nan:false
+              ~allow_infinity:false ()))
+          .generate
+          ()
       in
       List.iter (fun x -> assert (x >= 0.0)) xs);
 
   (* list(from_regex) exercises from_regex as_basic parse *)
   Hegel.run ~hegel_path (fun () ->
       let xs =
-        (Hegel.Gen.list ~max_size:3 (Hegel.Gen.from_regex ~fullmatch:true "[a-z]+"))
+        (Hegel.Gen.list ~max_size:3
+           (Hegel.Gen.from_regex ~fullmatch:true "[a-z]+"))
           .generate ()
       in
       List.iter (fun s -> assert (String.length s > 0)) xs);
@@ -156,37 +179,32 @@ let () =
   (* list(binary()) exercises binary as_basic parse *)
   Hegel.run ~hegel_path (fun () ->
       let xs =
-        (Hegel.Gen.list ~max_size:3 (Hegel.Gen.binary ~min_size:1 ~max_size:10 ()))
+        (Hegel.Gen.list ~max_size:3
+           (Hegel.Gen.binary ~min_size:1 ~max_size:10 ()))
           .generate ()
       in
       List.iter (fun s -> assert (String.length s >= 1)) xs);
 
   (* list(bool()) exercises bool as_basic parse *)
   Hegel.run ~hegel_path (fun () ->
-      let xs =
-        (Hegel.Gen.list ~max_size:5 (Hegel.Gen.bool ())).generate ()
-      in
+      let xs = (Hegel.Gen.list ~max_size:5 (Hegel.Gen.bool ())).generate () in
       List.iter (fun b -> ignore b) xs);
 
   (* list(unit()) exercises unit as_basic parse *)
   Hegel.run ~hegel_path (fun () ->
-      let xs =
-        (Hegel.Gen.list ~max_size:3 (Hegel.Gen.unit ())).generate ()
-      in
+      let xs = (Hegel.Gen.list ~max_size:3 (Hegel.Gen.unit ())).generate () in
       List.iter (fun () -> ()) xs);
 
   (* list(just 42) exercises just as_basic parse *)
   Hegel.run ~hegel_path (fun () ->
-      let xs =
-        (Hegel.Gen.list ~max_size:3 (Hegel.Gen.just 42)).generate ()
-      in
+      let xs = (Hegel.Gen.list ~max_size:3 (Hegel.Gen.just 42)).generate () in
       List.iter (fun x -> assert (x = 42)) xs);
 
   (* list(string()) exercises string as_basic parse *)
   Hegel.run ~hegel_path (fun () ->
       let xs =
-        (Hegel.Gen.list ~max_size:3 (Hegel.Gen.string ~max_size:10 ()))
-          .generate ()
+        (Hegel.Gen.list ~max_size:3 (Hegel.Gen.string ~max_size:10 ())).generate
+          ()
       in
       ignore xs);
 
@@ -194,8 +212,11 @@ let () =
   Hegel.run ~hegel_path (fun () ->
       let xs =
         (Hegel.Gen.list ~min_size:0
-           (Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ())))
-          .generate ()
+           (Hegel.Gen.filter
+              (fun x -> x > 0)
+              (Hegel.Gen.int ~min:(-10) ~max:10 ())))
+          .generate
+          ()
       in
       List.iter (fun x -> assert (x > 0)) xs);
 
@@ -209,7 +230,7 @@ let () =
 
   (* pair of basics exercises pair as_basic parse *)
   Hegel.run ~hegel_path (fun () ->
-      let (a, b) =
+      let a, b =
         (Hegel.Gen.pair (Hegel.Gen.int ~min:0 ~max:10 ()) (Hegel.Gen.bool ()))
           .generate ()
       in
@@ -218,12 +239,13 @@ let () =
 
   (* triple of basics exercises triple as_basic parse *)
   Hegel.run ~hegel_path (fun () ->
-      let (a, b, c) =
+      let a, b, c =
         (Hegel.Gen.triple
            (Hegel.Gen.int ~min:0 ~max:10 ())
            (Hegel.Gen.bool ())
            (Hegel.Gen.string ~max_size:5 ()))
-          .generate ()
+          .generate
+          ()
       in
       assert (a >= 0);
       ignore (b, c));
@@ -233,10 +255,10 @@ let () =
       let n =
         (Hegel.Gen.one_of
            [
-             Hegel.Gen.int ~min:0 ~max:10 ();
-             Hegel.Gen.int ~min:100 ~max:110 ();
+             Hegel.Gen.int ~min:0 ~max:10 (); Hegel.Gen.int ~min:100 ~max:110 ();
            ])
-          .generate ()
+          .generate
+          ()
       in
       assert (n >= 0));
 
@@ -249,15 +271,18 @@ let () =
                 Hegel.Gen.int ~min:0 ~max:10 ();
                 Hegel.Gen.int ~min:100 ~max:110 ();
               ]))
-          .generate ()
+          .generate
+          ()
       in
       List.iter (fun n -> assert (n >= 0)) xs);
 
   (* list(optional) exercises optional/one_of as_basic parse callback *)
   Hegel.run ~hegel_path (fun () ->
       let xs =
-        (Hegel.Gen.list ~max_size:5 (Hegel.Gen.optional (Hegel.Gen.int ~min:0 ~max:100 ())))
-          .generate ()
+        (Hegel.Gen.list ~max_size:5
+           (Hegel.Gen.optional (Hegel.Gen.int ~min:0 ~max:100 ())))
+          .generate
+          ()
       in
       List.iter
         (fun v -> match v with Some x -> assert (x >= 0) | None -> ())
@@ -266,23 +291,19 @@ let () =
   (* list(sampled_from) exercises sampled_from as_basic parse callback *)
   Hegel.run ~hegel_path (fun () ->
       let xs =
-        (Hegel.Gen.list ~max_size:5 (Hegel.Gen.sampled_from ["a"; "b"; "c"]))
+        (Hegel.Gen.list ~max_size:5 (Hegel.Gen.sampled_from [ "a"; "b"; "c" ]))
           .generate ()
       in
       List.iter (fun s -> assert (s = "a" || s = "b" || s = "c")) xs);
 
   (* list(email()) exercises simple_format as_basic parse callback *)
   Hegel.run ~hegel_path (fun () ->
-      let xs =
-        (Hegel.Gen.list ~max_size:2 (Hegel.Gen.email ())).generate ()
-      in
+      let xs = (Hegel.Gen.list ~max_size:2 (Hegel.Gen.email ())).generate () in
       List.iter (fun e -> assert (String.contains e '@')) xs);
 
   (* list(domain()) exercises domain as_basic parse callback *)
   Hegel.run ~hegel_path (fun () ->
-      let xs =
-        (Hegel.Gen.list ~max_size:2 (Hegel.Gen.domain ())).generate ()
-      in
+      let xs = (Hegel.Gen.list ~max_size:2 (Hegel.Gen.domain ())).generate () in
       List.iter (fun d -> assert (String.length d > 0)) xs);
 
   (* list(ip_address ~version:`V4) exercises ip_address as_basic parse callback *)
@@ -296,8 +317,7 @@ let () =
   (* ip_address without version: tests the None branch *)
   Hegel.run ~hegel_path (fun () ->
       let xs =
-        (Hegel.Gen.list ~max_size:2 (Hegel.Gen.ip_address ()))
-          .generate ()
+        (Hegel.Gen.list ~max_size:2 (Hegel.Gen.ip_address ())).generate ()
       in
       List.iter (fun ip -> assert (String.length ip > 0)) xs);
 
@@ -306,7 +326,8 @@ let () =
       let xss =
         (Hegel.Gen.list ~max_size:3
            (Hegel.Gen.list ~max_size:3 (Hegel.Gen.int ~min:0 ~max:10 ())))
-          .generate ()
+          .generate
+          ()
       in
       List.iter
         (fun xs -> List.iter (fun x -> assert (x >= 0 && x <= 10)) xs)
@@ -314,11 +335,12 @@ let () =
 
   (* pair(pair(...)) exercises nested pair as_basic parse callback *)
   Hegel.run ~hegel_path (fun () ->
-      let ((a, b), c) =
+      let (a, b), c =
         (Hegel.Gen.pair
            (Hegel.Gen.pair (Hegel.Gen.int ()) (Hegel.Gen.bool ()))
            (Hegel.Gen.string ~max_size:5 ()))
-          .generate ()
+          .generate
+          ()
       in
       ignore (a, b, c));
 
@@ -327,7 +349,8 @@ let () =
       let xs =
         (Hegel.Gen.list ~max_size:3
            (Hegel.Gen.map string_of_int (Hegel.Gen.int ~min:0 ~max:100 ())))
-          .generate ()
+          .generate
+          ()
       in
       List.iter (fun s -> ignore (int_of_string s)) xs);
 
@@ -338,7 +361,8 @@ let () =
            (Hegel.Gen.flat_map
               (fun x -> Hegel.Gen.int ~min:x ~max:(x + 10) ())
               (Hegel.Gen.int ~min:0 ~max:10 ())))
-          .generate ()
+          .generate
+          ()
       in
       List.iter (fun x -> assert (x >= 0)) xs);
 
@@ -369,8 +393,11 @@ let () =
   Hegel.run ~hegel_path (fun () ->
       let xs =
         (Hegel.Gen.list ~max_size:3
-           (Hegel.Gen.pair (Hegel.Gen.int ~min:0 ~max:10 ()) (Hegel.Gen.bool ())))
-          .generate ()
+           (Hegel.Gen.pair
+              (Hegel.Gen.int ~min:0 ~max:10 ())
+              (Hegel.Gen.bool ())))
+          .generate
+          ()
       in
       List.iter (fun (a, _) -> assert (a >= 0 && a <= 10)) xs);
 
@@ -382,7 +409,8 @@ let () =
               (Hegel.Gen.int ~min:0 ~max:10 ())
               (Hegel.Gen.bool ())
               (Hegel.Gen.string ~max_size:5 ())))
-          .generate ()
+          .generate
+          ()
       in
       List.iter (fun (a, _, _) -> assert (a >= 0 && a <= 10)) xs);
 
@@ -391,16 +419,20 @@ let () =
       let xs =
         (Hegel.Gen.list ~max_size:3
            (Hegel.Gen.array ~max_size:3 (Hegel.Gen.int ~min:0 ~max:10 ())))
-          .generate ()
+          .generate
+          ()
       in
-      List.iter (fun arr -> Array.iter (fun x -> assert (x >= 0 && x <= 10)) arr) xs);
+      List.iter
+        (fun arr -> Array.iter (fun x -> assert (x >= 0 && x <= 10)) arr)
+        xs);
 
   (* list(map(...)) triggers map.as_basic parse *)
   Hegel.run ~hegel_path (fun () ->
       let xs =
         (Hegel.Gen.list ~max_size:3
            (Hegel.Gen.map (fun x -> x * 2) (Hegel.Gen.int ~min:0 ~max:50 ())))
-          .generate ()
+          .generate
+          ()
       in
       List.iter (fun x -> assert (x >= 0 && x <= 100)) xs);
 
@@ -420,7 +452,10 @@ let () =
 
   (* list without max_size in basic path *)
   Hegel.run ~hegel_path (fun () ->
-      let xs = (Hegel.Gen.list ~min_size:1 (Hegel.Gen.int ~min:0 ~max:10 ())).generate () in
+      let xs =
+        (Hegel.Gen.list ~min_size:1 (Hegel.Gen.int ~min:0 ~max:10 ())).generate
+          ()
+      in
       assert (List.length xs >= 1));
 
   (* ================================================================ *)
@@ -429,24 +464,30 @@ let () =
 
   (* pair(list(filter...), int): list.as_basic returns None *)
   Hegel.run ~hegel_path (fun () ->
-      let (xs, n) =
+      let xs, n =
         (Hegel.Gen.pair
            (Hegel.Gen.list ~min_size:1 ~max_size:3
-              (Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ())))
+              (Hegel.Gen.filter
+                 (fun x -> x > 0)
+                 (Hegel.Gen.int ~min:(-10) ~max:10 ())))
            (Hegel.Gen.int ~min:0 ~max:100 ()))
-          .generate ()
+          .generate
+          ()
       in
       List.iter (fun x -> assert (x > 0)) xs;
       assert (n >= 0));
 
   (* pair(array(filter...), int): array.as_basic returns None *)
   Hegel.run ~hegel_path (fun () ->
-      let (arr, n) =
+      let arr, n =
         (Hegel.Gen.pair
            (Hegel.Gen.array ~min_size:1 ~max_size:3
-              (Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ())))
+              (Hegel.Gen.filter
+                 (fun x -> x > 0)
+                 (Hegel.Gen.int ~min:(-10) ~max:10 ())))
            (Hegel.Gen.int ~min:0 ~max:100 ()))
-          .generate ()
+          .generate
+          ()
       in
       Array.iter (fun x -> assert (x > 0)) arr;
       assert (n >= 0));
@@ -456,9 +497,12 @@ let () =
       let xs =
         (Hegel.Gen.list ~min_size:1 ~max_size:3
            (Hegel.Gen.pair
-              (Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ()))
+              (Hegel.Gen.filter
+                 (fun x -> x > 0)
+                 (Hegel.Gen.int ~min:(-10) ~max:10 ()))
               (Hegel.Gen.int ())))
-          .generate ()
+          .generate
+          ()
       in
       List.iter (fun (a, _) -> assert (a > 0)) xs);
 
@@ -467,10 +511,12 @@ let () =
       let xs =
         (Hegel.Gen.list ~min_size:1 ~max_size:3
            (Hegel.Gen.triple
-              (Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ()))
-              (Hegel.Gen.int ())
-              (Hegel.Gen.bool ())))
-          .generate ()
+              (Hegel.Gen.filter
+                 (fun x -> x > 0)
+                 (Hegel.Gen.int ~min:(-10) ~max:10 ()))
+              (Hegel.Gen.int ()) (Hegel.Gen.bool ())))
+          .generate
+          ()
       in
       List.iter (fun (a, _, _) -> assert (a > 0)) xs);
 
@@ -500,11 +546,12 @@ let () =
 
   (* list(int) in as_basic path without max_size - wrap in pair *)
   Hegel.run ~hegel_path (fun () ->
-      let (xs, b) =
+      let xs, b =
         (Hegel.Gen.pair
            (Hegel.Gen.list ~min_size:0 (Hegel.Gen.int ~min:0 ~max:10 ()))
            (Hegel.Gen.bool ()))
-          .generate ()
+          .generate
+          ()
       in
       List.iter (fun x -> assert (x >= 0 && x <= 10)) xs;
       ignore b);
@@ -515,10 +562,13 @@ let () =
         (Hegel.Gen.list ~min_size:1 ~max_size:3
            (Hegel.Gen.one_of
               [
-                Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ());
+                Hegel.Gen.filter
+                  (fun x -> x > 0)
+                  (Hegel.Gen.int ~min:(-10) ~max:10 ());
                 Hegel.Gen.int ~min:1 ~max:100 ();
               ]))
-          .generate ()
+          .generate
+          ()
       in
       List.iter (fun n -> assert (n > 0)) xs);
 
@@ -527,18 +577,26 @@ let () =
       let xs =
         (Hegel.Gen.list ~min_size:1 ~max_size:3
            (Hegel.Gen.optional
-              (Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ()))))
-          .generate ()
+              (Hegel.Gen.filter
+                 (fun x -> x > 0)
+                 (Hegel.Gen.int ~min:(-10) ~max:10 ()))))
+          .generate
+          ()
       in
-      List.iter (fun v -> match v with Some x -> assert (x > 0) | None -> ()) xs);
+      List.iter
+        (fun v -> match v with Some x -> assert (x > 0) | None -> ())
+        xs);
 
   (* list(map with non-basic): map.as_basic returns None *)
   Hegel.run ~hegel_path (fun () ->
       let xs =
         (Hegel.Gen.list ~min_size:1 ~max_size:3
            (Hegel.Gen.map string_of_int
-              (Hegel.Gen.filter (fun x -> x > 0) (Hegel.Gen.int ~min:(-10) ~max:10 ()))))
-          .generate ()
+              (Hegel.Gen.filter
+                 (fun x -> x > 0)
+                 (Hegel.Gen.int ~min:(-10) ~max:10 ()))))
+          .generate
+          ()
       in
       List.iter (fun s -> ignore (int_of_string s)) xs);
 
