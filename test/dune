@@ -1,6 +1,6 @@
 (tests
  (names test_hegel test_failing test_generators test_docs test_coverage)
- (libraries hegel))
+ (libraries hegel alcotest))
 
 (executable
  (name mock_hegel)
