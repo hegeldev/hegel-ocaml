@@ -3,5 +3,6 @@
  (public_name ppx_hegel)
  (kind ppx_deriver)
  (libraries ppxlib)
- (preprocess (pps ppxlib.metaquot))
+ (preprocess
+  (pps ppxlib.metaquot))
  (ppx_runtime_libraries hegel))

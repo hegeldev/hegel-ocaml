@@ -5,6 +5,7 @@ synopsis: "OCaml SDK for Hegel property-based testing"
 depends: [
   "ocaml" {>= "5.0"}
   "dune" {>= "3.0" & >= "3.0"}
+  "alcotest" {with-test & >= "1.5.0"}
   "odoc" {with-doc}
 ]
 build: [

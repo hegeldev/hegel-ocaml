@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: '5.2'
+      - run: opam install ocamlformat.0.26.2
+      - name: format
+        run: |
+          opam exec -- dune fmt
+          git diff --exit-code
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/base
+        with:
+          ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: '5.2'
+          dune-cache: true
+      - run: opam install . --deps-only --with-test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install hegel
+        run: pip install git+ssh://git@github.com/antithesishq/hegel.git
+      - name: Test
+        run: opam exec -- dune runtest

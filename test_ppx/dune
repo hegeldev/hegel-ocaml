@@ -1,4 +1,5 @@
-(executable
+(test
  (name test_ppx_hegel)
- (libraries hegel)
- (preprocess (pps ppx_hegel)))
+ (libraries hegel alcotest)
+ (preprocess
+  (pps ppx_hegel)))

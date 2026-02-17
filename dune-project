@@ -8,7 +8,8 @@
  (synopsis "OCaml SDK for Hegel property-based testing")
  (depends
   (ocaml (>= 5.0))
-  (dune (>= 3.0))))
+  (dune (>= 3.0))
+  (alcotest (and :with-test (>= 1.5.0)))))
 
 (package
  (name ppx_hegel)

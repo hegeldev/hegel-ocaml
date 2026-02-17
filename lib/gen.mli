@@ -2,15 +2,8 @@
 
 exception Assume_rejected
 
-type 'a basic = {
-  schema : Cbor.t;
-  parse : Cbor.t -> 'a;
-}
-
-type 'a t = {
-  generate : unit -> 'a;
-  as_basic : unit -> 'a basic option;
-}
+type 'a basic = { schema : Cbor.t; parse : Cbor.t -> 'a }
+type 'a t = { generate : unit -> 'a; as_basic : unit -> 'a basic option }
 
 (** {2 Primitives} *)
 
@@ -23,7 +16,14 @@ val just : 'a -> 'a t
 val int : ?min:int -> ?max:int -> unit -> int t
 val int32 : ?min:int32 -> ?max:int32 -> unit -> int32 t
 val int64 : ?min:int64 -> ?max:int64 -> unit -> int64 t
-val float : ?min:float -> ?max:float -> ?allow_nan:bool -> ?allow_infinity:bool -> unit -> float t
+
+val float :
+  ?min:float ->
+  ?max:float ->
+  ?allow_nan:bool ->
+  ?allow_infinity:bool ->
+  unit ->
+  float t
 
 (** {2 Strings} *)
 
