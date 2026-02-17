@@ -105,6 +105,4 @@ let () =
       let pb =
         (gen_pair_box (Hegel.Gen.int ()) (Hegel.Gen.string ())).generate ()
       in
-      ignore (pb.left + String.length pb.right));
-
-  Printf.printf "All PPX generator tests passed!\n"
+      ignore (pb.left + String.length pb.right))

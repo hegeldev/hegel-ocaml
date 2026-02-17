@@ -62,6 +62,4 @@ let () =
   (* email *)
   Hegel.run (fun () ->
       let e = (Hegel.Gen.email ()).generate () in
-      assert (String.contains e '@'));
-
-  Printf.printf "All generator tests passed!\n"
+      assert (String.contains e '@'))

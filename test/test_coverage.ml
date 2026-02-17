@@ -605,4 +605,3 @@ let () =
       let n = (Hegel.Gen.int ~min:0 ~max:10 ()).generate () in
       assert (n >= 0));
 
-  Printf.printf "All coverage tests passed!\n"

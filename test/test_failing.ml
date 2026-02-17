@@ -11,5 +11,4 @@ let () =
         assert (sum < 100));
     Printf.eprintf "ERROR: should have failed\n";
     exit 1
-  with Failure msg when msg = "Property test failed" ->
-    Printf.printf "Correctly caught failure (with shrinking)\n"
+  with Failure msg when msg = "Property test failed" -> ()

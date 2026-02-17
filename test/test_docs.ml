@@ -184,6 +184,4 @@ let () =
          let n = (Hegel.Gen.int ~min:0 ~max:100 ()).generate () in
          assert (n < 0));
      assert false
-   with Failure msg -> assert (msg = "Property test failed"));
-
-  Printf.printf "All doc tests passed!\n"
+   with Failure msg -> assert (msg = "Property test failed"))

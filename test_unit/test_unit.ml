@@ -1638,4 +1638,3 @@ let () =
   if !failures > 0 then (
     Printf.eprintf "%d test(s) FAILED\n%!" !failures;
     exit 1)
-  else Printf.printf "All unit tests passed.\n%!"
