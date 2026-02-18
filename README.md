@@ -1,6 +1,6 @@
 # Hegel OCaml SDK
 
-Property-based testing for OCaml, powered by [Hegel](https://github.com/DRMacIver/hegel).
+Property-based testing for OCaml, powered by [Hegel](https://github.com/antithesishq/hegel-core).
 
 Hegel is a universal property-based testing framework. This SDK communicates
 with the Hegel server (powered by Hypothesis) to generate test data and perform
