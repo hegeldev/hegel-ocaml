@@ -352,13 +352,12 @@ let int64 ?(min = Int64.of_int min_int) ?(max = Int64.of_int max_int) () =
         Some { schema; parse = (fun v -> Int64.of_int (cbor_int_value v)) });
   }
 
-let float ?(min = neg_infinity) ?(max = infinity) ?allow_nan ?allow_infinity () =
+let float ?(min = neg_infinity) ?(max = infinity) ?allow_nan ?allow_infinity ()
+    =
   let has_min = Float.is_finite min in
   let has_max = Float.is_finite max in
   let allow_nan =
-    match allow_nan with
-    | Some v -> v
-    | None -> (not has_min) && not has_max
+    match allow_nan with Some v -> v | None -> (not has_min) && not has_max
   in
   let allow_infinity =
     match allow_infinity with
