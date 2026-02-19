@@ -74,9 +74,7 @@ let send_request_no_fail command payload =
     then (
       State.set_test_aborted true;
       raise Assume_rejected)
-    else (
-      Printf.eprintf "Failed to communicate with Hegel: %s\n%!" msg;
-      exit 134)
+    else failwith (Printf.sprintf "Failed to communicate with Hegel: %s" msg)
 
 let generate_raw schema =
   if State.get_test_aborted () then raise Assume_rejected;
