@@ -301,9 +301,9 @@ let int ?(min = min_int) ?(max = max_int) () =
     Cbor.Map
       [
         (Cbor.Text "type", Cbor.Text "integer");
-        ( Cbor.Text "minimum",
+        ( Cbor.Text "min_value",
           if min >= 0 then Cbor.Unsigned min else Cbor.Negative min );
-        ( Cbor.Text "maximum",
+        ( Cbor.Text "max_value",
           if max >= 0 then Cbor.Unsigned max else Cbor.Negative max );
       ]
   in
@@ -319,9 +319,9 @@ let int32 ?(min = Int32.min_int) ?(max = Int32.max_int) () =
     Cbor.Map
       [
         (Cbor.Text "type", Cbor.Text "integer");
-        ( Cbor.Text "minimum",
+        ( Cbor.Text "min_value",
           if min_i >= 0 then Cbor.Unsigned min_i else Cbor.Negative min_i );
-        ( Cbor.Text "maximum",
+        ( Cbor.Text "max_value",
           if max_i >= 0 then Cbor.Unsigned max_i else Cbor.Negative max_i );
       ]
   in
@@ -339,9 +339,9 @@ let int64 ?(min = Int64.of_int min_int) ?(max = Int64.of_int max_int) () =
     Cbor.Map
       [
         (Cbor.Text "type", Cbor.Text "integer");
-        ( Cbor.Text "minimum",
+        ( Cbor.Text "min_value",
           if min_i >= 0 then Cbor.Unsigned min_i else Cbor.Negative min_i );
-        ( Cbor.Text "maximum",
+        ( Cbor.Text "max_value",
           if max_i >= 0 then Cbor.Unsigned max_i else Cbor.Negative max_i );
       ]
   in
@@ -352,23 +352,34 @@ let int64 ?(min = Int64.of_int min_int) ?(max = Int64.of_int max_int) () =
         Some { schema; parse = (fun v -> Int64.of_int (cbor_int_value v)) });
   }
 
-let float ?(min = neg_infinity) ?(max = infinity) ?(allow_nan = true)
-    ?(allow_infinity = true) () =
+let float ?(min = neg_infinity) ?(max = infinity) ?allow_nan ?allow_infinity () =
+  let has_min = Float.is_finite min in
+  let has_max = Float.is_finite max in
+  let allow_nan =
+    match allow_nan with
+    | Some v -> v
+    | None -> (not has_min) && not has_max
+  in
+  let allow_infinity =
+    match allow_infinity with
+    | Some v -> v
+    | None -> (not has_min) || not has_max
+  in
   let pairs =
     [
       (Cbor.Text "type", Cbor.Text "number");
-      (Cbor.Text "exclude_minimum", Cbor.Bool false);
-      (Cbor.Text "exclude_maximum", Cbor.Bool false);
+      (Cbor.Text "exclude_min", Cbor.Bool false);
+      (Cbor.Text "exclude_max", Cbor.Bool false);
       (Cbor.Text "allow_nan", Cbor.Bool allow_nan);
       (Cbor.Text "allow_infinity", Cbor.Bool allow_infinity);
       (Cbor.Text "width", Cbor.Unsigned 64);
     ]
-    @ (if Float.is_finite min || ((not allow_infinity) && not allow_nan) then
-         [ (Cbor.Text "minimum", Cbor.Float min) ]
+    @ (if has_min || ((not allow_infinity) && not allow_nan) then
+         [ (Cbor.Text "min_value", Cbor.Float min) ]
        else [])
     @
-    if Float.is_finite max || ((not allow_infinity) && not allow_nan) then
-      [ (Cbor.Text "maximum", Cbor.Float max) ]
+    if has_max || ((not allow_infinity) && not allow_nan) then
+      [ (Cbor.Text "max_value", Cbor.Float max) ]
     else []
   in
   let schema = Cbor.Map pairs in
@@ -745,8 +756,8 @@ let sampled_from elements =
         Cbor.Map
           [
             (Cbor.Text "type", Cbor.Text "integer");
-            (Cbor.Text "minimum", Cbor.Unsigned 0);
-            (Cbor.Text "maximum", Cbor.Unsigned (n - 1));
+            (Cbor.Text "min_value", Cbor.Unsigned 0);
+            (Cbor.Text "max_value", Cbor.Unsigned (n - 1));
           ]
       in
       let parse raw =
