@@ -1195,9 +1195,7 @@ let test_non_stop_test_error_raises () =
               ignore
                 (Hegel.Gen.generate_raw
                    (Hegel.Cbor.Map
-                      [
-                        (Hegel.Cbor.Text "type", Hegel.Cbor.Text "integer");
-                      ])));
+                      [ (Hegel.Cbor.Text "type", Hegel.Cbor.Text "integer") ])));
           Hegel.State.clear_connection ();
           ignore (Unix.waitpid [] pid))
 
