@@ -1158,46 +1158,46 @@ let test_collection_more_non_bool () =
       respond (Hegel.Protocol.read_packet rd) (Hegel.Cbor.Text "test_coll");
       respond (Hegel.Protocol.read_packet rd) (Hegel.Cbor.Unsigned 42))
 
-let test_non_stop_test_error_exits_134 () =
+let test_non_stop_test_error_raises () =
   let rd, wr = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  match Unix.fork () with
-  | 0 ->
-      Unix.close rd;
+  Fun.protect
+    ~finally:(fun () ->
+      (try Unix.close rd with _ -> ());
+      try Unix.close wr with _ -> ())
+    (fun () ->
       let conn = Hegel.Protocol.Connection.create wr in
       let ch = Hegel.Protocol.Connection.control_channel conn in
       Hegel.State.clear_connection ();
       Hegel.State.set_connection ch;
       Hegel.State.set_test_aborted false;
-      ignore
-        (Hegel.Gen.generate_raw
-           (Hegel.Cbor.Map
-              [ (Hegel.Cbor.Text "type", Hegel.Cbor.Text "integer") ]));
-      exit 1
-  | pid -> (
-      Unix.close wr;
-      let pkt = Hegel.Protocol.read_packet rd in
-      let error_response =
-        Hegel.Cbor.encode_to_string
-          (Hegel.Cbor.Map
-             [
-               (Hegel.Cbor.Text "error", Hegel.Cbor.Text "something unexpected");
-               (Hegel.Cbor.Text "type", Hegel.Cbor.Text "UnknownError");
-             ])
-      in
-      Hegel.Protocol.write_packet rd
-        {
-          Hegel.Protocol.channel = pkt.channel;
-          message_id = pkt.message_id;
-          is_reply = true;
-          payload = error_response;
-        };
-      let _, status = Unix.waitpid [] pid in
-      Unix.close rd;
-      match status with
-      | Unix.WEXITED 134 -> ()
-      | Unix.WEXITED n ->
-          Alcotest.failf "non-StopTest error expected exit 134, got %d" n
-      | _ -> Alcotest.fail "non-StopTest error got signal")
+      match Unix.fork () with
+      | 0 ->
+          let pkt = Hegel.Protocol.read_packet rd in
+          let error_response =
+            Hegel.Cbor.encode_to_string
+              (Hegel.Cbor.Map
+                 [
+                   ( Hegel.Cbor.Text "error",
+                     Hegel.Cbor.Text "something unexpected" );
+                   (Hegel.Cbor.Text "type", Hegel.Cbor.Text "UnknownError");
+                 ])
+          in
+          Hegel.Protocol.write_packet rd
+            {
+              Hegel.Protocol.channel = pkt.channel;
+              message_id = pkt.message_id;
+              is_reply = true;
+              payload = error_response;
+            };
+          exit 0
+      | pid ->
+          expect_failure "non-StopTest error raises" (fun () ->
+              ignore
+                (Hegel.Gen.generate_raw
+                   (Hegel.Cbor.Map
+                      [ (Hegel.Cbor.Text "type", Hegel.Cbor.Text "integer") ])));
+          Hegel.State.clear_connection ();
+          ignore (Unix.waitpid [] pid))
 
 (* ================================================================ *)
 (* receive_response with non-matching packets buffered               *)
@@ -1477,8 +1477,8 @@ let () =
             test_new_collection_non_text;
           Alcotest.test_case "collection_more non-bool" `Quick
             test_collection_more_non_bool;
-          Alcotest.test_case "non-stop_test error exits 134" `Quick
-            test_non_stop_test_error_exits_134;
+          Alcotest.test_case "non-stop_test error raises" `Quick
+            test_non_stop_test_error_raises;
         ] );
       ( "Mock runner",
         [
