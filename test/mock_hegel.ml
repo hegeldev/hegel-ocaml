@@ -79,15 +79,14 @@ let () =
   let client, _ = Unix.accept sock in
   (* Version negotiation *)
   let pkt = Hegel.Protocol.read_packet client in
-  assert (
-    pkt.Hegel.Protocol.payload = Hegel.Protocol.version_negotiation_message);
+  assert (pkt.Hegel.Protocol.payload = Hegel.Protocol.handshake_string);
   if m = "version_fail" then (
     Hegel.Protocol.write_packet client
       {
         Hegel.Protocol.channel = 0;
         message_id = pkt.message_id;
         is_reply = true;
-        payload = "NotOk";
+        payload = "Error: version negotiation failed";
       };
     Unix.close client;
     Unix.close sock;
@@ -97,7 +96,7 @@ let () =
       Hegel.Protocol.channel = 0;
       message_id = pkt.message_id;
       is_reply = true;
-      payload = Hegel.Protocol.version_negotiation_ok;
+      payload = "Hegel/0.1";
     };
   (* run_test command *)
   let pkt = Hegel.Protocol.read_packet client in

@@ -72,12 +72,25 @@ let rec run ?(test_cases = 100) ?hegel_path test_fn =
   try
     (* Version negotiation *)
     let control = Protocol.Connection.control_channel conn in
-    let req_id =
-      Protocol.Channel.send_request control Protocol.version_negotiation_message
-    in
+    let lo, hi = Protocol.supported_protocol_versions in
+    let req_id = Protocol.Channel.send_request control Protocol.handshake_string in
     let response = Protocol.Channel.receive_response control req_id in
-    if response <> Protocol.version_negotiation_ok then
-      failwith (Printf.sprintf "Version negotiation failed: %s" response);
+    let starts_with prefix s =
+      String.length s >= String.length prefix
+      && String.sub s 0 (String.length prefix) = prefix
+    in
+    if not (starts_with "Hegel/" response) then
+      failwith (Printf.sprintf "Bad handshake response: %s" response);
+    let server_version =
+      float_of_string (String.sub response 6 (String.length response - 6))
+    in
+    if server_version < lo || server_version > hi then
+      failwith
+        (Printf.sprintf
+           "hegel-ocaml supports protocol versions %g through %g, but got \
+            server version %g. Upgrading hegel-ocaml or downgrading your hegel \
+            cli might help."
+           lo hi server_version);
     (* Create test channel *)
     let test_channel = Protocol.Connection.new_channel conn in
     let test_channel_id = Protocol.Channel.channel_id test_channel in

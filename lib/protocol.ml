@@ -4,8 +4,8 @@ let reply_bit = 1 lsl 31
 let terminator = 0x0A
 let close_channel_payload = "\xFE"
 let close_channel_message_id = (1 lsl 31) - 1
-let version_negotiation_message = "Hegel/1.0"
-let version_negotiation_ok = "Ok"
+let supported_protocol_versions = (0.1, 0.1)
+let handshake_string = "hegel_handshake_start"
 
 type packet = {
   channel : int;
