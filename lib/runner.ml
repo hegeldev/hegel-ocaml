@@ -73,7 +73,9 @@ let rec run ?(test_cases = 100) ?hegel_path test_fn =
     (* Version negotiation *)
     let control = Protocol.Connection.control_channel conn in
     let lo, hi = Protocol.supported_protocol_versions in
-    let req_id = Protocol.Channel.send_request control Protocol.handshake_string in
+    let req_id =
+      Protocol.Channel.send_request control Protocol.handshake_string
+    in
     let response = Protocol.Channel.receive_response control req_id in
     let starts_with prefix s =
       String.length s >= String.length prefix
