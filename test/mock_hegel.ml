@@ -17,18 +17,18 @@ let send_request fd channel payload =
 (* Handle a test case channel: read mark_complete, respond, read close *)
 let handle_test_case fd tc_channel_id =
   (* Read mark_complete request *)
-  let pkt = Hegel.Protocol.read_packet fd in
-  assert (pkt.Hegel.Protocol.channel = tc_channel_id);
+  let packet = Hegel.Protocol.read_packet fd in
+  assert (packet.Hegel.Protocol.channel = tc_channel_id);
   let resp = cbor_result Hegel.Cbor.Null in
   Hegel.Protocol.write_packet fd
     {
       Hegel.Protocol.channel = tc_channel_id;
-      message_id = pkt.message_id;
+      message_id = packet.message_id;
       is_reply = true;
       payload = resp;
     };
   (* Read close packet *)
-  let _close_pkt = Hegel.Protocol.read_packet fd in
+  let _close_packet = Hegel.Protocol.read_packet fd in
   ()
 
 let next_tc_channel = ref 2
@@ -78,13 +78,13 @@ let () =
   Unix.listen sock 1;
   let client, _ = Unix.accept sock in
   (* Version negotiation *)
-  let pkt = Hegel.Protocol.read_packet client in
-  assert (pkt.Hegel.Protocol.payload = Hegel.Protocol.handshake_string);
+  let packet = Hegel.Protocol.read_packet client in
+  assert (packet.Hegel.Protocol.payload = Hegel.Protocol.handshake_string);
   if m = "version_fail" then (
     Hegel.Protocol.write_packet client
       {
         Hegel.Protocol.channel = 0;
-        message_id = pkt.message_id;
+        message_id = packet.message_id;
         is_reply = true;
         payload = "Error: version negotiation failed";
       };
@@ -94,13 +94,13 @@ let () =
   Hegel.Protocol.write_packet client
     {
       Hegel.Protocol.channel = 0;
-      message_id = pkt.message_id;
+      message_id = packet.message_id;
       is_reply = true;
       payload = "Hegel/0.1";
     };
   (* run_test command *)
-  let pkt = Hegel.Protocol.read_packet client in
-  let run_test = Hegel.Cbor.decode_string pkt.payload in
+  let packet = Hegel.Protocol.read_packet client in
+  let run_test = Hegel.Cbor.decode_string packet.payload in
   let test_channel_id =
     match Hegel.Cbor.map_get run_test "channel" with
     | Some v -> (
@@ -113,7 +113,7 @@ let () =
   Hegel.Protocol.write_packet client
     {
       Hegel.Protocol.channel = 0;
-      message_id = pkt.message_id;
+      message_id = packet.message_id;
       is_reply = true;
       payload = cbor_result Hegel.Cbor.Null;
     };

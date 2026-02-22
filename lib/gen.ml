@@ -46,8 +46,8 @@ let send_request command payload =
   let request = Cbor.Map entries in
   if is_debug () then
     Printf.eprintf "REQUEST: %s\n%!" (Cbor.to_diagnostic request);
-  let ch = State.get_channel () in
-  let result = Protocol.Channel.request_cbor ch request in
+  let channel = State.get_channel () in
+  let result = Protocol.Channel.request_cbor channel request in
   if is_debug () then
     Printf.eprintf "RESPONSE: %s\n%!" (Cbor.to_diagnostic result);
   result

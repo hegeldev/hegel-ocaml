@@ -218,10 +218,10 @@ and run_test_case tc_channel test_fn is_final got_interesting =
                (Cbor.Text "origin", origin);
              ]
          in
-         let ch = State.get_channel () in
-         (try ignore (Protocol.Channel.request_cbor ch mark_complete)
+         let channel = State.get_channel () in
+         (try ignore (Protocol.Channel.request_cbor channel mark_complete)
           with _ -> () [@coverage off]);
-         try Protocol.Channel.close ch with _ -> () [@coverage off])
+         try Protocol.Channel.close channel with _ -> () [@coverage off])
      | None ->
          (* set_connection called at top of run_test_case *)
          assert false);
