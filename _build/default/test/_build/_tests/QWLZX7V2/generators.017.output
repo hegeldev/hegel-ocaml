@@ -1,0 +1,2 @@
+[33mASSERT[0m value
+Thread 48 killed on uncaught exception Unix.Unix_error(3, "read", "")

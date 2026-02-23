@@ -2,7 +2,7 @@
 # OCAMLPARAM: unset
 # Shared cache: enabled-except-user-rules
 # Shared cache location: /home/drmaciver/.cache/dune/db
-# Workspace root: /home/drmaciver/hegelator/output/hegel-ocaml
+# Workspace root: /home/drmaciver/hegelator/output/hegel-ocaml-gen-primitives
 # Auto-detected concurrency: 24
 # Dune context:
 #  { name = "default"
@@ -13,20 +13,20 @@
 #  ; build_dir = In_build_dir "default"
 #  ; instrument_with = [ "bisect_ppx" ]
 #  }
-$ /home/drmaciver/.opam/5.2.1/bin/ocamlc.opt -config > /tmp/dune_949c9e_output
+$ /home/drmaciver/.opam/5.2.1/bin/ocamlc.opt -config > /tmp/dune_5f7b69_output
 $ (cd _build/.sandbox/d08721c1dd3a606f9c63eeb810be177e/default && .ppx/91be16f8c7b473bc6bcd0e4210417372/ppx.exe --cookie 'library-name="hegel"' -o lib/hegel.pp.ml --impl lib/hegel.ml -corrected-suffix .ppx-corrected -diff-cmd - -dump-ast)
 $ (cd _build/.sandbox/402a93f8b36ba98cb463061a2e4fda2e/default && .ppx/91be16f8c7b473bc6bcd0e4210417372/ppx.exe --cookie 'library-name="hegel"' -o lib/cbor_helpers.pp.ml --impl lib/cbor_helpers.ml -corrected-suffix .ppx-corrected -diff-cmd - -dump-ast)
-$ (cd _build/.sandbox/261250c375439ffca987ae73d91d938a/default && .ppx/91be16f8c7b473bc6bcd0e4210417372/ppx.exe --cookie 'library-name="hegel"' -o lib/generators.pp.ml --impl lib/generators.ml -corrected-suffix .ppx-corrected -diff-cmd - -dump-ast)
 $ (cd _build/.sandbox/d8fe4f3bf8ca7be77f5ffa2b6c8c8f3a/default && .ppx/91be16f8c7b473bc6bcd0e4210417372/ppx.exe --cookie 'library-name="hegel"' -o lib/session.pp.ml --impl lib/session.ml -corrected-suffix .ppx-corrected -diff-cmd - -dump-ast)
-$ (cd _build/.sandbox/a1888381229ff8dc3fa7efcf67b5f023/default && .ppx/91be16f8c7b473bc6bcd0e4210417372/ppx.exe --cookie 'library-name="hegel"' -o lib/protocol.pp.ml --impl lib/protocol.ml -corrected-suffix .ppx-corrected -diff-cmd - -dump-ast)
+$ (cd _build/.sandbox/261250c375439ffca987ae73d91d938a/default && .ppx/91be16f8c7b473bc6bcd0e4210417372/ppx.exe --cookie 'library-name="hegel"' -o lib/generators.pp.ml --impl lib/generators.ml -corrected-suffix .ppx-corrected -diff-cmd - -dump-ast)
 $ (cd _build/.sandbox/1c70329096d6df21b8af01a0c6ea0943/default && .ppx/91be16f8c7b473bc6bcd0e4210417372/ppx.exe --cookie 'library-name="hegel"' -o lib/client.pp.ml --impl lib/client.ml -corrected-suffix .ppx-corrected -diff-cmd - -dump-ast)
+$ (cd _build/.sandbox/a1888381229ff8dc3fa7efcf67b5f023/default && .ppx/91be16f8c7b473bc6bcd0e4210417372/ppx.exe --cookie 'library-name="hegel"' -o lib/protocol.pp.ml --impl lib/protocol.ml -corrected-suffix .ppx-corrected -diff-cmd - -dump-ast)
 $ (cd _build/.sandbox/a96f9f32121045091cb7ae2bda5f4750/default && .ppx/91be16f8c7b473bc6bcd0e4210417372/ppx.exe --cookie 'library-name="hegel"' -o lib/connection.pp.ml --impl lib/connection.ml -corrected-suffix .ppx-corrected -diff-cmd - -dump-ast)
 $ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamldep.opt -modules -impl lib/hegel.pp.ml) > _build/default/lib/.hegel.objs/hegel.impl.d
 $ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamldep.opt -modules -impl lib/cbor_helpers.pp.ml) > _build/default/lib/.hegel.objs/hegel__Cbor_helpers.impl.d
-$ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamldep.opt -modules -impl lib/generators.pp.ml) > _build/default/lib/.hegel.objs/hegel__Generators.impl.d
 $ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamldep.opt -modules -impl lib/session.pp.ml) > _build/default/lib/.hegel.objs/hegel__Session.impl.d
-$ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamldep.opt -modules -impl lib/protocol.pp.ml) > _build/default/lib/.hegel.objs/hegel__Protocol.impl.d
+$ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamldep.opt -modules -impl lib/generators.pp.ml) > _build/default/lib/.hegel.objs/hegel__Generators.impl.d
 $ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamldep.opt -modules -impl lib/client.pp.ml) > _build/default/lib/.hegel.objs/hegel__Client.impl.d
+$ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamldep.opt -modules -impl lib/protocol.pp.ml) > _build/default/lib/.hegel.objs/hegel__Protocol.impl.d
 $ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamldep.opt -modules -impl lib/connection.pp.ml) > _build/default/lib/.hegel.objs/hegel__Connection.impl.d
 $ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamlc.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -bin-annot-occurrences -I lib/.hegel.objs/byte -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/common -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/runtime -I /home/drmaciver/.opam/5.2.1/lib/bytes -I /home/drmaciver/.opam/5.2.1/lib/cbor -I /home/drmaciver/.opam/5.2.1/lib/checkseum -I /home/drmaciver/.opam/5.2.1/lib/checkseum/c -I /home/drmaciver/.opam/5.2.1/lib/ocaml/threads -I /home/drmaciver/.opam/5.2.1/lib/ocaml/unix -I /home/drmaciver/.opam/5.2.1/lib/ocplib-endian -I /home/drmaciver/.opam/5.2.1/lib/optint -no-alias-deps -opaque -open Hegel__ -o lib/.hegel.objs/byte/hegel__Cbor_helpers.cmo -c -impl lib/cbor_helpers.pp.ml)
 $ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamlc.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -bin-annot-occurrences -I lib/.hegel.objs/byte -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/common -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/runtime -I /home/drmaciver/.opam/5.2.1/lib/bytes -I /home/drmaciver/.opam/5.2.1/lib/cbor -I /home/drmaciver/.opam/5.2.1/lib/checkseum -I /home/drmaciver/.opam/5.2.1/lib/checkseum/c -I /home/drmaciver/.opam/5.2.1/lib/ocaml/threads -I /home/drmaciver/.opam/5.2.1/lib/ocaml/unix -I /home/drmaciver/.opam/5.2.1/lib/ocplib-endian -I /home/drmaciver/.opam/5.2.1/lib/optint -no-alias-deps -opaque -open Hegel__ -o lib/.hegel.objs/byte/hegel__Protocol.cmo -c -impl lib/protocol.pp.ml)
@@ -37,7 +37,7 @@ $ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamlc.opt -w @1..3@5..2
 $ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamlc.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -bin-annot-occurrences -I lib/.hegel.objs/byte -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/common -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/runtime -I /home/drmaciver/.opam/5.2.1/lib/bytes -I /home/drmaciver/.opam/5.2.1/lib/cbor -I /home/drmaciver/.opam/5.2.1/lib/checkseum -I /home/drmaciver/.opam/5.2.1/lib/checkseum/c -I /home/drmaciver/.opam/5.2.1/lib/ocaml/threads -I /home/drmaciver/.opam/5.2.1/lib/ocaml/unix -I /home/drmaciver/.opam/5.2.1/lib/ocplib-endian -I /home/drmaciver/.opam/5.2.1/lib/optint -no-alias-deps -opaque -open Hegel__ -o lib/.hegel.objs/byte/hegel.cmo -c -impl lib/hegel.pp.ml)
 $ (cd _build/default/test && ./test_hegel.exe)
 > Testing `hegel'.
-> This run has ID `TA2HXS83'.
+> This run has ID `QWLZX7V2'.
 >
 >   [OK]          version               0   returns version.
 >   [OK]          protocol              0   magic constant.
@@ -244,5 +244,5 @@ $ (cd _build/default/test && ./test_hegel.exe)
 >   [OK]          showcase              1   double negation is identity.
 >   [OK]          showcase              2   abs(x) >= 0.
 >
-> Full test results in `~/hegelator/output/hegel-ocaml/_build/default/test/_build/_tests/hegel'.
-> Test Successful in 7.138s. 204 tests run.
+> Full test results in `~/hegelator/output/hegel-ocaml-gen-primitives/_build/default/test/_build/_tests/hegel'.
+> Test Successful in 7.186s. 204 tests run.

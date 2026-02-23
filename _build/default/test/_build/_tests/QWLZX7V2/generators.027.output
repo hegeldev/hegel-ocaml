@@ -8,3 +8,4 @@
 [33mASSERT[0m collection_more 2
 [33mASSERT[0m more 2
 [33mASSERT[0m more 3
+Thread 58 killed on uncaught exception Unix.Unix_error(3, "read", "")

@@ -1,3 +1,0 @@
-[33mASSERT[0m cmd
-[33mASSERT[0m value
-Thread 47 killed on uncaught exception Unix.Unix_error(3, "read", "")
