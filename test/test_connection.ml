@@ -1112,6 +1112,17 @@ let test_process_one_message_default_timeout () =
   Alcotest.(check string) "payload" "test" pkt.payload;
   close conn
 
+(** Test: control_channel raises when channel 0 is not Live. *)
+let test_control_channel_failure () =
+  let s1, s2 = make_socket_pair () in
+  let conn = create_connection s1 ~name:"Test" () in
+  Hashtbl.replace conn.channels 0l (Dead { channel_id = 0l; name = "Control" });
+  let raised = ref false in
+  (try ignore (control_channel conn) with Failure _ -> raised := true);
+  Alcotest.(check bool) "raised" true !raised;
+  close conn;
+  Unix.close s2
+
 let tests =
   [
     (* Connection lifecycle *)
@@ -1248,4 +1259,7 @@ let tests =
     (* process_one_message default timeout *)
     Alcotest.test_case "process_one_message default timeout" `Quick
       test_process_one_message_default_timeout;
+    (* control_channel failure *)
+    Alcotest.test_case "control_channel failure" `Quick
+      test_control_channel_failure;
   ]

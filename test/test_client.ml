@@ -784,6 +784,147 @@ let test_run_test_case_nest () =
   close conn;
   Unix.close s2
 
+(** Test: missing "channel" field in test_case event raises Failure. *)
+let test_run_test_test_case_missing_channel () =
+  let server_socket, client_socket =
+    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
+  in
+  let server_conn = create_connection server_socket ~name:"Server" () in
+  let client_conn = create_connection client_socket ~name:"Client" () in
+  let t =
+    Thread.create
+      (fun () ->
+        let test_channel = accept_run_test server_conn in
+        ignore
+          (send_request test_channel
+             (`Map [ (`Text "event", `Text "test_case") ])))
+      ()
+  in
+  let raised = ref false in
+  (try
+     let c = create_client client_conn in
+     run_test c ~name:"no_channel" ~test_cases:1 (fun () -> ())
+   with Failure _ -> raised := true);
+  close client_conn;
+  close server_conn;
+  Thread.join t;
+  Alcotest.(check bool) "raised missing channel" true !raised
+
+(** Test: missing "results" field in test_done event raises Failure. *)
+let test_run_test_test_done_missing_results () =
+  let server_socket, client_socket =
+    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
+  in
+  let server_conn = create_connection server_socket ~name:"Server" () in
+  let client_conn = create_connection client_socket ~name:"Client" () in
+  let t =
+    Thread.create
+      (fun () ->
+        let test_channel = accept_run_test server_conn in
+        ignore
+          (pending_get
+             (request test_channel
+                (`Map [ (`Text "event", `Text "test_done") ]))))
+      ()
+  in
+  let raised = ref false in
+  (try
+     let c = create_client client_conn in
+     run_test c ~name:"no_results" ~test_cases:1 (fun () -> ())
+   with Failure _ -> raised := true);
+  close client_conn;
+  close server_conn;
+  Thread.join t;
+  Alcotest.(check bool) "raised missing results" true !raised
+
+(** Test: missing "interesting_test_cases" in results raises Failure. *)
+let test_run_test_missing_interesting_count () =
+  let server_socket, client_socket =
+    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
+  in
+  let server_conn = create_connection server_socket ~name:"Server" () in
+  let client_conn = create_connection client_socket ~name:"Client" () in
+  let t =
+    Thread.create
+      (fun () ->
+        let test_channel = accept_run_test server_conn in
+        ignore
+          (pending_get
+             (request test_channel
+                (`Map
+                   [
+                     (`Text "event", `Text "test_done");
+                     (`Text "results", `Map [ (`Text "passed", `Bool true) ]);
+                   ]))))
+      ()
+  in
+  let raised = ref false in
+  (try
+     let c = create_client client_conn in
+     run_test c ~name:"no_interesting_count" ~test_cases:1 (fun () -> ())
+   with Failure _ -> raised := true);
+  close client_conn;
+  close server_conn;
+  Thread.join t;
+  Alcotest.(check bool) "raised missing interesting count" true !raised
+
+(** Test: missing "channel" in n=1 interesting replay raises Failure. *)
+let test_run_test_interesting_n1_missing_channel () =
+  let server_socket, client_socket =
+    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
+  in
+  let server_conn = create_connection server_socket ~name:"Server" () in
+  let client_conn = create_connection client_socket ~name:"Client" () in
+  let t =
+    Thread.create
+      (fun () ->
+        let test_channel = accept_run_test server_conn in
+        send_test_done test_channel ~interesting:1;
+        ignore
+          (send_request test_channel
+             (`Map [ (`Text "event", `Text "test_case") ])))
+      ()
+  in
+  let raised = ref false in
+  (try
+     let c = create_client client_conn in
+     run_test c ~name:"n1_no_channel" ~test_cases:1 (fun () -> ())
+   with Failure _ -> raised := true);
+  close client_conn;
+  close server_conn;
+  Thread.join t;
+  Alcotest.(check bool) "raised missing channel n=1" true !raised
+
+(** Test: missing "channel" in n>1 interesting replay raises Failure. *)
+let test_run_test_interesting_n2_missing_channel () =
+  let server_socket, client_socket =
+    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
+  in
+  let server_conn = create_connection server_socket ~name:"Server" () in
+  let client_conn = create_connection client_socket ~name:"Client" () in
+  let t =
+    Thread.create
+      (fun () ->
+        let test_channel = accept_run_test server_conn in
+        send_test_done test_channel ~interesting:2;
+        ignore
+          (send_request test_channel
+             (`Map [ (`Text "event", `Text "test_case") ]));
+        ignore
+          (send_request test_channel
+             (`Map [ (`Text "event", `Text "test_case") ])))
+      ()
+  in
+  let raised = ref false in
+  (try
+     let c = create_client client_conn in
+     run_test c ~name:"n2_no_channel" ~test_cases:1 (fun () -> ())
+   with Failure _ -> raised := true);
+  close client_conn;
+  close server_conn;
+  Thread.join t;
+  Alcotest.(check bool) "raised missing channel n=2" true !raised
+
 (* ---- find_hegeld ---- *)
 
 let test_find_hegeld_via_env () =
@@ -849,6 +990,17 @@ let tests =
     Alcotest.test_case "multiple interesting" `Quick test_multiple_interesting;
     Alcotest.test_case "multiple interesting pass" `Quick
       test_multiple_interesting_pass;
+    (* Protocol error paths *)
+    Alcotest.test_case "test_case missing channel" `Quick
+      test_run_test_test_case_missing_channel;
+    Alcotest.test_case "test_done missing results" `Quick
+      test_run_test_test_done_missing_results;
+    Alcotest.test_case "results missing interesting count" `Quick
+      test_run_test_missing_interesting_count;
+    Alcotest.test_case "n=1 replay missing channel" `Quick
+      test_run_test_interesting_n1_missing_channel;
+    Alcotest.test_case "n>1 replay missing channel" `Quick
+      test_run_test_interesting_n2_missing_channel;
     (* find_hegeld *)
     Alcotest.test_case "find_hegeld via env" `Quick test_find_hegeld_via_env;
     Alcotest.test_case "find_hegeld on path" `Quick test_find_hegeld_on_path;
