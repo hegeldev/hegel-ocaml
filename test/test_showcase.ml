@@ -5,6 +5,7 @@
     mathematical or logical property. *)
 
 open Hegel.Client
+open Hegel.Generators
 
 (** Property: addition of integers is commutative. *)
 let test_addition_commutative () =
@@ -52,10 +53,44 @@ let test_abs_nonnegative () =
       let x = Hegel.Cbor_helpers.extract_int v in
       assert (abs x >= 0))
 
+(** Property: filter(x > 50) on integers(0, 100) always yields x > 50.
+
+    Every filtered value must satisfy the predicate. Also checks that the value
+    is still within the original bounds. *)
+let test_filter_greater_than () =
+  Hegel.Session.run_hegel_test ~name:"filter_gt50" ~test_cases:50 (fun () ->
+      let gen =
+        filter
+          (fun v -> Hegel.Cbor_helpers.extract_int v > 50)
+          (integers ~min_value:0 ~max_value:100 ())
+      in
+      let x = Hegel.Cbor_helpers.extract_int (generate gen) in
+      assert (x > 50);
+      assert (x <= 100))
+
+(** Property: filter(x % 2 = 0) on integers(0, 10) always yields even values.
+
+    Every filtered value is even and within bounds. We additionally verify that
+    even numbers are divisible by 2, i.e. that x / 2 * 2 = x. *)
+let test_filter_even () =
+  Hegel.Session.run_hegel_test ~name:"filter_even" ~test_cases:50 (fun () ->
+      let gen =
+        filter
+          (fun v -> Hegel.Cbor_helpers.extract_int v mod 2 = 0)
+          (integers ~min_value:0 ~max_value:10 ())
+      in
+      let x = Hegel.Cbor_helpers.extract_int (generate gen) in
+      assert (x mod 2 = 0);
+      assert (x / 2 * 2 = x);
+      assert (x >= 0 && x <= 10))
+
 let tests =
   [
     Alcotest.test_case "addition is commutative" `Quick
       test_addition_commutative;
     Alcotest.test_case "double negation is identity" `Quick test_double_negation;
     Alcotest.test_case "abs(x) >= 0" `Quick test_abs_nonnegative;
+    Alcotest.test_case "filter(x > 50) yields values > 50" `Quick
+      test_filter_greater_than;
+    Alcotest.test_case "filter(even) yields even values" `Quick test_filter_even;
   ]
