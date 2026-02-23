@@ -1,6 +1,5 @@
-# Hegel SDK for ocaml
+# Hegel SDK for OCaml
 # This justfile provides the standard build recipes.
-# Stage 1 will fill in the stub recipes with real implementations.
 
 # Install dependencies and the hegel binary.
 # If HEGEL_BINARY is set, symlinks it into .venv/bin instead of installing from git.
@@ -15,21 +14,39 @@ setup:
         uv pip install --python .venv/bin/python hegel@git+ssh://git@github.com/antithesishq/hegel-core.git
     fi
 
-# Run tests. Implement this in Stage 1.
+# Run tests with 100% code coverage enforcement.
 test:
-    @echo "test recipe not yet implemented" && exit 1
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export PATH=".venv/bin:$PATH"
+    eval $(opam env)
+    # Clean previous coverage data
+    find _build -name '*.coverage' -delete 2>/dev/null || true
+    # Run tests with bisect_ppx instrumentation
+    dune runtest --instrument-with bisect_ppx --force
+    # Enforce 100% coverage
+    python3 scripts/check-coverage.py
 
-# Auto-format code. Implement this in Stage 1.
+# Auto-format code.
 format:
-    @echo "format recipe not yet implemented" && exit 1
+    #!/usr/bin/env bash
+    set -euo pipefail
+    eval $(opam env)
+    dune fmt 2>&1 || true
 
-# Check formatting + linting. Implement this in Stage 1.
+# Check formatting + linting.
 lint:
-    @echo "lint recipe not yet implemented" && exit 1
+    #!/usr/bin/env bash
+    set -euo pipefail
+    eval $(opam env)
+    dune build @fmt
 
-# Build API documentation from source. Implement this in Stage 1.
+# Build API documentation from source. Must succeed with zero warnings.
 docs:
-    @echo "docs recipe not yet implemented" && exit 1
+    #!/usr/bin/env bash
+    set -euo pipefail
+    eval $(opam env)
+    dune build @doc 2>&1
 
 # Run lint + docs + test (the full CI check).
 check: lint docs test

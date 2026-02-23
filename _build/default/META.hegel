@@ -1,0 +1,6 @@
+description = ""
+requires = ""
+archive(byte) = "hegel.cma"
+archive(native) = "hegel.cmxa"
+plugin(byte) = "hegel.cma"
+plugin(native) = "hegel.cmxs"

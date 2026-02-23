@@ -1,0 +1,15 @@
+lib: [
+  "_build/install/default/lib/hegel/META"
+  "_build/install/default/lib/hegel/dune-package"
+  "_build/install/default/lib/hegel/hegel.a"
+  "_build/install/default/lib/hegel/hegel.cma"
+  "_build/install/default/lib/hegel/hegel.cmi"
+  "_build/install/default/lib/hegel/hegel.cmt"
+  "_build/install/default/lib/hegel/hegel.cmx"
+  "_build/install/default/lib/hegel/hegel.cmxa"
+  "_build/install/default/lib/hegel/hegel.ml"
+  "_build/install/default/lib/hegel/opam"
+]
+libexec: [
+  "_build/install/default/lib/hegel/hegel.cmxs"
+]

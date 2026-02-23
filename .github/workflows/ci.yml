@@ -19,8 +19,13 @@ jobs:
       - uses: extractions/setup-just@v2
       - uses: astral-sh/setup-uv@v6
 
-      # TODO(Stage 1): Add ocaml toolchain setup here.
-      # e.g. actions/setup-go, dtolnay/rust-toolchain, actions/setup-java, etc.
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.2.1
+
+      - name: Install OCaml dependencies
+        run: opam install . --deps-only --with-test --with-doc --yes
 
       - run: just setup
       - run: just check
@@ -41,7 +46,13 @@ jobs:
         with:
           python-version: "3.13"
 
-      # TODO(Stage 1): Add ocaml toolchain setup here.
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.2.1
+
+      - name: Install OCaml dependencies
+        run: opam install . --deps-only --with-test --yes
 
       - run: just setup
       - run: pip install pytest

@@ -1,0 +1,29 @@
+(lang dune 3.21)
+(name hegel)
+(sections (lib .) (libexec .))
+(files
+ (lib
+  (META
+   dune-package
+   hegel.a
+   hegel.cma
+   hegel.cmi
+   hegel.cmt
+   hegel.cmx
+   hegel.cmxa
+   hegel.ml
+   opam))
+ (libexec (hegel.cmxs)))
+(library
+ (name hegel)
+ (kind normal)
+ (archives (byte hegel.cma) (native hegel.cmxa))
+ (plugins (byte hegel.cma) (native hegel.cmxs))
+ (native_archives hegel.a)
+ (main_module_name Hegel)
+ (modes byte native)
+ (modules
+  (singleton
+   (obj_name hegel)
+   (visibility public)
+   (source (path Hegel) (impl (path hegel.ml))))))
