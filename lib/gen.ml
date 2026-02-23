@@ -436,7 +436,13 @@ let binary ?(min_size = 0) ?max_size () =
     | None -> []
   in
   let schema = Cbor.Map pairs in
-  let parse_binary v = base64_decode (cbor_text_value v) in
+  let parse_binary v =
+    match v with
+    | Cbor.Bytes s -> s
+    | _ ->
+        failwith
+          (Printf.sprintf "Expected bytes, got %s" (Cbor.to_diagnostic v))
+  in
   {
     generate = (fun () -> parse_binary (generate_raw schema));
     as_basic = (fun () -> Some { schema; parse = parse_binary });
