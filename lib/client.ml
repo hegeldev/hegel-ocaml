@@ -33,22 +33,22 @@ let in_test : bool ref = ref false
     Uses the backtrace if available. *)
 let extract_origin exn =
   let bt = Printexc.get_raw_backtrace () in
-  match Printexc.backtrace_slots bt with
-  | None -> Printf.sprintf "%s at :0" (Printexc.exn_slot_name exn)
-  | Some slots ->
-      let last_loc =
+  let file_line =
+    match Printexc.backtrace_slots bt with
+    | None -> None
+    | Some slots ->
         Array.fold_left
           (fun acc slot ->
-            match Printexc.Slot.location slot with
-            | Some loc -> Some loc
-            | None -> acc)
+            Option.fold ~none:acc
+              ~some:(fun loc -> Some loc)
+              (Printexc.Slot.location slot))
           None slots
-      in
-      let file, line =
-        match last_loc with
-        | None -> ("", 0)
-        | Some (loc : Printexc.location) -> (loc.filename, loc.line_number)
-      in
+        |> Option.map (fun (loc : Printexc.location) ->
+            (loc.filename, loc.line_number))
+  in
+  match file_line with
+  | None -> Printf.sprintf "%s at :0" (Printexc.exn_slot_name exn)
+  | Some (file, line) ->
       Printf.sprintf "%s at %s:%d" (Printexc.exn_slot_name exn) file line
 
 (** [get_channel ()] returns the current test data channel, raising [Failure] if
