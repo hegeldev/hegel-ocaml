@@ -454,33 +454,33 @@ let pp_packet fmt p =
 (** [compute_crc32 data] computes the CRC32 checksum of [data] and returns it as
     an [int32]. *)
 let compute_crc32 data =
-  <span data-count="228">l</span>et crc =
-    Checkseum.Crc32.digest_string data 0 (String.lengt<span data-count="228">h</span> data)
+  <span data-count="2210">l</span>et crc =
+    Checkseum.Crc32.digest_string data 0 (String.lengt<span data-count="2210">h</span> data)
       Checkseum.Crc32.default
   in
-  <span data-count="228">O</span>ptint.to_int32 crc
+  <span data-count="2210">O</span>ptint.to_int32 crc
 
 (** [pack_uint32_be buf offset value] writes [value] as a big-endian unsigned
     32-bit integer at [offset] in [buf]. *)
 let pack_uint32_be buf offset value =
-  <span data-count="843">B</span>ytes.set buf offset
-    (Char.ch<span data-count="843">r</span> (Int32.to_in<span data-count="843">t</span> (Int32.shift_right_logica<span data-count="843">l</span> value 24) land 0xFF));
-  <span data-count="843">B</span>ytes.set buf (offset + 1)
-    (Char.ch<span data-count="843">r</span> (Int32.to_in<span data-count="843">t</span> (Int32.shift_right_logica<span data-count="843">l</span> value 16) land 0xFF));
-  <span data-count="843">B</span>ytes.set buf (offset + 2)
-    (Char.ch<span data-count="843">r</span> (Int32.to_in<span data-count="843">t</span> (Int32.shift_right_logica<span data-count="843">l</span> value 8) land 0xFF));
-  <span data-count="843">B</span>ytes.set buf (offset + 3) (Char.ch<span data-count="843">r</span> (Int32.to_in<span data-count="843">t</span> value land 0xFF))
+  <span data-count="8335">B</span>ytes.set buf offset
+    (Char.ch<span data-count="8335">r</span> (Int32.to_in<span data-count="8335">t</span> (Int32.shift_right_logica<span data-count="8335">l</span> value 24) land 0xFF));
+  <span data-count="8335">B</span>ytes.set buf (offset + 1)
+    (Char.ch<span data-count="8335">r</span> (Int32.to_in<span data-count="8335">t</span> (Int32.shift_right_logica<span data-count="8335">l</span> value 16) land 0xFF));
+  <span data-count="8335">B</span>ytes.set buf (offset + 2)
+    (Char.ch<span data-count="8335">r</span> (Int32.to_in<span data-count="8335">t</span> (Int32.shift_right_logica<span data-count="8335">l</span> value 8) land 0xFF));
+  <span data-count="8335">B</span>ytes.set buf (offset + 3) (Char.ch<span data-count="8335">r</span> (Int32.to_in<span data-count="8335">t</span> value land 0xFF))
 
 (** [unpack_uint32_be data offset] reads a big-endian unsigned 32-bit integer
     from [data] at [offset]. *)
 let unpack_uint32_be data offset =
-  <span data-count="545">l</span>et b0 = Int32.of_int (Char.cod<span data-count="545">e</span> (Bytes.ge<span data-count="545">t</span> data offset)) in
-  <span data-count="545">l</span>et b1 = Int32.of_int (Char.cod<span data-count="545">e</span> (Bytes.ge<span data-count="545">t</span> data (offset + 1))) in
-  <span data-count="545">l</span>et b2 = Int32.of_int (Char.cod<span data-count="545">e</span> (Bytes.ge<span data-count="545">t</span> data (offset + 2))) in
-  <span data-count="545">l</span>et b3 = Int32.of_int (Char.cod<span data-count="545">e</span> (Bytes.ge<span data-count="545">t</span> data (offset + 3))) in
-  <span data-count="545">I</span>nt32.logor
-    (Int32.logo<span data-count="545">r</span> (Int32.shift_lef<span data-count="545">t</span> b0 24) (Int32.shift_lef<span data-count="545">t</span> b1 16))
-    (Int32.logo<span data-count="545">r</span> (Int32.shift_lef<span data-count="545">t</span> b2 8) b3)
+  <span data-count="4950">l</span>et b0 = Int32.of_int (Char.cod<span data-count="4950">e</span> (Bytes.ge<span data-count="4950">t</span> data offset)) in
+  <span data-count="4950">l</span>et b1 = Int32.of_int (Char.cod<span data-count="4950">e</span> (Bytes.ge<span data-count="4950">t</span> data (offset + 1))) in
+  <span data-count="4950">l</span>et b2 = Int32.of_int (Char.cod<span data-count="4950">e</span> (Bytes.ge<span data-count="4950">t</span> data (offset + 2))) in
+  <span data-count="4950">l</span>et b3 = Int32.of_int (Char.cod<span data-count="4950">e</span> (Bytes.ge<span data-count="4950">t</span> data (offset + 3))) in
+  <span data-count="4950">I</span>nt32.logor
+    (Int32.logo<span data-count="4950">r</span> (Int32.shift_lef<span data-count="4950">t</span> b0 24) (Int32.shift_lef<span data-count="4950">t</span> b1 16))
+    (Int32.logo<span data-count="4950">r</span> (Int32.shift_lef<span data-count="4950">t</span> b2 8) b3)
 
 exception Partial_packet of string
 (** Exception raised when the connection is closed partway through reading a
@@ -494,20 +494,20 @@ exception Connection_closed of string
     [sock]. Raises {!Partial_packet} if the connection closes with no data read,
     or {!Connection_closed} if it closes after partial data. *)
 let recv_exact sock n =
-  <span data-count="330">i</span>f n = 0 then <span data-count="2">B</span>ytes.empty
-  else <span data-count="328">b</span>egin
+  <span data-count="2972">i</span>f n = 0 then <span data-count="2">B</span>ytes.empty
+  else <span data-count="2970">b</span>egin
     let buf = Bytes.create n in
-    <span data-count="328">l</span>et pos = ref 0 in
+    <span data-count="2970">l</span>et pos = ref 0 in
     while !pos &lt; n do
-      <span data-count="329">l</span>et chunk = Unix.read sock buf !pos (n - !pos) in
-      <span data-count="328">i</span>f chunk = 0 then <span data-count="6">b</span>egin
+      <span data-count="2971">l</span>et chunk = Unix.read sock buf !pos (n - !pos) in
+      <span data-count="2969">i</span>f chunk = 0 then <span data-count="6">b</span>egin
         if !pos &gt; 0 then
           <span data-count="1">r</span>aise (Connection_closed "Connection closed while reading data")
         else
           <span data-count="5">r</span>aise
             (Partial_packet "Connection closed partway through reading packet.")
       end;
-      <span data-count="322">p</span>os := !pos + chunk
+      <span data-count="2963">p</span>os := !pos + chunk
     done;
     buf
   end
@@ -518,69 +518,69 @@ let recv_exact sock n =
     Raises [Failure] if the magic number is invalid, the terminator byte is
     invalid, or the CRC32 checksum does not match. *)
 let read_packet sock =
-  <span data-count="113">l</span>et header_buf = recv_exact sock header_size in
-  <span data-count="108">l</span>et pkt_magic = unpack_uint32_be header_buf 0 in
-  <span data-count="108">l</span>et checksum = unpack_uint32_be header_buf 4 in
-  <span data-count="108">l</span>et channel_id = unpack_uint32_be header_buf 8 in
-  <span data-count="108">l</span>et raw_message_id = unpack_uint32_be header_buf 12 in
-  <span data-count="108">l</span>et length = unpack_uint32_be header_buf 16 in
-  <span data-count="108">l</span>et is_reply = Int32.logan<span data-count="108">d</span> raw_message_id reply_bit &lt;&gt; 0l in
+  <span data-count="994">l</span>et header_buf = recv_exact sock header_size in
+  <span data-count="989">l</span>et pkt_magic = unpack_uint32_be header_buf 0 in
+  <span data-count="989">l</span>et checksum = unpack_uint32_be header_buf 4 in
+  <span data-count="989">l</span>et channel_id = unpack_uint32_be header_buf 8 in
+  <span data-count="989">l</span>et raw_message_id = unpack_uint32_be header_buf 12 in
+  <span data-count="989">l</span>et length = unpack_uint32_be header_buf 16 in
+  <span data-count="989">l</span>et is_reply = Int32.logan<span data-count="989">d</span> raw_message_id reply_bit &lt;&gt; 0l in
   let message_id =
-    if is_reply then <span data-count="45">I</span>nt32.logxo<span data-count="45">r</span> raw_message_id reply_bit else <span data-count="63">r</span>aw_message_id
+    if is_reply then <span data-count="620">I</span>nt32.logxo<span data-count="620">r</span> raw_message_id reply_bit else <span data-count="369">r</span>aw_message_id
   in
   if pkt_magic &lt;&gt; magic then
     <span data-count="1">f</span>ailwith
       (Printf.sprint<span data-count="1">f</span> "Invalid magic number: expected 0x%08lX, got 0x%08lX"
          magic pkt_magic);
-  <span data-count="107">l</span>et payload_buf = recv_exact sock (Int32.to_in<span data-count="107">t</span> length) in
-  <span data-count="107">l</span>et term_buf = recv_exact sock 1 in
-  <span data-count="107">l</span>et term_byte = Char.code (Bytes.ge<span data-count="107">t</span> term_buf 0) in
-  <span data-count="107">i</span>f term_byte &lt;&gt; terminator then
+  <span data-count="988">l</span>et payload_buf = recv_exact sock (Int32.to_in<span data-count="988">t</span> length) in
+  <span data-count="987">l</span>et term_buf = recv_exact sock 1 in
+  <span data-count="987">l</span>et term_byte = Char.code (Bytes.ge<span data-count="987">t</span> term_buf 0) in
+  <span data-count="987">i</span>f term_byte &lt;&gt; terminator then
     <span data-count="1">f</span>ailwith
       (Printf.sprint<span data-count="1">f</span> "Invalid terminator: expected 0x%02X, got 0x%02X"
          terminator term_byte);
   (* Verify checksum: CRC32 over header with checksum field zeroed + payload *)
-  <span data-count="106">l</span>et header_for_check = Bytes.copy header_buf in
-  <span data-count="106">p</span>ack_uint32_be header_for_check 4 0l;
-  <span data-count="106">l</span>et check_data =
-    Bytes.to_strin<span data-count="106">g</span> header_for_check ^ Bytes.to_strin<span data-count="106">g</span> payload_buf
+  <span data-count="986">l</span>et header_for_check = Bytes.copy header_buf in
+  <span data-count="986">p</span>ack_uint32_be header_for_check 4 0l;
+  <span data-count="986">l</span>et check_data =
+    Bytes.to_strin<span data-count="986">g</span> header_for_check ^ Bytes.to_strin<span data-count="986">g</span> payload_buf
   in
   let computed_crc = compute_crc32 check_data in
-  <span data-count="106">i</span>f computed_crc &lt;&gt; checksum then
+  <span data-count="986">i</span>f computed_crc &lt;&gt; checksum then
     <span data-count="1">f</span>ailwith
       (Printf.sprint<span data-count="1">f</span> "Checksum mismatch: expected 0x%08lX, got 0x%08lX"
          checksum computed_crc);
-  <span data-count="105">{</span> channel_id; message_id; is_reply; payload = Bytes.to_strin<span data-count="105">g</span> payload_buf }
+  <span data-count="985">{</span> channel_id; message_id; is_reply; payload = Bytes.to_strin<span data-count="985">g</span> payload_buf }
 
 (** [write_packet sock packet] serializes and writes [packet] to Unix file
     descriptor [sock]. *)
 let write_packet sock packet =
-  <span data-count="117">l</span>et wire_message_id =
-    if packet.is_reply then <span data-count="47">I</span>nt32.logo<span data-count="47">r</span> packet.message_id reply_bit
-    else <span data-count="70">p</span>acket.message_id
+  <span data-count="1219">l</span>et wire_message_id =
+    if packet.is_reply then <span data-count="344">I</span>nt32.logo<span data-count="344">r</span> packet.message_id reply_bit
+    else <span data-count="875">p</span>acket.message_id
   in
-  let payload_len = Int32.of_int (String.lengt<span data-count="117">h</span> packet.payload) in
+  let payload_len = Int32.of_int (String.lengt<span data-count="1219">h</span> packet.payload) in
   (* Build header with zeroed checksum for CRC computation *)
-  <span data-count="117">l</span>et header_buf = Bytes.create header_size in
-  <span data-count="117">p</span>ack_uint32_be header_buf 0 magic;
-  <span data-count="117">p</span>ack_uint32_be header_buf 4 0l;
-  <span data-count="117">p</span>ack_uint32_be header_buf 8 packet.channel_id;
-  <span data-count="117">p</span>ack_uint32_be header_buf 12 wire_message_id;
-  <span data-count="117">p</span>ack_uint32_be header_buf 16 payload_len;
-  <span data-count="117">l</span>et check_data = Bytes.to_strin<span data-count="117">g</span> header_buf ^ packet.payload in
+  <span data-count="1219">l</span>et header_buf = Bytes.create header_size in
+  <span data-count="1219">p</span>ack_uint32_be header_buf 0 magic;
+  <span data-count="1219">p</span>ack_uint32_be header_buf 4 0l;
+  <span data-count="1219">p</span>ack_uint32_be header_buf 8 packet.channel_id;
+  <span data-count="1219">p</span>ack_uint32_be header_buf 12 wire_message_id;
+  <span data-count="1219">p</span>ack_uint32_be header_buf 16 payload_len;
+  <span data-count="1219">l</span>et check_data = Bytes.to_strin<span data-count="1219">g</span> header_buf ^ packet.payload in
   let checksum = compute_crc32 check_data in
-  <span data-count="117">p</span>ack_uint32_be header_buf 4 checksum;
+  <span data-count="1219">p</span>ack_uint32_be header_buf 4 checksum;
   (* Write header + payload + terminator *)
-  <span data-count="117">l</span>et total =
-    Bytes.to_strin<span data-count="117">g</span> header_buf ^ packet.payload
-    ^ String.mak<span data-count="117">e</span> 1 (Char.ch<span data-count="117">r</span> terminator)
+  <span data-count="1219">l</span>et total =
+    Bytes.to_strin<span data-count="1219">g</span> header_buf ^ packet.payload
+    ^ String.mak<span data-count="1219">e</span> 1 (Char.ch<span data-count="1219">r</span> terminator)
   in
   let total_bytes = Bytes.of_string total in
-  <span data-count="117">l</span>et len = Bytes.length total_bytes in
-  <span data-count="117">l</span>et pos = ref 0 in
+  <span data-count="1219">l</span>et len = Bytes.length total_bytes in
+  <span data-count="1219">l</span>et pos = ref 0 in
   while !pos &lt; len do
-    <span data-count="117">l</span>et written = Unix.write sock total_bytes !pos (len - !pos) in
-    <span data-count="117">p</span>os := !pos + written
+    <span data-count="1219">l</span>et written = Unix.write sock total_bytes !pos (len - !pos) in
+    <span data-count="1219">p</span>os := !pos + written
   done
 </code></pre>
       </div>

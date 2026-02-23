@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <title>client.ml &mdash; Coverage report</title>
+    <meta name="description" content="99.26% coverage in lib/client.ml">
+    <link rel="stylesheet" href="../coverage.css"/>
+    <script src="../highlight.pack.js"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
+  </head>
+  <body>
+    <div id="header">
+      <h1>
+        <a href="../index.html">
+          <span class="dirname">lib/</span>client.ml
+        </a>
+      </h1>
+      <h2>99.26%</h2>
+    </div>
+    <div id="navbar">
+      <span class="some-visited" style="top:46.53%"></span>
+    </div>
+    <div id="report">
+      <div id="lines-layer">
+        <pre>
+<a id="L1"></a><span > </span>
+<a id="L2"></a><span > </span>
+<a id="L3"></a><span > </span>
+<a id="L4"></a><span > </span>
+<a id="L5"></a><span > </span>
+<a id="L6"></a><span > </span>
+<a id="L7"></a><span > </span>
+<a id="L8"></a><span > </span>
+<a id="L9"></a><span > </span>
+<a id="L10"></a><span > </span>
+<a id="L11"></a><span > </span>
+<a id="L12"></a><span > </span>
+<a id="L13"></a><span > </span>
+<a id="L14"></a><span > </span>
+<a id="L15"></a><span > </span>
+<a id="L16"></a><span > </span>
+<a id="L17"></a><span > </span>
+<a id="L18"></a><span > </span>
+<a id="L19"></a><span > </span>
+<a id="L20"></a><span > </span>
+<a id="L21"></a><span > </span>
+<a id="L22"></a><span > </span>
+<a id="L23"></a><span > </span>
+<a id="L24"></a><span > </span>
+<a id="L25"></a><span > </span>
+<a id="L26"></a><span > </span>
+<a id="L27"></a><span > </span>
+<a id="L28"></a><span > </span>
+<a id="L29"></a><span > </span>
+<a id="L30"></a><span > </span>
+<a id="L31"></a><span > </span>
+<a id="L32"></a><span > </span>
+<a id="L33"></a><span class="visited"> </span>
+<a id="L34"></a><span class="visited"> </span>
+<a id="L35"></a><span class="visited"> </span>
+<a id="L36"></a><span class="visited"> </span>
+<a id="L37"></a><span class="visited"> </span>
+<a id="L38"></a><span > </span>
+<a id="L39"></a><span > </span>
+<a id="L40"></a><span > </span>
+<a id="L41"></a><span > </span>
+<a id="L42"></a><span > </span>
+<a id="L43"></a><span class="visited"> </span>
+<a id="L44"></a><span > </span>
+<a id="L45"></a><span class="visited"> </span>
+<a id="L46"></a><span > </span>
+<a id="L47"></a><span class="visited"> </span>
+<a id="L48"></a><span > </span>
+<a id="L49"></a><span class="visited"> </span>
+<a id="L50"></a><span class="visited"> </span>
+<a id="L51"></a><span > </span>
+<a id="L52"></a><span > </span>
+<a id="L53"></a><span > </span>
+<a id="L54"></a><span > </span>
+<a id="L55"></a><span > </span>
+<a id="L56"></a><span class="visited"> </span>
+<a id="L57"></a><span class="visited"> </span>
+<a id="L58"></a><span > </span>
+<a id="L59"></a><span > </span>
+<a id="L60"></a><span class="visited"> </span>
+<a id="L61"></a><span > </span>
+<a id="L62"></a><span > </span>
+<a id="L63"></a><span > </span>
+<a id="L64"></a><span > </span>
+<a id="L65"></a><span > </span>
+<a id="L66"></a><span class="visited"> </span>
+<a id="L67"></a><span class="visited"> </span>
+<a id="L68"></a><span class="visited"> </span>
+<a id="L69"></a><span class="visited"> </span>
+<a id="L70"></a><span > </span>
+<a id="L71"></a><span class="visited"> </span>
+<a id="L72"></a><span class="visited"> </span>
+<a id="L73"></a><span > </span>
+<a id="L74"></a><span > </span>
+<a id="L75"></a><span > </span>
+<a id="L76"></a><span > </span>
+<a id="L77"></a><span class="visited"> </span>
+<a id="L78"></a><span > </span>
+<a id="L79"></a><span > </span>
+<a id="L80"></a><span > </span>
+<a id="L81"></a><span class="visited"> </span>
+<a id="L82"></a><span > </span>
+<a id="L83"></a><span > </span>
+<a id="L84"></a><span > </span>
+<a id="L85"></a><span > </span>
+<a id="L86"></a><span class="visited"> </span>
+<a id="L87"></a><span class="visited"> </span>
+<a id="L88"></a><span class="visited"> </span>
+<a id="L89"></a><span class="visited"> </span>
+<a id="L90"></a><span > </span>
+<a id="L91"></a><span > </span>
+<a id="L92"></a><span > </span>
+<a id="L93"></a><span > </span>
+<a id="L94"></a><span > </span>
+<a id="L95"></a><span > </span>
+<a id="L96"></a><span > </span>
+<a id="L97"></a><span > </span>
+<a id="L98"></a><span class="visited"> </span>
+<a id="L99"></a><span class="visited"> </span>
+<a id="L100"></a><span class="visited"> </span>
+<a id="L101"></a><span > </span>
+<a id="L102"></a><span class="visited"> </span>
+<a id="L103"></a><span class="visited"> </span>
+<a id="L104"></a><span class="visited"> </span>
+<a id="L105"></a><span > </span>
+<a id="L106"></a><span > </span>
+<a id="L107"></a><span > </span>
+<a id="L108"></a><span > </span>
+<a id="L109"></a><span > </span>
+<a id="L110"></a><span > </span>
+<a id="L111"></a><span > </span>
+<a id="L112"></a><span > </span>
+<a id="L113"></a><span class="visited"> </span>
+<a id="L114"></a><span class="visited"> </span>
+<a id="L115"></a><span class="visited"> </span>
+<a id="L116"></a><span > </span>
+<a id="L117"></a><span class="visited"> </span>
+<a id="L118"></a><span class="visited"> </span>
+<a id="L119"></a><span class="visited"> </span>
+<a id="L120"></a><span > </span>
+<a id="L121"></a><span > </span>
+<a id="L122"></a><span > </span>
+<a id="L123"></a><span > </span>
+<a id="L124"></a><span > </span>
+<a id="L125"></a><span > </span>
+<a id="L126"></a><span > </span>
+<a id="L127"></a><span > </span>
+<a id="L128"></a><span > </span>
+<a id="L129"></a><span > </span>
+<a id="L130"></a><span > </span>
+<a id="L131"></a><span > </span>
+<a id="L132"></a><span > </span>
+<a id="L133"></a><span class="visited"> </span>
+<a id="L134"></a><span class="some-visited"> </span>
+<a id="L135"></a><span class="visited"> </span>
+<a id="L136"></a><span class="visited"> </span>
+<a id="L137"></a><span > </span>
+<a id="L138"></a><span > </span>
+<a id="L139"></a><span > </span>
+<a id="L140"></a><span > </span>
+<a id="L141"></a><span class="visited"> </span>
+<a id="L142"></a><span > </span>
+<a id="L143"></a><span > </span>
+<a id="L144"></a><span > </span>
+<a id="L145"></a><span > </span>
+<a id="L146"></a><span > </span>
+<a id="L147"></a><span class="visited"> </span>
+<a id="L148"></a><span class="visited"> </span>
+<a id="L149"></a><span class="visited"> </span>
+<a id="L150"></a><span > </span>
+<a id="L151"></a><span > </span>
+<a id="L152"></a><span > </span>
+<a id="L153"></a><span > </span>
+<a id="L154"></a><span > </span>
+<a id="L155"></a><span > </span>
+<a id="L156"></a><span > </span>
+<a id="L157"></a><span class="visited"> </span>
+<a id="L158"></a><span class="visited"> </span>
+<a id="L159"></a><span class="visited"> </span>
+<a id="L160"></a><span class="visited"> </span>
+<a id="L161"></a><span > </span>
+<a id="L162"></a><span class="visited"> </span>
+<a id="L163"></a><span class="visited"> </span>
+<a id="L164"></a><span > </span>
+<a id="L165"></a><span > </span>
+<a id="L166"></a><span > </span>
+<a id="L167"></a><span > </span>
+<a id="L168"></a><span > </span>
+<a id="L169"></a><span class="visited"> </span>
+<a id="L170"></a><span > </span>
+<a id="L171"></a><span class="visited"> </span>
+<a id="L172"></a><span class="visited"> </span>
+<a id="L173"></a><span > </span>
+<a id="L174"></a><span > </span>
+<a id="L175"></a><span > </span>
+<a id="L176"></a><span > </span>
+<a id="L177"></a><span > </span>
+<a id="L178"></a><span > </span>
+<a id="L179"></a><span class="visited"> </span>
+<a id="L180"></a><span class="visited"> </span>
+<a id="L181"></a><span class="visited"> </span>
+<a id="L182"></a><span > </span>
+<a id="L183"></a><span > </span>
+<a id="L184"></a><span > </span>
+<a id="L185"></a><span class="visited"> </span>
+<a id="L186"></a><span class="visited"> </span>
+<a id="L187"></a><span class="visited"> </span>
+<a id="L188"></a><span class="visited"> </span>
+<a id="L189"></a><span class="visited"> </span>
+<a id="L190"></a><span class="visited"> </span>
+<a id="L191"></a><span > </span>
+<a id="L192"></a><span class="visited"> </span>
+<a id="L193"></a><span class="visited"> </span>
+<a id="L194"></a><span class="visited"> </span>
+<a id="L195"></a><span > </span>
+<a id="L196"></a><span > </span>
+<a id="L197"></a><span > </span>
+<a id="L198"></a><span > </span>
+<a id="L199"></a><span > </span>
+<a id="L200"></a><span class="visited"> </span>
+<a id="L201"></a><span > </span>
+<a id="L202"></a><span class="visited"> </span>
+<a id="L203"></a><span > </span>
+<a id="L204"></a><span > </span>
+<a id="L205"></a><span class="visited"> </span>
+<a id="L206"></a><span class="visited"> </span>
+<a id="L207"></a><span class="visited"> </span>
+<a id="L208"></a><span > </span>
+<a id="L209"></a><span class="visited"> </span>
+<a id="L210"></a><span class="visited"> </span>
+<a id="L211"></a><span > </span>
+<a id="L212"></a><span class="visited"> </span>
+<a id="L213"></a><span > </span>
+<a id="L214"></a><span > </span>
+<a id="L215"></a><span class="visited"> </span>
+<a id="L216"></a><span > </span>
+<a id="L217"></a><span class="visited"> </span>
+<a id="L218"></a><span class="visited"> </span>
+<a id="L219"></a><span > </span>
+<a id="L220"></a><span > </span>
+<a id="L221"></a><span class="visited"> </span>
+<a id="L222"></a><span > </span>
+<a id="L223"></a><span class="visited"> </span>
+<a id="L224"></a><span > </span>
+<a id="L225"></a><span class="visited"> </span>
+<a id="L226"></a><span class="visited"> </span>
+<a id="L227"></a><span > </span>
+<a id="L228"></a><span > </span>
+<a id="L229"></a><span > </span>
+<a id="L230"></a><span class="visited"> </span>
+<a id="L231"></a><span class="visited"> </span>
+<a id="L232"></a><span > </span>
+<a id="L233"></a><span > </span>
+<a id="L234"></a><span > </span>
+<a id="L235"></a><span class="visited"> </span>
+<a id="L236"></a><span > </span>
+<a id="L237"></a><span > </span>
+<a id="L238"></a><span > </span>
+<a id="L239"></a><span class="visited"> </span>
+<a id="L240"></a><span > </span>
+<a id="L241"></a><span > </span>
+<a id="L242"></a><span class="visited"> </span>
+<a id="L243"></a><span > </span>
+<a id="L244"></a><span class="visited"> </span>
+<a id="L245"></a><span class="visited"> </span>
+<a id="L246"></a><span > </span>
+<a id="L247"></a><span class="visited"> </span>
+<a id="L248"></a><span class="visited"> </span>
+<a id="L249"></a><span > </span>
+<a id="L250"></a><span class="visited"> </span>
+<a id="L251"></a><span > </span>
+<a id="L252"></a><span class="visited"> </span>
+<a id="L253"></a><span class="visited"> </span>
+<a id="L254"></a><span > </span>
+<a id="L255"></a><span > </span>
+<a id="L256"></a><span class="visited"> </span>
+<a id="L257"></a><span > </span>
+<a id="L258"></a><span > </span>
+<a id="L259"></a><span class="visited"> </span>
+<a id="L260"></a><span > </span>
+<a id="L261"></a><span class="visited"> </span>
+<a id="L262"></a><span > </span>
+<a id="L263"></a><span class="visited"> </span>
+<a id="L264"></a><span class="visited"> </span>
+<a id="L265"></a><span > </span>
+<a id="L266"></a><span class="visited"> </span>
+<a id="L267"></a><span > </span>
+<a id="L268"></a><span class="visited"> </span>
+<a id="L269"></a><span class="visited"> </span>
+<a id="L270"></a><span > </span>
+<a id="L271"></a><span > </span>
+<a id="L272"></a><span class="visited"> </span>
+<a id="L273"></a><span class="visited"> </span>
+<a id="L274"></a><span > </span>
+<a id="L275"></a><span class="visited"> </span>
+<a id="L276"></a><span class="visited"> </span>
+<a id="L277"></a><span > </span>
+<a id="L278"></a><span class="visited"> </span>
+<a id="L279"></a><span > </span>
+<a id="L280"></a><span > </span>
+<a id="L281"></a><span class="visited"> </span>
+<a id="L282"></a><span > </span>
+<a id="L283"></a><span class="visited"> </span>
+<a id="L284"></a><span class="visited"> </span>
+<a id="L285"></a><span class="visited"> </span>
+<a id="L286"></a><span > </span>
+<a id="L287"></a><span class="visited"> </span>
+<a id="L288"></a><span > </span>
+</pre>
+      </div>
+      <div id="text-layer">
+        <pre id="line-numbers">
+<a href="#L1">  1</a>
+<a href="#L2">  2</a>
+<a href="#L3">  3</a>
+<a href="#L4">  4</a>
+<a href="#L5">  5</a>
+<a href="#L6">  6</a>
+<a href="#L7">  7</a>
+<a href="#L8">  8</a>
+<a href="#L9">  9</a>
+<a href="#L10"> 10</a>
+<a href="#L11"> 11</a>
+<a href="#L12"> 12</a>
+<a href="#L13"> 13</a>
+<a href="#L14"> 14</a>
+<a href="#L15"> 15</a>
+<a href="#L16"> 16</a>
+<a href="#L17"> 17</a>
+<a href="#L18"> 18</a>
+<a href="#L19"> 19</a>
+<a href="#L20"> 20</a>
+<a href="#L21"> 21</a>
+<a href="#L22"> 22</a>
+<a href="#L23"> 23</a>
+<a href="#L24"> 24</a>
+<a href="#L25"> 25</a>
+<a href="#L26"> 26</a>
+<a href="#L27"> 27</a>
+<a href="#L28"> 28</a>
+<a href="#L29"> 29</a>
+<a href="#L30"> 30</a>
+<a href="#L31"> 31</a>
+<a href="#L32"> 32</a>
+<a href="#L33"> 33</a>
+<a href="#L34"> 34</a>
+<a href="#L35"> 35</a>
+<a href="#L36"> 36</a>
+<a href="#L37"> 37</a>
+<a href="#L38"> 38</a>
+<a href="#L39"> 39</a>
+<a href="#L40"> 40</a>
+<a href="#L41"> 41</a>
+<a href="#L42"> 42</a>
+<a href="#L43"> 43</a>
+<a href="#L44"> 44</a>
+<a href="#L45"> 45</a>
+<a href="#L46"> 46</a>
+<a href="#L47"> 47</a>
+<a href="#L48"> 48</a>
+<a href="#L49"> 49</a>
+<a href="#L50"> 50</a>
+<a href="#L51"> 51</a>
+<a href="#L52"> 52</a>
+<a href="#L53"> 53</a>
+<a href="#L54"> 54</a>
+<a href="#L55"> 55</a>
+<a href="#L56"> 56</a>
+<a href="#L57"> 57</a>
+<a href="#L58"> 58</a>
+<a href="#L59"> 59</a>
+<a href="#L60"> 60</a>
+<a href="#L61"> 61</a>
+<a href="#L62"> 62</a>
+<a href="#L63"> 63</a>
+<a href="#L64"> 64</a>
+<a href="#L65"> 65</a>
+<a href="#L66"> 66</a>
+<a href="#L67"> 67</a>
+<a href="#L68"> 68</a>
+<a href="#L69"> 69</a>
+<a href="#L70"> 70</a>
+<a href="#L71"> 71</a>
+<a href="#L72"> 72</a>
+<a href="#L73"> 73</a>
+<a href="#L74"> 74</a>
+<a href="#L75"> 75</a>
+<a href="#L76"> 76</a>
+<a href="#L77"> 77</a>
+<a href="#L78"> 78</a>
+<a href="#L79"> 79</a>
+<a href="#L80"> 80</a>
+<a href="#L81"> 81</a>
+<a href="#L82"> 82</a>
+<a href="#L83"> 83</a>
+<a href="#L84"> 84</a>
+<a href="#L85"> 85</a>
+<a href="#L86"> 86</a>
+<a href="#L87"> 87</a>
+<a href="#L88"> 88</a>
+<a href="#L89"> 89</a>
+<a href="#L90"> 90</a>
+<a href="#L91"> 91</a>
+<a href="#L92"> 92</a>
+<a href="#L93"> 93</a>
+<a href="#L94"> 94</a>
+<a href="#L95"> 95</a>
+<a href="#L96"> 96</a>
+<a href="#L97"> 97</a>
+<a href="#L98"> 98</a>
+<a href="#L99"> 99</a>
+<a href="#L100">100</a>
+<a href="#L101">101</a>
+<a href="#L102">102</a>
+<a href="#L103">103</a>
+<a href="#L104">104</a>
+<a href="#L105">105</a>
+<a href="#L106">106</a>
+<a href="#L107">107</a>
+<a href="#L108">108</a>
+<a href="#L109">109</a>
+<a href="#L110">110</a>
+<a href="#L111">111</a>
+<a href="#L112">112</a>
+<a href="#L113">113</a>
+<a href="#L114">114</a>
+<a href="#L115">115</a>
+<a href="#L116">116</a>
+<a href="#L117">117</a>
+<a href="#L118">118</a>
+<a href="#L119">119</a>
+<a href="#L120">120</a>
+<a href="#L121">121</a>
+<a href="#L122">122</a>
+<a href="#L123">123</a>
+<a href="#L124">124</a>
+<a href="#L125">125</a>
+<a href="#L126">126</a>
+<a href="#L127">127</a>
+<a href="#L128">128</a>
+<a href="#L129">129</a>
+<a href="#L130">130</a>
+<a href="#L131">131</a>
+<a href="#L132">132</a>
+<a href="#L133">133</a>
+<a href="#L134">134</a>
+<a href="#L135">135</a>
+<a href="#L136">136</a>
+<a href="#L137">137</a>
+<a href="#L138">138</a>
+<a href="#L139">139</a>
+<a href="#L140">140</a>
+<a href="#L141">141</a>
+<a href="#L142">142</a>
+<a href="#L143">143</a>
+<a href="#L144">144</a>
+<a href="#L145">145</a>
+<a href="#L146">146</a>
+<a href="#L147">147</a>
+<a href="#L148">148</a>
+<a href="#L149">149</a>
+<a href="#L150">150</a>
+<a href="#L151">151</a>
+<a href="#L152">152</a>
+<a href="#L153">153</a>
+<a href="#L154">154</a>
+<a href="#L155">155</a>
+<a href="#L156">156</a>
+<a href="#L157">157</a>
+<a href="#L158">158</a>
+<a href="#L159">159</a>
+<a href="#L160">160</a>
+<a href="#L161">161</a>
+<a href="#L162">162</a>
+<a href="#L163">163</a>
+<a href="#L164">164</a>
+<a href="#L165">165</a>
+<a href="#L166">166</a>
+<a href="#L167">167</a>
+<a href="#L168">168</a>
+<a href="#L169">169</a>
+<a href="#L170">170</a>
+<a href="#L171">171</a>
+<a href="#L172">172</a>
+<a href="#L173">173</a>
+<a href="#L174">174</a>
+<a href="#L175">175</a>
+<a href="#L176">176</a>
+<a href="#L177">177</a>
+<a href="#L178">178</a>
+<a href="#L179">179</a>
+<a href="#L180">180</a>
+<a href="#L181">181</a>
+<a href="#L182">182</a>
+<a href="#L183">183</a>
+<a href="#L184">184</a>
+<a href="#L185">185</a>
+<a href="#L186">186</a>
+<a href="#L187">187</a>
+<a href="#L188">188</a>
+<a href="#L189">189</a>
+<a href="#L190">190</a>
+<a href="#L191">191</a>
+<a href="#L192">192</a>
+<a href="#L193">193</a>
+<a href="#L194">194</a>
+<a href="#L195">195</a>
+<a href="#L196">196</a>
+<a href="#L197">197</a>
+<a href="#L198">198</a>
+<a href="#L199">199</a>
+<a href="#L200">200</a>
+<a href="#L201">201</a>
+<a href="#L202">202</a>
+<a href="#L203">203</a>
+<a href="#L204">204</a>
+<a href="#L205">205</a>
+<a href="#L206">206</a>
+<a href="#L207">207</a>
+<a href="#L208">208</a>
+<a href="#L209">209</a>
+<a href="#L210">210</a>
+<a href="#L211">211</a>
+<a href="#L212">212</a>
+<a href="#L213">213</a>
+<a href="#L214">214</a>
+<a href="#L215">215</a>
+<a href="#L216">216</a>
+<a href="#L217">217</a>
+<a href="#L218">218</a>
+<a href="#L219">219</a>
+<a href="#L220">220</a>
+<a href="#L221">221</a>
+<a href="#L222">222</a>
+<a href="#L223">223</a>
+<a href="#L224">224</a>
+<a href="#L225">225</a>
+<a href="#L226">226</a>
+<a href="#L227">227</a>
+<a href="#L228">228</a>
+<a href="#L229">229</a>
+<a href="#L230">230</a>
+<a href="#L231">231</a>
+<a href="#L232">232</a>
+<a href="#L233">233</a>
+<a href="#L234">234</a>
+<a href="#L235">235</a>
+<a href="#L236">236</a>
+<a href="#L237">237</a>
+<a href="#L238">238</a>
+<a href="#L239">239</a>
+<a href="#L240">240</a>
+<a href="#L241">241</a>
+<a href="#L242">242</a>
+<a href="#L243">243</a>
+<a href="#L244">244</a>
+<a href="#L245">245</a>
+<a href="#L246">246</a>
+<a href="#L247">247</a>
+<a href="#L248">248</a>
+<a href="#L249">249</a>
+<a href="#L250">250</a>
+<a href="#L251">251</a>
+<a href="#L252">252</a>
+<a href="#L253">253</a>
+<a href="#L254">254</a>
+<a href="#L255">255</a>
+<a href="#L256">256</a>
+<a href="#L257">257</a>
+<a href="#L258">258</a>
+<a href="#L259">259</a>
+<a href="#L260">260</a>
+<a href="#L261">261</a>
+<a href="#L262">262</a>
+<a href="#L263">263</a>
+<a href="#L264">264</a>
+<a href="#L265">265</a>
+<a href="#L266">266</a>
+<a href="#L267">267</a>
+<a href="#L268">268</a>
+<a href="#L269">269</a>
+<a href="#L270">270</a>
+<a href="#L271">271</a>
+<a href="#L272">272</a>
+<a href="#L273">273</a>
+<a href="#L274">274</a>
+<a href="#L275">275</a>
+<a href="#L276">276</a>
+<a href="#L277">277</a>
+<a href="#L278">278</a>
+<a href="#L279">279</a>
+<a href="#L280">280</a>
+<a href="#L281">281</a>
+<a href="#L282">282</a>
+<a href="#L283">283</a>
+<a href="#L284">284</a>
+<a href="#L285">285</a>
+<a href="#L286">286</a>
+<a href="#L287">287</a>
+<a href="#L288">288</a>
+</pre>
+<pre><code class="ocaml">(** Test runner and lifecycle management for the Hegel SDK.
+
+    This module implements the client-side logic for running property-based
+    tests against a Hegel server. It manages:
+    - Test lifecycle (run_test, test_case events, mark_complete)
+    - Thread-local state for the current data channel
+    - Helper functions (assume, note, target, generate_from_schema)
+    - Origin extraction for error reporting *)
+
+open Connection
+
+exception Assume_rejected
+(** Raised when {!assume} condition is [false]. *)
+
+exception Data_exhausted
+(** Raised when the server runs out of test data (StopTest). *)
+
+(** Thread-local state for the current test case. *)
+let _current_channel : channel option ref = ref None
+
+(** Thread-local flag indicating the final (replay) run. *)
+let _is_final : bool ref = ref false
+
+(** Thread-local flag indicating the test was aborted (StopTest). *)
+let _test_aborted : bool ref = ref false
+
+(** Thread-local flag indicating we are inside a test case. *)
+let _in_test : bool ref = ref false
+
+(** [extract_origin exn] extracts an InterestingOrigin string from an exception.
+    Uses the backtrace if available. *)
+let extract_origin exn =
+  <span data-count="26">l</span>et bt = Printexc.get_raw_backtrace () in
+  <span data-count="26">l</span>et slots = Printexc.backtrace_slots bt in
+  <span data-count="26">m</span>atch slots with
+  | <span data-count="24">N</span>one -&gt; Printf.sprintf "%s at :0" (Printexc.exn_slot_nam<span data-count="24">e</span> exn)
+  | <span data-count="2">S</span>ome slots -&gt;
+      (* Find the last slot with location info *)
+      let filename = ref "" in
+      let lineno = ref 0 in
+      Array.iter
+        (fun slot -&gt;
+          <span data-count="3">O</span>ption.iter
+            (fun (loc : Printexc.location) -&gt;
+              <span data-count="3">f</span>ilename := loc.filename;
+              lineno := loc.line_number)
+            (Printexc.Slot.locatio<span data-count="3">n</span> slot))
+        slots;
+      <span data-count="2">P</span>rintf.sprintf "%s at %s:%d"
+        (Printexc.exn_slot_nam<span data-count="2">e</span> exn)
+        !filename !lineno
+
+(** [get_channel ()] returns the current test data channel, raising [Failure] if
+    not in a test context. *)
+let get_channel () =
+  <span data-count="286">m</span>atch !_current_channel with
+  | <span data-count="1">N</span>one -&gt;
+      failwith
+        "Not in a test context - must be called from within a test function"
+  | <span data-count="285">S</span>ome ch -&gt; ch
+
+(** [generate_from_schema schema] generates a value from a schema by sending a
+    generate command to the server. Raises {!Data_exhausted} if the server
+    signals StopTest. *)
+let generate_from_schema schema =
+  <span data-count="278">l</span>et channel = get_channel () in
+  <span data-count="278">t</span>ry
+    pending_ge<span data-count="277">t</span>
+      (reques<span data-count="278">t</span> channel
+         (`Map [ (`Text "command", `Text "generate"); (`Text "schema", schema) ]))
+  with <span data-count="1">R</span>equest_error e when e.error_type = "StopTest" -&gt;
+    <span data-count="1">_</span>test_aborted := true;
+    raise Data_exhausted
+
+(** [assume condition] rejects the current test case if [condition] is [false].
+*)
+let assume condition = <span data-count="6">i</span>f not condition then <span data-count="4">r</span>aise Assume_rejected
+
+(** [note message] records a message that will be printed on the final (failing)
+    run. *)
+let note message = <span data-count="7">i</span>f !_is_final then <span data-count="1">P</span>rintf.eprintf "%s\n%!" message
+
+(** [target value label] sends a target command to guide the search engine
+    toward higher values. *)
+let target value label =
+  <span data-count="5">l</span>et channel = get_channel () in
+  <span data-count="5">i</span>gnore
+    (pending_ge<span data-count="5">t</span>
+       (reques<span data-count="5">t</span> channel
+          (`Map
+             [
+               (`Text "command", `Text "target");
+               (`Text "value", `Float value);
+               (`Text "label", `Text label);
+             ])))
+
+(** [start_span ?label ()] starts a generation span for better shrinking. *)
+let start_span ?(label = <span data-count="2">0</span>) () =
+  <span data-count="2">i</span>f !_test_aborted then <span data-count="1">(</span>)
+  else <span data-count="1">b</span>egin
+    let channel = get_channel () in
+    <span data-count="1">i</span>gnore
+      (pending_ge<span data-count="1">t</span>
+         (reques<span data-count="1">t</span> channel
+            (`Map
+               [
+                 (`Text "command", `Text "start_span");
+                 (`Text "label", `Int label);
+               ])))
+  end
+
+(** [stop_span ?discard ()] ends the current generation span. *)
+let stop_span ?(discard = <span data-count="2">f</span>alse) () =
+  <span data-count="2">i</span>f !_test_aborted then <span data-count="1">(</span>)
+  else <span data-count="1">b</span>egin
+    let channel = get_channel () in
+    <span data-count="1">i</span>gnore
+      (pending_ge<span data-count="1">t</span>
+         (reques<span data-count="1">t</span> channel
+            (`Map
+               [
+                 (`Text "command", `Text "stop_span");
+                 (`Text "discard", `Bool discard);
+               ])))
+  end
+
+type client = { connection : connection; control : channel; lock : Mutex.t }
+(** Hegel client for running property-based tests. *)
+
+(** [create_client connection] creates a new client from a connection. The
+    connection must not yet have had its handshake performed. *)
+let create_client connection =
+  <span data-count="14">l</span>et server_version = float_of_string (send_handshak<span data-count="14">e</span> connection) in
+  <span data-count="14">i</span>f server_version &lt; 0.<span data-count="0">1</span> || server_version &gt; 0.<span data-count="1">1</span> then
+    <span data-count="1">f</span>ailwith
+      (Printf.sprint<span data-count="1">f</span>
+         "hegel-ocaml supports protocol versions 0.1 through 0.1, but got \
+          server version %g. Upgrading hegel-ocaml or downgrading your hegel \
+          cli might help."
+         server_version);
+  <span data-count="13">{</span> connection; control = connection.control_channel; lock = Mutex.creat<span data-count="13">e</span> () }
+
+(** [run_test_case client channel test_fn ~is_final] runs a single test case.
+    Sets up thread-local state and calls [test_fn]. Reports status via
+    mark_complete. *)
+let run_test_case _client channel test_fn ~is_final =
+  <span data-count="231">i</span>f !_current_channel &lt;&gt; None then
+    <span data-count="1">f</span>ailwith "Cannot nest test cases - already inside a test case";
+  <span data-count="230">_</span>current_channel := Some channel;
+  _is_final := is_final;
+  _test_aborted := false;
+  _in_test := true;
+  let already_complete = ref false in
+  let status = ref "VALID" in
+  let origin = ref `Null in
+  let final_exn = ref None in
+  (try test_f<span data-count="202">n</span> () with
+  | <span data-count="3">A</span>ssume_rejected -&gt; status := "INVALID"
+  | <span data-count="1">D</span>ata_exhausted -&gt; already_complete := true
+  | <span data-count="24">e</span>xn -&gt;
+      status := "INTERESTING";
+      origin := `Text (extract_origi<span data-count="24">n</span> exn);
+      if is_final then <span data-count="4">f</span>inal_exn := Some exn);
+  _current_channel := None;
+  _is_final := false;
+  _test_aborted := false;
+  _in_test := false;
+  (if not !already_complete then
+     <span data-count="229">t</span>ry
+       ignore
+         (pending_ge<span data-count="9">t</span>
+            (reques<span data-count="229">t</span> channel
+               (`Map
+                  [
+                    (`Text "command", `Text "mark_complete");
+                    (`Text "status", `Text !status);
+                    (`Text "origin", !origin);
+                  ])))
+     with <span data-count="220">R</span>equest_error e when e.error_type = "StopTest" -&gt; <span data-count="220">(</span>));
+  <span data-count="230">c</span>lose_channel channel;
+  <span data-count="230">m</span>atch !final_exn with <span data-count="4">S</span>ome e -&gt; raise e | <span data-count="226">N</span>one -&gt; ()
+
+(** [run_test client ~name ~test_cases test_fn] runs a property test. *)
+let run_test client ~name ~test_cases test_fn =
+  <span data-count="27">i</span>f !_in_test then
+    <span data-count="1">f</span>ailwith "Cannot nest test cases - already inside a test case";
+  <span data-count="26">l</span>et test_channel = new_channel client.connection ~role:"Test" () in
+  <span data-count="26">M</span>utex.lock client.lock;
+  <span data-count="26">F</span>un.protect
+    ~finally:(fun () -&gt; <span data-count="26">M</span>utex.unlock client.lock)
+    (fun () -&gt;
+      <span data-count="26">i</span>gnore
+        (pending_ge<span data-count="26">t</span>
+           (reques<span data-count="26">t</span> client.control
+              (`Map
+                 [
+                   (`Text "command", `Text "run_test");
+                   (`Text "name", `Text name);
+                   (`Text "test_cases", `Int test_cases);
+                   (`Text "channel", `Int (Int32.to_in<span data-count="26">t</span> test_channel.channel_id));
+                 ]))));
+  <span data-count="26">l</span>et result_data = ref None in
+  let continue = ref true in
+  while !continue do
+    <span data-count="252">l</span>et message_id, message = receive_request test_channel () in
+    <span data-count="252">l</span>et pairs = Cbor_helpers.extract_dict message in
+    <span data-count="252">l</span>et event =
+      match List.assoc_opt (`Text "event") pairs with
+      | <span data-count="251">S</span>ome v -&gt; Cbor_helpers.extract_strin<span data-count="251">g</span> v
+      | <span data-count="1">N</span>one -&gt; ""
+    in
+    if event = "test_case" then <span data-count="224">b</span>egin
+      let channel_id =
+        Int32.of_int
+          (Cbor_helpers.extract_in<span data-count="224">t</span> (List.asso<span data-count="224">c</span> (`Text "channel") pairs))
+      in
+      <span data-count="224">s</span>end_response_value test_channel message_id `Null;
+      <span data-count="224">l</span>et test_case_channel =
+        connect_channel client.connection channel_id ~role:"Test Case" ()
+      in
+      <span data-count="224">r</span>un_test_cas<span data-count="224">e</span> client test_case_channel test_fn ~is_final:false
+    end
+    else <span data-count="28">i</span>f event = "test_done" then <span data-count="26">b</span>egin
+      send_response_value test_channel message_id (`Bool true);
+      <span data-count="26">r</span>esult_data :=
+        Some (Cbor_helpers.extract_dic<span data-count="26">t</span> (List.asso<span data-count="26">c</span> (`Text "results") pairs));
+      continue := false
+    end
+    else
+      <span data-count="2">s</span>end_response_ra<span data-count="2">w</span> test_channel message_id
+        (CBOR.Simple.encod<span data-count="2">e</span>
+           (`Map
+              [
+                ( `Text "error",
+                  `Text (Printf.sprint<span data-count="2">f</span> "Unrecognised event %s" event) );
+                (`Text "type", `Text "InvalidMessage");
+              ]))
+  done;
+  let results = match !result_data with <span data-count="26">S</span>ome r -&gt; r | None -&gt; assert false in
+  let n_interesting =
+    Cbor_helpers.extract_int
+      (List.asso<span data-count="26">c</span> (`Text "interesting_test_cases") results)
+  in
+  <span data-count="26">i</span>f n_interesting = 0 then <span data-count="22">(</span>)
+  else <span data-count="4">i</span>f n_interesting = 1 then <span data-count="2">b</span>egin
+    let message_id, message = receive_request test_channel () in
+    <span data-count="2">l</span>et pairs = Cbor_helpers.extract_dict message in
+    <span data-count="2">l</span>et channel_id =
+      Int32.of_int
+        (Cbor_helpers.extract_in<span data-count="2">t</span> (List.asso<span data-count="2">c</span> (`Text "channel") pairs))
+    in
+    <span data-count="2">s</span>end_response_value test_channel message_id `Null;
+    <span data-count="2">l</span>et test_case_channel =
+      connect_channel client.connection channel_id ~role:"Test Case" ()
+    in
+    <span data-count="2">r</span>un_test_case client test_case_channel test_fn ~is_final:true
+  end
+  else
+    <span data-count="2">l</span>et exceptions = ref [] in
+    for _i = 0 to n_interesting - 1 do
+      <span data-count="4">t</span>ry
+        let message_id, message = receive_request test_channel () in
+        <span data-count="4">l</span>et pairs = Cbor_helpers.extract_dict message in
+        <span data-count="4">l</span>et channel_id =
+          Int32.of_int
+            (Cbor_helpers.extract_in<span data-count="4">t</span> (List.asso<span data-count="4">c</span> (`Text "channel") pairs))
+        in
+        <span data-count="4">s</span>end_response_value test_channel message_id `Null;
+        <span data-count="4">l</span>et test_case_channel =
+          connect_channel client.connection channel_id ~role:"Test Case" ()
+        in
+        <span data-count="4">r</span>un_test_case client test_case_channel test_fn ~is_final:true;
+        <span data-count="2">e</span>xceptions :=
+          Failure
+            (Printf.sprint<span data-count="2">f</span> "Expected test case %d to fail but it didn't"
+               (List.lengt<span data-count="2">h</span> !exceptions))
+          :: !exceptions
+      with <span data-count="2">e</span> -&gt; exceptions := e :: !exceptions
+    done;
+    let exns = List.rev !exceptions in
+    <span data-count="2">r</span>aise
+      (Failure
+         (Printf.sprint<span data-count="2">f</span> "Multiple failures (%d):\n%s" (List.lengt<span data-count="2">h</span> exns)
+            (String.conca<span data-count="2">t</span> "\n"
+               (List.map<span data-count="2">i</span>
+                  (fun i e -&gt;
+                    <span data-count="4">P</span>rintf.sprintf "  %d: %s" i (Printexc.to_strin<span data-count="4">g</span> e))
+                  exns))))
+</code></pre>
+      </div>
+    </div>
+    <script src="../coverage.js"></script>
+  </body>
+</html>

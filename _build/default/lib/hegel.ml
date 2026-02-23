@@ -15,3 +15,9 @@ module Cbor_helpers = Cbor_helpers
 
 module Connection = Connection
 (** Multiplexed connection and channel abstractions. *)
+
+module Client = Client
+(** Test runner and lifecycle management. *)
+
+module Session = Session
+(** Global session management for running property tests. *)

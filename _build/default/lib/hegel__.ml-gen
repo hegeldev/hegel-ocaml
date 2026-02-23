@@ -3,11 +3,17 @@
 (** @canonical Hegel.Cbor_helpers *)
 module Cbor_helpers = Hegel__Cbor_helpers
 
+(** @canonical Hegel.Client *)
+module Client = Hegel__Client
+
 (** @canonical Hegel.Connection *)
 module Connection = Hegel__Connection
 
 (** @canonical Hegel.Protocol *)
 module Protocol = Hegel__Protocol
+
+(** @canonical Hegel.Session *)
+module Session = Hegel__Session
 
 module Hegel__ = struct end
 [@@deprecated "this module is shadowed"]

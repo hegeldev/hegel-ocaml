@@ -18,7 +18,7 @@ setup:
 test:
     #!/usr/bin/env bash
     set -euo pipefail
-    export PATH=".venv/bin:$PATH"
+    export PATH="$(pwd)/.venv/bin:$PATH"
     eval $(opam env)
     # Clean previous coverage data
     find _build -name '*.coverage' -delete 2>/dev/null || true

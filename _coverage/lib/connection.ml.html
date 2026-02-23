@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8"/>
     <title>connection.ml &mdash; Coverage report</title>
-    <meta name="description" content="99.13% coverage in lib/connection.ml">
+    <meta name="description" content="100.00% coverage in lib/connection.ml">
     <link rel="stylesheet" href="../coverage.css"/>
     <script src="../highlight.pack.js"></script>
     <script>hljs.initHighlightingOnLoad();</script>
@@ -15,11 +15,9 @@
           <span class="dirname">lib/</span>connection.ml
         </a>
       </h1>
-      <h2>99.13%</h2>
+      <h2>100.00%</h2>
     </div>
     <div id="navbar">
-      <span class="some-visited" style="top:29.46%"></span>
-      <span class="some-visited" style="bottom:3.01%"></span>
     </div>
     <div id="report">
       <div id="lines-layer">
@@ -170,7 +168,7 @@
 <a id="L144"></a><span class="visited"> </span>
 <a id="L145"></a><span > </span>
 <a id="L146"></a><span class="visited"> </span>
-<a id="L147"></a><span class="some-visited"> </span>
+<a id="L147"></a><span class="visited"> </span>
 <a id="L148"></a><span > </span>
 <a id="L149"></a><span class="visited"> </span>
 <a id="L150"></a><span > </span>
@@ -507,7 +505,7 @@
 <a id="L481"></a><span > </span>
 <a id="L482"></a><span > </span>
 <a id="L483"></a><span class="visited"> </span>
-<a id="L484"></a><span class="some-visited"> </span>
+<a id="L484"></a><span class="visited"> </span>
 <a id="L485"></a><span class="visited"> </span>
 <a id="L486"></a><span class="visited"> </span>
 <a id="L487"></a><span > </span>
@@ -1064,27 +1062,27 @@ exception
 (** [result_or_error body] extracts the ["result"] field from a CBOR map, or
     raises {!Request_error} if an ["error"] field is present. *)
 let result_or_error body =
-  <span data-count="15">l</span>et pairs = Cbor_helpers.extract_dict body in
-  <span data-count="15">l</span>et find_text key =
-    <span data-count="12">m</span>atch List.assoc_opt (`Text key) pairs with
-    | <span data-count="11">S</span>ome v -&gt; Cbor_helpers.extract_string v
+  <span data-count="560">l</span>et pairs = Cbor_helpers.extract_dict body in
+  <span data-count="560">l</span>et find_text key =
+    <span data-count="454">m</span>atch List.assoc_opt (`Text key) pairs with
+    | <span data-count="453">S</span>ome v -&gt; Cbor_helpers.extract_string v
     | <span data-count="1">N</span>one -&gt; ""
   in
-  if List.mem_assoc (`Text "error") pairs then <span data-count="6">b</span>egin
+  if List.mem_assoc (`Text "error") pairs then <span data-count="227">b</span>egin
     let msg = find_text "error" in
-    <span data-count="6">l</span>et error_type = find_text "type" in
-    <span data-count="6">l</span>et data =
+    <span data-count="227">l</span>et error_type = find_text "type" in
+    <span data-count="227">l</span>et data =
       List.filter
         (fun (k, _) -&gt;
-          <span data-count="12">l</span>et ks = Cbor_helpers.extract_string k in
-          <span data-count="12">k</span>s &lt;&gt; "error" &amp;&amp; <span data-count="6">k</span>s &lt;&gt; "type")
+          <span data-count="673">l</span>et ks = Cbor_helpers.extract_string k in
+          <span data-count="673">k</span>s &lt;&gt; "error" &amp;&amp; <span data-count="446">k</span>s &lt;&gt; "type")
         pairs
     in
-    <span data-count="6">r</span>aise (Request_error { message = msg; error_type; data })
+    <span data-count="227">r</span>aise (Request_error { message = msg; error_type; data })
   end
   else
-    <span data-count="9">m</span>atch List.assoc_opt (`Text "result") pairs with
-    | <span data-count="8">S</span>ome v -&gt; v
+    <span data-count="333">m</span>atch List.assoc_opt (`Text "result") pairs with
+    | <span data-count="332">S</span>ome v -&gt; v
     | <span data-count="1">N</span>one -&gt; failwith "Response has neither 'result' nor 'error'"
 
 (** Connection state after handshake. *)
@@ -1123,11 +1121,11 @@ and channel = {
 
 (** [channel_name ch] returns a human-readable name for channel [ch]. *)
 let channel_name ch =
-  <span data-count="105">m</span>atch (ch.role, ch.conn.name) with
+  <span data-count="984">m</span>atch (ch.role, ch.conn.name) with
   | <span data-count="1">N</span>one, None -&gt; Printf.sprintf "Channel %ld" ch.channel_id
   | <span data-count="7">N</span>one, Some n -&gt; Printf.sprintf "%s channel [id=%ld]" n ch.channel_id
   | <span data-count="6">S</span>ome r, None -&gt; Printf.sprintf "channel [id=%ld] (%s)" ch.channel_id r
-  | <span data-count="91">S</span>ome r, Some n -&gt;
+  | <span data-count="970">S</span>ome r, Some n -&gt;
       Printf.sprintf "%s channel [id=%ld] (%s)" n ch.channel_id r
 
 (** [channel_repr ch] returns a debug representation of channel [ch]. *)
@@ -1139,20 +1137,20 @@ let channel_repr ch =
 (** [entry_name conn channel_id] returns the name of the channel entry for
     [channel_id] in [conn], or a default. *)
 let entry_name conn channel_id =
-  <span data-count="103">m</span>atch Hashtbl.find_opt conn.channels channel_id with
-  | <span data-count="93">S</span>ome (Live ch) -&gt; channel_name ch
+  <span data-count="982">m</span>atch Hashtbl.find_opt conn.channels channel_id with
+  | <span data-count="972">S</span>ome (Live ch) -&gt; channel_name ch
   | <span data-count="4">S</span>ome (Dead d) -&gt; d.name
   | <span data-count="6">N</span>one -&gt; Printf.sprintf "channel %ld" channel_id
 
 (** [make_channel conn channel_id ~role] creates a new channel. *)
 let make_channel conn channel_id ~role =
-  <span data-count="127">a</span>ssert <span data-count="127">(</span>channel_id &lt;&gt; 0<span data-count="39">l</span> || role = Some "Control<span data-count="88">"</span>);
+  <span data-count="427">a</span>ssert <span data-count="427">(</span>channel_id &lt;&gt; 0<span data-count="313">l</span> || role = Some "Control<span data-count="114">"</span>);
   {
     channel_id;
     conn;
-    inbox = Queue.creat<span data-count="127">e</span> ();
-    requests = Queue.creat<span data-count="127">e</span> ();
-    responses = Hashtbl.creat<span data-count="127">e</span> 8;
+    inbox = Queue.creat<span data-count="427">e</span> ();
+    requests = Queue.creat<span data-count="427">e</span> ();
+    responses = Hashtbl.creat<span data-count="427">e</span> 8;
     role;
     next_message_id = 1l;
     closed = false;
@@ -1160,20 +1158,20 @@ let make_channel conn channel_id ~role =
 
 (** [send_packet conn packet] sends a packet on the connection, thread-safe. *)
 let send_packet conn packet =
-  <span data-count="107">M</span>utex.lock conn.writer_lock;
-  <span data-count="107">F</span>un.protect
-    ~finally:(fun () -&gt; <span data-count="107">M</span>utex.unlock conn.writer_lock)
-    (fun () -&gt; <span data-count="107">w</span>rite_packet conn.socket packet)
+  <span data-count="1209">M</span>utex.lock conn.writer_lock;
+  <span data-count="1209">F</span>un.protect
+    ~finally:(fun () -&gt; <span data-count="1209">M</span>utex.unlock conn.writer_lock)
+    (fun () -&gt; <span data-count="1209">w</span>rite_packet conn.socket packet)
 
 (** [read_packet_with_timeout sock timeout] reads a packet with a socket
     timeout. Returns [Some packet] on success, [None] on timeout. *)
 let read_packet_with_timeout sock timeout =
-  <span data-count="104">U</span>nix.setsockopt_float sock Unix.SO_RCVTIMEO timeout;
-  <span data-count="104">m</span>atch read_packet sock with
-  | <span data-count="99">p</span>kt -&gt;
+  <span data-count="985">U</span>nix.setsockopt_float sock Unix.SO_RCVTIMEO timeout;
+  <span data-count="985">m</span>atch read_packet sock with
+  | <span data-count="979">p</span>kt -&gt;
       Unix.setsockopt_float sock Unix.SO_RCVTIMEO 0.0;
-      <span data-count="99">S</span>ome pkt
-  | <span data-count="1">e</span>xception Unix.Unix_error ((<span data-count="1">U</span>nix.EAGAIN | <span data-count="0">U</span>nix.EWOULDBLOCK), _, _) -&gt;
+      <span data-count="978">S</span>ome pkt
+  | <span data-count="1">e</span>xception Unix.Unix_error (Unix.EAGAIN, _, _) -&gt;
       Unix.setsockopt_float sock Unix.SO_RCVTIMEO 0.0;
       <span data-count="1">N</span>one
 
@@ -1184,31 +1182,31 @@ let read_packet_with_timeout sock timeout =
     by another caller, polls until it becomes available or [until] is satisfied.
 *)
 let run_reader conn ~until =
-  <span data-count="108">i</span>f until () then <span data-count="8">(</span>)
-  else <span data-count="100">b</span>egin
+  <span data-count="980">i</span>f until () then <span data-count="9">(</span>)
+  else <span data-count="971">b</span>egin
     let acquired = ref false in
     Fun.protect
-      ~finally:(fun () -&gt; <span data-count="100">i</span>f !acquired then <span data-count="99">M</span>utex.unlock conn.reader_lock)
+      ~finally:(fun () -&gt; <span data-count="971">i</span>f !acquired then <span data-count="970">M</span>utex.unlock conn.reader_lock)
       (fun () -&gt;
         (* Try to acquire the reader lock, polling if busy *)
-        <span data-count="100">l</span>et got_lock = ref false in
+        <span data-count="971">l</span>et got_lock = ref false in
         while not !got_lock do
-          <span data-count="110">i</span>f Mutex.try_lock conn.reader_lock then <span data-count="99">b</span>egin
+          <span data-count="981">i</span>f Mutex.try_lock conn.reader_lock then <span data-count="970">b</span>egin
             acquired := true;
             got_lock := true
           end
           else <span data-count="11">i</span>f until () then <span data-count="1">g</span>ot_lock := true (* exit without lock *)
           else <span data-count="10">U</span>nix.sleep<span data-count="10">f</span> 0.001
         done;
-        if !acquired then <span data-count="99">b</span>egin
-          while conn.running &amp;&amp; <span data-count="199">n</span>ot (unti<span data-count="199">l</span> ()) do
-            <span data-count="104">m</span>atch read_packet_with_timeout conn.socket 0.1 with
+        if !acquired then <span data-count="970">b</span>egin
+          while conn.running &amp;&amp; <span data-count="1949">n</span>ot (unti<span data-count="1949">l</span> ()) do
+            <span data-count="985">m</span>atch read_packet_with_timeout conn.socket 0.1 with
             | <span data-count="1">N</span>one -&gt; ()
-            | <span data-count="99">S</span>ome pkt -&gt;
+            | <span data-count="978">S</span>ome pkt -&gt;
                 let _channel_name = entry_name conn pkt.channel_id in
-                <span data-count="99">i</span>f pkt.payload = close_channel_payload then <span data-count="5">b</span>egin
+                <span data-count="978">i</span>f pkt.payload = close_channel_payload then <span data-count="14">b</span>egin
                   (* Handle channel close *)
-                  assert <span data-count="5">(</span>pkt.message_id = close_channel_message_id);
+                  assert <span data-count="14">(</span>pkt.message_id = close_channel_message_id);
                   if conn.debug then <span data-count="5">b</span>egin
                     let prev_name =
                       match Hashtbl.find_opt conn.channels pkt.channel_id with
@@ -1220,9 +1218,9 @@ let run_reader conn ~until =
                       (Dead { channel_id = pkt.channel_id; name = prev_name })
                   end
                 end
-                else <span data-count="94">b</span>egin
+                else <span data-count="964">b</span>egin
                   match Hashtbl.find_opt conn.channels pkt.channel_id with
-                  | <span data-count="91">S</span>ome (Live ch) -&gt; Queue.pus<span data-count="91">h</span> (Pkt pkt) ch.inbox
+                  | <span data-count="961">S</span>ome (Live ch) -&gt; Queue.pus<span data-count="961">h</span> (Pkt pkt) ch.inbox
                   | <span data-count="1">S</span>ome (Dead _) | <span data-count="2">N</span>one -&gt;
                       let error_type =
                         match Hashtbl.find_opt conn.channels pkt.channel_id with
@@ -1260,16 +1258,16 @@ let run_reader conn ~until =
 
 (** [close conn] closes the connection and signals all live channels. *)
 let close conn =
-  <span data-count="89">i</span>f not conn.running then <span data-count="1">(</span>)
-  else <span data-count="88">b</span>egin
+  <span data-count="111">i</span>f not conn.running then <span data-count="1">(</span>)
+  else <span data-count="110">b</span>egin
     conn.running &lt;- false;
-    (try Unix.shutdow<span data-count="87">n</span> conn.socket Unix.SHUTDOWN_ALL
+    (try Unix.shutdow<span data-count="109">n</span> conn.socket Unix.SHUTDOWN_ALL
      with <span data-count="1">U</span>nix.Unix_error _ -&gt; ());
     Unix.close conn.socket;
-    <span data-count="88">H</span>ashtbl.iter
+    <span data-count="110">H</span>ashtbl.iter
       (fun _id entry -&gt;
-        <span data-count="130">m</span>atch entry with
-        | <span data-count="120">L</span>ive ch -&gt; Queue.push Shutdown ch.inbox
+        <span data-count="406">m</span>atch entry with
+        | <span data-count="396">L</span>ive ch -&gt; Queue.push Shutdown ch.inbox
         | <span data-count="10">D</span>ead _ -&gt; ())
       conn.channels
   end
@@ -1277,30 +1275,30 @@ let close conn =
 (** [create_connection sock ?name ?debug ()] creates a new connection wrapping
     the Unix file descriptor [sock]. A control channel (channel 0) is
     automatically created. *)
-let create_connection sock ?name ?(debug = <span data-count="73">f</span>alse) () =
-  <span data-count="88">l</span>et conn =
+let create_connection sock ?name ?(debug = <span data-count="99">f</span>alse) () =
+  <span data-count="114">l</span>et conn =
     {
       name;
       socket = sock;
       next_channel_id = 1;
-      channels = Hashtbl.creat<span data-count="88">e</span> 16;
+      channels = Hashtbl.creat<span data-count="114">e</span> 16;
       running = true;
       debug;
-      writer_lock = Mutex.creat<span data-count="88">e</span> ();
-      reader_lock = Mutex.creat<span data-count="88">e</span> ();
+      writer_lock = Mutex.creat<span data-count="114">e</span> ();
+      reader_lock = Mutex.creat<span data-count="114">e</span> ();
       connection_state = Unresolved;
       control_channel = Obj.magic 0 (* placeholder, set below *);
     }
   in
   let control = make_channel conn 0l ~role:(Some "Control") in
-  <span data-count="88">c</span>onn.control_channel &lt;- control;
+  <span data-count="114">c</span>onn.control_channel &lt;- control;
   Mutex.lock conn.writer_lock;
-  <span data-count="88">H</span>ashtbl.replace conn.channels 0l (Live control);
-  <span data-count="88">M</span>utex.unlock conn.writer_lock;
-  <span data-count="88">c</span>onn
+  <span data-count="114">H</span>ashtbl.replace conn.channels 0l (Live control);
+  <span data-count="114">M</span>utex.unlock conn.writer_lock;
+  <span data-count="114">c</span>onn
 
 (** [is_live conn] returns [true] if the connection is still active. *)
-let is_live conn = <span data-count="11">c</span>onn.running
+let is_live conn = <span data-count="255">c</span>onn.running
 
 (** [new_channel conn ?role ()] creates a new logical channel on the connection.
 
@@ -1308,31 +1306,31 @@ let is_live conn = <span data-count="11">c</span>onn.running
     use odd IDs [(counter &lt;&lt; 1) | 1], server channels use even IDs
     [(counter &lt;&lt; 1)]. *)
 let new_channel conn ?role () =
-  <span data-count="30">i</span>f conn.connection_state = Unresolved then
+  <span data-count="67">i</span>f conn.connection_state = Unresolved then
     <span data-count="1">f</span>ailwith "Cannot create a new channel before handshake has been performed."
-  else <span data-count="29">b</span>egin
-    let parity = if conn.connection_state = Client then <span data-count="21">1</span> else <span data-count="8">0</span> in
+  else <span data-count="66">b</span>egin
+    let parity = if conn.connection_state = Client then <span data-count="47">1</span> else <span data-count="19">0</span> in
     let channel_id = Int32.of_int ((conn.next_channel_id lsl 1) lor parity) in
-    <span data-count="29">c</span>onn.next_channel_id &lt;- conn.next_channel_id + 1;
+    <span data-count="66">c</span>onn.next_channel_id &lt;- conn.next_channel_id + 1;
     let ch = make_channel conn channel_id ~role in
-    <span data-count="29">M</span>utex.lock conn.writer_lock;
-    <span data-count="29">H</span>ashtbl.replace conn.channels channel_id (Live ch);
-    <span data-count="29">M</span>utex.unlock conn.writer_lock;
-    <span data-count="29">c</span>h
+    <span data-count="66">M</span>utex.lock conn.writer_lock;
+    <span data-count="66">H</span>ashtbl.replace conn.channels channel_id (Live ch);
+    <span data-count="66">M</span>utex.unlock conn.writer_lock;
+    <span data-count="66">c</span>h
   end
 
 (** [connect_channel conn channel_id ?role ()] connects to a channel created by
     the peer. *)
 let connect_channel conn channel_id ?role () =
-  <span data-count="12">i</span>f conn.connection_state = Unresolved then
+  <span data-count="249">i</span>f conn.connection_state = Unresolved then
     <span data-count="1">f</span>ailwith "Cannot create a new channel before handshake has been performed.";
-  <span data-count="11">i</span>f Hashtbl.mem conn.channels channel_id then
+  <span data-count="248">i</span>f Hashtbl.mem conn.channels channel_id then
     <span data-count="1">f</span>ailwith (Printf.sprint<span data-count="1">f</span> "Channel already connected as %ld." channel_id);
-  <span data-count="10">l</span>et ch = make_channel conn channel_id ~role in
-  <span data-count="10">M</span>utex.lock conn.writer_lock;
-  <span data-count="10">H</span>ashtbl.replace conn.channels channel_id (Live ch);
-  <span data-count="10">M</span>utex.unlock conn.writer_lock;
-  <span data-count="10">c</span>h
+  <span data-count="247">l</span>et ch = make_channel conn channel_id ~role in
+  <span data-count="247">M</span>utex.lock conn.writer_lock;
+  <span data-count="247">H</span>ashtbl.replace conn.channels channel_id (Live ch);
+  <span data-count="247">M</span>utex.unlock conn.writer_lock;
+  <span data-count="247">c</span>h
 
 (* --- Channel operations --- *)
 
@@ -1340,53 +1338,53 @@ let connect_channel conn channel_id ?role () =
     for channel [ch]. Dispatches replies to [ch.responses] and requests to
     [ch.requests]. *)
 let process_one_message ch ?(timeout = <span data-count="1">c</span>hannel_timeout) () =
-  <span data-count="102">l</span>et start = Unix.gettimeofday () in
-  <span data-count="102">r</span>un_reader ch.conn ~until:(fun () -&gt;
-      <span data-count="293">c</span>h.close<span data-count="1">d</span>
-      || Unix.gettimeofda<span data-count="292">y</span> () -. start &gt; timeou<span data-count="1">t</span>
-      || not (Queue.is_empt<span data-count="291">y</span> ch.inbox<span data-count="96">)</span>);
-  <span data-count="98">i</span>f ch.closed then
+  <span data-count="974">l</span>et start = Unix.gettimeofday () in
+  <span data-count="974">r</span>un_reader ch.conn ~until:(fun () -&gt;
+      <span data-count="2915">c</span>h.close<span data-count="1">d</span>
+      || Unix.gettimeofda<span data-count="2914">y</span> () -. start &gt; timeou<span data-count="1">t</span>
+      || not (Queue.is_empt<span data-count="2913">y</span> ch.inbox<span data-count="966">)</span>);
+  <span data-count="968">i</span>f ch.closed then
     <span data-count="1">r</span>aise (Failure (Printf.sprint<span data-count="1">f</span> "%s is closed" (channel_nam<span data-count="1">e</span> ch)));
-  <span data-count="97">i</span>f Queue.is_empty ch.inbox then
+  <span data-count="967">i</span>f Queue.is_empty ch.inbox then
     <span data-count="1">r</span>aise
       (Failure
          (Printf.sprint<span data-count="1">f</span> "Timed out after %.1fs waiting for a message on %s"
             timeout (channel_nam<span data-count="1">e</span> ch)));
-  <span data-count="96">l</span>et item = Queue.pop ch.inbox in
-  <span data-count="96">m</span>atch item with
+  <span data-count="966">l</span>et item = Queue.pop ch.inbox in
+  <span data-count="966">m</span>atch item with
   | <span data-count="2">S</span>hutdown -&gt; raise (Failure "Connection closed")
-  | <span data-count="94">P</span>kt pkt -&gt;
-      if pkt.is_reply then <span data-count="45">b</span>egin
+  | <span data-count="964">P</span>kt pkt -&gt;
+      if pkt.is_reply then <span data-count="618">b</span>egin
         if Hashtbl.mem ch.responses pkt.message_id then
           <span data-count="1">f</span>ailwith
             (Printf.sprint<span data-count="1">f</span> "Got two responses for message ID %ld"
                pkt.message_id)
-        else <span data-count="44">H</span>ashtbl.replace ch.responses pkt.message_id pkt.payload
+        else <span data-count="617">H</span>ashtbl.replace ch.responses pkt.message_id pkt.payload
       end
-      else <span data-count="49">Q</span>ueue.push pkt ch.requests
+      else <span data-count="346">Q</span>ueue.push pkt ch.requests
 
 (** [send_request_raw ch payload] sends raw bytes as a request and returns the
     message ID for matching the response. *)
 let send_request_raw ch payload =
-  <span data-count="52">l</span>et message_id = ch.next_message_id in
-  ch.next_message_id &lt;- Int32.ad<span data-count="52">d</span> ch.next_message_id 1l;
+  <span data-count="627">l</span>et message_id = ch.next_message_id in
+  ch.next_message_id &lt;- Int32.ad<span data-count="627">d</span> ch.next_message_id 1l;
   send_packet ch.conn
     { payload; channel_id = ch.channel_id; is_reply = false; message_id };
-  <span data-count="52">m</span>essage_id
+  <span data-count="627">m</span>essage_id
 
 (** [send_request ch message] sends a CBOR-encoded request and returns the
     message ID. *)
-let send_request ch message = <span data-count="11">s</span>end_request_raw ch (CBOR.Simple.encod<span data-count="11">e</span> message)
+let send_request ch message = <span data-count="571">s</span>end_request_raw ch (CBOR.Simple.encod<span data-count="571">e</span> message)
 
 (** [receive_response_raw ch message_id ?timeout ()] waits for raw response
     bytes to a request with the given [message_id]. *)
-let receive_response_raw ch message_id ?(timeout = <span data-count="34">c</span>hannel_timeout) () =
-  <span data-count="44">w</span>hile not (Hashtbl.me<span data-count="87">m</span> ch.responses message_id) do
-    <span data-count="43">p</span>rocess_one_messag<span data-count="43">e</span> ch ~timeout ()
+let receive_response_raw ch message_id ?(timeout = <span data-count="62">c</span>hannel_timeout) () =
+  <span data-count="619">w</span>hile not (Hashtbl.me<span data-count="1235">m</span> ch.responses message_id) do
+    <span data-count="618">p</span>rocess_one_messag<span data-count="616">e</span> ch ~timeout ()
   done;
   let result = Hashtbl.find ch.responses message_id in
-  <span data-count="44">H</span>ashtbl.remove ch.responses message_id;
-  <span data-count="44">r</span>esult
+  <span data-count="617">H</span>ashtbl.remove ch.responses message_id;
+  <span data-count="617">r</span>esult
 
 (** [receive_response ch message_id ?timeout ()] waits for and decodes a
     response, extracting the result or raising {!Request_error}. *)
@@ -1396,54 +1394,54 @@ let receive_response ch message_id ?(timeout = <span data-count="1">c</span>hann
 
 (** [receive_request_raw ch ?timeout ()] receives raw request bytes and returns
     [(message_id, payload)]. *)
-let receive_request_raw ch ?(timeout = <span data-count="38">c</span>hannel_timeout) () =
-  <span data-count="56">w</span>hile Queue.is_empt<span data-count="104">y</span> ch.requests do
-    <span data-count="56">p</span>rocess_one_messag<span data-count="48">e</span> ch ~timeout ()
+let receive_request_raw ch ?(timeout = <span data-count="47">c</span>hannel_timeout) () =
+  <span data-count="353">w</span>hile Queue.is_empt<span data-count="698">y</span> ch.requests do
+    <span data-count="353">p</span>rocess_one_messag<span data-count="345">e</span> ch ~timeout ()
   done;
   let pkt = Queue.pop ch.requests in
-  <span data-count="48">(</span>pkt.message_id, pkt.payload)
+  <span data-count="345">(</span>pkt.message_id, pkt.payload)
 
 (** [receive_request ch ?timeout ()] receives and CBOR-decodes a request,
     returning [(message_id, decoded_value)]. *)
-let receive_request ch ?(timeout = <span data-count="14">c</span>hannel_timeout) () =
-  <span data-count="17">l</span>et message_id, body = receive_request_raw ch ~timeout () in
-  <span data-count="9">(</span>message_id, CBOR.Simple.decod<span data-count="9">e</span> body)
+let receive_request ch ?(timeout = <span data-count="302">c</span>hannel_timeout) () =
+  <span data-count="305">l</span>et message_id, body = receive_request_raw ch ~timeout () in
+  <span data-count="297">(</span>message_id, CBOR.Simple.decod<span data-count="297">e</span> body)
 
 (** [send_response_raw ch message_id payload] sends raw bytes as a reply. *)
 let send_response_raw ch message_id payload =
-  <span data-count="43">s</span>end_packet ch.conn
+  <span data-count="340">s</span>end_packet ch.conn
     { payload; channel_id = ch.channel_id; is_reply = true; message_id }
 
 (** [send_response_value ch message_id value] sends a success response with
     [value] wrapped as [{"result": value}]. *)
 let send_response_value ch message_id value =
-  <span data-count="6">s</span>end_response_raw ch message_id
-    (CBOR.Simple.encod<span data-count="6">e</span> (`Map [ (`Text "result", value) ]))
+  <span data-count="290">s</span>end_response_raw ch message_id
+    (CBOR.Simple.encod<span data-count="290">e</span> (`Map [ (`Text "result", value) ]))
 
 (** [send_response_error ch message_id ~error ~error_type ()] sends an error
     response. *)
 let send_response_error ch message_id ~error ~error_type () =
-  <span data-count="3">s</span>end_response_raw ch message_id
-    (CBOR.Simple.encod<span data-count="3">e</span>
+  <span data-count="5">s</span>end_response_raw ch message_id
+    (CBOR.Simple.encod<span data-count="5">e</span>
        (`Map [ (`Text "error", `Text error); (`Text "type", `Text error_type) ]))
 
 (** [close_channel ch] closes the channel and notifies the peer. Idempotent. *)
 let close_channel ch =
-  <span data-count="10">i</span>f ch.closed then <span data-count="1">(</span>)
-  else <span data-count="9">b</span>egin
+  <span data-count="240">i</span>f ch.closed then <span data-count="1">(</span>)
+  else <span data-count="239">b</span>egin
     let is_registered =
       match Hashtbl.find_opt ch.conn.channels ch.channel_id with
-      | <span data-count="8">S</span>ome (Live ch2) -&gt; ch2 == ch
+      | <span data-count="238">S</span>ome (Live ch2) -&gt; ch2 == ch
       | <span data-count="1">_</span> -&gt; false
     in
     if not is_registered then <span data-count="1">c</span>h.closed &lt;- true
-    else <span data-count="8">b</span>egin
+    else <span data-count="238">b</span>egin
       ch.closed &lt;- true;
       if ch.conn.debug then
         <span data-count="4">H</span>ashtbl.replac<span data-count="4">e</span> ch.conn.channels ch.channel_id
           (Dead { name = channel_nam<span data-count="4">e</span> ch; channel_id = ch.channel_id });
-      <span data-count="8">i</span>f is_live ch.conn then
-        <span data-count="7">s</span>end_packet ch.conn
+      <span data-count="238">i</span>f is_live ch.conn then
+        <span data-count="237">s</span>end_packet ch.conn
           {
             payload = close_channel_payload;
             message_id = close_channel_message_id;
@@ -1463,22 +1461,22 @@ type pending_request = {
 (** [request ch message] sends a CBOR request and returns a {!pending_request}
     handle. *)
 let request ch message =
-  <span data-count="8">l</span>et message_id = send_request ch message in
-  <span data-count="8">{</span> pr_channel = ch; pr_message_id = message_id; pr_value = None }
+  <span data-count="555">l</span>et message_id = send_request ch message in
+  <span data-count="555">{</span> pr_channel = ch; pr_message_id = message_id; pr_value = None }
 
 (** [pending_get pr] blocks until the response arrives and returns the result.
     Caches the response so subsequent calls return the same value or raise the
     same error. *)
 let pending_get pr =
-  <span data-count="9">m</span>atch pr.pr_value with
+  <span data-count="556">m</span>atch pr.pr_value with
   | <span data-count="1">S</span>ome v -&gt; result_or_error v
-  | <span data-count="8">N</span>one -&gt;
+  | <span data-count="555">N</span>one -&gt;
       let raw =
         receive_response_raw pr.pr_channel pr.pr_message_id
           ~timeout:channel_timeout ()
       in
-      <span data-count="8">l</span>et v = CBOR.Simple.decode raw in
-      <span data-count="8">p</span>r.pr_value &lt;- Some v;
+      <span data-count="553">l</span>et v = CBOR.Simple.decode raw in
+      <span data-count="553">p</span>r.pr_value &lt;- Some v;
       result_or_error v
 
 (** [handle_requests ch handler] processes incoming requests, calling [handler]
@@ -1504,28 +1502,28 @@ let handle_requests ch handler =
 (** [send_handshake conn] initiates the handshake as a client. Returns the
     server protocol version string (e.g. ["0.1"]). *)
 let send_handshake conn =
-  <span data-count="35">i</span>f conn.connection_state &lt;&gt; Unresolved then
+  <span data-count="50">i</span>f conn.connection_state &lt;&gt; Unresolved then
     <span data-count="1">f</span>ailwith "Handshake already established";
-  <span data-count="34">c</span>onn.connection_state &lt;- Client;
+  <span data-count="49">c</span>onn.connection_state &lt;- Client;
   let ch = conn.control_channel in
   let message_id = send_request_raw ch handshake_string in
-  <span data-count="34">l</span>et response = receive_response_raw ch message_id () in
-  <span data-count="34">i</span>f String.lengt<span data-count="34">h</span> response &lt; <span data-count="2">6</span> || String.su<span data-count="32">b</span> response 0 6 &lt;&gt; "Hegel/<span data-count="0">"</span> then
-    <span data-count="2">f</span>ailwith (Printf.sprint<span data-count="2">f</span> "Bad handshake response: %S" response)
-  else <span data-count="32">S</span>tring.sub response 6 (String.lengt<span data-count="32">h</span> response - 6)
+  <span data-count="49">l</span>et response = receive_response_raw ch message_id () in
+  <span data-count="49">i</span>f String.lengt<span data-count="49">h</span> response &lt; <span data-count="2">6</span> || String.su<span data-count="47">b</span> response 0 6 &lt;&gt; "Hegel/<span data-count="1">"</span> then
+    <span data-count="3">f</span>ailwith (Printf.sprint<span data-count="3">f</span> "Bad handshake response: %S" response)
+  else <span data-count="46">S</span>tring.sub response 6 (String.lengt<span data-count="46">h</span> response - 6)
 
 (** [receive_handshake conn] accepts the handshake as a server. *)
 let receive_handshake conn =
-  <span data-count="34">i</span>f conn.connection_state &lt;&gt; Unresolved then
+  <span data-count="41">i</span>f conn.connection_state &lt;&gt; Unresolved then
     <span data-count="1">f</span>ailwith "Handshake already established";
-  <span data-count="33">c</span>onn.connection_state &lt;- Server;
+  <span data-count="40">c</span>onn.connection_state &lt;- Server;
   let ch = conn.control_channel in
   let message_id, payload = receive_request_raw ch () in
-  <span data-count="33">i</span>f payload &lt;&gt; handshake_string then
+  <span data-count="40">i</span>f payload &lt;&gt; handshake_string then
     <span data-count="1">f</span>ailwith
       (Printf.sprint<span data-count="1">f</span> "Bad handshake: expected %S, got %S" handshake_string
          payload);
-  <span data-count="32">s</span>end_response_raw ch message_id ("Hegel/" ^ protocol_version)
+  <span data-count="39">s</span>end_response_raw ch message_id ("Hegel/" ^ protocol_version)
 </code></pre>
       </div>
     </div>

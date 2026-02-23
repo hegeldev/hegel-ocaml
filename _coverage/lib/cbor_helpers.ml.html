@@ -236,7 +236,7 @@ let type_name = function
 
     Raises [Failure] if [v] is not an [`Int]. *)
 let extract_int = function
-  | <span data-count="14">`</span>Int i -&gt; i
+  | <span data-count="525">`</span>Int i -&gt; i
   | <span data-count="2">o</span>ther -&gt;
       failwith (Printf.sprint<span data-count="2">f</span> "Expected CBOR int, got %s" (type_nam<span data-count="2">e</span> other))
 
@@ -252,7 +252,7 @@ let extract_float = function
 
     Raises [Failure] if [v] is not a [`Text]. *)
 let extract_string = function
-  | <span data-count="28">`</span>Text s -&gt; s
+  | <span data-count="1382">`</span>Text s -&gt; s
   | <span data-count="2">o</span>ther -&gt;
       failwith (Printf.sprint<span data-count="2">f</span> "Expected CBOR text, got %s" (type_nam<span data-count="2">e</span> other))
 
@@ -260,7 +260,7 @@ let extract_string = function
 
     Raises [Failure] if [v] is not a [`Bool]. *)
 let extract_bool = function
-  | <span data-count="3">`</span>Bool b -&gt; b
+  | <span data-count="12">`</span>Bool b -&gt; b
   | <span data-count="2">o</span>ther -&gt;
       failwith (Printf.sprint<span data-count="2">f</span> "Expected CBOR bool, got %s" (type_nam<span data-count="2">e</span> other))
 
@@ -285,7 +285,7 @@ let extract_list = function
 
     Raises [Failure] if [v] is not a [`Map]. *)
 let extract_dict = function
-  | <span data-count="24">`</span>Map m -&gt; m
+  | <span data-count="860">`</span>Map m -&gt; m
   | <span data-count="2">o</span>ther -&gt;
       failwith (Printf.sprint<span data-count="2">f</span> "Expected CBOR map, got %s" (type_nam<span data-count="2">e</span> other))
 

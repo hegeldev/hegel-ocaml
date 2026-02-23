@@ -1,1 +1,1 @@
-lib/hegel.pp.ml: Bisect Cbor_helpers Connection Protocol
+lib/hegel.pp.ml: Bisect Cbor_helpers Client Connection Protocol Session
