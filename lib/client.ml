@@ -15,9 +15,9 @@ exception Assume_rejected
 exception Data_exhausted
 (** Raised when the server runs out of test data (StopTest). *)
 
-(** Current test case channel. Set for the duration of each test case.
-    Not thread-safe: only one test may run at a time (enforced by the
-    client lock in {!run_test}). *)
+(** Current test case channel. Set for the duration of each test case. Not
+    thread-safe: only one test may run at a time (enforced by the client lock in
+    {!run_test}). *)
 let current_channel : channel option ref = ref None
 
 (** Whether this is the final (replay) run for a failing test case. *)
@@ -245,7 +245,8 @@ let run_test client ~name ~test_cases test_fn =
   let n_interesting =
     match List.assoc_opt (`Text "interesting_test_cases") results with
     | Some v -> Cbor_helpers.extract_int v
-    | None -> failwith "test_done results missing 'interesting_test_cases' field"
+    | None ->
+        failwith "test_done results missing 'interesting_test_cases' field"
   in
   if n_interesting = 0 then ()
   else if n_interesting = 1 then begin
@@ -271,7 +272,8 @@ let run_test client ~name ~test_cases test_fn =
         let channel_id =
           match List.assoc_opt (`Text "channel") pairs with
           | Some v -> Int32.of_int (Cbor_helpers.extract_int v)
-          | None -> failwith "interesting test_case event missing 'channel' field"
+          | None ->
+              failwith "interesting test_case event missing 'channel' field"
         in
         send_response_value test_channel message_id `Null;
         let test_case_channel =

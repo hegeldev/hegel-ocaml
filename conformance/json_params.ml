@@ -42,10 +42,8 @@ let get_string pairs key default =
 let get_int_array pairs key =
   match List.assoc_opt key pairs with
   | Some (`List items) ->
-    List.filter_map
-      (function
-        | `Int n -> Some n
-        | `Float f -> Some (int_of_float f)
-        | _ -> None)
-      items
+      List.filter_map
+        (function
+          | `Int n -> Some n | `Float f -> Some (int_of_float f) | _ -> None)
+        items
   | _ -> []

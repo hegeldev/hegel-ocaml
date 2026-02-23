@@ -192,7 +192,8 @@ let run_reader conn ~until =
                       if not pkt.is_reply then begin
                         let error_msg =
                           Printf.sprintf "Message %ld sent to closed %s"
-                            pkt.message_id (entry_name conn pkt.channel_id)
+                            pkt.message_id
+                            (entry_name conn pkt.channel_id)
                         in
                         send_packet conn
                           {
@@ -208,7 +209,8 @@ let run_reader conn ~until =
                       if not pkt.is_reply then begin
                         let error_msg =
                           Printf.sprintf "Message %ld sent to non-existent %s"
-                            pkt.message_id (entry_name conn pkt.channel_id)
+                            pkt.message_id
+                            (entry_name conn pkt.channel_id)
                         in
                         send_packet conn
                           {

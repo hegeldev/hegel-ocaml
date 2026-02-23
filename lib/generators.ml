@@ -242,9 +242,11 @@ let as_basic gen =
 let integers ?min_value ?max_value () =
   let pairs =
     List.filter_map Fun.id
-      [ Some (`Text "type", `Text "integer")
-      ; Option.map (fun v -> (`Text "min_value", `Int v)) min_value
-      ; Option.map (fun v -> (`Text "max_value", `Int v)) max_value ]
+      [
+        Some (`Text "type", `Text "integer");
+        Option.map (fun v -> (`Text "min_value", `Int v)) min_value;
+        Option.map (fun v -> (`Text "max_value", `Int v)) max_value;
+      ]
   in
   Basic { schema = `Map pairs; transform = None }
 
@@ -285,8 +287,10 @@ let floats ?min_value ?max_value ?(exclude_min = false) ?(exclude_max = false)
   let pairs =
     pairs
     @ List.filter_map Fun.id
-        [ Option.map (fun v -> (`Text "min_value", `Float v)) min_value
-        ; Option.map (fun v -> (`Text "max_value", `Float v)) max_value ]
+        [
+          Option.map (fun v -> (`Text "min_value", `Float v)) min_value;
+          Option.map (fun v -> (`Text "max_value", `Float v)) max_value;
+        ]
   in
   Basic { schema = `Map pairs; transform = None }
 
@@ -296,9 +300,11 @@ let floats ?min_value ?max_value ?(exclude_min = false) ?(exclude_max = false)
 let text ?(min_size = 0) ?max_size () =
   let pairs =
     List.filter_map Fun.id
-      [ Some (`Text "type", `Text "string")
-      ; Some (`Text "min_size", `Int min_size)
-      ; Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size ]
+      [
+        Some (`Text "type", `Text "string");
+        Some (`Text "min_size", `Int min_size);
+        Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size;
+      ]
   in
   Basic { schema = `Map pairs; transform = None }
 
@@ -307,9 +313,11 @@ let text ?(min_size = 0) ?max_size () =
 let binary ?(min_size = 0) ?max_size () =
   let pairs =
     List.filter_map Fun.id
-      [ Some (`Text "type", `Text "binary")
-      ; Some (`Text "min_size", `Int min_size)
-      ; Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size ]
+      [
+        Some (`Text "type", `Text "binary");
+        Some (`Text "min_size", `Int min_size);
+        Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size;
+      ]
   in
   Basic { schema = `Map pairs; transform = None }
 
@@ -343,11 +351,13 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
   in
   let pairs =
     List.filter_map Fun.id
-      [ Some (`Text "type", `Text "dict")
-      ; Some (`Text "keys", key_schema)
-      ; Some (`Text "values", val_schema)
-      ; Some (`Text "min_size", `Int min_size)
-      ; Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size ]
+      [
+        Some (`Text "type", `Text "dict");
+        Some (`Text "keys", key_schema);
+        Some (`Text "values", val_schema);
+        Some (`Text "min_size", `Int min_size);
+        Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size;
+      ]
   in
   (* The server returns dicts as [[k, v], ...] lists. We transform to CBOR map. *)
   let transform raw =
@@ -379,10 +389,12 @@ let lists elements ?(min_size = 0) ?max_size () =
   | Some (elem_schema, elem_transform) ->
       let pairs =
         List.filter_map Fun.id
-          [ Some (`Text "type", `Text "list")
-          ; Some (`Text "elements", elem_schema)
-          ; Some (`Text "min_size", `Int min_size)
-          ; Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size ]
+          [
+            Some (`Text "type", `Text "list");
+            Some (`Text "elements", elem_schema);
+            Some (`Text "min_size", `Int min_size);
+            Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size;
+          ]
       in
       let raw_schema = `Map pairs in
       let list_transform =

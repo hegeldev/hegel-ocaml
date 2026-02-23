@@ -114,11 +114,11 @@ let start session =
           while !sock = None && !attempts < 50 do
             incr attempts;
             if Sys.file_exists socket_path then
-              (try
-                 let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-                 Unix.connect s (Unix.ADDR_UNIX socket_path);
-                 sock := Some s
-               with Unix.Unix_error _ -> Unix.sleepf 0.1)
+              try
+                let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+                Unix.connect s (Unix.ADDR_UNIX socket_path);
+                sock := Some s
+              with Unix.Unix_error _ -> Unix.sleepf 0.1
             else Unix.sleepf 0.1
           done;
           (match !sock with

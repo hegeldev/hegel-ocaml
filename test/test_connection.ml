@@ -691,7 +691,8 @@ let test_close_channel_creates_dead_channel_with_connect () =
   let client_ch = new_channel client_conn ~role:"ToClose" () in
   let r1 =
     pending_get
-      (request (control_channel client_conn)
+      (request
+         (control_channel client_conn)
          (`Map [ (`Text "channel", `Int (Int32.to_int client_ch.channel_id)) ]))
   in
   ignore r1;
