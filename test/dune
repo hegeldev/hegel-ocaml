@@ -1,3 +1,12 @@
 (test
  (name test_hegel)
+ (modules
+  test_hegel
+  test_protocol
+  test_cbor_helpers
+  test_connection
+  test_client
+  test_generators
+  test_showcase
+  test_conformance_helpers)
  (libraries hegel alcotest unix str threads.posix))

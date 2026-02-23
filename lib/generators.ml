@@ -257,6 +257,132 @@ let integers ?min_value ?max_value () =
 let booleans () =
   Basic { schema = `Map [ (`Text "type", `Text "boolean") ]; transform = None }
 
+(** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
+     ?allow_infinity ()] creates a generator for floating-point values.
+
+    Uses schema type ["number"] as required by the Hegel server. The fields
+    [allow_nan], [allow_infinity], [exclude_min], [exclude_max], and [width] are
+    always sent (required by the server). Defaults follow Hypothesis:
+    - [allow_nan]: [true] only when no bounds are set
+    - [allow_infinity]: [true] when at most one bound is set *)
+let floats ?min_value ?max_value ?(exclude_min = false) ?(exclude_max = false)
+    ?allow_nan ?allow_infinity () =
+  let has_min = Option.is_some min_value in
+  let has_max = Option.is_some max_value in
+  let eff_allow_nan =
+    match allow_nan with Some v -> v | None -> (not has_min) && not has_max
+  in
+  let eff_allow_infinity =
+    match allow_infinity with
+    | Some v -> v
+    | None -> (not has_min) || not has_max
+  in
+  let pairs =
+    [
+      (`Text "type", `Text "number");
+      (`Text "allow_nan", `Bool eff_allow_nan);
+      (`Text "allow_infinity", `Bool eff_allow_infinity);
+      (`Text "exclude_min", `Bool exclude_min);
+      (`Text "exclude_max", `Bool exclude_max);
+      (`Text "width", `Int 64);
+    ]
+  in
+  let pairs =
+    match min_value with
+    | Some v -> pairs @ [ (`Text "min_value", `Float v) ]
+    | None -> pairs
+  in
+  let pairs =
+    match max_value with
+    | Some v -> pairs @ [ (`Text "max_value", `Float v) ]
+    | None -> pairs
+  in
+  Basic { schema = `Map pairs; transform = None }
+
+(** [text ?min_size ?max_size ()] creates a generator for Unicode text strings.
+
+    Uses schema type ["string"] as required by the Hegel server. *)
+let text ?(min_size = 0) ?max_size () =
+  let pairs =
+    [ (`Text "type", `Text "string"); (`Text "min_size", `Int min_size) ]
+  in
+  let pairs =
+    match max_size with
+    | Some ms -> pairs @ [ (`Text "max_size", `Int ms) ]
+    | None -> pairs
+  in
+  Basic { schema = `Map pairs; transform = None }
+
+(** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.
+*)
+let binary ?(min_size = 0) ?max_size () =
+  let pairs =
+    [ (`Text "type", `Text "binary"); (`Text "min_size", `Int min_size) ]
+  in
+  let pairs =
+    match max_size with
+    | Some ms -> pairs @ [ (`Text "max_size", `Int ms) ]
+    | None -> pairs
+  in
+  Basic { schema = `Map pairs; transform = None }
+
+(** [sampled_from options] creates a generator that samples uniformly from a
+    non-empty list of CBOR values.
+
+    Uses a top-level ["sampled_from"] key (not a ["type"] field) as required by
+    the Hegel server. *)
+let sampled_from options =
+  Basic
+    {
+      schema = `Map [ (`Text "sampled_from", `Array options) ];
+      transform = None;
+    }
+
+(** [hashmaps keys values ?min_size ?max_size ()] creates a generator for
+    dictionaries (hash maps). [keys] and [values] must be basic generators.
+
+    The server returns the dict as a list of [[key, value]] pairs. The
+    [hashmaps] generator automatically transforms this to a CBOR map. *)
+let hashmaps keys values ?(min_size = 0) ?max_size () =
+  let key_schema =
+    match keys with
+    | Basic { schema; _ } -> schema
+    | _ -> failwith "hashmaps: keys generator must be a Basic generator"
+  in
+  let val_schema =
+    match values with
+    | Basic { schema; _ } -> schema
+    | _ -> failwith "hashmaps: values generator must be a Basic generator"
+  in
+  let pairs =
+    [
+      (`Text "type", `Text "dict");
+      (`Text "keys", key_schema);
+      (`Text "values", val_schema);
+      (`Text "min_size", `Int min_size);
+    ]
+  in
+  let pairs =
+    match max_size with
+    | Some ms -> pairs @ [ (`Text "max_size", `Int ms) ]
+    | None -> pairs
+  in
+  (* The server returns dicts as [[k, v], ...] lists. We transform to CBOR map. *)
+  let transform raw =
+    match raw with
+    | `Array kv_pairs ->
+        let map_pairs =
+          List.map
+            (function
+              | `Array [ k; v ] -> (k, v)
+              | _ -> failwith "hashmaps: expected [k, v] pair from server")
+            kv_pairs
+        in
+        `Map map_pairs
+    | _ -> failwith "hashmaps: expected array from server"
+  in
+  Basic { schema = `Map pairs; transform = Some transform }
+
 (** [lists elements ?min_size ?max_size ()] creates a generator for lists.
 
     When [elements] is a [Basic] generator, sends a [list] schema to the server

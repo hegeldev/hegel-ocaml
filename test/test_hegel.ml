@@ -11,4 +11,5 @@ let () =
       ("client", Test_client.tests);
       ("generators", Test_generators.tests);
       ("showcase", Test_showcase.tests);
+      ("conformance_helpers", Test_conformance_helpers.tests);
     ]

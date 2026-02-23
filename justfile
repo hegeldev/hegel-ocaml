@@ -48,5 +48,20 @@ docs:
     eval $(opam env)
     dune build @doc 2>&1
 
+# Run conformance tests against the Hegel conformance framework.
+conformance:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export PATH="$(pwd)/.venv/bin:$PATH"
+    eval $(opam env 2>/dev/null || true)
+    # Install pytest and pytest-subtests if not already available
+    if ! .venv/bin/python -c "import pytest" 2>/dev/null; then
+        uv pip install --python .venv/bin/python pytest pytest-subtests
+    fi
+    # Build conformance binaries
+    dune build conformance/
+    # Run Python conformance tests
+    .venv/bin/python -m pytest tests/conformance/ -v
+
 # Run lint + docs + test (the full CI check).
 check: lint docs test

@@ -24,3 +24,6 @@ module Session = Session
 
 module Generators = Generators
 (** Generator combinators for composable test data generation. *)
+
+module Conformance = Conformance
+(** Conformance test helpers for writing conformance binaries. *)
