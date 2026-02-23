@@ -1,3 +1,0 @@
-[33mASSERT[0m new_collection
-[33mASSERT[0m max_size is null
-Thread 59 killed on uncaught exception Unix.Unix_error(3, "setsockopt_float", "")
