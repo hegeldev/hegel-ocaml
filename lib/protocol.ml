@@ -53,7 +53,8 @@ let get_u32_be s off =
 
 let write_packet fd packet =
   let message_id_wire =
-    if packet.is_reply then packet.message_id lor reply_bit else packet.message_id
+    if packet.is_reply then packet.message_id lor reply_bit
+    else packet.message_id
   in
   let header = Bytes.create header_size in
   put_u32_be header 0 magic;
