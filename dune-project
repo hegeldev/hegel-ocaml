@@ -35,4 +35,6 @@
    (and
     :with-test
     (>= 2.8)))
+  (yojson
+   (>= 1.7))
   (odoc :with-doc)))

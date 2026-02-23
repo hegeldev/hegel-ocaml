@@ -15,6 +15,7 @@ depends: [
   "cbor" {>= "0.5"}
   "checkseum" {>= "0.5"}
   "bisect_ppx" {with-test & >= "2.8"}
+  "yojson" {>= "1.7"}
   "odoc" {with-doc}
 ]
 build: [
