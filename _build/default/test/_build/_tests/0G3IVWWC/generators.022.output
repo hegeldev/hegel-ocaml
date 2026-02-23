@@ -1,5 +1,0 @@
-[33mASSERT[0m first discard=true
-[33mASSERT[0m second discard=false
-[33mASSERT[0m value
-[33mASSERT[0m total cmds
-Thread 53 killed on uncaught exception Unix.Unix_error(3, "setsockopt_float", "")

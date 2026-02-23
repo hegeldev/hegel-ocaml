@@ -1,3 +1,0 @@
-(test
- (name test_hegel)
- (libraries hegel alcotest unix str threads.posix))
