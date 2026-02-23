@@ -2,4 +2,4 @@
 [33mASSERT[0m label
 [33mASSERT[0m stop_span
 [33mASSERT[0m result
-Thread 55 killed on uncaught exception Unix.Unix_error(3, "read", "")
+Thread 55 killed on uncaught exception Unix.Unix_error(3, "setsockopt_float", "")

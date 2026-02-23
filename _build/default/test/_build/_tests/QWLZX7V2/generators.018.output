@@ -1,3 +1,0 @@
-[33mASSERT[0m still basic
-[33mASSERT[0m value
-Thread 49 killed on uncaught exception Unix.Unix_error(3, "setsockopt_float", "")
