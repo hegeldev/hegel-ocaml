@@ -84,6 +84,60 @@ let test_filter_even () =
       assert (x / 2 * 2 = x);
       assert (x >= 0 && x <= 10))
 
+(** Property: reversing a list twice yields the original list.
+
+    For any list of integers, [List.rev (List.rev xs) = xs]. This verifies that
+    the list generator produces well-formed OCaml lists. *)
+let test_list_reverse_involution () =
+  Hegel.Session.run_hegel_test ~name:"list_rev_involution" ~test_cases:50
+    (fun () ->
+      let gen =
+        lists (integers ~min_value:(-100) ~max_value:100 ()) ~max_size:10 ()
+      in
+      let v = generate gen in
+      let items = Hegel.Cbor_helpers.extract_list v in
+      let ints = List.map Hegel.Cbor_helpers.extract_int items in
+      assert (List.rev (List.rev ints) = ints))
+
+(** Property: sum of a non-negative integer list is non-negative.
+
+    Every element is non-negative, so the sum must also be non-negative. Also
+    verifies that every element individually satisfies the bound. *)
+let test_list_sum_nonnegative () =
+  Hegel.Session.run_hegel_test ~name:"list_sum_nonneg" ~test_cases:50 (fun () ->
+      let gen =
+        lists (integers ~min_value:0 ~max_value:100 ()) ~max_size:10 ()
+      in
+      let v = generate gen in
+      let items = Hegel.Cbor_helpers.extract_list v in
+      let ints = List.map Hegel.Cbor_helpers.extract_int items in
+      let sum = List.fold_left ( + ) 0 ints in
+      assert (sum >= 0);
+      List.iter (fun x -> assert (x >= 0 && x <= 100)) ints)
+
+(** Property: filtering a list preserves all matching elements.
+
+    After filtering integers for evenness from a lists() generator, every result
+    must be even and within the original range. *)
+let test_list_filter_preserves_predicate () =
+  Hegel.Session.run_hegel_test ~name:"list_filter_preserves" ~test_cases:50
+    (fun () ->
+      let elem =
+        filter
+          (fun v -> Hegel.Cbor_helpers.extract_int v mod 2 = 0)
+          (integers ~min_value:0 ~max_value:50 ())
+      in
+      let gen = lists elem ~max_size:5 () in
+      let v = generate gen in
+      let items = Hegel.Cbor_helpers.extract_list v in
+      assert (List.length items <= 5);
+      List.iter
+        (fun item ->
+          let x = Hegel.Cbor_helpers.extract_int item in
+          assert (x mod 2 = 0);
+          assert (x >= 0 && x <= 50))
+        items)
+
 let tests =
   [
     Alcotest.test_case "addition is commutative" `Quick
@@ -93,4 +147,10 @@ let tests =
     Alcotest.test_case "filter(x > 50) yields values > 50" `Quick
       test_filter_greater_than;
     Alcotest.test_case "filter(even) yields even values" `Quick test_filter_even;
+    Alcotest.test_case "list reverse is involution" `Quick
+      test_list_reverse_involution;
+    Alcotest.test_case "list sum of non-negatives is non-negative" `Quick
+      test_list_sum_nonnegative;
+    Alcotest.test_case "list filter preserves predicate" `Quick
+      test_list_filter_preserves_predicate;
   ]

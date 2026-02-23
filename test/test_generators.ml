@@ -849,6 +849,299 @@ let test_discardable_group_e2e () =
       let n = Hegel.Cbor_helpers.extract_int v in
       assert (n >= 0 && n <= 10))
 
+(* ==== Unit tests for lists / booleans ==== *)
+
+(** Test: booleans() produces a Basic generator with type=boolean schema. *)
+let test_booleans_schema () =
+  let gen = booleans () in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
+      in
+      Alcotest.(check string) "type" "boolean" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: lists(basic_elem) produces a Basic generator with type=list schema. *)
+let test_lists_basic_schema () =
+  let elem = integers ~min_value:0 ~max_value:10 () in
+  let gen = lists elem ~min_size:2 ~max_size:5 () in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
+      in
+      Alcotest.(check string) "type" "list" typ;
+      let min_s =
+        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "min_size") pairs)
+      in
+      Alcotest.(check int) "min_size" 2 min_s;
+      let max_s =
+        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "max_size") pairs)
+      in
+      Alcotest.(check int) "max_size" 5 max_s
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: lists(basic_elem) without max_size omits max_size from schema. *)
+let test_lists_basic_no_max_schema () =
+  let elem = integers () in
+  let gen = lists elem () in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      Alcotest.(check bool)
+        "no max_size key" false
+        (List.mem_assoc (`Text "max_size") pairs);
+      let min_s =
+        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "min_size") pairs)
+      in
+      Alcotest.(check int) "default min_size" 0 min_s
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: lists(basic_elem_with_transform) produces a Basic generator whose
+    transform applies the element transform to every item in the result list. *)
+let test_lists_basic_with_element_transform () =
+  (* Build a basic generator with a transform (doubles the value) *)
+  let elem =
+    map (fun v -> `Int (Hegel.Cbor_helpers.extract_int v * 2)) (integers ())
+  in
+  Alcotest.(check bool) "elem is_basic" true (is_basic elem);
+  let gen = lists elem () in
+  Alcotest.(check bool) "gen is_basic" true (is_basic gen);
+  (* The generator has a transform *)
+  match as_basic gen with
+  | Some (_, Some _) -> () (* expected: transform present *)
+  | Some (_, None) -> Alcotest.fail "expected list transform"
+  | None -> Alcotest.fail "expected basic"
+
+(** Test: lists(non_basic_elem) produces a CompositeList (not Basic). *)
+let test_lists_non_basic_is_not_basic () =
+  let elem = filter (fun _ -> true) (integers ()) in
+  Alcotest.(check bool) "elem not basic" false (is_basic elem);
+  let gen = lists elem () in
+  Alcotest.(check bool) "gen not basic" false (is_basic gen);
+  Alcotest.(check bool) "as_basic None" true (as_basic gen = None)
+
+(* ==== Socketpair tests for lists ==== *)
+
+(** Test: lists(basic_elem) sends a generate command with list schema. *)
+let test_lists_basic_generate_socketpair () =
+  with_fake_server
+    (fun server_conn ->
+      let test_channel = accept_run_test server_conn in
+      let data_ch = send_test_case server_conn test_channel in
+      (* Expect: generate{schema:{type:list,...}}, mark_complete *)
+      let msg_id, cmd, pairs = recv_command data_ch in
+      Alcotest.(check string) "cmd" "generate" cmd;
+      let schema_v = List.assoc (`Text "schema") pairs in
+      let schema_pairs = Hegel.Cbor_helpers.extract_dict schema_v in
+      let typ =
+        Hegel.Cbor_helpers.extract_string
+          (List.assoc (`Text "type") schema_pairs)
+      in
+      Alcotest.(check string) "schema type" "list" typ;
+      (* Server returns an array *)
+      send_response_value data_ch msg_id (`Array [ `Int 3; `Int 7 ]);
+      (* mark_complete *)
+      let msg_id, _msg = receive_request data_ch () in
+      send_response_value data_ch msg_id `Null;
+      send_test_done test_channel ~interesting:0)
+    (fun client_conn ->
+      let c = Hegel.Client.create_client client_conn in
+      Hegel.Client.run_test c ~name:"lists_basic" ~test_cases:1 (fun () ->
+          let gen = lists (integers ~min_value:0 ~max_value:10 ()) () in
+          let v = generate gen in
+          let items = Hegel.Cbor_helpers.extract_list v in
+          Alcotest.(check int) "length" 2 (List.length items)))
+
+(** Test: lists(basic_elem_with_transform) applies the list transform. *)
+let test_lists_basic_with_transform_generate_socketpair () =
+  with_fake_server
+    (fun server_conn ->
+      let test_channel = accept_run_test server_conn in
+      let data_ch = send_test_case server_conn test_channel in
+      (* generate → array of [2, 4] *)
+      let msg_id, _cmd, _pairs = recv_command data_ch in
+      send_response_value data_ch msg_id (`Array [ `Int 2; `Int 4 ]);
+      (* mark_complete *)
+      let msg_id, _msg = receive_request data_ch () in
+      send_response_value data_ch msg_id `Null;
+      send_test_done test_channel ~interesting:0)
+    (fun client_conn ->
+      let c = Hegel.Client.create_client client_conn in
+      Hegel.Client.run_test c ~name:"lists_transform" ~test_cases:1 (fun () ->
+          (* elem doubles values; list transform should double each item *)
+          let elem =
+            map
+              (fun v -> `Int (Hegel.Cbor_helpers.extract_int v * 2))
+              (integers ~min_value:1 ~max_value:5 ())
+          in
+          let gen = lists elem () in
+          let v = generate gen in
+          let items = Hegel.Cbor_helpers.extract_list v in
+          (* The server returned [2, 4] as raw; the transform doubles them → [4, 8] *)
+          let ints = List.map Hegel.Cbor_helpers.extract_int items in
+          Alcotest.(check (list int)) "doubled" [ 4; 8 ] ints))
+
+(** Test: lists(non_basic) uses collection protocol: start_span(LIST),
+    new_collection, collection_more loop, stop_span, mark_complete. *)
+let test_lists_composite_generate_socketpair () =
+  with_fake_server
+    (fun server_conn ->
+      let test_channel = accept_run_test server_conn in
+      let data_ch = send_test_case server_conn test_channel in
+      (* Sequence:
+         start_span(LIST=1)
+         start_span(FILTER=12)   ← from the filter in elem
+         new_collection
+         collection_more → true
+         start_span(FILTER=12)   ← filter attempt for element
+         generate
+         stop_span               ← filter span
+         collection_more → false
+         stop_span               ← LIST span
+         mark_complete *)
+      let steps = ref [] in
+      let done_ = ref false in
+      while not !done_ do
+        let msg_id, cmd, pairs = recv_command data_ch in
+        steps := cmd :: !steps;
+        match cmd with
+        | "start_span" -> send_response_value data_ch msg_id `Null
+        | "stop_span" -> send_response_value data_ch msg_id `Null
+        | "new_collection" ->
+            let min_s =
+              Hegel.Cbor_helpers.extract_int
+                (List.assoc (`Text "min_size") pairs)
+            in
+            Alcotest.(check int) "min_size" 0 min_s;
+            let max_s = List.assoc (`Text "max_size") pairs in
+            Alcotest.(check bool)
+              "max_size null" true
+              (Hegel.Cbor_helpers.is_null max_s);
+            send_response_value data_ch msg_id (`Text "coll1")
+        | "collection_more" ->
+            (* Return true once, then false *)
+            let already_done =
+              List.length (List.filter (( = ) "collection_more") !steps) >= 2
+            in
+            if already_done then begin
+              send_response_value data_ch msg_id (`Bool false)
+            end
+            else send_response_value data_ch msg_id (`Bool true)
+        | "generate" -> send_response_value data_ch msg_id (`Int 9)
+        | "mark_complete" ->
+            send_response_value data_ch msg_id `Null;
+            done_ := true
+        | other -> failwith (Printf.sprintf "Unexpected: %s" other)
+      done;
+      send_test_done test_channel ~interesting:0)
+    (fun client_conn ->
+      let c = Hegel.Client.create_client client_conn in
+      Hegel.Client.run_test c ~name:"lists_composite" ~test_cases:1 (fun () ->
+          let elem =
+            filter (fun _ -> true) (integers ~min_value:0 ~max_value:10 ())
+          in
+          let gen = lists elem () in
+          Alcotest.(check bool) "not basic" false (is_basic gen);
+          let v = generate gen in
+          let items = Hegel.Cbor_helpers.extract_list v in
+          Alcotest.(check int) "one element" 1 (List.length items)))
+
+(** Test: lists(non_basic) with StopTest during collection_more aborts cleanly.
+*)
+let test_lists_composite_stoptest_socketpair () =
+  with_fake_server
+    (fun server_conn ->
+      let test_channel = accept_run_test server_conn in
+      let data_ch = send_test_case server_conn test_channel in
+      (* start_span(LIST) *)
+      let msg_id, _cmd, _pairs = recv_command data_ch in
+      send_response_value data_ch msg_id `Null;
+      (* new_collection succeeds *)
+      let msg_id, _cmd, _pairs = recv_command data_ch in
+      send_response_value data_ch msg_id (`Text "coll_x");
+      (* collection_more → StopTest *)
+      let msg_id, _cmd, _pairs = recv_command data_ch in
+      send_response_error data_ch msg_id ~error:"Stop" ~error_type:"StopTest" ();
+      send_test_done test_channel ~interesting:0)
+    (fun client_conn ->
+      let c = Hegel.Client.create_client client_conn in
+      Hegel.Client.run_test c ~name:"lists_stoptest" ~test_cases:1 (fun () ->
+          let elem = filter (fun _ -> true) (integers ()) in
+          ignore (generate (lists elem ()))))
+
+(* ==== E2E tests for lists ==== *)
+
+(** Test: lists(integers) generates a list where all elements are in range. *)
+let test_lists_of_integers_e2e () =
+  Hegel.Session.run_hegel_test ~name:"lists_ints_e2e" ~test_cases:50 (fun () ->
+      let gen =
+        lists (integers ~min_value:0 ~max_value:100 ()) ~max_size:3 ()
+      in
+      Alcotest.(check bool) "is_basic" true (is_basic gen);
+      let v = generate gen in
+      let items = Hegel.Cbor_helpers.extract_list v in
+      Alcotest.(check bool) "max 3" true (List.length items <= 3);
+      List.iter
+        (fun item ->
+          let n = Hegel.Cbor_helpers.extract_int item in
+          assert (n >= 0 && n <= 100))
+        items)
+
+(** Test: lists(booleans, min_size=3, max_size=5) → length in [3,5]. *)
+let test_lists_booleans_bounds_e2e () =
+  Hegel.Session.run_hegel_test ~name:"lists_bools_bounds_e2e" ~test_cases:50
+    (fun () ->
+      let gen = lists (booleans ()) ~min_size:3 ~max_size:5 () in
+      Alcotest.(check bool) "is_basic" true (is_basic gen);
+      let v = generate gen in
+      let items = Hegel.Cbor_helpers.extract_list v in
+      let n = List.length items in
+      assert (n >= 3 && n <= 5))
+
+(** Test: lists(filtered integers) → all elements satisfy predicate. *)
+let test_lists_non_basic_e2e () =
+  Hegel.Session.run_hegel_test ~name:"lists_nonbasic_e2e" ~test_cases:50
+    (fun () ->
+      let elem =
+        filter
+          (fun v -> Hegel.Cbor_helpers.extract_int v > 5)
+          (integers ~min_value:0 ~max_value:10 ())
+      in
+      let gen = lists elem ~min_size:1 ~max_size:3 () in
+      Alcotest.(check bool) "not basic" false (is_basic gen);
+      let v = generate gen in
+      let items = Hegel.Cbor_helpers.extract_list v in
+      let n = List.length items in
+      assert (n >= 1 && n <= 3);
+      List.iter
+        (fun item ->
+          let x = Hegel.Cbor_helpers.extract_int item in
+          assert (x > 5))
+        items)
+
+(** Test: lists(lists(booleans)) → nested lists work. *)
+let test_lists_nested_e2e () =
+  Hegel.Session.run_hegel_test ~name:"lists_nested_e2e" ~test_cases:50
+    (fun () ->
+      let inner = lists (booleans ()) ~max_size:3 () in
+      let gen = lists inner ~max_size:3 () in
+      Alcotest.(check bool) "outer is_basic" true (is_basic gen);
+      let v = generate gen in
+      let outer_items = Hegel.Cbor_helpers.extract_list v in
+      assert (List.length outer_items <= 3);
+      List.iter
+        (fun inner_v ->
+          let inner_items = Hegel.Cbor_helpers.extract_list inner_v in
+          assert (List.length inner_items <= 3))
+        outer_items)
+
 let tests =
   [
     (* Unit tests *)
@@ -905,6 +1198,24 @@ let tests =
       test_collection_stoptest_more_socketpair;
     Alcotest.test_case "collection reject cached socketpair" `Quick
       test_collection_reject_cached_name_socketpair;
+    (* Unit tests for lists/booleans *)
+    Alcotest.test_case "booleans schema" `Quick test_booleans_schema;
+    Alcotest.test_case "lists basic schema" `Quick test_lists_basic_schema;
+    Alcotest.test_case "lists basic no max schema" `Quick
+      test_lists_basic_no_max_schema;
+    Alcotest.test_case "lists basic with element transform" `Quick
+      test_lists_basic_with_element_transform;
+    Alcotest.test_case "lists non-basic is not basic" `Quick
+      test_lists_non_basic_is_not_basic;
+    (* Socketpair tests for lists *)
+    Alcotest.test_case "lists basic generate socketpair" `Quick
+      test_lists_basic_generate_socketpair;
+    Alcotest.test_case "lists basic with transform generate socketpair" `Quick
+      test_lists_basic_with_transform_generate_socketpair;
+    Alcotest.test_case "lists composite generate socketpair" `Quick
+      test_lists_composite_generate_socketpair;
+    Alcotest.test_case "lists composite stoptest socketpair" `Quick
+      test_lists_composite_stoptest_socketpair;
     (* E2E tests *)
     Alcotest.test_case "integers in range" `Quick test_integers_in_range;
     Alcotest.test_case "map doubles e2e" `Quick test_map_doubles_e2e;
@@ -914,4 +1225,10 @@ let tests =
     Alcotest.test_case "filter exhaustion e2e" `Quick test_filter_exhaustion_e2e;
     Alcotest.test_case "group e2e" `Quick test_group_e2e;
     Alcotest.test_case "discardable_group e2e" `Quick test_discardable_group_e2e;
+    (* E2E tests for lists *)
+    Alcotest.test_case "lists of integers e2e" `Quick test_lists_of_integers_e2e;
+    Alcotest.test_case "lists booleans bounds e2e" `Quick
+      test_lists_booleans_bounds_e2e;
+    Alcotest.test_case "lists non-basic e2e" `Quick test_lists_non_basic_e2e;
+    Alcotest.test_case "lists nested e2e" `Quick test_lists_nested_e2e;
   ]

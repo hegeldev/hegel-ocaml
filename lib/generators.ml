@@ -38,7 +38,9 @@ end
     - [Mapped] generators wrap a source generator and a transform function.
     - [FlatMapped] generators wrap a source and a function returning a
       generator.
-    - [Filtered] generators wrap a source and a predicate. *)
+    - [Filtered] generators wrap a source and a predicate.
+    - [CompositeList] generators use the collection protocol to generate lists
+      of non-basic elements, creating a fresh collection per generate call. *)
 type generator =
   | Basic of {
       schema : CBOR.Simple.t;
@@ -47,6 +49,11 @@ type generator =
   | Mapped of { source : generator; f : CBOR.Simple.t -> CBOR.Simple.t }
   | FlatMapped of { source : generator; f : CBOR.Simple.t -> generator }
   | Filtered of { source : generator; predicate : CBOR.Simple.t -> bool }
+  | CompositeList of {
+      elements : generator;
+      min_size : int;
+      max_size : int option;
+    }
 
 (** Maximum number of filter attempts before calling [assume false]. *)
 let max_filter_attempts = 3
@@ -69,73 +76,6 @@ let discardable_group label f =
   | exception e ->
       Client.stop_span ~discard:true ();
       raise e
-
-(** [generate gen] produces a value from generator [gen]. *)
-let rec generate gen =
-  match gen with
-  | Basic { schema; transform = None } -> Client.generate_from_schema schema
-  | Basic { schema; transform = Some f } ->
-      f (Client.generate_from_schema schema)
-  | Mapped { source; f } ->
-      group Labels.mapped (fun () ->
-          let value = generate source in
-          f value)
-  | FlatMapped { source; f } ->
-      group Labels.flat_map (fun () ->
-          let first = generate source in
-          let second_gen = f first in
-          generate second_gen)
-  | Filtered { source; predicate } ->
-      let rec attempt i =
-        if i > max_filter_attempts then raise Client.Assume_rejected
-        else begin
-          Client.start_span ~label:Labels.filter ();
-          let value = generate source in
-          if predicate value then begin
-            Client.stop_span ();
-            value
-          end
-          else begin
-            Client.stop_span ~discard:true ();
-            attempt (i + 1)
-          end
-        end
-      in
-      attempt 1
-
-(** [map f gen] transforms values from [gen] using [f].
-
-    When [gen] is a [Basic] generator, the schema is preserved and transforms
-    are composed. Otherwise, a [Mapped] generator is created. *)
-let map f gen =
-  match gen with
-  | Basic { schema; transform = None } -> Basic { schema; transform = Some f }
-  | Basic { schema; transform = Some existing } ->
-      Basic { schema; transform = Some (fun x -> f (existing x)) }
-  | other -> Mapped { source = other; f }
-
-(** [flat_map f gen] creates a dependent generator. The function [f] receives
-    the generated value and returns a new generator whose value is the final
-    result. *)
-let flat_map f gen = FlatMapped { source = gen; f }
-
-(** [filter predicate gen] filters values from [gen] using [predicate]. Tries up
-    to {!max_filter_attempts} times; calls [assume false] if all attempts fail.
-*)
-let filter predicate gen = Filtered { source = gen; predicate }
-
-(** [schema gen] returns the schema for a [Basic] generator, or [None]. *)
-let schema gen = match gen with Basic { schema; _ } -> Some schema | _ -> None
-
-(** [is_basic gen] returns [true] if [gen] is a [Basic] generator. *)
-let is_basic gen = match gen with Basic _ -> true | _ -> false
-
-(** [as_basic gen] returns [Some (schema, transform)] if [gen] is [Basic], or
-    [None] otherwise. *)
-let as_basic gen =
-  match gen with
-  | Basic { schema; transform } -> Some (schema, transform)
-  | _ -> None
 
 type collection = {
   mutable finished : bool;
@@ -222,6 +162,81 @@ let collection_reject coll =
                ])))
   end
 
+(** [generate gen] produces a value from generator [gen]. *)
+let rec generate gen =
+  match gen with
+  | Basic { schema; transform = None } -> Client.generate_from_schema schema
+  | Basic { schema; transform = Some f } ->
+      f (Client.generate_from_schema schema)
+  | Mapped { source; f } ->
+      group Labels.mapped (fun () ->
+          let value = generate source in
+          f value)
+  | FlatMapped { source; f } ->
+      group Labels.flat_map (fun () ->
+          let first = generate source in
+          let second_gen = f first in
+          generate second_gen)
+  | Filtered { source; predicate } ->
+      let rec attempt i =
+        if i > max_filter_attempts then raise Client.Assume_rejected
+        else begin
+          Client.start_span ~label:Labels.filter ();
+          let value = generate source in
+          if predicate value then begin
+            Client.stop_span ();
+            value
+          end
+          else begin
+            Client.stop_span ~discard:true ();
+            attempt (i + 1)
+          end
+        end
+      in
+      attempt 1
+  | CompositeList { elements; min_size; max_size } ->
+      group Labels.list (fun () ->
+          let coll = new_collection ~min_size ?max_size () in
+          let result = ref [] in
+          while collection_more coll do
+            result := generate elements :: !result
+          done;
+          `Array (List.rev !result))
+
+(** [map f gen] transforms values from [gen] using [f].
+
+    When [gen] is a [Basic] generator, the schema is preserved and transforms
+    are composed. Otherwise, a [Mapped] generator is created. *)
+let map f gen =
+  match gen with
+  | Basic { schema; transform = None } -> Basic { schema; transform = Some f }
+  | Basic { schema; transform = Some existing } ->
+      Basic { schema; transform = Some (fun x -> f (existing x)) }
+  | other -> Mapped { source = other; f }
+
+(** [flat_map f gen] creates a dependent generator. The function [f] receives
+    the generated value and returns a new generator whose value is the final
+    result. *)
+let flat_map f gen = FlatMapped { source = gen; f }
+
+(** [filter predicate gen] filters values from [gen] using [predicate]. Tries up
+    to {!max_filter_attempts} times; calls [assume false] if all attempts fail.
+*)
+let filter predicate gen = Filtered { source = gen; predicate }
+
+(** [schema gen] returns the schema for a [Basic] generator, or [None]. *)
+let schema gen = match gen with Basic { schema; _ } -> Some schema | _ -> None
+
+(** [is_basic gen] returns [true] if [gen] is a [Basic] generator. *)
+let is_basic gen = match gen with Basic _ -> true | _ -> false
+
+(** [as_basic gen] returns [Some (schema, transform)] if [gen] is [Basic], or
+    [None] otherwise. *)
+let as_basic gen =
+  match gen with
+  | Basic { schema; transform } -> Some (schema, transform)
+  | _ -> None
+
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
     the given bounds. *)
 let integers ?min_value ?max_value () =
@@ -237,3 +252,51 @@ let integers ?min_value ?max_value () =
     | None -> pairs
   in
   Basic { schema = `Map pairs; transform = None }
+
+(** [booleans ()] creates a generator for boolean values. *)
+let booleans () =
+  Basic { schema = `Map [ (`Text "type", `Text "boolean") ]; transform = None }
+
+(** [lists elements ?min_size ?max_size ()] creates a generator for lists.
+
+    When [elements] is a [Basic] generator, sends a [list] schema to the server
+    and lets it generate the entire list (fast path). The element transform, if
+    any, is lifted to apply to every item in the resulting list.
+
+    When [elements] is non-basic (e.g. filtered or flat-mapped), uses the
+    collection protocol inside a {!Labels.list} span to generate elements one at
+    a time. A fresh collection is created on each call to [generate]. *)
+let lists elements ?(min_size = 0) ?max_size () =
+  match as_basic elements with
+  | Some (elem_schema, elem_transform) ->
+      let pairs =
+        [
+          (`Text "type", `Text "list");
+          (`Text "elements", elem_schema);
+          (`Text "min_size", `Int min_size);
+        ]
+      in
+      let pairs =
+        match max_size with
+        | Some ms -> pairs @ [ (`Text "max_size", `Int ms) ]
+        | None -> pairs
+      in
+      let raw_schema = `Map pairs in
+      let list_transform =
+        match elem_transform with
+        | None -> None
+        | Some t ->
+            Some
+              (fun raw_list ->
+                match raw_list with
+                | `Array items -> `Array (List.map t items)
+                | _ ->
+                    (* Server always returns Array for list schema *)
+                    assert false)
+      in
+      Basic { schema = raw_schema; transform = list_transform }
+  | None ->
+      (* Non-basic element: use CompositeList, which creates a fresh
+         collection per generate() call via the CompositeList arm of
+         [generate]. *)
+      CompositeList { elements; min_size; max_size }
