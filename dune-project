@@ -35,6 +35,10 @@
    (and
     :with-test
     (>= 2.8)))
+  (ocamlformat
+   (and
+    :with-test
+    (= 0.28.1)))
   (yojson
    (>= 1.7))
   (odoc :with-doc)))
