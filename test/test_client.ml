@@ -61,7 +61,7 @@ let test_start_span_when_aborted () =
   test_aborted := true;
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
-  current_channel := Some conn.control_channel;
+  current_channel := Some (control_channel conn);
   start_span ();
   stop_span ();
   current_channel := None;
@@ -92,7 +92,7 @@ let test_unrecognised_event () =
   let client_conn = create_connection client_socket ~name:"Client" () in
   let fake_server () =
     receive_handshake server_conn;
-    let control = server_conn.control_channel in
+    let control = control_channel server_conn in
     let msg_id, message = receive_request control () in
     let pairs = Hegel.Cbor_helpers.extract_dict message in
     let test_ch_id =
@@ -284,7 +284,7 @@ let with_fake_server server_fn client_fn =
     channel. *)
 let accept_run_test server_conn =
   receive_handshake server_conn;
-  let control = server_conn.control_channel in
+  let control = control_channel server_conn in
   let msg_id, message = receive_request control () in
   let pairs = Hegel.Cbor_helpers.extract_dict message in
   let test_ch_id =
@@ -377,7 +377,7 @@ let test_version_mismatch () =
       (fun () ->
         (* Receive the handshake and respond with a bad version *)
         server_conn.connection_state <- Server;
-        let ch = server_conn.control_channel in
+        let ch = control_channel server_conn in
         let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "Hegel/9.9")
       ()
@@ -400,7 +400,7 @@ let test_version_mismatch_low () =
     Thread.create
       (fun () ->
         server_conn.connection_state <- Server;
-        let ch = server_conn.control_channel in
+        let ch = control_channel server_conn in
         let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "Hegel/0.0")
       ()
@@ -727,7 +727,7 @@ let test_has_working_client_live () =
         Some
           {
             connection = conn;
-            control = conn.control_channel;
+            control = control_channel conn;
             lock = Mutex.create ();
           };
       socket_path = None;
@@ -766,16 +766,16 @@ let test_no_event_field () =
 let test_run_test_case_nest () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
-  current_channel := Some conn.control_channel;
+  current_channel := Some (control_channel conn);
   let raised = ref false in
   (try
      run_test_case
        {
          connection = conn;
-         control = conn.control_channel;
+         control = control_channel conn;
          lock = Mutex.create ();
        }
-       conn.control_channel
+       (control_channel conn)
        (fun () -> ())
        ~is_final:false
    with Failure _ -> raised := true);

@@ -110,17 +110,16 @@ let start session =
           session.process <- Some pid;
           (* Wait for socket to appear and connect *)
           let sock = ref None in
-          for _ = 1 to 50 do
-            if !sock = None then begin
-              if Sys.file_exists socket_path then begin
-                try
-                  let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-                  Unix.connect s (Unix.ADDR_UNIX socket_path);
-                  sock := Some s
-                with Unix.Unix_error _ -> Unix.sleepf 0.1
-              end
-              else Unix.sleepf 0.1
-            end
+          let attempts = ref 0 in
+          while !sock = None && !attempts < 50 do
+            incr attempts;
+            if Sys.file_exists socket_path then
+              (try
+                 let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+                 Unix.connect s (Unix.ADDR_UNIX socket_path);
+                 sock := Some s
+               with Unix.Unix_error _ -> Unix.sleepf 0.1)
+            else Unix.sleepf 0.1
           done;
           (match !sock with
           | None ->

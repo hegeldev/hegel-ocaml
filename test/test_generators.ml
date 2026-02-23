@@ -19,7 +19,7 @@ let with_fake_server server_fn client_fn =
 (** Helper: accept run_test on control channel and return the test channel. *)
 let accept_run_test server_conn =
   receive_handshake server_conn;
-  let control = server_conn.control_channel in
+  let control = control_channel server_conn in
   let msg_id, message = receive_request control () in
   let pairs = Hegel.Cbor_helpers.extract_dict message in
   let test_ch_id =

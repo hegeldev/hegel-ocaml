@@ -92,7 +92,7 @@ let test_bad_handshake_negotiation () =
   let t =
     Thread.create
       (fun () ->
-        let ch = client_conn.control_channel in
+        let ch = control_channel client_conn in
         ignore (send_request_raw ch "BadVersion"))
       ()
   in
@@ -115,7 +115,7 @@ let test_send_handshake_bad_response () =
   let t =
     Thread.create
       (fun () ->
-        let ch = server_conn.control_channel in
+        let ch = control_channel server_conn in
         let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "NotOk")
       ()
@@ -258,7 +258,7 @@ let test_channel_timeout () =
 let test_channel_repr () =
   let s1, _s2 = make_socket_pair () in
   let conn = create_connection s1 ~name:"Test" () in
-  let ch = conn.control_channel in
+  let ch = control_channel conn in
   let r = channel_repr ch in
   Alcotest.(check bool) "Control in repr" true (contains_substring r "Control");
   close conn
@@ -331,7 +331,7 @@ let test_channel_name_no_role_with_conn_name () =
 let test_channel_name_control () =
   let s1, _s2 = make_socket_pair () in
   let conn = create_connection s1 () in
-  let ch = conn.control_channel in
+  let ch = control_channel conn in
   let n = channel_name ch in
   Alcotest.(check bool) "has Control" true (contains_substring n "Control");
   close conn
@@ -555,7 +555,7 @@ let test_send_response_error_with_kwargs () =
 let test_duplicate_response_error () =
   let s1, _s2 = make_socket_pair () in
   let conn = create_connection s1 ~name:"Test" () in
-  let ch = conn.control_channel in
+  let ch = control_channel conn in
   (* Put a response in the responses dict directly *)
   Hashtbl.replace ch.responses 42l "first";
   (* Now try to process another reply with same ID *)
@@ -583,7 +583,7 @@ let test_duplicate_response_error () =
 let test_shutdown_in_inbox () =
   let s1, _s2 = make_socket_pair () in
   let conn = create_connection s1 ~name:"Test" () in
-  let ch = conn.control_channel in
+  let ch = control_channel conn in
   Queue.push Shutdown ch.inbox;
   let raised = ref false in
   (try ignore (receive_request ch ~timeout:0.1 ())
@@ -611,8 +611,8 @@ let test_message_to_nonexistent_channel () =
       payload = CBOR.Simple.encode (`Map [ (`Text "command", `Text "test") ]);
     };
   (* Also send a control channel message so the server processes packets *)
-  ignore (send_request_raw client_conn.control_channel "ping");
-  ignore (receive_request_raw server_conn.control_channel ());
+  ignore (send_request_raw (control_channel client_conn) "ping");
+  ignore (receive_request_raw (control_channel server_conn) ());
   close server_conn;
   close client_conn
 
@@ -645,7 +645,7 @@ let test_close_channel_creates_dead_channel () =
     Thread.create
       (fun () ->
         receive_handshake server_conn;
-        let ch = server_conn.control_channel in
+        let ch = control_channel server_conn in
         let msg_id, _ = receive_request ch () in
         send_response_value ch msg_id (`Text "Ok");
         server_done := true)
@@ -654,7 +654,7 @@ let test_close_channel_creates_dead_channel () =
   ignore (send_handshake client_conn);
   let client_ch = new_channel client_conn ~role:"ToClose" () in
   close_channel client_ch;
-  let result = pending_get (request client_conn.control_channel (`Map [])) in
+  let result = pending_get (request (control_channel client_conn) (`Map [])) in
   ignore result;
   Thread.join t;
   (* The channel should be dead on server side *)
@@ -673,7 +673,7 @@ let test_close_channel_creates_dead_channel_with_connect () =
     Thread.create
       (fun () ->
         receive_handshake server_conn;
-        let ch = server_conn.control_channel in
+        let ch = control_channel server_conn in
         let msg_id, msg = receive_request ch () in
         let channel_id =
           Hegel.Cbor_helpers.extract_int
@@ -691,12 +691,12 @@ let test_close_channel_creates_dead_channel_with_connect () =
   let client_ch = new_channel client_conn ~role:"ToClose" () in
   let r1 =
     pending_get
-      (request client_conn.control_channel
+      (request (control_channel client_conn)
          (`Map [ (`Text "channel", `Int (Int32.to_int client_ch.channel_id)) ]))
   in
   ignore r1;
   close_channel client_ch;
-  let r2 = pending_get (request client_conn.control_channel (`Map [])) in
+  let r2 = pending_get (request (control_channel client_conn) (`Map [])) in
   ignore r2;
   Thread.join t;
   let dead = Hashtbl.find server_conn.channels client_ch.channel_id in
@@ -734,7 +734,7 @@ let test_reader_loop_clean_exit () =
 let test_process_reply_packet () =
   let s1, _s2 = make_socket_pair () in
   let conn = create_connection s1 ~name:"Test" () in
-  let ch = conn.control_channel in
+  let ch = control_channel conn in
   Queue.push
     (Pkt { channel_id = 0l; message_id = 7l; is_reply = true; payload = "ok" })
     ch.inbox;
@@ -746,7 +746,7 @@ let test_process_reply_packet () =
 let test_process_request_packet () =
   let s1, _s2 = make_socket_pair () in
   let conn = create_connection s1 ~name:"Test" () in
-  let ch = conn.control_channel in
+  let ch = control_channel conn in
   Queue.push
     (Pkt { channel_id = 0l; message_id = 3l; is_reply = false; payload = "req" })
     ch.inbox;
@@ -802,8 +802,8 @@ let test_reply_to_nonexistent_ignored () =
       payload = "reply_data";
     };
   (* Send another message on control so we can process *)
-  ignore (send_request_raw client_conn.control_channel "ping");
-  ignore (receive_request_raw server_conn.control_channel ());
+  ignore (send_request_raw (control_channel client_conn) "ping");
+  ignore (receive_request_raw (control_channel server_conn) ());
   close server_conn;
   close client_conn
 
@@ -937,7 +937,7 @@ let test_debug_close_already_dead_channel () =
     { channel_id = 0l; message_id = 99l; is_reply = false; payload = "sync" };
   (* Process until we see the sync message in control channel inbox *)
   run_reader conn ~until:(fun () ->
-      not (Queue.is_empty conn.control_channel.inbox));
+      not (Queue.is_empty (control_channel conn).inbox));
   (match Hashtbl.find_opt conn.channels 50l with
   | Some (Dead d) ->
       Alcotest.(check string) "dead name preserved" "OldDead" d.name
@@ -995,8 +995,8 @@ let test_message_to_dead_channel_in_reader () =
       payload = CBOR.Simple.encode (`Map [ (`Text "test", `Text "data") ]);
     };
   (* Also send something to control so we can synchronize *)
-  ignore (send_request_raw client_conn.control_channel "sync");
-  ignore (receive_request_raw server_conn.control_channel ());
+  ignore (send_request_raw (control_channel client_conn) "sync");
+  ignore (receive_request_raw (control_channel server_conn) ());
   close server_conn;
   close client_conn
 
@@ -1030,7 +1030,7 @@ let test_close_channel_not_registered () =
 let test_handle_requests_exits_on_close () =
   let s1, _s2 = make_socket_pair () in
   let conn = create_connection s1 ~name:"Test" () in
-  let ch = conn.control_channel in
+  let ch = control_channel conn in
   (* Push a Shutdown event directly to test the Failure catch in handle_requests *)
   Queue.push Shutdown ch.inbox;
   let handler_called = ref false in
@@ -1050,7 +1050,7 @@ let test_send_handshake_short_response () =
   let t =
     Thread.create
       (fun () ->
-        let ch = server_conn.control_channel in
+        let ch = control_channel server_conn in
         server_conn.connection_state <- Server;
         let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "Hi")
@@ -1077,7 +1077,7 @@ let test_send_handshake_wrong_prefix () =
   let t =
     Thread.create
       (fun () ->
-        let ch = server_conn.control_channel in
+        let ch = control_channel server_conn in
         server_conn.connection_state <- Server;
         let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "WrongPrefix/1.0")
@@ -1100,7 +1100,7 @@ let test_send_handshake_wrong_prefix () =
 let test_process_one_message_default_timeout () =
   let s1, _s2 = make_socket_pair () in
   let conn = create_connection s1 ~name:"Test" () in
-  let ch = conn.control_channel in
+  let ch = control_channel conn in
   Queue.push
     (Pkt
        { channel_id = 0l; message_id = 1l; is_reply = false; payload = "test" })

@@ -240,16 +240,11 @@ let as_basic gen =
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
     the given bounds. *)
 let integers ?min_value ?max_value () =
-  let pairs = [ (`Text "type", `Text "integer") ] in
   let pairs =
-    match min_value with
-    | Some v -> pairs @ [ (`Text "min_value", `Int v) ]
-    | None -> pairs
-  in
-  let pairs =
-    match max_value with
-    | Some v -> pairs @ [ (`Text "max_value", `Int v) ]
-    | None -> pairs
+    List.filter_map Fun.id
+      [ Some (`Text "type", `Text "integer")
+      ; Option.map (fun v -> (`Text "min_value", `Int v)) min_value
+      ; Option.map (fun v -> (`Text "max_value", `Int v)) max_value ]
   in
   Basic { schema = `Map pairs; transform = None }
 
@@ -288,14 +283,10 @@ let floats ?min_value ?max_value ?(exclude_min = false) ?(exclude_max = false)
     ]
   in
   let pairs =
-    match min_value with
-    | Some v -> pairs @ [ (`Text "min_value", `Float v) ]
-    | None -> pairs
-  in
-  let pairs =
-    match max_value with
-    | Some v -> pairs @ [ (`Text "max_value", `Float v) ]
-    | None -> pairs
+    pairs
+    @ List.filter_map Fun.id
+        [ Option.map (fun v -> (`Text "min_value", `Float v)) min_value
+        ; Option.map (fun v -> (`Text "max_value", `Float v)) max_value ]
   in
   Basic { schema = `Map pairs; transform = None }
 
@@ -304,12 +295,10 @@ let floats ?min_value ?max_value ?(exclude_min = false) ?(exclude_max = false)
     Uses schema type ["string"] as required by the Hegel server. *)
 let text ?(min_size = 0) ?max_size () =
   let pairs =
-    [ (`Text "type", `Text "string"); (`Text "min_size", `Int min_size) ]
-  in
-  let pairs =
-    match max_size with
-    | Some ms -> pairs @ [ (`Text "max_size", `Int ms) ]
-    | None -> pairs
+    List.filter_map Fun.id
+      [ Some (`Text "type", `Text "string")
+      ; Some (`Text "min_size", `Int min_size)
+      ; Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size ]
   in
   Basic { schema = `Map pairs; transform = None }
 
@@ -317,12 +306,10 @@ let text ?(min_size = 0) ?max_size () =
 *)
 let binary ?(min_size = 0) ?max_size () =
   let pairs =
-    [ (`Text "type", `Text "binary"); (`Text "min_size", `Int min_size) ]
-  in
-  let pairs =
-    match max_size with
-    | Some ms -> pairs @ [ (`Text "max_size", `Int ms) ]
-    | None -> pairs
+    List.filter_map Fun.id
+      [ Some (`Text "type", `Text "binary")
+      ; Some (`Text "min_size", `Int min_size)
+      ; Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size ]
   in
   Basic { schema = `Map pairs; transform = None }
 
@@ -355,17 +342,12 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
     | _ -> failwith "hashmaps: values generator must be a Basic generator"
   in
   let pairs =
-    [
-      (`Text "type", `Text "dict");
-      (`Text "keys", key_schema);
-      (`Text "values", val_schema);
-      (`Text "min_size", `Int min_size);
-    ]
-  in
-  let pairs =
-    match max_size with
-    | Some ms -> pairs @ [ (`Text "max_size", `Int ms) ]
-    | None -> pairs
+    List.filter_map Fun.id
+      [ Some (`Text "type", `Text "dict")
+      ; Some (`Text "keys", key_schema)
+      ; Some (`Text "values", val_schema)
+      ; Some (`Text "min_size", `Int min_size)
+      ; Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size ]
   in
   (* The server returns dicts as [[k, v], ...] lists. We transform to CBOR map. *)
   let transform raw =
@@ -396,16 +378,11 @@ let lists elements ?(min_size = 0) ?max_size () =
   match as_basic elements with
   | Some (elem_schema, elem_transform) ->
       let pairs =
-        [
-          (`Text "type", `Text "list");
-          (`Text "elements", elem_schema);
-          (`Text "min_size", `Int min_size);
-        ]
-      in
-      let pairs =
-        match max_size with
-        | Some ms -> pairs @ [ (`Text "max_size", `Int ms) ]
-        | None -> pairs
+        List.filter_map Fun.id
+          [ Some (`Text "type", `Text "list")
+          ; Some (`Text "elements", elem_schema)
+          ; Some (`Text "min_size", `Int min_size)
+          ; Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size ]
       in
       let raw_schema = `Map pairs in
       let list_transform =

@@ -8,7 +8,7 @@
     defaulting to 50 if [s] is [None] or not a valid integer. *)
 let parse_test_cases = function
   | None -> 50
-  | Some s -> ( match int_of_string_opt s with Some n -> n | None -> 50)
+  | Some s -> Option.value ~default:50 (int_of_string_opt s)
 
 (** [get_test_cases ()] returns the number of test cases to run. Reads
     [CONFORMANCE_TEST_CASES] env var; defaults to [50]. *)

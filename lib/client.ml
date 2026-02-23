@@ -3,7 +3,7 @@
     This module implements the client-side logic for running property-based
     tests against a Hegel server. It manages:
     - Test lifecycle (run_test, test_case events, mark_complete)
-    - Thread-local state for the current data channel
+    - Module-level state for the current data channel (single-threaded)
     - Helper functions (assume, note, target, generate_from_schema)
     - Origin extraction for error reporting *)
 
@@ -15,40 +15,41 @@ exception Assume_rejected
 exception Data_exhausted
 (** Raised when the server runs out of test data (StopTest). *)
 
-(** Thread-local state for the current test case. *)
+(** Current test case channel. Set for the duration of each test case.
+    Not thread-safe: only one test may run at a time (enforced by the
+    client lock in {!run_test}). *)
 let current_channel : channel option ref = ref None
 
-(** Thread-local flag indicating the final (replay) run. *)
+(** Whether this is the final (replay) run for a failing test case. *)
 let is_final_run : bool ref = ref false
 
-(** Thread-local flag indicating the test was aborted (StopTest). *)
+(** Whether the server sent StopTest during this test case. *)
 let test_aborted : bool ref = ref false
 
-(** Thread-local flag indicating we are inside a test case. *)
+(** Whether we are currently inside a test case body. *)
 let in_test : bool ref = ref false
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available. *)
 let extract_origin exn =
   let bt = Printexc.get_raw_backtrace () in
-  let slots = Printexc.backtrace_slots bt in
-  match slots with
+  match Printexc.backtrace_slots bt with
   | None -> Printf.sprintf "%s at :0" (Printexc.exn_slot_name exn)
   | Some slots ->
-      (* Find the last slot with location info *)
-      let filename = ref "" in
-      let lineno = ref 0 in
-      Array.iter
-        (fun slot ->
-          Option.iter
-            (fun (loc : Printexc.location) ->
-              filename := loc.filename;
-              lineno := loc.line_number)
-            (Printexc.Slot.location slot))
-        slots;
-      Printf.sprintf "%s at %s:%d"
-        (Printexc.exn_slot_name exn)
-        !filename !lineno
+      let last_loc =
+        Array.fold_left
+          (fun acc slot ->
+            match Printexc.Slot.location slot with
+            | Some loc -> Some loc
+            | None -> acc)
+          None slots
+      in
+      let file, line =
+        match last_loc with
+        | None -> ("", 0)
+        | Some (loc : Printexc.location) -> (loc.filename, loc.line_number)
+      in
+      Printf.sprintf "%s at %s:%d" (Printexc.exn_slot_name exn) file line
 
 (** [get_channel ()] returns the current test data channel, raising [Failure] if
     not in a test context. *)
@@ -138,7 +139,7 @@ let create_client connection =
           server version %g. Upgrading hegel-ocaml or downgrading your hegel \
           cli might help."
          server_version);
-  { connection; control = connection.control_channel; lock = Mutex.create () }
+  { connection; control = control_channel connection; lock = Mutex.create () }
 
 (** [run_test_case client channel test_fn ~is_final] runs a single test case.
     Sets up thread-local state and calls [test_fn]. Reports status via
@@ -211,8 +212,9 @@ let run_test client ~name ~test_cases test_fn =
     in
     if event = "test_case" then begin
       let channel_id =
-        Int32.of_int
-          (Cbor_helpers.extract_int (List.assoc (`Text "channel") pairs))
+        match List.assoc_opt (`Text "channel") pairs with
+        | Some v -> Int32.of_int (Cbor_helpers.extract_int v)
+        | None -> failwith "test_case event missing 'channel' field"
       in
       send_response_value test_channel message_id `Null;
       let test_case_channel =
@@ -223,7 +225,10 @@ let run_test client ~name ~test_cases test_fn =
     else if event = "test_done" then begin
       send_response_value test_channel message_id (`Bool true);
       result_data :=
-        Some (Cbor_helpers.extract_dict (List.assoc (`Text "results") pairs));
+        Some
+          (match List.assoc_opt (`Text "results") pairs with
+          | Some v -> Cbor_helpers.extract_dict v
+          | None -> failwith "test_done event missing 'results' field");
       continue := false
     end
     else
@@ -238,16 +243,18 @@ let run_test client ~name ~test_cases test_fn =
   done;
   let results = match !result_data with Some r -> r | None -> assert false in
   let n_interesting =
-    Cbor_helpers.extract_int
-      (List.assoc (`Text "interesting_test_cases") results)
+    match List.assoc_opt (`Text "interesting_test_cases") results with
+    | Some v -> Cbor_helpers.extract_int v
+    | None -> failwith "test_done results missing 'interesting_test_cases' field"
   in
   if n_interesting = 0 then ()
   else if n_interesting = 1 then begin
     let message_id, message = receive_request test_channel () in
     let pairs = Cbor_helpers.extract_dict message in
     let channel_id =
-      Int32.of_int
-        (Cbor_helpers.extract_int (List.assoc (`Text "channel") pairs))
+      match List.assoc_opt (`Text "channel") pairs with
+      | Some v -> Int32.of_int (Cbor_helpers.extract_int v)
+      | None -> failwith "interesting test_case event missing 'channel' field"
     in
     send_response_value test_channel message_id `Null;
     let test_case_channel =
@@ -262,8 +269,9 @@ let run_test client ~name ~test_cases test_fn =
         let message_id, message = receive_request test_channel () in
         let pairs = Cbor_helpers.extract_dict message in
         let channel_id =
-          Int32.of_int
-            (Cbor_helpers.extract_int (List.assoc (`Text "channel") pairs))
+          match List.assoc_opt (`Text "channel") pairs with
+          | Some v -> Int32.of_int (Cbor_helpers.extract_int v)
+          | None -> failwith "interesting test_case event missing 'channel' field"
         in
         send_response_value test_channel message_id `Null;
         let test_case_channel =

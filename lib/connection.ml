@@ -45,11 +45,7 @@ let result_or_error body =
     let msg = find_text "error" in
     let error_type = find_text "type" in
     let data =
-      List.filter
-        (fun (k, _) ->
-          let ks = Cbor_helpers.extract_string k in
-          ks <> "error" && ks <> "type")
-        pairs
+      List.filter (fun (k, _) -> k <> `Text "error" && k <> `Text "type") pairs
     in
     raise (Request_error { message = msg; error_type; data })
   end
@@ -76,7 +72,6 @@ and connection = {
   writer_lock : Mutex.t;
   reader_lock : Mutex.t;
   mutable connection_state : connection_state;
-  mutable control_channel : channel;
 }
 (** Multiplexed socket connection to a Hegel peer. *)
 
@@ -193,20 +188,27 @@ let run_reader conn ~until =
                 else begin
                   match Hashtbl.find_opt conn.channels pkt.channel_id with
                   | Some (Live ch) -> Queue.push (Pkt pkt) ch.inbox
-                  | Some (Dead _) | None ->
+                  | Some (Dead _) ->
                       if not pkt.is_reply then begin
-                        let error_type =
-                          match
-                            Hashtbl.find_opt conn.channels pkt.channel_id
-                          with
-                          | None -> "non-existent"
-                          | Some (Dead _) -> "closed"
-                          | Some (Live _) -> assert false
-                        in
-                        let chan_name = entry_name conn pkt.channel_id in
                         let error_msg =
-                          Printf.sprintf "Message %ld sent to %s %s"
-                            pkt.message_id error_type chan_name
+                          Printf.sprintf "Message %ld sent to closed %s"
+                            pkt.message_id (entry_name conn pkt.channel_id)
+                        in
+                        send_packet conn
+                          {
+                            channel_id = pkt.channel_id;
+                            message_id = pkt.message_id;
+                            is_reply = true;
+                            payload =
+                              CBOR.Simple.encode
+                                (`Map [ (`Text "error", `Text error_msg) ]);
+                          }
+                      end
+                  | None ->
+                      if not pkt.is_reply then begin
+                        let error_msg =
+                          Printf.sprintf "Message %ld sent to non-existent %s"
+                            pkt.message_id (entry_name conn pkt.channel_id)
                         in
                         send_packet conn
                           {
@@ -243,22 +245,6 @@ let close conn =
     the Unix file descriptor [sock]. A control channel (channel 0) is
     automatically created. *)
 let create_connection sock ?name ?(debug = false) () =
-  (* We need a circular reference: conn.control_channel.conn = conn.
-     OCaml cannot express this with let rec (make_channel is not a
-     constant expression), so we create the connection with a dummy
-     control_channel and immediately overwrite it. *)
-  let dummy_channel =
-    {
-      channel_id = 0l;
-      conn = Obj.magic ();
-      inbox = Queue.create ();
-      requests = Queue.create ();
-      responses = Hashtbl.create 0;
-      role = None;
-      next_message_id = 0l;
-      closed = true;
-    }
-  in
   let conn =
     {
       name;
@@ -270,11 +256,9 @@ let create_connection sock ?name ?(debug = false) () =
       writer_lock = Mutex.create ();
       reader_lock = Mutex.create ();
       connection_state = Unresolved;
-      control_channel = dummy_channel;
     }
   in
   let control = make_channel conn 0l ~role:(Some "Control") in
-  conn.control_channel <- control;
   Mutex.lock conn.writer_lock;
   Hashtbl.replace conn.channels 0l (Live control);
   Mutex.unlock conn.writer_lock;
@@ -282,6 +266,12 @@ let create_connection sock ?name ?(debug = false) () =
 
 (** [is_live conn] returns [true] if the connection is still active. *)
 let is_live conn = conn.running
+
+(** [control_channel conn] returns the control channel (channel 0). *)
+let control_channel conn =
+  match Hashtbl.find_opt conn.channels 0l with
+  | Some (Live ch) -> ch
+  | _ -> failwith "Internal error: no control channel"
 
 (** [new_channel conn ?role ()] creates a new logical channel on the connection.
 
@@ -488,7 +478,7 @@ let send_handshake conn =
   if conn.connection_state <> Unresolved then
     failwith "Handshake already established";
   conn.connection_state <- Client;
-  let ch = conn.control_channel in
+  let ch = control_channel conn in
   let message_id = send_request_raw ch handshake_string in
   let response = receive_response_raw ch message_id () in
   if String.length response < 6 || String.sub response 0 6 <> "Hegel/" then
@@ -500,7 +490,7 @@ let receive_handshake conn =
   if conn.connection_state <> Unresolved then
     failwith "Handshake already established";
   conn.connection_state <- Server;
-  let ch = conn.control_channel in
+  let ch = control_channel conn in
   let message_id, payload = receive_request_raw ch () in
   if payload <> handshake_string then
     failwith
