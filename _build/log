@@ -13,14 +13,74 @@
 #  ; build_dir = In_build_dir "default"
 #  ; instrument_with = [ "bisect_ppx" ]
 #  }
-$ /home/drmaciver/.opam/5.2.1/bin/ocamlc.opt -config > /tmp/dune_feff04_output
-$ (cd _build/.sandbox/8705dadb4c0ed6c561d5561c6b52730d/default && .ppx/91be16f8c7b473bc6bcd0e4210417372/ppx.exe --cookie 'library-name="hegel"' -o lib/hegel.pp.ml --impl lib/hegel.ml -corrected-suffix .ppx-corrected -diff-cmd - -dump-ast)
-$ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamlc.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -bin-annot-occurrences -I lib/.hegel.objs/byte -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/common -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/runtime -I /home/drmaciver/.opam/5.2.1/lib/ocaml/unix -no-alias-deps -opaque -o lib/.hegel.objs/byte/hegel.cmo -c -impl lib/hegel.pp.ml)
+$ /home/drmaciver/.opam/5.2.1/bin/ocamlc.opt -config > /tmp/dune_4d3280_output
+$ (cd _build/.sandbox/e35d0116f37f7e3bfd6cb09eeef7f690/default && .ppx/91be16f8c7b473bc6bcd0e4210417372/ppx.exe --cookie 'library-name="hegel"' -o lib/hegel.pp.ml --impl lib/hegel.ml -corrected-suffix .ppx-corrected -diff-cmd - -dump-ast)
+$ (cd _build/.sandbox/402a93f8b36ba98cb463061a2e4fda2e/default && .ppx/91be16f8c7b473bc6bcd0e4210417372/ppx.exe --cookie 'library-name="hegel"' -o lib/cbor_helpers.pp.ml --impl lib/cbor_helpers.ml -corrected-suffix .ppx-corrected -diff-cmd - -dump-ast)
+$ (cd _build/.sandbox/a1888381229ff8dc3fa7efcf67b5f023/default && .ppx/91be16f8c7b473bc6bcd0e4210417372/ppx.exe --cookie 'library-name="hegel"' -o lib/protocol.pp.ml --impl lib/protocol.ml -corrected-suffix .ppx-corrected -diff-cmd - -dump-ast)
+$ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamldep.opt -modules -impl lib/hegel.pp.ml) > _build/default/lib/.hegel.objs/hegel.impl.d
+$ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamldep.opt -modules -impl lib/cbor_helpers.pp.ml) > _build/default/lib/.hegel.objs/hegel__Cbor_helpers.impl.d
+$ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamldep.opt -modules -impl lib/protocol.pp.ml) > _build/default/lib/.hegel.objs/hegel__Protocol.impl.d
+$ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamlc.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -bin-annot-occurrences -I lib/.hegel.objs/byte -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/common -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/runtime -I /home/drmaciver/.opam/5.2.1/lib/bytes -I /home/drmaciver/.opam/5.2.1/lib/cbor -I /home/drmaciver/.opam/5.2.1/lib/checkseum -I /home/drmaciver/.opam/5.2.1/lib/checkseum/c -I /home/drmaciver/.opam/5.2.1/lib/ocaml/unix -I /home/drmaciver/.opam/5.2.1/lib/ocplib-endian -I /home/drmaciver/.opam/5.2.1/lib/optint -no-alias-deps -opaque -open Hegel__ -o lib/.hegel.objs/byte/hegel__Cbor_helpers.cmo -c -impl lib/cbor_helpers.pp.ml)
+$ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamlc.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -bin-annot-occurrences -I lib/.hegel.objs/byte -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/common -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/runtime -I /home/drmaciver/.opam/5.2.1/lib/bytes -I /home/drmaciver/.opam/5.2.1/lib/cbor -I /home/drmaciver/.opam/5.2.1/lib/checkseum -I /home/drmaciver/.opam/5.2.1/lib/checkseum/c -I /home/drmaciver/.opam/5.2.1/lib/ocaml/unix -I /home/drmaciver/.opam/5.2.1/lib/ocplib-endian -I /home/drmaciver/.opam/5.2.1/lib/optint -no-alias-deps -opaque -open Hegel__ -o lib/.hegel.objs/byte/hegel__Protocol.cmo -c -impl lib/protocol.pp.ml)
+$ (cd _build/default && /home/drmaciver/.opam/5.2.1/bin/ocamlc.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -bin-annot-occurrences -I lib/.hegel.objs/byte -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/common -I /home/drmaciver/.opam/5.2.1/lib/bisect_ppx/runtime -I /home/drmaciver/.opam/5.2.1/lib/bytes -I /home/drmaciver/.opam/5.2.1/lib/cbor -I /home/drmaciver/.opam/5.2.1/lib/checkseum -I /home/drmaciver/.opam/5.2.1/lib/checkseum/c -I /home/drmaciver/.opam/5.2.1/lib/ocaml/unix -I /home/drmaciver/.opam/5.2.1/lib/ocplib-endian -I /home/drmaciver/.opam/5.2.1/lib/optint -no-alias-deps -opaque -open Hegel__ -o lib/.hegel.objs/byte/hegel.cmo -c -impl lib/hegel.pp.ml)
 $ (cd _build/default/test && ./test_hegel.exe)
 > Testing `hegel'.
-> This run has ID `J3N2V4M5'.
+> This run has ID `CNQ9D65P'.
 >
->   [OK]          version          0   returns version.
+>   [OK]          version               0   returns version.
+>   [OK]          protocol              0   magic constant.
+>   [OK]          protocol              1   reply_bit constant.
+>   [OK]          protocol              2   terminator constant.
+>   [OK]          protocol              3   close_channel_message_id.
+>   [OK]          protocol              4   close_channel_payload.
+>   [OK]          protocol              5   CRC32 known vector.
+>   [OK]          protocol              6   CRC32 empty string.
+>   [OK]          protocol              7   CRC32 single byte.
+>   [OK]          protocol              8   round-trip simple.
+>   [OK]          protocol              9   round-trip empty payload.
+>   [OK]          protocol             10   round-trip large payload.
+>   [OK]          protocol             11   round-trip max channel.
+>   [OK]          protocol             12   round-trip reply bit set.
+>   [OK]          protocol             13   round-trip reply bit unset.
+>   [OK]          protocol             14   invalid magic.
+>   [OK]          protocol             15   invalid terminator.
+>   [OK]          protocol             16   bad checksum.
+>   [OK]          protocol             17   recv_exact zero bytes.
+>   [OK]          protocol             18   recv_exact partial close.
+>   [OK]          protocol             19   recv_exact no data close.
+>   [OK]          protocol             20   pp_packet.
+>   [OK]          protocol             21   equal_packet different fields.
+>   [OK]          protocol             22   pack/unpack uint32.
+>   [OK]          cbor_helpers          0   round-trip int.
+>   [OK]          cbor_helpers          1   round-trip negative int.
+>   [OK]          cbor_helpers          2   round-trip float.
+>   [OK]          cbor_helpers          3   round-trip string.
+>   [OK]          cbor_helpers          4   round-trip empty string.
+>   [OK]          cbor_helpers          5   round-trip bool true.
+>   [OK]          cbor_helpers          6   round-trip bool false.
+>   [OK]          cbor_helpers          7   round-trip bytes.
+>   [OK]          cbor_helpers          8   round-trip null.
+>   [OK]          cbor_helpers          9   round-trip list.
+>   [OK]          cbor_helpers         10   round-trip dict.
+>   [OK]          cbor_helpers         11   nested list of dicts.
+>   [OK]          cbor_helpers         12   nested dict with list values.
+>   [OK]          cbor_helpers         13   extract_int wrong type.
+>   [OK]          cbor_helpers         14   extract_float wrong type.
+>   [OK]          cbor_helpers         15   extract_string wrong type.
+>   [OK]          cbor_helpers         16   extract_bool wrong type.
+>   [OK]          cbor_helpers         17   extract_bytes wrong type.
+>   [OK]          cbor_helpers         18   extract_list wrong type.
+>   [OK]          cbor_helpers         19   extract_dict wrong type.
+>   [OK]          cbor_helpers         20   extract_int null.
+>   [OK]          cbor_helpers         21   extract_float null.
+>   [OK]          cbor_helpers         22   extract_string null.
+>   [OK]          cbor_helpers         23   extract_bool null.
+>   [OK]          cbor_helpers         24   extract_bytes null.
+>   [OK]          cbor_helpers         25   extract_list null.
+>   [OK]          cbor_helpers         26   extract_dict null.
+>   [OK]          cbor_helpers         27   is_null true.
+>   [OK]          cbor_helpers         28   is_null false.
+>   [OK]          cbor_helpers         29   type_name all types.
 >
 > Full test results in `~/hegelator/output/hegel-ocaml/_build/default/test/_build/_tests/hegel'.
-> Test Successful in 0.000s. 1 test run.
+> Test Successful in 0.003s. 54 tests run.

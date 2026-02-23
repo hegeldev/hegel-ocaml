@@ -6,3 +6,9 @@
 
 (** [version] returns the current version of the Hegel OCaml SDK. *)
 let version () = "0.1.0"
+
+module Protocol = Protocol
+(** Binary wire protocol for packet serialization and deserialization. *)
+
+module Cbor_helpers = Cbor_helpers
+(** CBOR encoding/decoding with type-safe extractor helpers. *)

@@ -12,6 +12,8 @@ depends: [
   "ocaml" {>= "5.2"}
   "dune" {>= "3.16" & >= "3.16"}
   "alcotest" {with-test & >= "1.7"}
+  "cbor" {>= "0.5"}
+  "checkseum" {>= "0.5"}
   "bisect_ppx" {with-test & >= "2.8"}
   "odoc" {with-doc}
 ]

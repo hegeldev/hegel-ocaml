@@ -24,15 +24,25 @@ just check   # Run lint + docs + test (the full CI check)
 ## Project Structure
 
 ```
-lib/           # Library source code (the SDK)
-  dune         # Library build config
-  hegel.ml     # Main module
-test/          # Test files
-  dune         # Test build config
-  test_hegel.ml
-scripts/       # Build scripts
-  check-coverage.py  # Parses bisect_ppx output, enforces 100%
+lib/               # Library source code (the SDK)
+  dune             # Library build config
+  hegel.ml         # Main module (re-exports Protocol and Cbor_helpers)
+  protocol.ml      # Binary wire protocol (packet format, CRC32, constants)
+  cbor_helpers.ml  # CBOR encoding/decoding with type-safe extractors
+test/              # Test files
+  dune             # Test build config
+  test_hegel.ml    # Test runner (imports test modules)
+  test_protocol.ml # Protocol tests (round-trip, CRC32, error cases)
+  test_cbor_helpers.ml # CBOR helper tests (round-trip, extractors)
+scripts/           # Build scripts
+  check-coverage.py    # Parses bisect_ppx output, enforces 100%
 ```
+
+## Dependencies
+
+- **cbor** (>= 0.5): CBOR encoding/decoding via `CBOR.Simple`
+- **checkseum** (>= 0.5): CRC32 checksums via `Checkseum.Crc32`
+- **unix**: Socket I/O for packet read/write
 
 ## Project Conventions
 

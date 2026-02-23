@@ -27,6 +27,10 @@
    (and
     :with-test
     (>= 1.7)))
+  (cbor
+   (>= 0.5))
+  (checkseum
+   (>= 0.5))
   (bisect_ppx
    (and
     :with-test

@@ -1,5 +1,5 @@
 description = ""
-requires = ""
+requires = "cbor checkseum.c unix"
 archive(byte) = "hegel.cma"
 archive(native) = "hegel.cmxa"
 plugin(byte) = "hegel.cma"

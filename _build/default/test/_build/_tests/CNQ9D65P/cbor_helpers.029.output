@@ -1,0 +1,11 @@
+[33mASSERT[0m null
+[33mASSERT[0m undefined
+[33mASSERT[0m simple
+[33mASSERT[0m bool
+[33mASSERT[0m int
+[33mASSERT[0m float
+[33mASSERT[0m bytes
+[33mASSERT[0m text
+[33mASSERT[0m array
+[33mASSERT[0m map
+[33mASSERT[0m tag

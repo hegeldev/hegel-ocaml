@@ -1,5 +1,6 @@
 (library
  (name hegel)
  (public_name hegel)
+ (libraries cbor checkseum.c unix)
  (instrumentation
   (backend bisect_ppx)))

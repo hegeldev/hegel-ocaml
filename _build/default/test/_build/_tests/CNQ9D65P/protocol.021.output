@@ -1,0 +1,5 @@
+[33mASSERT[0m diff is_reply
+[33mASSERT[0m diff message_id
+[33mASSERT[0m diff channel_id
+[33mASSERT[0m diff payload
+[33mASSERT[0m same
