@@ -1,5 +1,5 @@
 let test_version () =
-  Alcotest.(check string) "version string" "0.1.0" (Hegel.version ())
+  Alcotest.(check string) "version string" "0.1.0" Hegel.version
 
 let () =
   Alcotest.run "hegel"

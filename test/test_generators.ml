@@ -82,11 +82,11 @@ let handle_one data_ch respond =
 
 (** Standard responder: generate returns `Int value, start/stop span return
     Null, mark_complete returns Null. *)
-let standard_respond ?(generate_value = `Int 42) () _data_ch msg_id cmd _pairs =
+let standard_respond ?(generate_value = `Int 42) () data_ch msg_id cmd _pairs =
   match cmd with
-  | "generate" -> send_response_value _data_ch msg_id generate_value
+  | "generate" -> send_response_value data_ch msg_id generate_value
   | "start_span" | "stop_span" | "mark_complete" ->
-      send_response_value _data_ch msg_id `Null
+      send_response_value data_ch msg_id `Null
   | other ->
       failwith (Printf.sprintf "Unexpected command in standard: %s" other)
 

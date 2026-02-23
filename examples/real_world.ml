@@ -5,7 +5,6 @@
     elements as the concatenation of the inputs. *)
 
 open Hegel.Generators
-open Hegel.Client
 
 (** [sorted lst] returns [lst] in non-decreasing order. *)
 let sorted lst = List.sort compare lst

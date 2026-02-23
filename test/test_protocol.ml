@@ -1,5 +1,18 @@
 open Hegel.Protocol
 
+(** [contains_substring s sub] returns [true] if [sub] appears anywhere in [s].
+*)
+let contains_substring s sub =
+  let slen = String.length s and sublen = String.length sub in
+  if sublen > slen then false
+  else
+    let rec check i =
+      if i > slen - sublen then false
+      else if String.sub s i sublen = sub then true
+      else check (i + 1)
+    in
+    check 0
+
 (** Helper: create a socketpair for testing. Returns (reader, writer). *)
 let with_socket_pair f =
   let reader, writer = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
@@ -172,14 +185,7 @@ let test_invalid_magic () =
          exn_raised := true;
          Alcotest.(check bool)
            "contains 'Invalid magic number'" true
-           (String.length msg > 0
-           &&
-             try
-               let _ =
-                 Str.search_forward (Str.regexp "Invalid magic number") msg 0
-               in
-               true
-             with Not_found -> false));
+           (contains_substring msg "Invalid magic number"));
       Alcotest.(check bool) "exception raised" true !exn_raised)
 
 let test_invalid_terminator () =
@@ -194,14 +200,7 @@ let test_invalid_terminator () =
          exn_raised := true;
          Alcotest.(check bool)
            "contains 'Invalid terminator'" true
-           (String.length msg > 0
-           &&
-             try
-               let _ =
-                 Str.search_forward (Str.regexp "Invalid terminator") msg 0
-               in
-               true
-             with Not_found -> false));
+           (contains_substring msg "Invalid terminator"));
       Alcotest.(check bool) "exception raised" true !exn_raised)
 
 let test_bad_checksum () =
@@ -216,14 +215,7 @@ let test_bad_checksum () =
          exn_raised := true;
          Alcotest.(check bool)
            "contains 'Checksum mismatch'" true
-           (String.length msg > 0
-           &&
-             try
-               let _ =
-                 Str.search_forward (Str.regexp "Checksum mismatch") msg 0
-               in
-               true
-             with Not_found -> false));
+           (contains_substring msg "Checksum mismatch"));
       Alcotest.(check bool) "exception raised" true !exn_raised)
 
 (* --- recv_exact tests --- *)

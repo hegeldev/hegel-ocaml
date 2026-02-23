@@ -1,6 +1,19 @@
 open Hegel.Connection
 open Hegel.Client
 
+(** [contains_substring s sub] returns [true] if [sub] appears anywhere in [s].
+*)
+let contains_substring s sub =
+  let slen = String.length s and sublen = String.length sub in
+  if sublen > slen then false
+  else
+    let rec check i =
+      if i > slen - sublen then false
+      else if String.sub s i sublen = sub then true
+      else check (i + 1)
+    in
+    check 0
+
 (* ---- Unit tests for helpers that don't need a server ---- *)
 
 let test_assume_true () = assume true
@@ -17,29 +30,21 @@ let test_get_channel_outside_context () =
      raised := true;
      Alcotest.(check bool)
        "has 'Not in a test context'" true
-       (try
-          ignore (Str.search_forward (Str.regexp "Not in a test") msg 0);
-          true
-        with Not_found -> false));
+       (contains_substring msg "Not in a test"));
   Alcotest.(check bool) "raised" true !raised
 
 let test_note_when_not_final () =
-  _is_final := false;
+  is_final_run := false;
   note "should not print"
 
 let test_note_when_final () =
-  _is_final := true;
+  is_final_run := true;
   note "test message from note";
-  _is_final := false
+  is_final_run := false
 
 let test_extract_origin_no_backtrace () =
   let origin = extract_origin (Failure "test") in
-  Alcotest.(check bool)
-    "has Failure" true
-    (try
-       ignore (Str.search_forward (Str.regexp "Failure") origin 0);
-       true
-     with Not_found -> false)
+  Alcotest.(check bool) "has Failure" true (contains_substring origin "Failure")
 
 let test_extract_origin_with_backtrace () =
   Printexc.record_backtrace true;
@@ -47,45 +52,34 @@ let test_extract_origin_with_backtrace () =
     try raise (Failure "test error") with exn -> extract_origin exn
   in
   Printexc.record_backtrace false;
-  Alcotest.(check bool)
-    "has Failure" true
-    (try
-       ignore (Str.search_forward (Str.regexp "Failure") origin 0);
-       true
-     with Not_found -> false);
+  Alcotest.(check bool) "has Failure" true (contains_substring origin "Failure");
   Alcotest.(check bool)
     "has file:line" true
-    (try
-       ignore (Str.search_forward (Str.regexp "test_client.ml") origin 0);
-       true
-     with Not_found -> false)
+    (contains_substring origin "test_client.ml")
 
 let test_start_span_when_aborted () =
-  _test_aborted := true;
+  test_aborted := true;
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
-  _current_channel := Some conn.control_channel;
+  current_channel := Some conn.control_channel;
   start_span ();
   stop_span ();
-  _current_channel := None;
-  _test_aborted := false;
+  current_channel := None;
+  test_aborted := false;
   close conn;
   Unix.close s2
 
 let test_nested_test_raises () =
-  (* Set the _in_test flag to simulate being inside a test *)
-  _in_test := true;
+  (* Set the in_test flag to simulate being inside a test *)
+  in_test := true;
   let raised = ref false in
   (try Hegel.Session.run_hegel_test ~name:"nested" ~test_cases:1 (fun () -> ())
    with Failure msg ->
      raised := true;
      Alcotest.(check bool)
        "has 'Cannot nest'" true
-       (try
-          ignore (Str.search_forward (Str.regexp "Cannot nest") msg 0);
-          true
-        with Not_found -> false));
-  _in_test := false;
+       (contains_substring msg "Cannot nest"));
+  in_test := false;
   Alcotest.(check bool) "raised" true !raised
 
 (* ---- Unrecognised event test using socketpair ---- *)
@@ -304,7 +298,7 @@ let accept_run_test server_conn =
 (** Helper: send a test_case event and return the data channel. *)
 let send_test_case server_conn test_channel =
   let data_ch = new_channel server_conn ~role:"Data" () in
-  let _req_id =
+  let req_id =
     send_request test_channel
       (`Map
          [
@@ -312,7 +306,7 @@ let send_test_case server_conn test_channel =
            (`Text "channel", `Int (Int32.to_int data_ch.channel_id));
          ])
   in
-  ignore (receive_response_raw test_channel _req_id ());
+  ignore (receive_response_raw test_channel req_id ());
   data_ch
 
 (** Helper: send test_done with given interesting count. *)
@@ -591,10 +585,7 @@ let test_session_start_timeout () =
      raised := true;
      Alcotest.(check bool)
        "has 'Timeout'" true
-       (try
-          ignore (Str.search_forward (Str.regexp "Timeout") msg 0);
-          true
-        with Not_found -> false));
+       (contains_substring msg "Timeout"));
   Alcotest.(check bool) "raised timeout" true !raised;
   Hegel.Session.cleanup session;
   (try Sys.remove script_path with _ -> ());
@@ -771,11 +762,11 @@ let test_no_event_field () =
       let c = create_client client_conn in
       run_test c ~name:"no_event" ~test_cases:1 (fun () -> ()))
 
-(** Test: nest test_case raises (when _current_channel is already set). *)
+(** Test: nest test_case raises (when current_channel is already set). *)
 let test_run_test_case_nest () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
-  _current_channel := Some conn.control_channel;
+  current_channel := Some conn.control_channel;
   let raised = ref false in
   (try
      run_test_case
@@ -789,7 +780,7 @@ let test_run_test_case_nest () =
        ~is_final:false
    with Failure _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised;
-  _current_channel := None;
+  current_channel := None;
   close conn;
   Unix.close s2
 

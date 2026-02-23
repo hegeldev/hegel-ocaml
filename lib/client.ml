@@ -16,16 +16,16 @@ exception Data_exhausted
 (** Raised when the server runs out of test data (StopTest). *)
 
 (** Thread-local state for the current test case. *)
-let _current_channel : channel option ref = ref None
+let current_channel : channel option ref = ref None
 
 (** Thread-local flag indicating the final (replay) run. *)
-let _is_final : bool ref = ref false
+let is_final_run : bool ref = ref false
 
 (** Thread-local flag indicating the test was aborted (StopTest). *)
-let _test_aborted : bool ref = ref false
+let test_aborted : bool ref = ref false
 
 (** Thread-local flag indicating we are inside a test case. *)
-let _in_test : bool ref = ref false
+let in_test : bool ref = ref false
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available. *)
@@ -53,7 +53,7 @@ let extract_origin exn =
 (** [get_channel ()] returns the current test data channel, raising [Failure] if
     not in a test context. *)
 let get_channel () =
-  match !_current_channel with
+  match !current_channel with
   | None ->
       failwith
         "Not in a test context - must be called from within a test function"
@@ -69,7 +69,7 @@ let generate_from_schema schema =
       (request channel
          (`Map [ (`Text "command", `Text "generate"); (`Text "schema", schema) ]))
   with Request_error e when e.error_type = "StopTest" ->
-    _test_aborted := true;
+    test_aborted := true;
     raise Data_exhausted
 
 (** [assume condition] rejects the current test case if [condition] is [false].
@@ -78,7 +78,7 @@ let assume condition = if not condition then raise Assume_rejected
 
 (** [note message] records a message that will be printed on the final (failing)
     run. *)
-let note message = if !_is_final then Printf.eprintf "%s\n%!" message
+let note message = if !is_final_run then Printf.eprintf "%s\n%!" message
 
 (** [target value label] sends a target command to guide the search engine
     toward higher values. *)
@@ -96,7 +96,7 @@ let target value label =
 
 (** [start_span ?label ()] starts a generation span for better shrinking. *)
 let start_span ?(label = 0) () =
-  if !_test_aborted then ()
+  if !test_aborted then ()
   else begin
     let channel = get_channel () in
     ignore
@@ -111,7 +111,7 @@ let start_span ?(label = 0) () =
 
 (** [stop_span ?discard ()] ends the current generation span. *)
 let stop_span ?(discard = false) () =
-  if !_test_aborted then ()
+  if !test_aborted then ()
   else begin
     let channel = get_channel () in
     ignore
@@ -144,12 +144,12 @@ let create_client connection =
     Sets up thread-local state and calls [test_fn]. Reports status via
     mark_complete. *)
 let run_test_case _client channel test_fn ~is_final =
-  if !_current_channel <> None then
+  if !current_channel <> None then
     failwith "Cannot nest test cases - already inside a test case";
-  _current_channel := Some channel;
-  _is_final := is_final;
-  _test_aborted := false;
-  _in_test := true;
+  current_channel := Some channel;
+  is_final_run := is_final;
+  test_aborted := false;
+  in_test := true;
   let already_complete = ref false in
   let status = ref "VALID" in
   let origin = ref `Null in
@@ -161,10 +161,10 @@ let run_test_case _client channel test_fn ~is_final =
       status := "INTERESTING";
       origin := `Text (extract_origin exn);
       if is_final then final_exn := Some exn);
-  _current_channel := None;
-  _is_final := false;
-  _test_aborted := false;
-  _in_test := false;
+  current_channel := None;
+  is_final_run := false;
+  test_aborted := false;
+  in_test := false;
   (if not !already_complete then
      try
        ignore
@@ -182,7 +182,7 @@ let run_test_case _client channel test_fn ~is_final =
 
 (** [run_test client ~name ~test_cases test_fn] runs a property test. *)
 let run_test client ~name ~test_cases test_fn =
-  if !_in_test then
+  if !in_test then
     failwith "Cannot nest test cases - already inside a test case";
   let test_channel = new_channel client.connection ~role:"Test" () in
   Mutex.lock client.lock;

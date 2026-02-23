@@ -114,7 +114,7 @@ let get_server_name coll =
                     (`Text "max_size", max_size_val);
                   ]))
         with Request_error e when e.error_type = "StopTest" ->
-          Client._test_aborted := true;
+          Client.test_aborted := true;
           raise Client.Data_exhausted
       in
       coll.server_name <- Some result;
@@ -139,7 +139,7 @@ let collection_more coll =
                   (`Text "collection", server_name);
                 ]))
       with Request_error e when e.error_type = "StopTest" ->
-        Client._test_aborted := true;
+        Client.test_aborted := true;
         raise Client.Data_exhausted
     in
     let more = Cbor_helpers.extract_bool result in

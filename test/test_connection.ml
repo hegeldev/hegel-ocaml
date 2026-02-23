@@ -1,6 +1,19 @@
 open Hegel.Protocol
 open Hegel.Connection
 
+(** [contains_substring s sub] returns [true] if [sub] appears anywhere in [s].
+*)
+let contains_substring s sub =
+  let slen = String.length s and sublen = String.length sub in
+  if sublen > slen then false
+  else
+    let rec check i =
+      if i > slen - sublen then false
+      else if String.sub s i sublen = sub then true
+      else check (i + 1)
+    in
+    check 0
+
 (** Helper: create a socketpair. Returns (fd1, fd2). *)
 let make_socket_pair () = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
 
@@ -89,10 +102,7 @@ let test_bad_handshake_negotiation () =
      raised := true;
      Alcotest.(check bool)
        "bad handshake msg" true
-       (try
-          ignore (Str.search_forward (Str.regexp "Bad handshake") msg 0);
-          true
-        with Not_found -> false));
+       (contains_substring msg "Bad handshake"));
   Thread.join t;
   Alcotest.(check bool) "raised" true !raised;
   close client_conn;
@@ -116,10 +126,7 @@ let test_send_handshake_bad_response () =
      raised := true;
      Alcotest.(check bool)
        "bad handshake response" true
-       (try
-          ignore (Str.search_forward (Str.regexp "Bad handshake") msg 0);
-          true
-        with Not_found -> false));
+       (contains_substring msg "Bad handshake"));
   Thread.join t;
   Alcotest.(check bool) "raised" true !raised;
   close client_conn;
@@ -154,10 +161,7 @@ let test_connect_channel_already_exists_raises () =
      raised := true;
      Alcotest.(check bool)
        "already connected" true
-       (try
-          ignore (Str.search_forward (Str.regexp "already connected") msg 0);
-          true
-        with Not_found -> false));
+       (contains_substring msg "already connected"));
   Alcotest.(check bool) "raised" true !raised;
   close client_conn;
   close server_conn
@@ -229,12 +233,7 @@ let test_channel_process_message_when_closed () =
   (try ignore (receive_request ch ~timeout:0.1 ())
    with Failure msg ->
      raised := true;
-     Alcotest.(check bool)
-       "is closed" true
-       (try
-          ignore (Str.search_forward (Str.regexp "is closed") msg 0);
-          true
-        with Not_found -> false));
+     Alcotest.(check bool) "is closed" true (contains_substring msg "is closed"));
   Alcotest.(check bool) "raised" true !raised;
   close server_conn;
   close client_conn
@@ -249,12 +248,7 @@ let test_channel_timeout () =
   (try ignore (receive_request ch ~timeout:0.1 ())
    with Failure msg ->
      raised := true;
-     Alcotest.(check bool)
-       "timed out" true
-       (try
-          ignore (Str.search_forward (Str.regexp "Timed out") msg 0);
-          true
-        with Not_found -> false));
+     Alcotest.(check bool) "timed out" true (contains_substring msg "Timed out"));
   Alcotest.(check bool) "raised" true !raised;
   close server_conn;
   close client_conn
@@ -266,12 +260,7 @@ let test_channel_repr () =
   let conn = create_connection s1 ~name:"Test" () in
   let ch = conn.control_channel in
   let r = channel_repr ch in
-  Alcotest.(check bool)
-    "Control in repr" true
-    (try
-       ignore (Str.search_forward (Str.regexp "Control") r 0);
-       true
-     with Not_found -> false);
+  Alcotest.(check bool) "Control in repr" true (contains_substring r "Control");
   close conn
 
 let test_channel_repr_no_role () =
@@ -283,16 +272,10 @@ let test_channel_repr_no_role () =
   let r = channel_repr ch in
   Alcotest.(check bool)
     "Channel( in repr" true
-    (try
-       ignore (Str.search_forward (Str.regexp "Channel(") r 0);
-       true
-     with Not_found -> false);
+    (contains_substring r "Channel(");
   Alcotest.(check bool)
     "no role= in repr" true
-    (try
-       ignore (Str.search_forward (Str.regexp "role=") r 0);
-       false
-     with Not_found -> true);
+    (not (contains_substring r "role="));
   close server_conn;
   close client_conn
 
@@ -305,10 +288,7 @@ let test_channel_repr_with_role () =
   let r = channel_repr ch in
   Alcotest.(check bool)
     "role=TestRole in repr" true
-    (try
-       ignore (Str.search_forward (Str.regexp "role=TestRole") r 0);
-       true
-     with Not_found -> false);
+    (contains_substring r "role=TestRole");
   close server_conn;
   close client_conn
 
@@ -330,12 +310,7 @@ let test_channel_name_with_role_no_conn_name () =
   handshake_pair server_conn client_conn;
   let ch = new_channel client_conn ~role:"MyRole" () in
   let n = channel_name ch in
-  Alcotest.(check bool)
-    "has MyRole" true
-    (try
-       ignore (Str.search_forward (Str.regexp "MyRole") n 0);
-       true
-     with Not_found -> false);
+  Alcotest.(check bool) "has MyRole" true (contains_substring n "MyRole");
   close server_conn;
   close client_conn
 
@@ -346,18 +321,10 @@ let test_channel_name_no_role_with_conn_name () =
   handshake_pair server_conn client_conn;
   let ch = new_channel client_conn () in
   let n = channel_name ch in
-  Alcotest.(check bool)
-    "has Cli" true
-    (try
-       ignore (Str.search_forward (Str.regexp "Cli") n 0);
-       true
-     with Not_found -> false);
+  Alcotest.(check bool) "has Cli" true (contains_substring n "Cli");
   Alcotest.(check bool)
     "no parens (no role)" true
-    (try
-       ignore (Str.search_forward (Str.regexp "(") n 0);
-       false
-     with Not_found -> true);
+    (not (contains_substring n "("));
   close server_conn;
   close client_conn
 
@@ -366,12 +333,7 @@ let test_channel_name_control () =
   let conn = create_connection s1 () in
   let ch = conn.control_channel in
   let n = channel_name ch in
-  Alcotest.(check bool)
-    "has Control" true
-    (try
-       ignore (Str.search_forward (Str.regexp "Control") n 0);
-       true
-     with Not_found -> false);
+  Alcotest.(check bool) "has Control" true (contains_substring n "Control");
   close conn
 
 (* ---- Request/response ---- *)
@@ -527,10 +489,7 @@ let test_handle_requests_sends_error () =
      raised := true;
      Alcotest.(check bool)
        "error contains test error" true
-       (try
-          ignore (Str.search_forward (Str.regexp "test error") e.message 0);
-          true
-        with Not_found -> false));
+       (contains_substring e.message "test error"));
   Alcotest.(check bool) "raised" true !raised;
   close client_conn;
   Thread.join t;
@@ -615,10 +574,7 @@ let test_duplicate_response_error () =
      raised := true;
      Alcotest.(check bool)
        "got two responses" true
-       (try
-          ignore (Str.search_forward (Str.regexp "Got two responses") msg 0);
-          true
-        with Not_found -> false));
+       (contains_substring msg "Got two responses"));
   Alcotest.(check bool) "raised" true !raised;
   close conn
 
@@ -635,10 +591,7 @@ let test_shutdown_in_inbox () =
      raised := true;
      Alcotest.(check bool)
        "connection closed" true
-       (try
-          ignore (Str.search_forward (Str.regexp "Connection closed") msg 0);
-          true
-        with Not_found -> false));
+       (contains_substring msg "Connection closed"));
   Alcotest.(check bool) "raised" true !raised;
   close conn
 
@@ -752,10 +705,7 @@ let test_close_channel_creates_dead_channel_with_connect () =
       Alcotest.(check bool) "is dead" true true;
       Alcotest.(check bool)
         "name has Hello" true
-        (try
-           ignore (Str.search_forward (Str.regexp "Hello") d.name 0);
-           true
-         with Not_found -> false)
+        (contains_substring d.name "Hello")
   | Live _ -> Alcotest.fail "expected dead channel");
   close client_conn;
   close server_conn
@@ -896,13 +846,21 @@ let test_result_or_error_neither () =
      raised := true;
      Alcotest.(check bool)
        "has 'neither'" true
-       (try
-          ignore (Str.search_forward (Str.regexp "neither") msg 0);
-          true
-        with Not_found -> false));
+       (contains_substring msg "neither"));
   Alcotest.(check bool) "raised" true !raised
 
-(* ---- entry_name for dead channel ---- *)
+(* ---- entry_name ---- *)
+
+let test_entry_name_live_channel () =
+  let s1, s2 = make_socket_pair () in
+  let server_conn = create_connection s1 ~name:"Server" () in
+  let client_conn = create_connection s2 ~name:"Client" () in
+  handshake_pair server_conn client_conn;
+  let ch = new_channel client_conn ~role:"LiveRole" () in
+  let name = entry_name client_conn ch.channel_id in
+  Alcotest.(check bool) "has LiveRole" true (contains_substring name "LiveRole");
+  close client_conn;
+  close server_conn
 
 let test_entry_name_dead_channel () =
   let s1, s2 = make_socket_pair () in
@@ -913,12 +871,7 @@ let test_entry_name_dead_channel () =
   close_channel ch;
   (* In debug mode, close_channel replaces with Dead entry *)
   let name = entry_name client_conn ch.channel_id in
-  Alcotest.(check bool)
-    "has ForDead" true
-    (try
-       ignore (Str.search_forward (Str.regexp "ForDead") name 0);
-       true
-     with Not_found -> false);
+  Alcotest.(check bool) "has ForDead" true (contains_substring name "ForDead");
   close client_conn;
   close server_conn
 
@@ -1016,10 +969,7 @@ let test_debug_close_existing_live_channel () =
   | Some (Dead d) ->
       Alcotest.(check bool)
         "dead name has LiveChSrv" true
-        (try
-           ignore (Str.search_forward (Str.regexp "LiveChSrv") d.name 0);
-           true
-         with Not_found -> false)
+        (contains_substring d.name "LiveChSrv")
   | _ -> Alcotest.fail "expected Dead entry");
   close client_conn;
   close server_conn
@@ -1112,10 +1062,7 @@ let test_send_handshake_short_response () =
      raised := true;
      Alcotest.(check bool)
        "bad handshake" true
-       (try
-          ignore (Str.search_forward (Str.regexp "Bad handshake") msg 0);
-          true
-        with Not_found -> false));
+       (contains_substring msg "Bad handshake"));
   Thread.join t;
   Alcotest.(check bool) "raised" true !raised;
   close client_conn;
@@ -1142,10 +1089,7 @@ let test_send_handshake_wrong_prefix () =
      raised := true;
      Alcotest.(check bool)
        "bad handshake wrong prefix" true
-       (try
-          ignore (Str.search_forward (Str.regexp "Bad handshake") msg 0);
-          true
-        with Not_found -> false));
+       (contains_substring msg "Bad handshake"));
   Thread.join t;
   Alcotest.(check bool) "raised" true !raised;
   close client_conn;
@@ -1267,7 +1211,9 @@ let tests =
       test_result_or_error_error_without_type;
     Alcotest.test_case "neither result nor error" `Quick
       test_result_or_error_neither;
-    (* entry_name for dead channel *)
+    (* entry_name *)
+    Alcotest.test_case "entry_name live channel" `Quick
+      test_entry_name_live_channel;
     Alcotest.test_case "entry_name dead channel" `Quick
       test_entry_name_dead_channel;
     (* Reader lock contention *)

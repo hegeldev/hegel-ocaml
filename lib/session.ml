@@ -19,14 +19,11 @@ let find_hegeld () =
       let path_str = Option.value ~default:"" (Sys.getenv_opt "PATH") in
       let path_dirs = String.split_on_char ':' path_str in
       let found =
-        List.fold_left
-          (fun acc dir ->
-            match acc with
-            | Some _ -> acc
-            | None ->
-                let candidate = Filename.concat dir "hegel" in
-                if Sys.file_exists candidate then Some candidate else None)
-          None path_dirs
+        List.find_map
+          (fun dir ->
+            let candidate = Filename.concat dir "hegel" in
+            if Sys.file_exists candidate then Some candidate else None)
+          path_dirs
       in
       match found with
       | Some p -> p
@@ -112,26 +109,25 @@ let start session =
           in
           session.process <- Some pid;
           (* Wait for socket to appear and connect *)
-          let connected = ref false in
-          let sock = ref Unix.stdin in
+          let sock = ref None in
           for _ = 1 to 50 do
-            if not !connected then begin
+            if !sock = None then begin
               if Sys.file_exists socket_path then begin
                 try
                   let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
                   Unix.connect s (Unix.ADDR_UNIX socket_path);
-                  sock := s;
-                  connected := true
+                  sock := Some s
                 with Unix.Unix_error _ -> Unix.sleepf 0.1
               end
               else Unix.sleepf 0.1
             end
           done;
-          if not !connected then begin
-            Unix.kill pid Sys.sigkill;
-            failwith "Timeout waiting for hegeld to start"
-          end;
-          let conn = create_connection !sock ~name:"SDK" () in
+          (match !sock with
+          | None ->
+              Unix.kill pid Sys.sigkill;
+              failwith "Timeout waiting for hegeld to start"
+          | _ -> ());
+          let conn = create_connection (Option.get !sock) ~name:"SDK" () in
           session.connection <- Some conn;
           let c = Client.create_client conn in
           session.client <- Some c;

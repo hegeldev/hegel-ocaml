@@ -9,4 +9,4 @@
   test_generators
   test_showcase
   test_conformance_helpers)
- (libraries hegel alcotest unix str threads.posix))
+ (libraries hegel alcotest unix threads.posix))

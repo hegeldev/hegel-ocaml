@@ -4,8 +4,8 @@
     (hegeld, powered by Hypothesis) via Unix sockets using a binary protocol,
     enabling property-based testing from OCaml. *)
 
-(** [version] returns the current version of the Hegel OCaml SDK. *)
-let version () = "0.1.0"
+(** The current version of the Hegel OCaml SDK. *)
+let version = "0.1.0"
 
 module Protocol = Protocol
 (** Binary wire protocol for packet serialization and deserialization. *)

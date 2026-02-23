@@ -105,7 +105,7 @@ let rec parse_value s i =
     | '-' | '0' .. '9' -> parse_number s i
     | c -> failwith (Printf.sprintf "Unexpected char %c at %d" c i)
 
-(** [parse_array s i] parses a JSON array starting after the '['. *)
+(** [parse_array s i] parses a JSON array starting after the opening bracket. *)
 and parse_array s i =
   let i = skip_ws s i in
   if i < String.length s && s.[i] = ']' then (Array [], i + 1)
@@ -123,13 +123,9 @@ and parse_array s i =
     in
     go i []
 
-(** [parse_object s i] parses a JSON object starting after the '{'. Returns as
-    an [Array] of alternating key-value pairs encoded as an association list,
-    but we represent it as [value] with key=String. Actually returns the object
-    as an Array of [String key, value] pairs - we use a flat array of tuples
-    wrapped in a special way. Here we just return an Array of pairs.
-
-    Actually, we need to return an object. Let's store as Array of pairs. *)
+(** [parse_object s i] parses a JSON object starting after the opening brace.
+    Returns an [Array] of key-value pair arrays. The top-level {!parse} function
+    converts this to an association list. *)
 and parse_object s i =
   let i = skip_ws s i in
   if i < String.length s && s.[i] = '}' then (Array [], i + 1)

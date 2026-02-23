@@ -14,7 +14,7 @@
 (** Magic number identifying Hegel packets ("HEGL" in hex). *)
 let magic = 0x4845474Cl
 
-(** Format string for the 20-byte header: 5 big-endian uint32 values. *)
+(** Size of the packet header in bytes (5 big-endian uint32 fields). *)
 let header_size = 20
 
 (** Terminator byte appended after the payload. *)

@@ -3,7 +3,6 @@
     Demonstrates: lists, hashmaps, sampled_from, map, flat_map, filter. *)
 
 open Hegel.Generators
-open Hegel.Client
 
 (** Property: every element in a list of non-negative integers is non-negative.
     Uses [filter] to restrict the element generator. *)

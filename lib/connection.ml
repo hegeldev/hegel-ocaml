@@ -176,7 +176,6 @@ let run_reader conn ~until =
             match read_packet_with_timeout conn.socket 0.1 with
             | None -> ()
             | Some pkt ->
-                let _channel_name = entry_name conn pkt.channel_id in
                 if pkt.payload = close_channel_payload then begin
                   (* Handle channel close *)
                   assert (pkt.message_id = close_channel_message_id);
@@ -195,18 +194,20 @@ let run_reader conn ~until =
                   match Hashtbl.find_opt conn.channels pkt.channel_id with
                   | Some (Live ch) -> Queue.push (Pkt pkt) ch.inbox
                   | Some (Dead _) | None ->
-                      let error_type =
-                        match Hashtbl.find_opt conn.channels pkt.channel_id with
-                        | None -> "non-existent"
-                        | Some (Dead _) -> "closed"
-                        | Some (Live _) -> assert false
-                      in
-                      let chan_name = entry_name conn pkt.channel_id in
-                      let _error =
-                        Printf.sprintf "Message %ld sent to %s %s"
-                          pkt.message_id error_type chan_name
-                      in
-                      if not pkt.is_reply then
+                      if not pkt.is_reply then begin
+                        let error_type =
+                          match
+                            Hashtbl.find_opt conn.channels pkt.channel_id
+                          with
+                          | None -> "non-existent"
+                          | Some (Dead _) -> "closed"
+                          | Some (Live _) -> assert false
+                        in
+                        let chan_name = entry_name conn pkt.channel_id in
+                        let error_msg =
+                          Printf.sprintf "Message %ld sent to %s %s"
+                            pkt.message_id error_type chan_name
+                        in
                         send_packet conn
                           {
                             channel_id = pkt.channel_id;
@@ -214,16 +215,9 @@ let run_reader conn ~until =
                             is_reply = true;
                             payload =
                               CBOR.Simple.encode
-                                (`Map
-                                   [
-                                     ( `Text "error",
-                                       `Text
-                                         (Printf.sprintf
-                                            "Message %ld sent to %s %s"
-                                            pkt.message_id error_type chan_name)
-                                     );
-                                   ]);
+                                (`Map [ (`Text "error", `Text error_msg) ]);
                           }
+                      end
                 end
           done
         end)
@@ -249,6 +243,22 @@ let close conn =
     the Unix file descriptor [sock]. A control channel (channel 0) is
     automatically created. *)
 let create_connection sock ?name ?(debug = false) () =
+  (* We need a circular reference: conn.control_channel.conn = conn.
+     OCaml cannot express this with let rec (make_channel is not a
+     constant expression), so we create the connection with a dummy
+     control_channel and immediately overwrite it. *)
+  let dummy_channel =
+    {
+      channel_id = 0l;
+      conn = Obj.magic ();
+      inbox = Queue.create ();
+      requests = Queue.create ();
+      responses = Hashtbl.create 0;
+      role = None;
+      next_message_id = 0l;
+      closed = true;
+    }
+  in
   let conn =
     {
       name;
@@ -260,7 +270,7 @@ let create_connection sock ?name ?(debug = false) () =
       writer_lock = Mutex.create ();
       reader_lock = Mutex.create ();
       connection_state = Unresolved;
-      control_channel = Obj.magic 0 (* placeholder, set below *);
+      control_channel = dummy_channel;
     }
   in
   let control = make_channel conn 0l ~role:(Some "Control") in
