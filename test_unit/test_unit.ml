@@ -1269,7 +1269,7 @@ let test_protocol_receive_request_unexpected_reply () =
           payload = "unexpected reply";
         };
       expect_failure "receive_request unexpected reply" (fun () ->
-          ignore (Hegel.Protocol.Channel.receive_request ch)))
+          ignore (Hegel.Protocol.Channel.receive_request channel)))
 
 (* ================================================================ *)
 (* Mock hegel runner tests                                          *)
