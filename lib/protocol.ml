@@ -4,8 +4,8 @@ let reply_bit = 1 lsl 31
 let terminator = 0x0A
 let close_channel_payload = "\xFE"
 let close_channel_message_id = (1 lsl 31) - 1
-let version_negotiation_message = "Hegel/1.0"
-let version_negotiation_ok = "Ok"
+let supported_protocol_versions = (0.1, 0.1)
+let handshake_string = "hegel_handshake_start"
 
 type packet = {
   channel : int;
@@ -51,32 +51,33 @@ let get_u32_be s off =
   lor Char.code s.[off + 3]
   land 0xFFFFFFFF
 
-let write_packet fd pkt =
+let write_packet fd packet =
   let message_id_wire =
-    if pkt.is_reply then pkt.message_id lor reply_bit else pkt.message_id
+    if packet.is_reply then packet.message_id lor reply_bit
+    else packet.message_id
   in
   let header = Bytes.create header_size in
   put_u32_be header 0 magic;
   (* checksum placeholder at 4..8 *)
   Bytes.fill header 4 4 '\x00';
-  put_u32_be header 8 pkt.channel;
+  put_u32_be header 8 packet.channel;
   put_u32_be header 12 message_id_wire;
-  put_u32_be header 16 (String.length pkt.payload);
+  put_u32_be header 16 (String.length packet.payload);
   (* compute CRC32 over header (with zeroed checksum) + payload *)
   let header_str = Bytes.to_string header in
-  let checksum = Crc32.compute (header_str ^ pkt.payload) in
+  let checksum = Crc32.compute (header_str ^ packet.payload) in
   put_u32_be header 4 (Int32.to_int checksum);
   write_all fd (Bytes.to_string header);
-  write_all fd pkt.payload;
+  write_all fd packet.payload;
   write_all fd (String.make 1 (Char.chr terminator))
 
 let read_packet fd =
   let header = read_exact fd header_size in
-  let pkt_magic = get_u32_be header 0 in
-  if pkt_magic <> magic then
+  let packet_magic = get_u32_be header 0 in
+  if packet_magic <> magic then
     failwith
       (Printf.sprintf "Invalid magic: expected 0x%08X, got 0x%08X" magic
-         pkt_magic);
+         packet_magic);
   let checksum = get_u32_be header 4 in
   let channel = get_u32_be header 8 in
   let message_id_raw = get_u32_be header 12 in
@@ -121,11 +122,11 @@ module Connection = struct
       pending = Hashtbl.create 16;
     }
 
-  let send_packet conn pkt =
+  let send_packet conn packet =
     Mutex.lock conn.lock;
     Fun.protect
       ~finally:(fun () -> Mutex.unlock conn.lock)
-      (fun () -> write_packet conn.fd pkt)
+      (fun () -> write_packet conn.fd packet)
 
   let receive_packet_for_channel conn channel_id =
     (* check pending first *)
@@ -133,21 +134,21 @@ module Connection = struct
     | Some q when not (Queue.is_empty q) -> Some (Queue.pop q)
     | _ -> None)
     |> function
-    | Some pkt -> pkt
+    | Some packet -> packet
     | None ->
         let rec loop () =
-          let pkt = read_packet conn.fd in
-          if pkt.channel = channel_id then pkt
+          let packet = read_packet conn.fd in
+          if packet.channel = channel_id then packet
           else
             let q =
-              match Hashtbl.find_opt conn.pending pkt.channel with
+              match Hashtbl.find_opt conn.pending packet.channel with
               | Some q -> q
               | None ->
                   let q = Queue.create () in
-                  Hashtbl.replace conn.pending pkt.channel q;
+                  Hashtbl.replace conn.pending packet.channel q;
                   q
             in
-            Queue.push pkt q;
+            Queue.push packet q;
             loop ()
         in
         loop ()
@@ -187,8 +188,8 @@ module Channel = struct
       { channel = chan_id; message_id = msg_id; is_reply = true; payload }
 
   let receive_response (conn, _chan_id) msg_id =
-    let pkt = Connection.receive_packet_for_channel conn _chan_id in
-    if pkt.is_reply && pkt.message_id = msg_id then pkt.payload
+    let packet = Connection.receive_packet_for_channel conn _chan_id in
+    if packet.is_reply && packet.message_id = msg_id then packet.payload
     else
       (* receive_packet_for_channel always returns same-channel packets,
          so re-queuing and looping would be infinite. Fail fast instead. *)
@@ -196,18 +197,18 @@ module Channel = struct
         (Printf.sprintf
            "receive_response: unexpected packet (is_reply=%b, msg_id=%d, \
             expected=%d)"
-           pkt.is_reply pkt.message_id msg_id)
+           packet.is_reply packet.message_id msg_id)
 
   let receive_request (conn, _chan_id) =
-    let pkt = Connection.receive_packet_for_channel conn _chan_id in
-    if not pkt.is_reply then (pkt.message_id, pkt.payload)
+    let packet = Connection.receive_packet_for_channel conn _chan_id in
+    if not packet.is_reply then (packet.message_id, packet.payload)
     else
       (* receive_packet_for_channel always returns same-channel packets,
          so re-queuing a reply and looping would be infinite. Fail fast. *)
       failwith
         (Printf.sprintf
            "receive_request: unexpected reply (msg_id=%d) on channel %d"
-           pkt.message_id _chan_id)
+           packet.message_id _chan_id)
 
   let request_cbor ((_, _) as ch) message =
     let payload = Cbor.encode_to_string message in

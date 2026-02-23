@@ -363,7 +363,7 @@ let test_protocol_packet_roundtrip () =
       Unix.close rd;
       Unix.close wr)
     (fun () ->
-      let pkt =
+      let packet =
         {
           Hegel.Protocol.channel = 42;
           message_id = 7;
@@ -371,7 +371,7 @@ let test_protocol_packet_roundtrip () =
           payload = "hello";
         }
       in
-      Hegel.Protocol.write_packet wr pkt;
+      Hegel.Protocol.write_packet wr packet;
       let got = Hegel.Protocol.read_packet rd in
       assert (got.channel = 42);
       assert (got.message_id = 7);
@@ -385,7 +385,7 @@ let test_protocol_packet_reply () =
       Unix.close rd;
       Unix.close wr)
     (fun () ->
-      let pkt =
+      let packet =
         {
           Hegel.Protocol.channel = 1;
           message_id = 3;
@@ -393,7 +393,7 @@ let test_protocol_packet_reply () =
           payload = "world";
         }
       in
-      Hegel.Protocol.write_packet wr pkt;
+      Hegel.Protocol.write_packet wr packet;
       let got = Hegel.Protocol.read_packet rd in
       assert (got.channel = 1);
       assert (got.message_id = 3);
@@ -407,7 +407,7 @@ let test_protocol_packet_empty_payload () =
       Unix.close rd;
       Unix.close wr)
     (fun () ->
-      let pkt =
+      let packet =
         {
           Hegel.Protocol.channel = 0;
           message_id = 0;
@@ -415,7 +415,7 @@ let test_protocol_packet_empty_payload () =
           payload = "";
         }
       in
-      Hegel.Protocol.write_packet wr pkt;
+      Hegel.Protocol.write_packet wr packet;
       let got = Hegel.Protocol.read_packet rd in
       assert (got.payload = ""))
 
@@ -461,8 +461,8 @@ let test_protocol_connect_channel () =
       Unix.close wr)
     (fun () ->
       let conn = Hegel.Protocol.Connection.create wr in
-      let ch = Hegel.Protocol.Connection.connect_channel conn 99 in
-      assert (Hegel.Protocol.Channel.channel_id ch = 99))
+      let channel = Hegel.Protocol.Connection.connect_channel conn 99 in
+      assert (Hegel.Protocol.Channel.channel_id channel = 99))
 
 let test_protocol_channel_close () =
   let rd, wr = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
@@ -472,8 +472,8 @@ let test_protocol_channel_close () =
       Unix.close wr)
     (fun () ->
       let conn = Hegel.Protocol.Connection.create wr in
-      let ch = Hegel.Protocol.Connection.control_channel conn in
-      Hegel.Protocol.Channel.close ch;
+      let channel = Hegel.Protocol.Connection.control_channel conn in
+      Hegel.Protocol.Channel.close channel;
       let got = Hegel.Protocol.read_packet rd in
       assert (got.payload = "\xFE"))
 
@@ -499,8 +499,8 @@ let test_protocol_send_response () =
       Unix.close wr)
     (fun () ->
       let conn = Hegel.Protocol.Connection.create wr in
-      let ch = Hegel.Protocol.Connection.control_channel conn in
-      Hegel.Protocol.Channel.send_response ch 42 "response data";
+      let channel = Hegel.Protocol.Connection.control_channel conn in
+      Hegel.Protocol.Channel.send_response channel 42 "response data";
       let got = Hegel.Protocol.read_packet rd in
       assert got.is_reply;
       assert (got.message_id = 42);
@@ -515,7 +515,7 @@ let test_protocol_receive_response () =
     (fun () ->
       let conn_recv = Hegel.Protocol.Connection.create rd1 in
       let ch_recv = Hegel.Protocol.Connection.control_channel conn_recv in
-      let reply_pkt =
+      let reply_packet =
         {
           Hegel.Protocol.channel = 0;
           message_id = 99;
@@ -523,7 +523,7 @@ let test_protocol_receive_response () =
           payload = "the reply";
         }
       in
-      Hegel.Protocol.write_packet wr1 reply_pkt;
+      Hegel.Protocol.write_packet wr1 reply_packet;
       let got = Hegel.Protocol.Channel.receive_response ch_recv 99 in
       assert (got = "the reply"))
 
@@ -536,7 +536,7 @@ let test_protocol_receive_request () =
     (fun () ->
       let conn_recv = Hegel.Protocol.Connection.create rd1 in
       let ch_recv = Hegel.Protocol.Connection.control_channel conn_recv in
-      let request_pkt =
+      let request_packet =
         {
           Hegel.Protocol.channel = 0;
           message_id = 20;
@@ -544,7 +544,7 @@ let test_protocol_receive_request () =
           payload = "the request";
         }
       in
-      Hegel.Protocol.write_packet wr1 request_pkt;
+      Hegel.Protocol.write_packet wr1 request_packet;
       let msg_id, payload = Hegel.Protocol.Channel.receive_request ch_recv in
       assert (payload = "the request");
       assert (msg_id = 20))
@@ -557,7 +557,7 @@ let test_protocol_channel_routing () =
       Unix.close wr1)
     (fun () ->
       let conn = Hegel.Protocol.Connection.create rd1 in
-      let pkt_ch5 =
+      let packet_ch5 =
         {
           Hegel.Protocol.channel = 5;
           message_id = 1;
@@ -565,8 +565,8 @@ let test_protocol_channel_routing () =
           payload = "for ch5";
         }
       in
-      Hegel.Protocol.write_packet wr1 pkt_ch5;
-      let pkt_ch0 =
+      Hegel.Protocol.write_packet wr1 packet_ch5;
+      let packet_ch0 =
         {
           Hegel.Protocol.channel = 0;
           message_id = 2;
@@ -574,7 +574,7 @@ let test_protocol_channel_routing () =
           payload = "for ch0";
         }
       in
-      Hegel.Protocol.write_packet wr1 pkt_ch0;
+      Hegel.Protocol.write_packet wr1 packet_ch0;
       let ch0 = Hegel.Protocol.Connection.control_channel conn in
       let msg_id, payload = Hegel.Protocol.Channel.receive_request ch0 in
       assert (payload = "for ch0");
@@ -761,7 +761,7 @@ let test_protocol_request_cbor_error () =
       let ch_send = Hegel.Protocol.Connection.control_channel conn_send in
       match Unix.fork () with
       | 0 ->
-          let pkt = Hegel.Protocol.read_packet rd in
+          let packet = Hegel.Protocol.read_packet rd in
           let error_response =
             Hegel.Cbor.encode_to_string
               (Hegel.Cbor.Map
@@ -773,8 +773,8 @@ let test_protocol_request_cbor_error () =
           in
           Hegel.Protocol.write_packet rd
             {
-              Hegel.Protocol.channel = pkt.channel;
-              message_id = pkt.message_id;
+              Hegel.Protocol.channel = packet.channel;
+              message_id = packet.message_id;
               is_reply = true;
               payload = error_response;
             };
@@ -796,7 +796,7 @@ let test_protocol_request_cbor_non_text_error () =
       let ch_send = Hegel.Protocol.Connection.control_channel conn_send in
       match Unix.fork () with
       | 0 ->
-          let pkt = Hegel.Protocol.read_packet rd in
+          let packet = Hegel.Protocol.read_packet rd in
           let error_response =
             Hegel.Cbor.encode_to_string
               (Hegel.Cbor.Map
@@ -807,8 +807,8 @@ let test_protocol_request_cbor_non_text_error () =
           in
           Hegel.Protocol.write_packet rd
             {
-              Hegel.Protocol.channel = pkt.channel;
-              message_id = pkt.message_id;
+              Hegel.Protocol.channel = packet.channel;
+              message_id = packet.message_id;
               is_reply = true;
               payload = error_response;
             };
@@ -830,7 +830,7 @@ let test_protocol_request_cbor_error_no_type () =
       let ch_send = Hegel.Protocol.Connection.control_channel conn_send in
       match Unix.fork () with
       | 0 ->
-          let pkt = Hegel.Protocol.read_packet rd in
+          let packet = Hegel.Protocol.read_packet rd in
           let error_response =
             Hegel.Cbor.encode_to_string
               (Hegel.Cbor.Map
@@ -840,8 +840,8 @@ let test_protocol_request_cbor_error_no_type () =
           in
           Hegel.Protocol.write_packet rd
             {
-              Hegel.Protocol.channel = pkt.channel;
-              message_id = pkt.message_id;
+              Hegel.Protocol.channel = packet.channel;
+              message_id = packet.message_id;
               is_reply = true;
               payload = error_response;
             };
@@ -863,7 +863,7 @@ let test_protocol_request_cbor_no_result () =
       let ch_send = Hegel.Protocol.Connection.control_channel conn_send in
       match Unix.fork () with
       | 0 ->
-          let pkt = Hegel.Protocol.read_packet rd in
+          let packet = Hegel.Protocol.read_packet rd in
           let response =
             Hegel.Cbor.encode_to_string
               (Hegel.Cbor.Map
@@ -871,8 +871,8 @@ let test_protocol_request_cbor_no_result () =
           in
           Hegel.Protocol.write_packet rd
             {
-              Hegel.Protocol.channel = pkt.channel;
-              message_id = pkt.message_id;
+              Hegel.Protocol.channel = packet.channel;
+              message_id = packet.message_id;
               is_reply = true;
               payload = response;
             };
@@ -897,8 +897,8 @@ let test_state_connection_lifecycle () =
       Unix.close wr)
     (fun () ->
       let conn = Hegel.Protocol.Connection.create wr in
-      let ch = Hegel.Protocol.Connection.control_channel conn in
-      Hegel.State.set_connection ch;
+      let channel = Hegel.Protocol.Connection.control_channel conn in
+      Hegel.State.set_connection channel;
       assert (Hegel.State.get_connection () <> None);
       let _ = Hegel.State.get_channel () in
       Hegel.State.increment_span_depth ();
@@ -964,8 +964,8 @@ let () = Sys.set_signal Sys.sigpipe Sys.Signal_ignore
 let with_mock_server test_fn server_fn =
   let rd, wr = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = Hegel.Protocol.Connection.create wr in
-  let ch = Hegel.Protocol.Connection.control_channel conn in
-  Hegel.State.set_connection ch;
+  let channel = Hegel.Protocol.Connection.control_channel conn in
+  Hegel.State.set_connection channel;
   Hegel.State.set_test_aborted false;
   match Unix.fork () with
   | 0 ->
@@ -973,15 +973,15 @@ let with_mock_server test_fn server_fn =
       (try server_fn rd with _ -> ());
       (try
          while true do
-           let pkt = Hegel.Protocol.read_packet rd in
+           let packet = Hegel.Protocol.read_packet rd in
            let ok =
              Hegel.Cbor.encode_to_string
                (Hegel.Cbor.Map [ (Hegel.Cbor.Text "result", Hegel.Cbor.Null) ])
            in
            Hegel.Protocol.write_packet rd
              {
-               Hegel.Protocol.channel = pkt.channel;
-               message_id = pkt.message_id;
+               Hegel.Protocol.channel = packet.channel;
+               message_id = packet.message_id;
                is_reply = true;
                payload = ok;
              }
@@ -1000,7 +1000,7 @@ let with_mock_server test_fn server_fn =
         test_fn
 
 let respond_with_stop_test rd =
-  let pkt = Hegel.Protocol.read_packet rd in
+  let packet = Hegel.Protocol.read_packet rd in
   let error_response =
     Hegel.Cbor.encode_to_string
       (Hegel.Cbor.Map
@@ -1011,8 +1011,8 @@ let respond_with_stop_test rd =
   in
   Hegel.Protocol.write_packet rd
     {
-      Hegel.Protocol.channel = pkt.channel;
-      message_id = pkt.message_id;
+      Hegel.Protocol.channel = packet.channel;
+      message_id = packet.message_id;
       is_reply = true;
       payload = error_response;
     }
@@ -1039,8 +1039,8 @@ let test_start_span_stop_test () =
 let test_stop_span_error () =
   let rd, wr = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = Hegel.Protocol.Connection.create wr in
-  let ch = Hegel.Protocol.Connection.control_channel conn in
-  Hegel.State.set_connection ch;
+  let channel = Hegel.Protocol.Connection.control_channel conn in
+  Hegel.State.set_connection channel;
   Hegel.State.set_test_aborted false;
   Hegel.State.increment_span_depth ();
   Unix.close rd;
@@ -1049,7 +1049,7 @@ let test_stop_span_error () =
   Hegel.State.clear_connection ()
 
 let respond_with_error rd error_type error_msg =
-  let pkt = Hegel.Protocol.read_packet rd in
+  let packet = Hegel.Protocol.read_packet rd in
   let error_response =
     Hegel.Cbor.encode_to_string
       (Hegel.Cbor.Map
@@ -1060,8 +1060,8 @@ let respond_with_error rd error_type error_msg =
   in
   Hegel.Protocol.write_packet rd
     {
-      Hegel.Protocol.channel = pkt.channel;
-      message_id = pkt.message_id;
+      Hegel.Protocol.channel = packet.channel;
+      message_id = packet.message_id;
       is_reply = true;
       payload = error_response;
     }
@@ -1094,24 +1094,24 @@ let respond_ok_then_custom rd n_ok custom_result =
       (Hegel.Cbor.Map [ (Hegel.Cbor.Text "result", Hegel.Cbor.Null) ])
   in
   for _ = 1 to n_ok do
-    let pkt = Hegel.Protocol.read_packet rd in
+    let packet = Hegel.Protocol.read_packet rd in
     Hegel.Protocol.write_packet rd
       {
-        Hegel.Protocol.channel = pkt.channel;
-        message_id = pkt.message_id;
+        Hegel.Protocol.channel = packet.channel;
+        message_id = packet.message_id;
         is_reply = true;
         payload = ok;
       }
   done;
-  let pkt = Hegel.Protocol.read_packet rd in
+  let packet = Hegel.Protocol.read_packet rd in
   let resp =
     Hegel.Cbor.encode_to_string
       (Hegel.Cbor.Map [ (Hegel.Cbor.Text "result", custom_result) ])
   in
   Hegel.Protocol.write_packet rd
     {
-      Hegel.Protocol.channel = pkt.channel;
-      message_id = pkt.message_id;
+      Hegel.Protocol.channel = packet.channel;
+      message_id = packet.message_id;
       is_reply = true;
       payload = resp;
     }
@@ -1141,15 +1141,15 @@ let test_collection_more_non_bool () =
           in
           ignore (gen.generate ())))
     (fun rd ->
-      let respond (pkt : Hegel.Protocol.packet) result =
+      let respond (packet : Hegel.Protocol.packet) result =
         let resp =
           Hegel.Cbor.encode_to_string
             (Hegel.Cbor.Map [ (Hegel.Cbor.Text "result", result) ])
         in
         Hegel.Protocol.write_packet rd
           {
-            Hegel.Protocol.channel = pkt.channel;
-            message_id = pkt.message_id;
+            Hegel.Protocol.channel = packet.channel;
+            message_id = packet.message_id;
             is_reply = true;
             payload = resp;
           }
@@ -1166,13 +1166,13 @@ let test_non_stop_test_error_raises () =
       try Unix.close wr with _ -> ())
     (fun () ->
       let conn = Hegel.Protocol.Connection.create wr in
-      let ch = Hegel.Protocol.Connection.control_channel conn in
+      let channel = Hegel.Protocol.Connection.control_channel conn in
       Hegel.State.clear_connection ();
-      Hegel.State.set_connection ch;
+      Hegel.State.set_connection channel;
       Hegel.State.set_test_aborted false;
       match Unix.fork () with
       | 0 ->
-          let pkt = Hegel.Protocol.read_packet rd in
+          let packet = Hegel.Protocol.read_packet rd in
           let error_response =
             Hegel.Cbor.encode_to_string
               (Hegel.Cbor.Map
@@ -1184,8 +1184,8 @@ let test_non_stop_test_error_raises () =
           in
           Hegel.Protocol.write_packet rd
             {
-              Hegel.Protocol.channel = pkt.channel;
-              message_id = pkt.message_id;
+              Hegel.Protocol.channel = packet.channel;
+              message_id = packet.message_id;
               is_reply = true;
               payload = error_response;
             };
@@ -1241,7 +1241,7 @@ let test_protocol_receive_response_wrong_type () =
       Unix.close wr)
     (fun () ->
       let conn = Hegel.Protocol.Connection.create rd in
-      let ch = Hegel.Protocol.Connection.control_channel conn in
+      let channel = Hegel.Protocol.Connection.control_channel conn in
       Hegel.Protocol.write_packet wr
         {
           Hegel.Protocol.channel = 0;
@@ -1250,7 +1250,7 @@ let test_protocol_receive_response_wrong_type () =
           payload = "not a reply";
         };
       expect_failure "receive_response non-reply" (fun () ->
-          ignore (Hegel.Protocol.Channel.receive_response ch 99)))
+          ignore (Hegel.Protocol.Channel.receive_response channel 99)))
 
 let test_protocol_receive_request_unexpected_reply () =
   let rd, wr = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
@@ -1260,7 +1260,7 @@ let test_protocol_receive_request_unexpected_reply () =
       Unix.close wr)
     (fun () ->
       let conn = Hegel.Protocol.Connection.create rd in
-      let ch = Hegel.Protocol.Connection.control_channel conn in
+      let channel = Hegel.Protocol.Connection.control_channel conn in
       Hegel.Protocol.write_packet wr
         {
           Hegel.Protocol.channel = 0;
@@ -1269,7 +1269,7 @@ let test_protocol_receive_request_unexpected_reply () =
           payload = "unexpected reply";
         };
       expect_failure "receive_request unexpected reply" (fun () ->
-          ignore (Hegel.Protocol.Channel.receive_request ch)))
+          ignore (Hegel.Protocol.Channel.receive_request channel)))
 
 (* ================================================================ *)
 (* Mock hegel runner tests                                          *)

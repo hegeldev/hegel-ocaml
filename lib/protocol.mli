@@ -30,5 +30,5 @@ module Connection : sig
   val close : t -> unit
 end
 
-val version_negotiation_message : string
-val version_negotiation_ok : string
+val supported_protocol_versions : float * float
+val handshake_string : string
