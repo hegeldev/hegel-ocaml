@@ -1,0 +1,7 @@
+[33mASSERT[0m label is FLAT_MAP
+[33mASSERT[0m cmd 0
+[33mASSERT[0m cmd 1
+[33mASSERT[0m cmd 2
+[33mASSERT[0m cmd 3
+[33mASSERT[0m cmd 4
+Thread 51 killed on uncaught exception Unix.Unix_error(3, "read", "")

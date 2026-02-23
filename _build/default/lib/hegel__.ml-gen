@@ -9,6 +9,9 @@ module Client = Hegel__Client
 (** @canonical Hegel.Connection *)
 module Connection = Hegel__Connection
 
+(** @canonical Hegel.Generators *)
+module Generators = Hegel__Generators
+
 (** @canonical Hegel.Protocol *)
 module Protocol = Hegel__Protocol
 

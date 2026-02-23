@@ -1,5 +1,6 @@
 dune__exe__Test_cbor_helpers
 dune__exe__Test_client
 dune__exe__Test_connection
+dune__exe__Test_generators
 dune__exe__Test_protocol
 dune__exe__Test_showcase

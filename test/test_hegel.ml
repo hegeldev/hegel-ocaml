@@ -9,5 +9,6 @@ let () =
       ("cbor_helpers", Test_cbor_helpers.tests);
       ("connection", Test_connection.tests);
       ("client", Test_client.tests);
+      ("generators", Test_generators.tests);
       ("showcase", Test_showcase.tests);
     ]

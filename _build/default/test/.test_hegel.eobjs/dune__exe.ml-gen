@@ -9,6 +9,9 @@ module Test_client = Dune__exe__Test_client
 (** @canonical Dune__exe.Test_connection *)
 module Test_connection = Dune__exe__Test_connection
 
+(** @canonical Dune__exe.Test_generators *)
+module Test_generators = Dune__exe__Test_generators
+
 (** @canonical Dune__exe.Test_hegel *)
 module Test_hegel = Dune__exe__Test_hegel
 

@@ -21,3 +21,6 @@ module Client = Client
 
 module Session = Session
 (** Global session management for running property tests. *)
+
+module Generators = Generators
+(** Generator combinators for composable test data generation. *)
