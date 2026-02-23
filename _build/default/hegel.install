@@ -1,6 +1,7 @@
 lib: [
   "_build/install/default/lib/hegel/META"
   "_build/install/default/lib/hegel/cbor_helpers.ml"
+  "_build/install/default/lib/hegel/connection.ml"
   "_build/install/default/lib/hegel/dune-package"
   "_build/install/default/lib/hegel/hegel.a"
   "_build/install/default/lib/hegel/hegel.cma"
@@ -16,6 +17,9 @@ lib: [
   "_build/install/default/lib/hegel/hegel__Cbor_helpers.cmi"
   "_build/install/default/lib/hegel/hegel__Cbor_helpers.cmt"
   "_build/install/default/lib/hegel/hegel__Cbor_helpers.cmx"
+  "_build/install/default/lib/hegel/hegel__Connection.cmi"
+  "_build/install/default/lib/hegel/hegel__Connection.cmt"
+  "_build/install/default/lib/hegel/hegel__Connection.cmx"
   "_build/install/default/lib/hegel/hegel__Protocol.cmi"
   "_build/install/default/lib/hegel/hegel__Protocol.cmt"
   "_build/install/default/lib/hegel/hegel__Protocol.cmx"

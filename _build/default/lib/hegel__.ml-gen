@@ -3,6 +3,9 @@
 (** @canonical Hegel.Cbor_helpers *)
 module Cbor_helpers = Hegel__Cbor_helpers
 
+(** @canonical Hegel.Connection *)
+module Connection = Hegel__Connection
+
 (** @canonical Hegel.Protocol *)
 module Protocol = Hegel__Protocol
 

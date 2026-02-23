@@ -1,0 +1,14 @@
+[33mASSERT[0m sum
+Thread 18 killed on uncaught exception Hegel__Protocol.Partial_packet("Connection closed partway through reading packet.")
+Raised at Hegel__Protocol.recv_exact in file "lib/protocol.ml", lines 108-109, characters 10-80
+Called from Hegel__Protocol.read_packet in file "lib/protocol.ml", line 122, characters 19-46
+Called from Hegel__Connection.read_packet_with_timeout in file "lib/connection.ml", line 143, characters 8-24
+Called from Hegel__Connection.run_reader.(fun) in file "lib/connection.ml", line 176, characters 18-58
+Called from Stdlib__Fun.protect in file "fun.ml", line 34, characters 8-15
+Re-raised at Stdlib__Fun.protect in file "fun.ml", line 39, characters 6-52
+Called from Hegel__Connection.process_one_message in file "lib/connection.ml", lines 315-318, characters 2-39
+Called from Hegel__Connection.receive_request_raw in file "lib/connection.ml", line 372, characters 4-38
+Called from Hegel__Connection.receive_request in file "lib/connection.ml", line 380, characters 25-59
+Called from Hegel__Connection.handle_requests in file "lib/connection.ml", line 462, characters 32-53
+Called from Dune__exe__Test_connection.test_request_response.(fun) in file "test/test_connection.ml", lines 389-398, characters 8-49
+Called from Thread.create.(fun) in file "thread.ml", line 48, characters 8-14

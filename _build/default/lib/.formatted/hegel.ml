@@ -12,3 +12,6 @@ module Protocol = Protocol
 
 module Cbor_helpers = Cbor_helpers
 (** CBOR encoding/decoding with type-safe extractor helpers. *)
+
+module Connection = Connection
+(** Multiplexed connection and channel abstractions. *)

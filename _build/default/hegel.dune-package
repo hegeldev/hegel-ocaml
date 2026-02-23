@@ -5,6 +5,7 @@
  (lib
   (META
    cbor_helpers.ml
+   connection.ml
    dune-package
    hegel.a
    hegel.cma
@@ -20,6 +21,9 @@
    hegel__Cbor_helpers.cmi
    hegel__Cbor_helpers.cmt
    hegel__Cbor_helpers.cmx
+   hegel__Connection.cmi
+   hegel__Connection.cmt
+   hegel__Connection.cmx
    hegel__Protocol.cmi
    hegel__Protocol.cmt
    hegel__Protocol.cmx
@@ -49,6 +53,10 @@
       (obj_name hegel__Cbor_helpers)
       (visibility public)
       (source (path Cbor_helpers) (impl (path cbor_helpers.ml))))
+     (module
+      (obj_name hegel__Connection)
+      (visibility public)
+      (source (path Connection) (impl (path connection.ml))))
      (module
       (obj_name hegel)
       (visibility public)

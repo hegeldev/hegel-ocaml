@@ -7,4 +7,5 @@ let () =
       ("version", [ Alcotest.test_case "returns version" `Quick test_version ]);
       ("protocol", Test_protocol.tests);
       ("cbor_helpers", Test_cbor_helpers.tests);
+      ("connection", Test_connection.tests);
     ]
