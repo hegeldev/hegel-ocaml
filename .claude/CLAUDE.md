@@ -204,9 +204,16 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
 - `{"type": "number", "allow_nan": bool, "allow_infinity": bool, "width": 64, "exclude_min": bool, "exclude_max": bool, "min_value"?: f, "max_value"?: f}` — floats
 - `{"type": "string", "min_size": N, "max_size"?: N}` — text
 - `{"type": "binary", "min_size": N, "max_size"?: N}` — binary
-- `{"sampled_from": [...]}` — sampled from list (no "type" key)
+- sampled_from: uses `{"type": "integer", "min_value": 0, "max_value": N-1}` with a map transform to index into the values array
 - `{"type": "list", "elements": schema, "min_size": N, "max_size"?: N}` — lists
 - `{"type": "dict", "keys": schema, "values": schema, "min_size": N, "max_size"?: N}` — dicts (server returns `[[k,v],...]`)
+- `{"const": null}` — just (constant value; transform ignores server result)
+- `{"type": "regex", "pattern": str, "fullmatch": bool}` — from_regex
+- `{"type": "email"}`, `{"type": "url"}`, `{"type": "domain", "max_length"?: N}` — format generators
+- `{"type": "date"}`, `{"type": "time"}`, `{"type": "datetime"}` — date/time generators
+- `{"type": "ipv4"}`, `{"type": "ipv6"}` — IP address generators
+- `{"one_of": [tagged_schema, ...]}` — one_of (tagged-tuple schemas for dispatch)
+- `{"type": "tuple", "elements": [schema, ...]}` — tuples
 
 ### Coverage Rules
 

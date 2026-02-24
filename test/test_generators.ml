@@ -1036,6 +1036,566 @@ let test_lists_nested_e2e () =
         (fun inner_items -> assert (List.length inner_items <= 3))
         outer_items)
 
+(* ==== Unit tests for new generators ==== *)
+
+(** Test: just schema is const null. *)
+let test_just_schema () =
+  let gen = just 42 in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      Alcotest.(check int) "one pair" 1 (List.length pairs);
+      Alcotest.(check bool)
+        "const is null" true
+        (Hegel.Cbor_helpers.is_null (List.assoc (`Text "const") pairs))
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: just transform ignores server value. *)
+let test_just_transform () =
+  let gen = just "hello" in
+  match gen with
+  | Basic { transform; _ } ->
+      Alcotest.(check string) "ignores server" "hello" (transform (`Int 999))
+  | _ -> Alcotest.fail "expected Basic"
+
+(** Test: from_regex schema with default fullmatch. *)
+let test_from_regex_schema () =
+  let gen = from_regex "[a-z]+" () in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
+      in
+      Alcotest.(check string) "type" "regex" typ;
+      let pat =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "pattern") pairs)
+      in
+      Alcotest.(check string) "pattern" "[a-z]+" pat;
+      let fm =
+        Hegel.Cbor_helpers.extract_bool (List.assoc (`Text "fullmatch") pairs)
+      in
+      Alcotest.(check bool) "fullmatch" true fm
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: from_regex with fullmatch=false. *)
+let test_from_regex_no_fullmatch () =
+  let gen = from_regex "abc" ~fullmatch:false () in
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let fm =
+        Hegel.Cbor_helpers.extract_bool (List.assoc (`Text "fullmatch") pairs)
+      in
+      Alcotest.(check bool) "fullmatch false" false fm
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: emails schema. *)
+let test_emails_schema () =
+  let gen = emails () in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
+      in
+      Alcotest.(check string) "type" "email" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: urls schema. *)
+let test_urls_schema () =
+  let gen = urls () in
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
+      in
+      Alcotest.(check string) "type" "url" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: domains schema without max_length. *)
+let test_domains_schema () =
+  let gen = domains () in
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
+      in
+      Alcotest.(check string) "type" "domain" typ;
+      Alcotest.(check bool)
+        "no max_length" false
+        (List.mem_assoc (`Text "max_length") pairs)
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: domains schema with max_length. *)
+let test_domains_max_length () =
+  let gen = domains ~max_length:100 () in
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let ml =
+        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "max_length") pairs)
+      in
+      Alcotest.(check int) "max_length" 100 ml
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: dates schema. *)
+let test_dates_schema () =
+  let gen = dates () in
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
+      in
+      Alcotest.(check string) "type" "date" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: times schema. *)
+let test_times_schema () =
+  let gen = times () in
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
+      in
+      Alcotest.(check string) "type" "time" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: datetimes schema. *)
+let test_datetimes_schema () =
+  let gen = datetimes () in
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
+      in
+      Alcotest.(check string) "type" "datetime" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: one_of with < 2 generators raises. *)
+let test_one_of_too_few () =
+  let raised = ref false in
+  (try ignore (one_of [ integers () ]) with Failure _ -> raised := true);
+  Alcotest.(check bool) "raised" true !raised
+
+(** Test: one_of all basic uses tagged-tuple schema. *)
+let test_one_of_basic_schema () =
+  let gen =
+    one_of
+      [
+        integers ~min_value:0 ~max_value:10 ();
+        integers ~min_value:100 ~max_value:200 ();
+      ]
+  in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      Alcotest.(check bool)
+        "has one_of key" true
+        (List.mem_assoc (`Text "one_of") pairs)
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: one_of with non-basic generators is not basic. *)
+let test_one_of_non_basic () =
+  let filtered = filter (fun _ -> true) (integers ()) in
+  let gen = one_of [ integers (); filtered ] in
+  Alcotest.(check bool) "not basic" false (is_basic gen)
+
+(** Test: one_of tagged-tuple dispatch transform. *)
+let test_one_of_dispatch () =
+  let gen =
+    one_of
+      [
+        map (fun x -> x * 2) (integers ()); map (fun x -> x + 100) (integers ());
+      ]
+  in
+  match gen with
+  | Basic { transform; _ } ->
+      (* Tag 0 → first branch, value 5 → 5 * 2 = 10 *)
+      let result = transform (`Array [ `Int 0; `Int 5 ]) in
+      Alcotest.(check int) "dispatched first" 10 result;
+      (* Tag 1 → second branch, value 7 → 7 + 100 = 107 *)
+      let result2 = transform (`Array [ `Int 1; `Int 7 ]) in
+      Alcotest.(check int) "dispatched second" 107 result2
+  | _ -> Alcotest.fail "expected Basic"
+
+(** Test: one_of dispatch bad format raises. *)
+let test_one_of_dispatch_bad_format () =
+  let gen =
+    one_of
+      [
+        integers ~min_value:0 ~max_value:10 ();
+        integers ~min_value:100 ~max_value:200 ();
+      ]
+  in
+  match gen with
+  | Basic { transform; _ } ->
+      let raised = ref false in
+      (try ignore (transform (`Int 42)) with Failure _ -> raised := true);
+      Alcotest.(check bool) "bad format raised" true !raised
+  | _ -> Alcotest.fail "expected Basic"
+
+(** Test: optional creates one_of-based generator. *)
+let test_optional_basic () =
+  let gen = optional (integers ()) in
+  Alcotest.(check bool) "is_basic" true (is_basic gen)
+
+(** Test: ip_addresses IPv4. *)
+let test_ip_v4_schema () =
+  let gen = ip_addresses ~version:4 () in
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
+      in
+      Alcotest.(check string) "type" "ipv4" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: ip_addresses IPv6. *)
+let test_ip_v6_schema () =
+  let gen = ip_addresses ~version:6 () in
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
+      in
+      Alcotest.(check string) "type" "ipv6" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: ip_addresses default (both) is a one_of. *)
+let test_ip_both () =
+  let gen = ip_addresses () in
+  Alcotest.(check bool) "is_basic (one_of)" true (is_basic gen)
+
+(** Test: ip_addresses invalid version raises. *)
+let test_ip_invalid_version () =
+  let raised = ref false in
+  (try ignore (ip_addresses ~version:3 ()) with Failure _ -> raised := true);
+  Alcotest.(check bool) "raised" true !raised
+
+(** Test: tuples2 basic schema. *)
+let test_tuples2_basic_schema () =
+  let gen = tuples2 (integers ()) (booleans ()) in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
+      in
+      Alcotest.(check string) "type" "tuple" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: tuples2 basic transform. *)
+let test_tuples2_basic_transform () =
+  let gen = tuples2 (integers ()) (booleans ()) in
+  match gen with
+  | Basic { transform; _ } ->
+      let a, b = transform (`Array [ `Int 5; `Bool true ]) in
+      Alcotest.(check int) "first" 5 a;
+      Alcotest.(check bool) "second" true b
+  | _ -> Alcotest.fail "expected Basic"
+
+(** Test: tuples2 basic transform bad format raises. *)
+let test_tuples2_bad_format () =
+  let gen = tuples2 (integers ()) (booleans ()) in
+  match gen with
+  | Basic { transform; _ } ->
+      let raised = ref false in
+      (try ignore (transform (`Int 42)) with Failure _ -> raised := true);
+      Alcotest.(check bool) "raised" true !raised
+  | _ -> Alcotest.fail "expected Basic"
+
+(** Test: tuples2 non-basic is not basic. *)
+let test_tuples2_non_basic () =
+  let filtered = filter (fun _ -> true) (integers ()) in
+  let gen = tuples2 filtered (booleans ()) in
+  Alcotest.(check bool) "not basic" false (is_basic gen)
+
+(** Test: tuples3 basic schema. *)
+let test_tuples3_basic_schema () =
+  let gen =
+    tuples3 (integers ()) (booleans ()) (integers ~min_value:0 ~max_value:5 ())
+  in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
+      in
+      Alcotest.(check string) "type" "tuple" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: tuples3 basic transform. *)
+let test_tuples3_basic_transform () =
+  let gen =
+    tuples3 (integers ()) (booleans ()) (integers ~min_value:0 ~max_value:5 ())
+  in
+  match gen with
+  | Basic { transform; _ } ->
+      let a, b, c = transform (`Array [ `Int 1; `Bool false; `Int 3 ]) in
+      Alcotest.(check int) "first" 1 a;
+      Alcotest.(check bool) "second" false b;
+      Alcotest.(check int) "third" 3 c
+  | _ -> Alcotest.fail "expected Basic"
+
+(** Test: tuples3 bad format raises. *)
+let test_tuples3_bad_format () =
+  let gen =
+    tuples3 (integers ()) (booleans ()) (integers ~min_value:0 ~max_value:5 ())
+  in
+  match gen with
+  | Basic { transform; _ } ->
+      let raised = ref false in
+      (try ignore (transform (`Int 42)) with Failure _ -> raised := true);
+      Alcotest.(check bool) "raised" true !raised
+  | _ -> Alcotest.fail "expected Basic"
+
+(** Test: tuples3 non-basic is not basic. *)
+let test_tuples3_non_basic () =
+  let filtered = filter (fun _ -> true) (integers ()) in
+  let gen = tuples3 filtered (booleans ()) (integers ()) in
+  Alcotest.(check bool) "not basic" false (is_basic gen)
+
+(** Test: tuples4 basic schema. *)
+let test_tuples4_basic_schema () =
+  let gen =
+    tuples4 (integers ()) (booleans ())
+      (integers ~min_value:0 ~max_value:5 ())
+      (floats ())
+  in
+  Alcotest.(check bool) "is_basic" true (is_basic gen)
+
+(** Test: tuples4 basic transform. *)
+let test_tuples4_basic_transform () =
+  let gen =
+    tuples4 (integers ()) (booleans ())
+      (integers ~min_value:0 ~max_value:5 ())
+      (floats ())
+  in
+  match gen with
+  | Basic { transform; _ } ->
+      let a, b, c, d =
+        transform (`Array [ `Int 1; `Bool true; `Int 3; `Float 3.14 ])
+      in
+      Alcotest.(check int) "first" 1 a;
+      Alcotest.(check bool) "second" true b;
+      Alcotest.(check int) "third" 3 c;
+      Alcotest.(check (float 0.01)) "fourth" 3.14 d
+  | _ -> Alcotest.fail "expected Basic"
+
+(** Test: tuples4 bad format raises. *)
+let test_tuples4_bad_format () =
+  let gen =
+    tuples4 (integers ()) (booleans ())
+      (integers ~min_value:0 ~max_value:5 ())
+      (floats ())
+  in
+  match gen with
+  | Basic { transform; _ } ->
+      let raised = ref false in
+      (try ignore (transform (`Int 42)) with Failure _ -> raised := true);
+      Alcotest.(check bool) "raised" true !raised
+  | _ -> Alcotest.fail "expected Basic"
+
+(** Test: tuples4 non-basic is not basic. *)
+let test_tuples4_non_basic () =
+  let filtered = filter (fun _ -> true) (integers ()) in
+  let gen = tuples4 filtered (booleans ()) (integers ()) (floats ()) in
+  Alcotest.(check bool) "not basic" false (is_basic gen)
+
+(* ==== E2E tests for new generators ==== *)
+
+(** Test: just always returns the constant. *)
+let test_just_e2e () =
+  Hegel.Session.run_hegel_test ~name:"just_e2e" ~test_cases:10 (fun () ->
+      let v = generate (just 42) in
+      Alcotest.(check int) "always 42" 42 v)
+
+(** Test: from_regex generates matching strings. *)
+let test_from_regex_e2e () =
+  Hegel.Session.run_hegel_test ~name:"from_regex_e2e" ~test_cases:10 (fun () ->
+      let v = generate (from_regex "[0-9]+" ()) in
+      assert (String.length v > 0))
+
+(** Test: emails generates strings containing at-sign. *)
+let test_emails_e2e () =
+  Hegel.Session.run_hegel_test ~name:"emails_e2e" ~test_cases:10 (fun () ->
+      let v = generate (emails ()) in
+      assert (String.contains v '@'))
+
+(** Test: urls generates strings starting with http. *)
+let test_urls_e2e () =
+  Hegel.Session.run_hegel_test ~name:"urls_e2e" ~test_cases:10 (fun () ->
+      let v = generate (urls ()) in
+      assert (
+        String.length v >= 7
+        && (String.sub v 0 7 = "http://" || String.sub v 0 8 = "https://")))
+
+(** Test: domains generates non-empty strings. *)
+let test_domains_e2e () =
+  Hegel.Session.run_hegel_test ~name:"domains_e2e" ~test_cases:10 (fun () ->
+      let v = generate (domains ()) in
+      assert (String.length v > 0))
+
+(** Test: dates generates YYYY-MM-DD strings. *)
+let test_dates_e2e () =
+  Hegel.Session.run_hegel_test ~name:"dates_e2e" ~test_cases:10 (fun () ->
+      let v = generate (dates ()) in
+      assert (String.contains v '-'))
+
+(** Test: times generates strings with colons. *)
+let test_times_e2e () =
+  Hegel.Session.run_hegel_test ~name:"times_e2e" ~test_cases:10 (fun () ->
+      let v = generate (times ()) in
+      assert (String.contains v ':'))
+
+(** Test: datetimes generates strings with T. *)
+let test_datetimes_e2e () =
+  Hegel.Session.run_hegel_test ~name:"datetimes_e2e" ~test_cases:10 (fun () ->
+      let v = generate (datetimes ()) in
+      assert (String.contains v 'T'))
+
+(** Test: one_of with basic generators works e2e. *)
+let test_one_of_e2e () =
+  Hegel.Session.run_hegel_test ~name:"one_of_e2e" ~test_cases:50 (fun () ->
+      let gen = one_of [ integers ~min_value:0 ~max_value:10 (); just 99 ] in
+      let v = generate gen in
+      assert ((v >= 0 && v <= 10) || v = 99))
+
+(** Test: one_of with non-basic generators works e2e. *)
+let test_one_of_non_basic_e2e () =
+  Hegel.Session.run_hegel_test ~name:"one_of_nb_e2e" ~test_cases:50 (fun () ->
+      let filtered =
+        filter (fun x -> x > 5) (integers ~min_value:0 ~max_value:10 ())
+      in
+      let gen =
+        one_of [ filtered; integers ~min_value:100 ~max_value:200 () ]
+      in
+      let v = generate gen in
+      assert ((v > 5 && v <= 10) || (v >= 100 && v <= 200)))
+
+(** Test: optional produces None or Some e2e. *)
+let test_optional_e2e () =
+  let saw_some = ref false in
+  let saw_none = ref false in
+  Hegel.Session.run_hegel_test ~name:"optional_e2e" ~test_cases:50 (fun () ->
+      let gen = optional (integers ~min_value:1 ~max_value:100 ()) in
+      match generate gen with
+      | Some v ->
+          saw_some := true;
+          assert (v >= 1 && v <= 100)
+      | None -> saw_none := true);
+  (* At least one of each should have occurred in 50 test cases *)
+  Alcotest.(check bool) "saw Some" true !saw_some;
+  Alcotest.(check bool) "saw None" true !saw_none
+
+(** Test: ip_addresses generates valid IPs e2e. *)
+let test_ip_addresses_e2e () =
+  Hegel.Session.run_hegel_test ~name:"ip_e2e" ~test_cases:20 (fun () ->
+      let v4 = generate (ip_addresses ~version:4 ()) in
+      assert (String.contains v4 '.');
+      let v6 = generate (ip_addresses ~version:6 ()) in
+      assert (String.contains v6 ':'))
+
+(** Test: ip_addresses default generates either v4 or v6 e2e. *)
+let test_ip_both_e2e () =
+  Hegel.Session.run_hegel_test ~name:"ip_both_e2e" ~test_cases:20 (fun () ->
+      let v = generate (ip_addresses ()) in
+      assert (String.contains v '.' || String.contains v ':'))
+
+(** Test: tuples2 basic e2e. *)
+let test_tuples2_e2e () =
+  Hegel.Session.run_hegel_test ~name:"tuples2_e2e" ~test_cases:20 (fun () ->
+      let gen =
+        tuples2 (integers ~min_value:0 ~max_value:10 ()) (booleans ())
+      in
+      let a, _b = generate gen in
+      assert (a >= 0 && a <= 10))
+
+(** Test: tuples2 composite e2e. *)
+let test_tuples2_composite_e2e () =
+  Hegel.Session.run_hegel_test ~name:"tuples2_comp_e2e" ~test_cases:20
+    (fun () ->
+      let filtered =
+        filter (fun x -> x > 5) (integers ~min_value:0 ~max_value:10 ())
+      in
+      let gen = tuples2 filtered (booleans ()) in
+      let a, _b = generate gen in
+      assert (a > 5 && a <= 10))
+
+(** Test: tuples3 basic e2e. *)
+let test_tuples3_e2e () =
+  Hegel.Session.run_hegel_test ~name:"tuples3_e2e" ~test_cases:20 (fun () ->
+      let gen =
+        tuples3
+          (integers ~min_value:0 ~max_value:10 ())
+          (booleans ())
+          (integers ~min_value:100 ~max_value:200 ())
+      in
+      let a, _b, c = generate gen in
+      assert (a >= 0 && a <= 10);
+      assert (c >= 100 && c <= 200))
+
+(** Test: tuples3 composite e2e. *)
+let test_tuples3_composite_e2e () =
+  Hegel.Session.run_hegel_test ~name:"tuples3_comp_e2e" ~test_cases:20
+    (fun () ->
+      let filtered =
+        filter (fun x -> x > 5) (integers ~min_value:0 ~max_value:10 ())
+      in
+      let gen =
+        tuples3 filtered (booleans ())
+          (integers ~min_value:100 ~max_value:200 ())
+      in
+      let a, _b, c = generate gen in
+      assert (a > 5 && a <= 10);
+      assert (c >= 100 && c <= 200))
+
+(** Test: tuples4 basic e2e. *)
+let test_tuples4_e2e () =
+  Hegel.Session.run_hegel_test ~name:"tuples4_e2e" ~test_cases:20 (fun () ->
+      let gen =
+        tuples4
+          (integers ~min_value:0 ~max_value:10 ())
+          (booleans ())
+          (integers ~min_value:100 ~max_value:200 ())
+          (floats ~min_value:0.0 ~max_value:1.0 ())
+      in
+      let a, _b, c, d = generate gen in
+      assert (a >= 0 && a <= 10);
+      assert (c >= 100 && c <= 200);
+      assert (d >= 0.0 && d <= 1.0))
+
+(** Test: tuples4 composite e2e. *)
+let test_tuples4_composite_e2e () =
+  Hegel.Session.run_hegel_test ~name:"tuples4_comp_e2e" ~test_cases:20
+    (fun () ->
+      let filtered =
+        filter (fun x -> x > 5) (integers ~min_value:0 ~max_value:10 ())
+      in
+      let gen =
+        tuples4 filtered (booleans ())
+          (integers ~min_value:100 ~max_value:200 ())
+          (floats ~min_value:0.0 ~max_value:1.0 ())
+      in
+      let a, _b, c, d = generate gen in
+      assert (a > 5 && a <= 10);
+      assert (c >= 100 && c <= 200);
+      assert (d >= 0.0 && d <= 1.0))
+
 let tests =
   [
     (* Unit tests *)
@@ -1125,4 +1685,63 @@ let tests =
       test_lists_booleans_bounds_e2e;
     Alcotest.test_case "lists non-basic e2e" `Quick test_lists_non_basic_e2e;
     Alcotest.test_case "lists nested e2e" `Quick test_lists_nested_e2e;
+    (* Unit tests for new generators *)
+    Alcotest.test_case "just schema" `Quick test_just_schema;
+    Alcotest.test_case "just transform" `Quick test_just_transform;
+    Alcotest.test_case "from_regex schema" `Quick test_from_regex_schema;
+    Alcotest.test_case "from_regex no fullmatch" `Quick
+      test_from_regex_no_fullmatch;
+    Alcotest.test_case "emails schema" `Quick test_emails_schema;
+    Alcotest.test_case "urls schema" `Quick test_urls_schema;
+    Alcotest.test_case "domains schema" `Quick test_domains_schema;
+    Alcotest.test_case "domains max_length" `Quick test_domains_max_length;
+    Alcotest.test_case "dates schema" `Quick test_dates_schema;
+    Alcotest.test_case "times schema" `Quick test_times_schema;
+    Alcotest.test_case "datetimes schema" `Quick test_datetimes_schema;
+    Alcotest.test_case "one_of too few" `Quick test_one_of_too_few;
+    Alcotest.test_case "one_of basic schema" `Quick test_one_of_basic_schema;
+    Alcotest.test_case "one_of non-basic" `Quick test_one_of_non_basic;
+    Alcotest.test_case "one_of dispatch" `Quick test_one_of_dispatch;
+    Alcotest.test_case "one_of dispatch bad format" `Quick
+      test_one_of_dispatch_bad_format;
+    Alcotest.test_case "optional basic" `Quick test_optional_basic;
+    Alcotest.test_case "ip_addresses v4" `Quick test_ip_v4_schema;
+    Alcotest.test_case "ip_addresses v6" `Quick test_ip_v6_schema;
+    Alcotest.test_case "ip_addresses both" `Quick test_ip_both;
+    Alcotest.test_case "ip_addresses invalid" `Quick test_ip_invalid_version;
+    Alcotest.test_case "tuples2 basic schema" `Quick test_tuples2_basic_schema;
+    Alcotest.test_case "tuples2 basic transform" `Quick
+      test_tuples2_basic_transform;
+    Alcotest.test_case "tuples2 bad format" `Quick test_tuples2_bad_format;
+    Alcotest.test_case "tuples2 non-basic" `Quick test_tuples2_non_basic;
+    Alcotest.test_case "tuples3 basic schema" `Quick test_tuples3_basic_schema;
+    Alcotest.test_case "tuples3 basic transform" `Quick
+      test_tuples3_basic_transform;
+    Alcotest.test_case "tuples3 bad format" `Quick test_tuples3_bad_format;
+    Alcotest.test_case "tuples3 non-basic" `Quick test_tuples3_non_basic;
+    Alcotest.test_case "tuples4 basic schema" `Quick test_tuples4_basic_schema;
+    Alcotest.test_case "tuples4 basic transform" `Quick
+      test_tuples4_basic_transform;
+    Alcotest.test_case "tuples4 bad format" `Quick test_tuples4_bad_format;
+    Alcotest.test_case "tuples4 non-basic" `Quick test_tuples4_non_basic;
+    (* E2E tests for new generators *)
+    Alcotest.test_case "just e2e" `Quick test_just_e2e;
+    Alcotest.test_case "from_regex e2e" `Quick test_from_regex_e2e;
+    Alcotest.test_case "emails e2e" `Quick test_emails_e2e;
+    Alcotest.test_case "urls e2e" `Quick test_urls_e2e;
+    Alcotest.test_case "domains e2e" `Quick test_domains_e2e;
+    Alcotest.test_case "dates e2e" `Quick test_dates_e2e;
+    Alcotest.test_case "times e2e" `Quick test_times_e2e;
+    Alcotest.test_case "datetimes e2e" `Quick test_datetimes_e2e;
+    Alcotest.test_case "one_of e2e" `Quick test_one_of_e2e;
+    Alcotest.test_case "one_of non-basic e2e" `Quick test_one_of_non_basic_e2e;
+    Alcotest.test_case "optional e2e" `Quick test_optional_e2e;
+    Alcotest.test_case "ip_addresses e2e" `Quick test_ip_addresses_e2e;
+    Alcotest.test_case "ip_addresses both e2e" `Quick test_ip_both_e2e;
+    Alcotest.test_case "tuples2 e2e" `Quick test_tuples2_e2e;
+    Alcotest.test_case "tuples2 composite e2e" `Quick test_tuples2_composite_e2e;
+    Alcotest.test_case "tuples3 e2e" `Quick test_tuples3_e2e;
+    Alcotest.test_case "tuples3 composite e2e" `Quick test_tuples3_composite_e2e;
+    Alcotest.test_case "tuples4 e2e" `Quick test_tuples4_e2e;
+    Alcotest.test_case "tuples4 composite e2e" `Quick test_tuples4_composite_e2e;
   ]

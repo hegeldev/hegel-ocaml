@@ -40,7 +40,9 @@ end
       generator.
     - [Filtered] generators wrap a source and a predicate.
     - [CompositeList] generators use the collection protocol to generate lists
-      of non-basic elements, creating a fresh collection per generate call. *)
+      of non-basic elements, creating a fresh collection per generate call.
+    - [Composite] generators wrap a [generate_fn] thunk inside a span with the
+      given [label]. Used for tuples and one_of with non-basic elements. *)
 type 'a generator =
   | Basic : {
       schema : CBOR.Simple.t;
@@ -60,6 +62,7 @@ type 'a generator =
       max_size : int option;
     }
       -> 'a list generator
+  | Composite : { label : int; generate_fn : unit -> 'a } -> 'a generator
 
 (** Maximum number of filter attempts before calling [assume false]. *)
 let max_filter_attempts = 3
@@ -208,6 +211,7 @@ let rec generate : type a. a generator -> a =
             result := generate elements :: !result
           done;
           List.rev !result)
+  | Composite { label; generate_fn } -> group label (fun () -> generate_fn ())
 
 (** [map f gen] transforms values from [gen] using [f].
 
@@ -421,3 +425,292 @@ let lists elements ?(min_size = 0) ?max_size () =
          collection per generate() call via the CompositeList arm of
          [generate]. *)
       CompositeList { elements; min_size; max_size }
+
+(** [just value] creates a generator that always produces [value].
+
+    The schema uses [{"const": null}] and the transform ignores the server
+    result, returning the constant [value]. *)
+let just value =
+  Basic
+    { schema = `Map [ (`Text "const", `Null) ]; transform = (fun _ -> value) }
+
+(** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
+    a regular expression [pattern].
+
+    When [fullmatch] is [true] (the default), the entire string must match the
+    pattern. When [false], a substring match suffices. *)
+let from_regex pattern ?(fullmatch = true) () =
+  Basic
+    {
+      schema =
+        `Map
+          [
+            (`Text "type", `Text "regex");
+            (`Text "pattern", `Text pattern);
+            (`Text "fullmatch", `Bool fullmatch);
+          ];
+      transform = Cbor_helpers.extract_string;
+    }
+
+(** [emails ()] creates a generator for valid email address strings. *)
+let emails () =
+  Basic
+    {
+      schema = `Map [ (`Text "type", `Text "email") ];
+      transform = Cbor_helpers.extract_string;
+    }
+
+(** [urls ()] creates a generator for valid URL strings. *)
+let urls () =
+  Basic
+    {
+      schema = `Map [ (`Text "type", `Text "url") ];
+      transform = Cbor_helpers.extract_string;
+    }
+
+(** [domains ?max_length ()] creates a generator for domain name strings.
+
+    If [max_length] is provided, generated domains will not exceed that length.
+*)
+let domains ?max_length () =
+  let pairs =
+    List.filter_map Fun.id
+      [
+        Some (`Text "type", `Text "domain");
+        Option.map (fun ml -> (`Text "max_length", `Int ml)) max_length;
+      ]
+  in
+  Basic { schema = `Map pairs; transform = Cbor_helpers.extract_string }
+
+(** [dates ()] creates a generator for ISO 8601 date strings (YYYY-MM-DD). *)
+let dates () =
+  Basic
+    {
+      schema = `Map [ (`Text "type", `Text "date") ];
+      transform = Cbor_helpers.extract_string;
+    }
+
+(** [times ()] creates a generator for time strings. *)
+let times () =
+  Basic
+    {
+      schema = `Map [ (`Text "type", `Text "time") ];
+      transform = Cbor_helpers.extract_string;
+    }
+
+(** [datetimes ()] creates a generator for ISO 8601 datetime strings. *)
+let datetimes () =
+  Basic
+    {
+      schema = `Map [ (`Text "type", `Text "datetime") ];
+      transform = Cbor_helpers.extract_string;
+    }
+
+(** [one_of generators] creates a generator that picks from one of the given
+    [generators].
+
+    Three code paths depending on generator types:
+    - All basic with identity transforms: simple [one_of] schema.
+    - All basic with some transforms: tagged-tuple schema with dispatch.
+    - Any non-basic: compositional via [ONE_OF] span.
+
+    Requires at least 2 generators. *)
+let one_of (generators : 'a generator list) =
+  if List.length generators < 2 then
+    failwith "one_of requires at least 2 generators";
+  let all_basic = List.for_all is_basic generators in
+  if not all_basic then begin
+    (* Path 3: composite — generate index in ONE_OF span, then delegate *)
+    let gens = Array.of_list generators in
+    let n = Array.length gens in
+    Composite
+      {
+        label = Labels.one_of;
+        generate_fn =
+          (fun () ->
+            let idx =
+              Cbor_helpers.extract_int
+                (Client.generate_from_schema
+                   (`Map
+                      [
+                        (`Text "type", `Text "integer");
+                        (`Text "min_value", `Int 0);
+                        (`Text "max_value", `Int (n - 1));
+                      ]))
+            in
+            generate gens.(idx));
+      }
+  end
+  else
+    let basics =
+      List.map
+        (fun g ->
+          match g with
+          | Basic { schema; transform } -> (schema, transform)
+          | _ -> assert false)
+        generators
+    in
+    (* Check if all have identity transforms by testing if the transform is
+       literally the identity. We can't test function equality, so we check
+       if all transforms act as identity on a canary value. Instead, we use
+       the tagged-tuple path which is always correct. *)
+    (* Path 2: tagged-tuple schema with dispatch transform *)
+    let tagged_schemas =
+      List.mapi
+        (fun i (s, _) ->
+          `Map
+            [
+              (`Text "type", `Text "tuple");
+              (`Text "elements", `Array [ `Map [ (`Text "const", `Int i) ]; s ]);
+            ])
+        basics
+    in
+    let transforms = Array.of_list (List.map snd basics) in
+    let dispatch raw =
+      match raw with
+      | `Array [ tag; value ] ->
+          let idx = Cbor_helpers.extract_int tag in
+          transforms.(idx) value
+      | _ -> failwith "one_of: expected [tag, value] tuple from server"
+    in
+    Basic
+      {
+        schema = `Map [ (`Text "one_of", `Array tagged_schemas) ];
+        transform = dispatch;
+      }
+
+(** [optional element] creates a generator that produces either [None] or
+    [Some value] from [element].
+
+    Equivalent to [one_of [just None; map (fun x -> Some x) element]]. *)
+let optional element = one_of [ just None; map (fun x -> Some x) element ]
+
+(** [ip_addresses ?version ()] creates a generator for IP address strings.
+
+    - [version = Some 4]: generates IPv4 addresses (dotted decimal).
+    - [version = Some 6]: generates IPv6 addresses (colon hex).
+    - [version = None] (default): generates either IPv4 or IPv6. *)
+let rec ip_addresses ?version () =
+  match version with
+  | Some 4 ->
+      Basic
+        {
+          schema = `Map [ (`Text "type", `Text "ipv4") ];
+          transform = Cbor_helpers.extract_string;
+        }
+  | Some 6 ->
+      Basic
+        {
+          schema = `Map [ (`Text "type", `Text "ipv6") ];
+          transform = Cbor_helpers.extract_string;
+        }
+  | None -> one_of [ ip_addresses ~version:4 (); ip_addresses ~version:6 () ]
+  | Some v -> failwith (Printf.sprintf "ip_addresses: invalid version %d" v)
+
+(** [tuples2 g1 g2] creates a generator for 2-element tuples.
+
+    When both elements are basic, a single [generate] command is sent using a
+    [tuple] schema. Otherwise, elements are generated separately inside a
+    {!Labels.tuple} span. *)
+let tuples2 (type a b) (g1 : a generator) (g2 : b generator) : (a * b) generator
+    =
+  match (as_basic g1, as_basic g2) with
+  | Some (s1, t1), Some (s2, t2) ->
+      let combined =
+        `Map
+          [
+            (`Text "type", `Text "tuple"); (`Text "elements", `Array [ s1; s2 ]);
+          ]
+      in
+      Basic
+        {
+          schema = combined;
+          transform =
+            (fun raw ->
+              match raw with
+              | `Array [ v1; v2 ] -> (t1 v1, t2 v2)
+              | _ -> failwith "tuples2: expected 2-element array from server");
+        }
+  | _ ->
+      Composite
+        {
+          label = Labels.tuple;
+          generate_fn =
+            (fun () ->
+              let a = generate g1 in
+              let b = generate g2 in
+              (a, b));
+        }
+
+(** [tuples3 g1 g2 g3] creates a generator for 3-element tuples.
+
+    When all elements are basic, a single [generate] command is sent. Otherwise,
+    elements are generated separately inside a {!Labels.tuple} span. *)
+let tuples3 (type a b c) (g1 : a generator) (g2 : b generator)
+    (g3 : c generator) : (a * b * c) generator =
+  match (as_basic g1, as_basic g2, as_basic g3) with
+  | Some (s1, t1), Some (s2, t2), Some (s3, t3) ->
+      let combined =
+        `Map
+          [
+            (`Text "type", `Text "tuple");
+            (`Text "elements", `Array [ s1; s2; s3 ]);
+          ]
+      in
+      Basic
+        {
+          schema = combined;
+          transform =
+            (fun raw ->
+              match raw with
+              | `Array [ v1; v2; v3 ] -> (t1 v1, t2 v2, t3 v3)
+              | _ -> failwith "tuples3: expected 3-element array from server");
+        }
+  | _ ->
+      Composite
+        {
+          label = Labels.tuple;
+          generate_fn =
+            (fun () ->
+              let a = generate g1 in
+              let b = generate g2 in
+              let c = generate g3 in
+              (a, b, c));
+        }
+
+(** [tuples4 g1 g2 g3 g4] creates a generator for 4-element tuples.
+
+    When all elements are basic, a single [generate] command is sent. Otherwise,
+    elements are generated separately inside a {!Labels.tuple} span. *)
+let tuples4 (type a b c d) (g1 : a generator) (g2 : b generator)
+    (g3 : c generator) (g4 : d generator) : (a * b * c * d) generator =
+  match (as_basic g1, as_basic g2, as_basic g3, as_basic g4) with
+  | Some (s1, t1), Some (s2, t2), Some (s3, t3), Some (s4, t4) ->
+      let combined =
+        `Map
+          [
+            (`Text "type", `Text "tuple");
+            (`Text "elements", `Array [ s1; s2; s3; s4 ]);
+          ]
+      in
+      Basic
+        {
+          schema = combined;
+          transform =
+            (fun raw ->
+              match raw with
+              | `Array [ v1; v2; v3; v4 ] -> (t1 v1, t2 v2, t3 v3, t4 v4)
+              | _ -> failwith "tuples4: expected 4-element array from server");
+        }
+  | _ ->
+      Composite
+        {
+          label = Labels.tuple;
+          generate_fn =
+            (fun () ->
+              let a = generate g1 in
+              let b = generate g2 in
+              let c = generate g3 in
+              let d = generate g4 in
+              (a, b, c, d));
+        }
