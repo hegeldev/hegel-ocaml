@@ -37,7 +37,7 @@ let accept_run_test server_conn =
   let pairs = Hegel.Cbor_helpers.extract_dict message in
   let test_ch_id =
     Int32.of_int
-      (Hegel.Cbor_helpers.extract_int (List.assoc (`Text "channel") pairs))
+      (Hegel.Cbor_helpers.extract_int (List.assoc (`Text "channel_id") pairs))
   in
   let test_channel = connect_channel server_conn test_ch_id ~role:"Test" () in
   send_response_value control msg_id (`Bool true);
@@ -51,7 +51,7 @@ let send_test_case server_conn test_channel =
       (`Map
          [
            (`Text "event", `Text "test_case");
-           (`Text "channel", `Int (Int32.to_int data_ch.channel_id));
+           (`Text "channel_id", `Int (Int32.to_int data_ch.channel_id));
          ])
   in
   ignore (receive_response_raw test_channel req_id ());

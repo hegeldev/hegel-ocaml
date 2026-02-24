@@ -86,7 +86,7 @@ let test_unrecognised_event () =
     let pairs = Hegel.Cbor_helpers.extract_dict message in
     let test_ch_id =
       Int32.of_int
-        (Hegel.Cbor_helpers.extract_int (List.assoc (`Text "channel") pairs))
+        (Hegel.Cbor_helpers.extract_int (List.assoc (`Text "channel_id") pairs))
     in
     let test_channel = connect_channel server_conn test_ch_id ~role:"Test" () in
     send_response_value control msg_id (`Bool true);
@@ -716,7 +716,7 @@ let test_run_test_case_nest () =
   close conn;
   Unix.close s2
 
-(** Test: missing "channel" field in test_case event raises Failure. *)
+(** Test: missing "channel_id" field in test_case event raises Failure. *)
 let test_run_test_test_case_missing_channel () =
   let server_socket, client_socket =
     Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
@@ -800,7 +800,7 @@ let test_run_test_missing_interesting_count () =
   Thread.join t;
   Alcotest.(check bool) "raised missing interesting count" true !raised
 
-(** Test: missing "channel" in n=1 interesting replay raises Failure. *)
+(** Test: missing "channel_id" in n=1 interesting replay raises Failure. *)
 let test_run_test_interesting_n1_missing_channel () =
   let server_socket, client_socket =
     Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
@@ -827,7 +827,7 @@ let test_run_test_interesting_n1_missing_channel () =
   Thread.join t;
   Alcotest.(check bool) "raised missing channel n=1" true !raised
 
-(** Test: missing "channel" in n>1 interesting replay raises Failure. *)
+(** Test: missing "channel_id" in n>1 interesting replay raises Failure. *)
 let test_run_test_interesting_n2_missing_channel () =
   let server_socket, client_socket =
     Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0

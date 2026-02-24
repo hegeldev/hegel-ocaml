@@ -198,7 +198,8 @@ let run_test client ~name ~test_cases test_fn =
                    (`Text "command", `Text "run_test");
                    (`Text "name", `Text name);
                    (`Text "test_cases", `Int test_cases);
-                   (`Text "channel", `Int (Int32.to_int test_channel.channel_id));
+                   ( `Text "channel_id",
+                     `Int (Int32.to_int test_channel.channel_id) );
                  ]))));
   let result_data = ref None in
   let continue = ref true in
@@ -212,9 +213,9 @@ let run_test client ~name ~test_cases test_fn =
     in
     if event = "test_case" then begin
       let channel_id =
-        match List.assoc_opt (`Text "channel") pairs with
+        match List.assoc_opt (`Text "channel_id") pairs with
         | Some v -> Int32.of_int (Cbor_helpers.extract_int v)
-        | None -> failwith "test_case event missing 'channel' field"
+        | None -> failwith "test_case event missing 'channel_id' field"
       in
       send_response_value test_channel message_id `Null;
       let test_case_channel =
@@ -253,9 +254,10 @@ let run_test client ~name ~test_cases test_fn =
     let message_id, message = receive_request test_channel () in
     let pairs = Cbor_helpers.extract_dict message in
     let channel_id =
-      match List.assoc_opt (`Text "channel") pairs with
+      match List.assoc_opt (`Text "channel_id") pairs with
       | Some v -> Int32.of_int (Cbor_helpers.extract_int v)
-      | None -> failwith "interesting test_case event missing 'channel' field"
+      | None ->
+          failwith "interesting test_case event missing 'channel_id' field"
     in
     send_response_value test_channel message_id `Null;
     let test_case_channel =
@@ -270,10 +272,10 @@ let run_test client ~name ~test_cases test_fn =
         let message_id, message = receive_request test_channel () in
         let pairs = Cbor_helpers.extract_dict message in
         let channel_id =
-          match List.assoc_opt (`Text "channel") pairs with
+          match List.assoc_opt (`Text "channel_id") pairs with
           | Some v -> Int32.of_int (Cbor_helpers.extract_int v)
           | None ->
-              failwith "interesting test_case event missing 'channel' field"
+              failwith "interesting test_case event missing 'channel_id' field"
         in
         send_response_value test_channel message_id `Null;
         let test_case_channel =
