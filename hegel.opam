@@ -3,8 +3,6 @@ opam-version: "2.0"
 synopsis: "Hegel property-based testing SDK for OCaml"
 description:
   "A property-based testing SDK that communicates with the Hegel server (hegeld) to enable universal property-based testing from OCaml."
-maintainer: ["Antithesis <engineering@antithesis.com>"]
-authors: ["Antithesis <engineering@antithesis.com>"]
 license: "MIT"
 homepage: "https://github.com/antithesishq/hegel-ocaml"
 bug-reports: "https://github.com/antithesishq/hegel-ocaml/issues"

@@ -7,10 +7,6 @@
 (source
  (github antithesishq/hegel-ocaml))
 
-(authors "Antithesis <engineering@antithesis.com>")
-
-(maintainers "Antithesis <engineering@antithesis.com>")
-
 (license MIT)
 
 (package
