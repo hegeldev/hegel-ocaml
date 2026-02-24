@@ -912,14 +912,15 @@ let test_state_connection_lifecycle () =
 
 let test_extract_channel_id () =
   let valid =
-    Hegel.Cbor.Map [ (Hegel.Cbor.Text "channel", Hegel.Cbor.Unsigned 42) ]
+    Hegel.Cbor.Map [ (Hegel.Cbor.Text "channel_id", Hegel.Cbor.Unsigned 42) ]
   in
   assert (Hegel.extract_channel_id valid = 42);
   let missing = Hegel.Cbor.Map [] in
   expect_failure "extract_channel_id missing" (fun () ->
       ignore (Hegel.extract_channel_id missing));
   let wrong_type =
-    Hegel.Cbor.Map [ (Hegel.Cbor.Text "channel", Hegel.Cbor.Text "not an int") ]
+    Hegel.Cbor.Map
+      [ (Hegel.Cbor.Text "channel_id", Hegel.Cbor.Text "not an int") ]
   in
   expect_failure "extract_channel_id wrong type" (fun () ->
       ignore (Hegel.extract_channel_id wrong_type))

@@ -10,7 +10,7 @@ let find_hegel_path () =
   find dirs
 
 let extract_channel_id event =
-  match Cbor.map_get event "channel" with
+  match Cbor.map_get event "channel_id" with
   | Some v -> (
       match Cbor.as_int v with
       | Some n -> n
@@ -103,7 +103,7 @@ let rec run ?(test_cases = 100) ?hegel_path test_fn =
           (Cbor.Text "command", Cbor.Text "run_test");
           (Cbor.Text "name", Cbor.Text "test");
           (Cbor.Text "test_cases", Cbor.Unsigned test_cases);
-          (Cbor.Text "channel", Cbor.Unsigned test_channel_id);
+          (Cbor.Text "channel_id", Cbor.Unsigned test_channel_id);
         ]
     in
     let run_test_id =
