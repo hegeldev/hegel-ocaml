@@ -335,8 +335,18 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
     file. This is idiomatic OCaml — module-level `let` aliases are cheap and keep the call
     sites clean while eliminating copy-paste.
 
-23. **OCaml codebase is stable and well-structured after greybeard pass**: After two rounds
+23. **OCaml codebase is stable and well-structured after greybeard pass**: After three rounds
     of expert review, the lib/ code has no reinvented wheels, no non-idiomatic patterns,
     no needless complexity, no bad names, and no dead code. The `List.filter_map Fun.id`
     pattern for optional schema fields, `Option.fold` for accumulator updates, and
     `Fun.protect ~finally` for resource cleanup are all standard idiomatic OCaml.
+
+24. **`dune-project` license must match the actual LICENSE file**: The `(license ...)` field
+    in `dune-project` is propagated to the generated `.opam` file. If these disagree with
+    the actual `LICENSE` file, downstream tooling (opam, GitHub license detection) will show
+    conflicting information. Always check that the declared license matches the file.
+
+25. **Shared conformance helpers belong in `json_params.ml`**: Utility functions used by
+    multiple conformance binaries (like `int_opt_to_json`) should live in the shared
+    `json_params` module rather than being copy-pasted into each binary. The conformance
+    binaries already depend on `json_params` via the dune `(libraries ...)` stanza.
