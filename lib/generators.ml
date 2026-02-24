@@ -1,7 +1,7 @@
 (** Generator combinators for the Hegel SDK.
 
     This module provides a composable generator API for property-based testing.
-    Generators produce CBOR values and can be combined using {!map},
+    Generators produce typed OCaml values and can be combined using {!map},
     {!flat_map}, and {!filter}. {!Basic} generators preserve schemas through
     {!map} for optimized server communication.
 
@@ -29,10 +29,10 @@ module Labels = struct
   let enum_variant = 15
 end
 
-(** The type of generators. Generators produce CBOR values and can be combined
-    using {!map}, {!flat_map}, and {!filter}.
+(** The type of generators. Generators produce typed OCaml values and can be
+    combined using {!map}, {!flat_map}, and {!filter}.
 
-    - [Basic] generators hold a raw schema and an optional client-side
+    - [Basic] generators hold a raw schema and a mandatory client-side
       transform. Calling {!map} on a [Basic] generator preserves the schema and
       composes transforms.
     - [Mapped] generators wrap a source generator and a transform function.
@@ -41,19 +41,25 @@ end
     - [Filtered] generators wrap a source and a predicate.
     - [CompositeList] generators use the collection protocol to generate lists
       of non-basic elements, creating a fresh collection per generate call. *)
-type generator =
-  | Basic of {
+type 'a generator =
+  | Basic : {
       schema : CBOR.Simple.t;
-      transform : (CBOR.Simple.t -> CBOR.Simple.t) option;
+      transform : CBOR.Simple.t -> 'a;
     }
-  | Mapped of { source : generator; f : CBOR.Simple.t -> CBOR.Simple.t }
-  | FlatMapped of { source : generator; f : CBOR.Simple.t -> generator }
-  | Filtered of { source : generator; predicate : CBOR.Simple.t -> bool }
-  | CompositeList of {
-      elements : generator;
+      -> 'a generator
+  | Mapped : { source : 'b generator; f : 'b -> 'a } -> 'a generator
+  | FlatMapped : {
+      source : 'b generator;
+      f : 'b -> 'a generator;
+    }
+      -> 'a generator
+  | Filtered : { source : 'a generator; predicate : 'a -> bool } -> 'a generator
+  | CompositeList : {
+      elements : 'a generator;
       min_size : int;
       max_size : int option;
     }
+      -> 'a list generator
 
 (** Maximum number of filter attempts before calling [assume false]. *)
 let max_filter_attempts = 3
@@ -162,12 +168,12 @@ let collection_reject coll =
                ])))
   end
 
-(** [generate gen] produces a value from generator [gen]. *)
-let rec generate gen =
+(** [generate gen] produces a typed value from generator [gen]. *)
+let rec generate : type a. a generator -> a =
+ fun gen ->
   match gen with
-  | Basic { schema; transform = None } -> Client.generate_from_schema schema
-  | Basic { schema; transform = Some f } ->
-      f (Client.generate_from_schema schema)
+  | Basic { schema; transform } ->
+      transform (Client.generate_from_schema schema)
   | Mapped { source; f } ->
       group Labels.mapped (fun () ->
           let value = generate source in
@@ -201,17 +207,17 @@ let rec generate gen =
           while collection_more coll do
             result := generate elements :: !result
           done;
-          `Array (List.rev !result))
+          List.rev !result)
 
 (** [map f gen] transforms values from [gen] using [f].
 
     When [gen] is a [Basic] generator, the schema is preserved and transforms
     are composed. Otherwise, a [Mapped] generator is created. *)
-let map f gen =
+let map : type a b. (a -> b) -> a generator -> b generator =
+ fun f gen ->
   match gen with
-  | Basic { schema; transform = None } -> Basic { schema; transform = Some f }
-  | Basic { schema; transform = Some existing } ->
-      Basic { schema; transform = Some (fun x -> f (existing x)) }
+  | Basic { schema; transform } ->
+      Basic { schema; transform = (fun x -> f (transform x)) }
   | other -> Mapped { source = other; f }
 
 (** [flat_map f gen] creates a dependent generator. The function [f] receives
@@ -225,15 +231,19 @@ let flat_map f gen = FlatMapped { source = gen; f }
 let filter predicate gen = Filtered { source = gen; predicate }
 
 (** [schema gen] returns the schema for a [Basic] generator, or [None]. *)
-let schema gen = match gen with Basic { schema; _ } -> Some schema | _ -> None
+let schema : type a. a generator -> CBOR.Simple.t option = function
+  | Basic { schema; _ } -> Some schema
+  | _ -> None
 
 (** [is_basic gen] returns [true] if [gen] is a [Basic] generator. *)
-let is_basic gen = match gen with Basic _ -> true | _ -> false
+let is_basic : type a. a generator -> bool = function
+  | Basic _ -> true
+  | _ -> false
 
 (** [as_basic gen] returns [Some (schema, transform)] if [gen] is [Basic], or
     [None] otherwise. *)
-let as_basic gen =
-  match gen with
+let as_basic : type a.
+    a generator -> (CBOR.Simple.t * (CBOR.Simple.t -> a)) option = function
   | Basic { schema; transform } -> Some (schema, transform)
   | _ -> None
 
@@ -248,11 +258,15 @@ let integers ?min_value ?max_value () =
         Option.map (fun v -> (`Text "max_value", `Int v)) max_value;
       ]
   in
-  Basic { schema = `Map pairs; transform = None }
+  Basic { schema = `Map pairs; transform = Cbor_helpers.extract_int }
 
 (** [booleans ()] creates a generator for boolean values. *)
 let booleans () =
-  Basic { schema = `Map [ (`Text "type", `Text "boolean") ]; transform = None }
+  Basic
+    {
+      schema = `Map [ (`Text "type", `Text "boolean") ];
+      transform = Cbor_helpers.extract_bool;
+    }
 
 (** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
      ?allow_infinity ()] creates a generator for floating-point values.
@@ -292,7 +306,7 @@ let floats ?min_value ?max_value ?(exclude_min = false) ?(exclude_max = false)
           Option.map (fun v -> (`Text "max_value", `Float v)) max_value;
         ]
   in
-  Basic { schema = `Map pairs; transform = None }
+  Basic { schema = `Map pairs; transform = Cbor_helpers.extract_float }
 
 (** [text ?min_size ?max_size ()] creates a generator for Unicode text strings.
 
@@ -306,7 +320,7 @@ let text ?(min_size = 0) ?max_size () =
         Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size;
       ]
   in
-  Basic { schema = `Map pairs; transform = None }
+  Basic { schema = `Map pairs; transform = Cbor_helpers.extract_string }
 
 (** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.
 *)
@@ -319,34 +333,33 @@ let binary ?(min_size = 0) ?max_size () =
         Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size;
       ]
   in
-  Basic { schema = `Map pairs; transform = None }
+  Basic { schema = `Map pairs; transform = Cbor_helpers.extract_bytes }
 
 (** [sampled_from options] creates a generator that samples uniformly from a
-    non-empty list of CBOR values.
+    non-empty list of values.
 
-    Uses a top-level ["sampled_from"] key (not a ["type"] field) as required by
-    the Hegel server. *)
+    Implemented as an integer index generator: picks an index in [0, n-1] and
+    returns [options.(index)]. *)
 let sampled_from options =
-  Basic
-    {
-      schema = `Map [ (`Text "sampled_from", `Array options) ];
-      transform = None;
-    }
+  let arr = Array.of_list options in
+  let n = Array.length arr in
+  map (fun i -> arr.(i)) (integers ~min_value:0 ~max_value:(n - 1) ())
 
 (** [hashmaps keys values ?min_size ?max_size ()] creates a generator for
     dictionaries (hash maps). [keys] and [values] must be basic generators.
 
     The server returns the dict as a list of [[key, value]] pairs. The
-    [hashmaps] generator automatically transforms this to a CBOR map. *)
+    [hashmaps] generator automatically transforms this to a list of
+    [(key, value)] tuples. *)
 let hashmaps keys values ?(min_size = 0) ?max_size () =
-  let key_schema =
+  let key_schema, key_transform =
     match keys with
-    | Basic { schema; _ } -> schema
+    | Basic { schema; transform } -> (schema, transform)
     | _ -> failwith "hashmaps: keys generator must be a Basic generator"
   in
-  let val_schema =
+  let val_schema, val_transform =
     match values with
-    | Basic { schema; _ } -> schema
+    | Basic { schema; transform } -> (schema, transform)
     | _ -> failwith "hashmaps: values generator must be a Basic generator"
   in
   let pairs =
@@ -359,27 +372,25 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
         Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size;
       ]
   in
-  (* The server returns dicts as [[k, v], ...] lists. We transform to CBOR map. *)
+  (* The server returns dicts as [[k, v], ...] lists. We transform to typed
+     pairs. *)
   let transform raw =
     match raw with
     | `Array kv_pairs ->
-        let map_pairs =
-          List.map
-            (function
-              | `Array [ k; v ] -> (k, v)
-              | _ -> failwith "hashmaps: expected [k, v] pair from server")
-            kv_pairs
-        in
-        `Map map_pairs
+        List.map
+          (function
+            | `Array [ k; v ] -> (key_transform k, val_transform v)
+            | _ -> failwith "hashmaps: expected [k, v] pair from server")
+          kv_pairs
     | _ -> failwith "hashmaps: expected array from server"
   in
-  Basic { schema = `Map pairs; transform = Some transform }
+  Basic { schema = `Map pairs; transform }
 
 (** [lists elements ?min_size ?max_size ()] creates a generator for lists.
 
     When [elements] is a [Basic] generator, sends a [list] schema to the server
-    and lets it generate the entire list (fast path). The element transform, if
-    any, is lifted to apply to every item in the resulting list.
+    and lets it generate the entire list (fast path). The element transform is
+    lifted to apply to every item in the resulting list.
 
     When [elements] is non-basic (e.g. filtered or flat-mapped), uses the
     collection protocol inside a {!Labels.list} span to generate elements one at
@@ -397,17 +408,12 @@ let lists elements ?(min_size = 0) ?max_size () =
           ]
       in
       let raw_schema = `Map pairs in
-      let list_transform =
-        match elem_transform with
-        | None -> None
-        | Some t ->
-            Some
-              (fun raw_list ->
-                match raw_list with
-                | `Array items -> `Array (List.map t items)
-                | _ ->
-                    (* Server always returns Array for list schema *)
-                    assert false)
+      let list_transform raw_list =
+        match raw_list with
+        | `Array items -> List.map elem_transform items
+        | _ ->
+            (* Server always returns Array for list schema *)
+            assert false
       in
       Basic { schema = raw_schema; transform = list_transform }
   | None ->

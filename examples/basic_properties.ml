@@ -9,14 +9,8 @@ open Hegel.Client
 let test_integer_arithmetic () =
   Hegel.Session.run_hegel_test ~name:"integer_arithmetic" ~test_cases:100
     (fun () ->
-      let a =
-        Hegel.Cbor_helpers.extract_int
-          (generate (integers ~min_value:(-1000) ~max_value:1000 ()))
-      in
-      let b =
-        Hegel.Cbor_helpers.extract_int
-          (generate (integers ~min_value:(-1000) ~max_value:1000 ()))
-      in
+      let a = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in
+      let b = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in
       (* Addition is commutative *)
       assert (a + b = b + a);
       (* Double negation is identity *)
@@ -27,8 +21,8 @@ let test_integer_arithmetic () =
 (** Property: boolean identities. *)
 let test_boolean_laws () =
   Hegel.Session.run_hegel_test ~name:"boolean_laws" ~test_cases:50 (fun () ->
-      let p = Hegel.Cbor_helpers.extract_bool (generate (booleans ())) in
-      let q = Hegel.Cbor_helpers.extract_bool (generate (booleans ())) in
+      let p = generate (booleans ()) in
+      let q = generate (booleans ()) in
       (* De Morgan's law *)
       assert (((not p) || not q) = not (p && q));
       (* Double negation *)
@@ -40,14 +34,8 @@ let test_boolean_laws () =
 let test_division () =
   Hegel.Session.run_hegel_test ~name:"division_identity" ~test_cases:100
     (fun () ->
-      let n =
-        Hegel.Cbor_helpers.extract_int
-          (generate (integers ~min_value:(-1000) ~max_value:1000 ()))
-      in
-      let d =
-        Hegel.Cbor_helpers.extract_int
-          (generate (integers ~min_value:(-1000) ~max_value:1000 ()))
-      in
+      let n = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in
+      let d = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in
       assume (d <> 0);
       note (Printf.sprintf "n=%d d=%d" n d);
       (* Integer division: n = (n / d) * d + (n mod d) *)
@@ -56,19 +44,13 @@ let test_division () =
 (** Property: text strings have non-negative length. *)
 let test_text_length () =
   Hegel.Session.run_hegel_test ~name:"text_length" ~test_cases:100 (fun () ->
-      let s =
-        Hegel.Cbor_helpers.extract_string
-          (generate (text ~min_size:0 ~max_size:50 ()))
-      in
+      let s = generate (text ~min_size:0 ~max_size:50 ()) in
       assert (String.length s >= 0))
 
 (** Property: binary blobs have non-negative byte length. *)
 let test_binary_length () =
   Hegel.Session.run_hegel_test ~name:"binary_length" ~test_cases:100 (fun () ->
-      let b =
-        Hegel.Cbor_helpers.extract_bytes
-          (generate (binary ~min_size:0 ~max_size:50 ()))
-      in
+      let b = generate (binary ~min_size:0 ~max_size:50 ()) in
       assert (String.length b >= 0))
 
 (** Property: finite floats are their own doubles divided by two. Uses
@@ -76,10 +58,9 @@ let test_binary_length () =
 let test_float_finite () =
   Hegel.Session.run_hegel_test ~name:"float_finite" ~test_cases:100 (fun () ->
       let x =
-        Hegel.Cbor_helpers.extract_float
-          (generate
-             (floats ~min_value:(-1e6) ~max_value:1e6 ~allow_nan:false
-                ~allow_infinity:false ()))
+        generate
+          (floats ~min_value:(-1e6) ~max_value:1e6 ~allow_nan:false
+             ~allow_infinity:false ())
       in
       assert (Float.is_finite x))
 

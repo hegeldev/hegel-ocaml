@@ -290,26 +290,32 @@ let test_binary_schema_no_max () =
         (List.mem_assoc (`Text "max_size") pairs)
   | None -> Alcotest.fail "expected schema"
 
-(** Test: sampled_from() produces a Basic generator using "sampled_from" key. *)
+(** Test: sampled_from() produces a Basic generator using integer index schema.
+    Since sampled_from is implemented via integers + map, the schema is an
+    integer schema (type=integer, min=0, max=n-1). *)
 let test_sampled_from_schema () =
-  let options = [ `Int 1; `Int 2; `Int 3 ] in
+  let options = [ 1; 2; 3 ] in
   let gen = sampled_from options in
   Alcotest.(check bool) "is_basic" true (is_basic gen);
   match schema gen with
   | Some s ->
       let pairs = Hegel.Cbor_helpers.extract_dict s in
-      (* sampled_from uses a top-level key, not a type field *)
+      (* sampled_from uses an integer index schema *)
       Alcotest.(check bool)
-        "has sampled_from key" true
-        (List.mem_assoc (`Text "sampled_from") pairs);
-      Alcotest.(check bool)
-        "no type field" false
+        "has type field" true
         (List.mem_assoc (`Text "type") pairs);
-      let opts =
-        Hegel.Cbor_helpers.extract_list
-          (List.assoc (`Text "sampled_from") pairs)
+      let typ =
+        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
       in
-      Alcotest.(check int) "3 options" 3 (List.length opts)
+      Alcotest.(check string) "type is integer" "integer" typ;
+      let min_v =
+        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "min_value") pairs)
+      in
+      Alcotest.(check int) "min_value 0" 0 min_v;
+      let max_v =
+        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "max_value") pairs)
+      in
+      Alcotest.(check int) "max_value 2 (n-1)" 2 max_v
   | None -> Alcotest.fail "expected schema"
 
 (** Test: hashmaps() produces a Basic generator with type=dict schema and a
@@ -320,7 +326,7 @@ let test_hashmaps_schema () =
   let gen = hashmaps key_gen val_gen ~min_size:2 ~max_size:5 () in
   Alcotest.(check bool) "is_basic" true (is_basic gen);
   match as_basic gen with
-  | Some (s, Some _transform) ->
+  | Some (s, _transform) ->
       let pairs = Hegel.Cbor_helpers.extract_dict s in
       let typ =
         Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
@@ -334,7 +340,6 @@ let test_hashmaps_schema () =
       in
       Alcotest.(check int) "min_size" 2 min_size;
       Alcotest.(check int) "max_size" 5 max_size
-  | Some (_, None) -> Alcotest.fail "expected transform"
   | None -> Alcotest.fail "expected basic generator"
 
 (** Test: hashmaps() without max_size omits it from schema. *)
@@ -350,27 +355,21 @@ let test_hashmaps_schema_no_max () =
         (List.mem_assoc (`Text "max_size") pairs)
   | None -> Alcotest.fail "expected schema"
 
-(** Test: hashmaps() transform converts [[k,v],...] to a CBOR map. *)
+(** Test: hashmaps() transform converts [[k,v],...] to a list of typed pairs. *)
 let test_hashmaps_transform () =
   let key_gen = integers () in
   let val_gen = integers () in
   let gen = hashmaps key_gen val_gen () in
   match as_basic gen with
-  | Some (_schema, Some transform) -> (
+  | Some (_schema, transform) ->
       (* Normal case: array of [k, v] pairs *)
       let raw =
         `Array [ `Array [ `Int 1; `Int 10 ]; `Array [ `Int 2; `Int 20 ] ]
       in
       let result = transform raw in
-      match result with
-      | `Map pairs ->
-          Alcotest.(check int) "2 pairs" 2 (List.length pairs);
-          let v1 = List.assoc (`Int 1) pairs in
-          Alcotest.(check int)
-            "first value" 10
-            (Hegel.Cbor_helpers.extract_int v1)
-      | _ -> Alcotest.fail "expected map")
-  | Some (_, None) -> Alcotest.fail "expected transform"
+      Alcotest.(check int) "2 pairs" 2 (List.length result);
+      let v1 = List.assoc 1 result in
+      Alcotest.(check int) "first value" 10 v1
   | None -> Alcotest.fail "expected basic generator"
 
 (** Test: hashmaps() transform raises on non-array input. *)
@@ -379,14 +378,13 @@ let test_hashmaps_transform_bad_outer () =
   let val_gen = integers () in
   let gen = hashmaps key_gen val_gen () in
   match as_basic gen with
-  | Some (_schema, Some transform) ->
+  | Some (_schema, transform) ->
       let raised =
         match transform (`Int 42) with
         | _ -> false
         | exception Failure _ -> true
       in
       Alcotest.(check bool) "raises on non-array" true raised
-  | Some (_, None) -> Alcotest.fail "expected transform"
   | None -> Alcotest.fail "expected basic generator"
 
 (** Test: hashmaps() transform raises on bad inner pair. *)
@@ -395,14 +393,13 @@ let test_hashmaps_transform_bad_inner () =
   let val_gen = integers () in
   let gen = hashmaps key_gen val_gen () in
   match as_basic gen with
-  | Some (_schema, Some transform) ->
+  | Some (_schema, transform) ->
       let raised =
         match transform (`Array [ `Int 99 ]) with
         | _ -> false
         | exception Failure _ -> true
       in
       Alcotest.(check bool) "raises on bad pair" true raised
-  | Some (_, None) -> Alcotest.fail "expected transform"
   | None -> Alcotest.fail "expected basic generator"
 
 (** Test: hashmaps() raises when keys are non-basic. *)
@@ -432,43 +429,38 @@ let test_hashmaps_non_basic_values_raises () =
 (** Test: floats() E2E — values are floats. *)
 let test_floats_e2e () =
   Hegel.Session.run_hegel_test ~name:"floats_e2e" ~test_cases:10 (fun () ->
-      let v = generate (floats ~allow_nan:false ~allow_infinity:false ()) in
-      let f = Hegel.Cbor_helpers.extract_float v in
+      let f = generate (floats ~allow_nan:false ~allow_infinity:false ()) in
       assert (Float.is_finite f))
 
 (** Test: floats() with bounds E2E — values within range. *)
 let test_floats_bounds_e2e () =
   Hegel.Session.run_hegel_test ~name:"floats_bounds_e2e" ~test_cases:10
     (fun () ->
-      let v =
+      let f =
         generate
           (floats ~min_value:0.0 ~max_value:1.0 ~allow_nan:false
              ~allow_infinity:false ())
       in
-      let f = Hegel.Cbor_helpers.extract_float v in
       assert (f >= 0.0 && f <= 1.0))
 
 (** Test: text() E2E — values are text strings. *)
 let test_text_e2e () =
   Hegel.Session.run_hegel_test ~name:"text_e2e" ~test_cases:10 (fun () ->
-      let v = generate (text ~min_size:1 ~max_size:10 ()) in
-      let s = Hegel.Cbor_helpers.extract_string v in
+      let s = generate (text ~min_size:1 ~max_size:10 ()) in
       assert (String.length s >= 1))
 
 (** Test: binary() E2E — values are byte strings. *)
 let test_binary_e2e () =
   Hegel.Session.run_hegel_test ~name:"binary_e2e" ~test_cases:10 (fun () ->
-      let v = generate (binary ~min_size:0 ~max_size:10 ()) in
-      let b = Hegel.Cbor_helpers.extract_bytes v in
+      let b = generate (binary ~min_size:0 ~max_size:10 ()) in
       assert (String.length b >= 0))
 
 (** Test: sampled_from() E2E — values come from the options list. *)
 let test_sampled_from_e2e () =
-  let options = [ `Int 10; `Int 20; `Int 30 ] in
+  let options = [ 10; 20; 30 ] in
   Hegel.Session.run_hegel_test ~name:"sampled_from_e2e" ~test_cases:10
     (fun () ->
-      let v = generate (sampled_from options) in
-      let n = Hegel.Cbor_helpers.extract_int v in
+      let n = generate (sampled_from options) in
       assert (List.mem n [ 10; 20; 30 ]))
 
 (** Test: hashmaps() E2E — values are maps. *)
@@ -477,8 +469,7 @@ let test_hashmaps_e2e () =
       let key_gen = integers ~min_value:0 ~max_value:100 () in
       let val_gen = integers ~min_value:0 ~max_value:100 () in
       let gen = hashmaps key_gen val_gen ~min_size:0 ~max_size:5 () in
-      let v = generate gen in
-      let pairs = Hegel.Cbor_helpers.extract_dict v in
+      let pairs = generate gen in
       assert (List.length pairs <= 5))
 
 let tests =

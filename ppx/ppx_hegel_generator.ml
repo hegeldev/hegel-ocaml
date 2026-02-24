@@ -5,7 +5,7 @@
 
     When called inside a Hegel test body, these functions generate a value of
     the declared type by calling [Hegel.Generators.generate] with appropriate
-    generators and extracting the OCaml values.
+    generators and returning typed OCaml values directly.
 
     Supported types:
     - Records: generates all fields, then constructs the record
@@ -13,10 +13,10 @@
     - Type aliases: delegates to the generator for the aliased type
 
     Supported field/argument types:
-    - [int] → generates via [integers()] and extracts
-    - [bool] → generates via [booleans()] and extracts
+    - [int] → generates via [integers()]
+    - [bool] → generates via [booleans()]
     - [float] → generates via [floats ~allow_nan:false ~allow_infinity:false ()]
-    - [string] → generates via [text()] and extracts
+    - [string] → generates via [text()]
     - [t list] → generates a list length, then generates each element
     - [t option] → generates [Some v] or [None]
     - Named type [t] → calls [t_generator ()] (assumes it exists in scope) *)
@@ -31,27 +31,18 @@ let rec generate_expr_of_core_type (ct : core_type) : expression =
   | Ptyp_constr ({ txt = Lident "int"; _ }, []) ->
       [%expr
         fun () ->
-          Hegel.Cbor_helpers.extract_int
-            (Hegel.Generators.generate
-               (Hegel.Generators.integers ~min_value:(-1073741823)
-                  ~max_value:1073741823 ()))]
+          Hegel.Generators.generate
+            (Hegel.Generators.integers ~min_value:(-1073741823)
+               ~max_value:1073741823 ())]
   | Ptyp_constr ({ txt = Lident "bool"; _ }, []) ->
-      [%expr
-        fun () ->
-          Hegel.Cbor_helpers.extract_bool
-            (Hegel.Generators.generate (Hegel.Generators.booleans ()))]
+      [%expr fun () -> Hegel.Generators.generate (Hegel.Generators.booleans ())]
   | Ptyp_constr ({ txt = Lident "float"; _ }, []) ->
       [%expr
         fun () ->
-          Hegel.Cbor_helpers.extract_float
-            (Hegel.Generators.generate
-               (Hegel.Generators.floats ~allow_nan:false ~allow_infinity:false
-                  ()))]
+          Hegel.Generators.generate
+            (Hegel.Generators.floats ~allow_nan:false ~allow_infinity:false ())]
   | Ptyp_constr ({ txt = Lident "string"; _ }, []) ->
-      [%expr
-        fun () ->
-          Hegel.Cbor_helpers.extract_string
-            (Hegel.Generators.generate (Hegel.Generators.text ()))]
+      [%expr fun () -> Hegel.Generators.generate (Hegel.Generators.text ())]
   | Ptyp_constr ({ txt = Lident "list"; _ }, [ elem_type ]) ->
       let elem_gen_fn = generate_expr_of_core_type elem_type in
       [%expr fun () -> Hegel.Derive.generate_list [%e elem_gen_fn]]
@@ -164,9 +155,7 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) :
   if n = 0 then
     Location.raise_errorf ~loc
       "ppx_hegel_generator: empty variant types not supported";
-  let index_options =
-    List.init n (fun i -> [%expr `Int [%e Ast_builder.Default.eint ~loc i]])
-  in
+  let index_options = List.init n (fun i -> Ast_builder.Default.eint ~loc i) in
   let match_arms =
     List.mapi
       (fun i (cd : constructor_declaration) ->
@@ -246,10 +235,9 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) :
   [%expr
     fun () ->
       let _variant_idx =
-        Hegel.Cbor_helpers.extract_int
-          (Hegel.Generators.generate
-             (Hegel.Generators.sampled_from
-                [%e Ast_builder.Default.elist ~loc index_options]))
+        Hegel.Generators.generate
+          (Hegel.Generators.sampled_from
+             [%e Ast_builder.Default.elist ~loc index_options])
       in
       [%e match_expr]]
 

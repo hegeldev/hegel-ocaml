@@ -56,9 +56,9 @@ conformance:
     set -euo pipefail
     export PATH="$(pwd)/.venv/bin:$PATH"
     eval $(opam env 2>/dev/null || true)
-    # Install pytest and pytest-subtests if not already available
+    # Install pytest if not already available
     if ! .venv/bin/python -c "import pytest" 2>/dev/null; then
-        uv pip install --python .venv/bin/python pytest pytest-subtests
+        uv pip install --python .venv/bin/python pytest
     fi
     # Build conformance binaries
     dune build conformance/

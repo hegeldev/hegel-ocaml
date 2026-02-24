@@ -135,7 +135,7 @@ let start session =
   end
 
 (** [restart_session ()] forces a restart of the global session. Useful when
-    environment variables (like [HEGEL_TEST_MODE]) have changed. *)
+    environment variables (like [HEGEL_PROTOCOL_TEST_MODE]) have changed. *)
 let restart_session () = cleanup global_session
 
 (** [run_hegel_test ?test_cases ?name test_fn] runs a property test using the

@@ -26,7 +26,7 @@ open Hegel.Generators
 let test_integers () =
   Hegel.Session.run_hegel_test ~name:"test_integers" ~test_cases:100
     (fun () ->
-      let n = Hegel.Cbor_helpers.extract_int (generate (integers ())) in
+      let n = generate (integers ()) in
       Printf.printf "called with %d\n%!" n;
       assert (n = n))  (* integers are always equal to themselves *)
 
@@ -34,8 +34,9 @@ let () = test_integers ()
 ```
 
 Inside the test body you call `generate` on generators to produce random values.
-When executed, Hegel generates random inputs matching the generator's
-specification. Running `./example.exe` produces output like:
+The `generate` function returns a typed OCaml value directly — no extraction
+step is needed. When executed, Hegel generates random inputs matching the
+generator's specification. Running `./example.exe` produces output like:
 
 ```
 called with 0
@@ -63,8 +64,7 @@ open Hegel.Generators
 let test_integers_bounded () =
   Hegel.Session.run_hegel_test ~name:"integers_bounded" ~test_cases:100
     (fun () ->
-      let n = Hegel.Cbor_helpers.extract_int
-                (generate (integers ~min_value:0 ~max_value:200 ())) in
+      let n = generate (integers ~min_value:0 ~max_value:200 ()) in
       assert (n < 50))  (* this will fail! *)
 
 let () =
@@ -85,8 +85,8 @@ open Hegel.Generators
 let test_multiple_values () =
   Hegel.Session.run_hegel_test ~name:"multiple_values" ~test_cases:50
     (fun () ->
-      let n = Hegel.Cbor_helpers.extract_int (generate (integers ())) in
-      let s = Hegel.Cbor_helpers.extract_string (generate (text ())) in
+      let n = generate (integers ()) in
+      let s = generate (text ()) in
       assert (n = n);          (* integers are reflexive *)
       assert (String.length s >= 0))  (* strings have non-negative length *)
 ```
@@ -106,10 +106,7 @@ open Hegel.Generators
 let test_even_integers () =
   Hegel.Session.run_hegel_test ~name:"even_integers" ~test_cases:50
     (fun () ->
-      let n = Hegel.Cbor_helpers.extract_int
-                (generate (filter
-                  (fun v -> Hegel.Cbor_helpers.extract_int v mod 2 = 0)
-                  (integers ()))) in
+      let n = generate (filter (fun v -> v mod 2 = 0) (integers ())) in
       assert (n mod 2 = 0))
 ```
 
@@ -123,8 +120,8 @@ open Hegel.Client
 let test_division () =
   Hegel.Session.run_hegel_test ~name:"division" ~test_cases:100
     (fun () ->
-      let n1 = Hegel.Cbor_helpers.extract_int (generate (integers ())) in
-      let n2 = Hegel.Cbor_helpers.extract_int (generate (integers ())) in
+      let n1 = generate (integers ()) in
+      let n2 = generate (integers ()) in
       assume (n2 <> 0);
       (* n2 is guaranteed non-zero here *)
       assert (n1 = (n1 / n2) * n2 + (n1 mod n2)))
@@ -143,11 +140,12 @@ open Hegel.Generators
 let test_string_integers () =
   Hegel.Session.run_hegel_test ~name:"string_integers" ~test_cases:50
     (fun () ->
-      let s = Hegel.Cbor_helpers.extract_string
-                (generate (map
-                  (fun v ->
-                    `Text (string_of_int (Hegel.Cbor_helpers.extract_int v)))
-                  (integers ~min_value:0 ~max_value:100 ()))) in
+      let s =
+        generate
+          (map
+            (fun n -> string_of_int n)
+            (integers ~min_value:0 ~max_value:100 ()))
+      in
       assert (int_of_string s >= 0))
 ```
 
@@ -162,12 +160,9 @@ open Hegel.Generators
 let test_list_with_valid_index () =
   Hegel.Session.run_hegel_test ~name:"list_index" ~test_cases:50
     (fun () ->
-      let n = Hegel.Cbor_helpers.extract_int
-                (generate (integers ~min_value:1 ~max_value:10 ())) in
-      let lst = Hegel.Cbor_helpers.extract_list
-                  (generate (lists (integers ()) ~min_size:n ~max_size:n ())) in
-      let index = Hegel.Cbor_helpers.extract_int
-                    (generate (integers ~min_value:0 ~max_value:(n - 1) ())) in
+      let n = generate (integers ~min_value:1 ~max_value:10 ()) in
+      let lst = generate (lists (integers ()) ~min_size:n ~max_size:n ()) in
+      let index = generate (integers ~min_value:0 ~max_value:(n - 1) ()) in
       assert (index >= 0 && index < List.length lst))
 ```
 
@@ -184,17 +179,15 @@ open Hegel.Generators
 let test_list_with_valid_index_flatmap () =
   Hegel.Session.run_hegel_test ~name:"list_index_flatmap" ~test_cases:50
     (fun () ->
-      let pair = generate (flat_map
-        (fun n_v ->
-          let n = Hegel.Cbor_helpers.extract_int n_v in
-          map
-            (fun lst_v -> `Array [lst_v; `Int (n - 1)])
-            (lists (integers ()) ~min_size:n ~max_size:n ()))
-        (integers ~min_value:1 ~max_value:5 ())) in
-      let items = Hegel.Cbor_helpers.extract_list pair in
-      let lst = Hegel.Cbor_helpers.extract_list (List.nth items 0) in
-      let index = Hegel.Cbor_helpers.extract_int (List.nth items 1) in
-      assert (index >= 0 && index < List.length lst))
+      let n, lst =
+        generate
+          (flat_map
+            (fun n ->
+              map (fun lst -> (n, lst))
+                (lists (integers ()) ~min_size:n ~max_size:n ()))
+            (integers ~min_value:1 ~max_value:5 ()))
+      in
+      assert (List.length lst = n))
 ```
 
 ## What you can generate
@@ -205,32 +198,32 @@ Hegel provides generators for all common data types.
 
 ```ocaml
 booleans ()
-(* Produces: true or false *)
+(* Produces: true or false — type: bool generator *)
 
 integers ~min_value:(-100) ~max_value:100 ()
-(* Produces: integer values, optionally bounded *)
+(* Produces: integer values, optionally bounded — type: int generator *)
 
 floats ~min_value:0.0 ~max_value:1.0 ~allow_nan:false ~allow_infinity:false ()
-(* Produces: floating-point numbers *)
+(* Produces: floating-point numbers — type: float generator *)
 (* allow_nan defaults to true only when no bounds are set *)
 (* allow_infinity defaults to true when at most one bound is set *)
 
 text ~min_size:0 ~max_size:100 ()
-(* Produces: Unicode strings *)
+(* Produces: Unicode strings — type: string generator *)
 
 binary ~min_size:0 ~max_size:64 ()
-(* Produces: byte strings *)
+(* Produces: byte strings — type: string generator *)
 ```
 
 ### Constants and choices
 
 ```ocaml
 (* OCaml has no just() built-in, but you can wrap with map: *)
-map (fun _ -> `Int 42) (booleans ())
-(* or generate a constant directly via generate_from_schema *)
+map (fun _ -> 42) (booleans ())
+(* type: int generator — always produces 42 *)
 
-sampled_from [`Int 1; `Int 2; `Int 3]
-(* Picks uniformly from the given list of CBOR values *)
+sampled_from [1; 2; 3]
+(* Picks uniformly from the given list — type: int generator *)
 ```
 
 > **Note:** The Python SDK provides `just(value)` and `tuples(...)` as
@@ -242,13 +235,13 @@ sampled_from [`Int 1; `Int 2; `Int 3]
 
 ```ocaml
 lists (integers ~min_value:0 ~max_value:100 ()) ~min_size:1 ~max_size:10 ()
-(* Produces: lists of integers *)
+(* Produces: int list — a list of integers *)
 
 hashmaps
-  (integers ~min_value:0 ~max_value:999 ())  (* keys *)
-  (text ~max_size:20 ())                      (* values *)
+  (integers ~min_value:0 ~max_value:999 ())  (* keys: int generator *)
+  (text ~max_size:20 ())                      (* values: string generator *)
   ~min_size:0 ~max_size:5 ()
-(* Produces: dictionaries as CBOR maps *)
+(* Produces: (int * string) list — a list of key-value pairs *)
 ```
 
 ### Combinators
@@ -271,8 +264,8 @@ open Hegel.Client
 let test_something () =
   Hegel.Session.run_hegel_test ~name:"note_example" ~test_cases:100
     (fun () ->
-      let x = Hegel.Cbor_helpers.extract_int (generate (integers ())) in
-      let y = Hegel.Cbor_helpers.extract_int (generate (integers ())) in
+      let x = generate (integers ()) in
+      let y = generate (integers ()) in
       note (Printf.sprintf "trying x=%d, y=%d" x y);
       assert (x + y <> x - y || x = 0 || y = 0))
 ```
@@ -288,9 +281,11 @@ open Hegel.Client
 let test_optimization () =
   Hegel.Session.run_hegel_test ~name:"optimization" ~test_cases:1000
     (fun () ->
-      let x = Hegel.Cbor_helpers.extract_float
-                (generate (floats ~min_value:0.0 ~max_value:10000.0
-                             ~allow_nan:false ~allow_infinity:false ())) in
+      let x =
+        generate
+          (floats ~min_value:0.0 ~max_value:10000.0
+             ~allow_nan:false ~allow_infinity:false ())
+      in
       target x "maximize_x";
       assert (x < 9999.0))
 ```

@@ -34,10 +34,8 @@ let test_merge_sorted_is_sorted () =
     (fun () ->
       let int_gen = integers ~min_value:(-1000) ~max_value:1000 () in
       let list_gen = lists int_gen ~min_size:0 ~max_size:20 () in
-      let raw_a = Hegel.Cbor_helpers.extract_list (generate list_gen) in
-      let raw_b = Hegel.Cbor_helpers.extract_list (generate list_gen) in
-      let a = sorted (List.map Hegel.Cbor_helpers.extract_int raw_a) in
-      let b = sorted (List.map Hegel.Cbor_helpers.extract_int raw_b) in
+      let a = sorted (generate list_gen) in
+      let b = sorted (generate list_gen) in
       let merged = merge_sorted a b in
       assert (is_sorted merged))
 
@@ -48,10 +46,8 @@ let test_merge_preserves_elements () =
     (fun () ->
       let int_gen = integers ~min_value:(-100) ~max_value:100 () in
       let list_gen = lists int_gen ~min_size:0 ~max_size:15 () in
-      let raw_a = Hegel.Cbor_helpers.extract_list (generate list_gen) in
-      let raw_b = Hegel.Cbor_helpers.extract_list (generate list_gen) in
-      let a = sorted (List.map Hegel.Cbor_helpers.extract_int raw_a) in
-      let b = sorted (List.map Hegel.Cbor_helpers.extract_int raw_b) in
+      let a = sorted (generate list_gen) in
+      let b = sorted (generate list_gen) in
       let merged = merge_sorted a b in
       assert (multiset_equal merged (a @ b)))
 
@@ -62,8 +58,7 @@ let test_merge_with_self () =
     (fun () ->
       let int_gen = integers ~min_value:(-500) ~max_value:500 () in
       let list_gen = lists int_gen ~min_size:0 ~max_size:10 () in
-      let raw = Hegel.Cbor_helpers.extract_list (generate list_gen) in
-      let a = sorted (List.map Hegel.Cbor_helpers.extract_int raw) in
+      let a = sorted (generate list_gen) in
       let merged = merge_sorted a a in
       assert (is_sorted merged);
       assert (List.length merged = 2 * List.length a))
@@ -74,10 +69,8 @@ let test_merge_commutative () =
     (fun () ->
       let int_gen = integers ~min_value:(-200) ~max_value:200 () in
       let list_gen = lists int_gen ~min_size:0 ~max_size:10 () in
-      let raw_a = Hegel.Cbor_helpers.extract_list (generate list_gen) in
-      let raw_b = Hegel.Cbor_helpers.extract_list (generate list_gen) in
-      let a = sorted (List.map Hegel.Cbor_helpers.extract_int raw_a) in
-      let b = sorted (List.map Hegel.Cbor_helpers.extract_int raw_b) in
+      let a = sorted (generate list_gen) in
+      let b = sorted (generate list_gen) in
       let ab = merge_sorted a b in
       let ba = merge_sorted b a in
       (* Both results should be the same sorted multiset *)

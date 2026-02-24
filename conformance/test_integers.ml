@@ -2,7 +2,6 @@
 
 open Hegel.Conformance
 open Hegel.Generators
-open Hegel.Cbor_helpers
 
 let () =
   let params_str = if Array.length Sys.argv > 1 then Sys.argv.(1) else "{}" in
@@ -11,6 +10,5 @@ let () =
   let max_value = Json_params.get_int_opt params "max_value" in
   let test_cases = get_test_cases () in
   Hegel.Session.run_hegel_test ~name:"test_integers" ~test_cases (fun () ->
-      let v = generate (integers ?min_value ?max_value ()) in
-      let n = extract_int v in
+      let n = generate (integers ?min_value ?max_value ()) in
       write_metrics [ ("value", string_of_int n) ])

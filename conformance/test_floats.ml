@@ -2,7 +2,6 @@
 
 open Hegel.Conformance
 open Hegel.Generators
-open Hegel.Cbor_helpers
 
 (** [json_float f] serializes a float to JSON, handling NaN and Infinity. *)
 let json_float f =
@@ -21,12 +20,11 @@ let () =
   let allow_infinity = Json_params.get_bool_opt params "allow_infinity" in
   let test_cases = get_test_cases () in
   Hegel.Session.run_hegel_test ~name:"test_floats" ~test_cases (fun () ->
-      let v =
+      let f =
         generate
           (floats ?min_value ?max_value ~exclude_min ~exclude_max ?allow_nan
              ?allow_infinity ())
       in
-      let f = extract_float v in
       let is_nan = Float.is_nan f in
       let is_infinite = Float.is_infinite f in
       write_metrics

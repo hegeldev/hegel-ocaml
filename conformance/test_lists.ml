@@ -6,7 +6,6 @@
 
 open Hegel.Conformance
 open Hegel.Generators
-open Hegel.Cbor_helpers
 
 let () =
   let params_str = if Array.length Sys.argv > 1 then Sys.argv.(1) else "{}" in
@@ -25,17 +24,15 @@ let () =
         filter (fun _ -> true) (integers ?min_value ?max_value ())
       in
       let list_gen = lists elem_gen ~min_size ?max_size () in
-      let v = generate list_gen in
-      let items = extract_list v in
+      let items = generate list_gen in
       let size = List.length items in
-      let ints = List.map extract_int items in
       let min_element =
         if size = 0 then None
-        else Some (List.fold_left min (List.hd ints) (List.tl ints))
+        else Some (List.fold_left min (List.hd items) (List.tl items))
       in
       let max_element =
         if size = 0 then None
-        else Some (List.fold_left max (List.hd ints) (List.tl ints))
+        else Some (List.fold_left max (List.hd items) (List.tl items))
       in
       write_metrics
         [

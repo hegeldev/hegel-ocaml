@@ -44,8 +44,7 @@ let test_generate_option_some_socketpair () =
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"opt_some" ~test_cases:1 (fun () ->
           let gen_fn () =
-            Hegel.Cbor_helpers.extract_int
-              (Hegel.Generators.generate (Hegel.Generators.integers ()))
+            Hegel.Generators.generate (Hegel.Generators.integers ())
           in
           let result = Hegel.Derive.generate_option gen_fn in
           match result with
@@ -74,8 +73,7 @@ let test_generate_option_none_socketpair () =
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"opt_none" ~test_cases:1 (fun () ->
           let gen_fn () =
-            Hegel.Cbor_helpers.extract_int
-              (Hegel.Generators.generate (Hegel.Generators.integers ()))
+            Hegel.Generators.generate (Hegel.Generators.integers ())
           in
           let result = Hegel.Derive.generate_option gen_fn in
           Alcotest.(check bool) "is None" true (result = None)))
@@ -113,8 +111,7 @@ let test_generate_list_socketpair () =
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"list_gen" ~test_cases:1 (fun () ->
           let gen_fn () =
-            Hegel.Cbor_helpers.extract_int
-              (Hegel.Generators.generate (Hegel.Generators.integers ()))
+            Hegel.Generators.generate (Hegel.Generators.integers ())
           in
           let result = Hegel.Derive.generate_list gen_fn in
           Alcotest.(check int) "length" 3 (List.length result)))
@@ -142,8 +139,7 @@ let test_generate_list_empty_socketpair () =
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"list_empty" ~test_cases:1 (fun () ->
           let gen_fn () =
-            Hegel.Cbor_helpers.extract_int
-              (Hegel.Generators.generate (Hegel.Generators.integers ()))
+            Hegel.Generators.generate (Hegel.Generators.integers ())
           in
           let result = Hegel.Derive.generate_list gen_fn in
           Alcotest.(check int) "length" 0 (List.length result)))
@@ -156,9 +152,8 @@ let test_generate_option_e2e () =
   let saw_none = ref false in
   Hegel.Session.run_hegel_test ~name:"derive_opt_e2e" ~test_cases:50 (fun () ->
       let gen_fn () =
-        Hegel.Cbor_helpers.extract_int
-          (Hegel.Generators.generate
-             (Hegel.Generators.integers ~min_value:0 ~max_value:10 ()))
+        Hegel.Generators.generate
+          (Hegel.Generators.integers ~min_value:0 ~max_value:10 ())
       in
       let result = Hegel.Derive.generate_option gen_fn in
       match result with
@@ -173,9 +168,8 @@ let test_generate_option_e2e () =
 let test_generate_list_e2e () =
   Hegel.Session.run_hegel_test ~name:"derive_list_e2e" ~test_cases:20 (fun () ->
       let gen_fn () =
-        Hegel.Cbor_helpers.extract_int
-          (Hegel.Generators.generate
-             (Hegel.Generators.integers ~min_value:0 ~max_value:100 ()))
+        Hegel.Generators.generate
+          (Hegel.Generators.integers ~min_value:0 ~max_value:100 ())
       in
       let result = Hegel.Derive.generate_list gen_fn in
       assert (List.length result >= 0 && List.length result <= 20);

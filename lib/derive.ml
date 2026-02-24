@@ -4,8 +4,8 @@
     PPX deriver. They are not intended for direct use by end users.
 
     The PPX generates [unit -> 'a] functions that call
-    {!Hegel.Generators.generate} internally and extract typed OCaml values.
-    These helpers provide the plumbing for option and list types. *)
+    {!Hegel.Generators.generate} internally and return typed OCaml values. These
+    helpers provide the plumbing for option and list types. *)
 
 (** [generate_option gen_fn] generates an [option] value.
 
@@ -13,9 +13,7 @@
     is chosen, calls [gen_fn ()] to produce the inner value. Must be called from
     within a Hegel test body. *)
 let generate_option gen_fn =
-  let b =
-    Cbor_helpers.extract_bool (Generators.generate (Generators.booleans ()))
-  in
+  let b = Generators.generate (Generators.booleans ()) in
   if b then Some (gen_fn ()) else None
 
 (** [generate_list gen_fn] generates a list of values.
@@ -25,7 +23,6 @@ let generate_option gen_fn =
 *)
 let generate_list gen_fn =
   let len =
-    Cbor_helpers.extract_int
-      (Generators.generate (Generators.integers ~min_value:0 ~max_value:20 ()))
+    Generators.generate (Generators.integers ~min_value:0 ~max_value:20 ())
   in
   List.init len (fun _ -> gen_fn ())

@@ -81,7 +81,7 @@ let test_basic_generator_no_bounds () =
 
 let test_map_on_basic_preserves_schema () =
   let gen = integers ~min_value:0 ~max_value:10 () in
-  let mapped = map (fun v -> `Int (Hegel.Cbor_helpers.extract_int v * 2)) gen in
+  let mapped = map (fun v -> v * 2) gen in
   Alcotest.(check bool) "still basic" true (is_basic mapped);
   match schema mapped with
   | Some s ->
@@ -94,8 +94,8 @@ let test_map_on_basic_preserves_schema () =
 
 let test_double_map_on_basic () =
   let gen = integers () in
-  let m1 = map (fun _ -> `Int 2) gen in
-  let m2 = map (fun _ -> `Int 3) m1 in
+  let m1 = map (fun _ -> 2) gen in
+  let m2 = map (fun _ -> 3) m1 in
   Alcotest.(check bool) "double map still basic" true (is_basic m2);
   (* Verify schema is preserved through both maps *)
   match (schema gen, schema m2) with
@@ -128,20 +128,18 @@ let test_schema_on_non_basic () =
 let test_as_basic_on_basic () =
   let gen = integers ~min_value:1 ~max_value:5 () in
   match as_basic gen with
-  | Some (s, None) ->
+  | Some (s, _transform) ->
       let pairs = Hegel.Cbor_helpers.extract_dict s in
       let typ =
         Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
       in
       Alcotest.(check string) "type" "integer" typ
-  | Some (_, Some _) -> Alcotest.fail "expected no transform"
   | None -> Alcotest.fail "expected Some"
 
 let test_as_basic_on_basic_with_transform () =
   let gen = map (fun x -> x) (integers ()) in
   match as_basic gen with
-  | Some (_, Some _) -> ()
-  | Some (_, None) -> Alcotest.fail "expected transform"
+  | Some (_, _transform) -> ()
   | None -> Alcotest.fail "expected Some"
 
 let test_as_basic_on_non_basic () =
@@ -187,7 +185,7 @@ let test_basic_generate_socketpair () =
       Hegel.Client.run_test c ~name:"basic_gen" ~test_cases:1 (fun () ->
           let gen = integers ~min_value:0 ~max_value:100 () in
           let v = generate gen in
-          Alcotest.(check int) "value" 42 (Hegel.Cbor_helpers.extract_int v)))
+          Alcotest.(check int) "value" 42 v))
 
 (** Test: Basic generator with transform applies transform. *)
 let test_basic_generate_with_transform_socketpair () =
@@ -206,12 +204,10 @@ let test_basic_generate_with_transform_socketpair () =
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"transform_gen" ~test_cases:1 (fun () ->
           let gen =
-            map
-              (fun v -> `Int (Hegel.Cbor_helpers.extract_int v * 2))
-              (integers ~min_value:0 ~max_value:10 ())
+            map (fun v -> v * 2) (integers ~min_value:0 ~max_value:10 ())
           in
           let v = generate gen in
-          Alcotest.(check int) "value" 10 (Hegel.Cbor_helpers.extract_int v)))
+          Alcotest.(check int) "value" 10 v))
 
 (** Test: Double-map on basic composes transforms correctly via socketpair. *)
 let test_double_map_socketpair () =
@@ -231,14 +227,14 @@ let test_double_map_socketpair () =
       Hegel.Client.run_test c ~name:"double_map" ~test_cases:1 (fun () ->
           let gen =
             integers ~min_value:1 ~max_value:5 ()
-            |> map (fun v -> `Int (Hegel.Cbor_helpers.extract_int v * 2))
-            |> map (fun v -> `Int (Hegel.Cbor_helpers.extract_int v + 1))
+            |> map (fun v -> v * 2)
+            |> map (fun v -> v + 1)
           in
           (* schema should be unchanged *)
           Alcotest.(check bool) "still basic" true (is_basic gen);
           let v = generate gen in
           (* 3*2+1 = 7 *)
-          Alcotest.(check int) "value" 7 (Hegel.Cbor_helpers.extract_int v)))
+          Alcotest.(check int) "value" 7 v))
 
 (** Test: Mapped generator on non-basic sends start_span(MAPPED)/stop_span. The
     inner filter also sends span commands, so the full sequence is:
@@ -280,7 +276,7 @@ let test_mapped_generate_socketpair () =
       Hegel.Client.run_test c ~name:"mapped_gen" ~test_cases:1 (fun () ->
           let gen = integers () |> filter (fun _ -> true) |> map (fun x -> x) in
           let v = generate gen in
-          Alcotest.(check int) "value" 7 (Hegel.Cbor_helpers.extract_int v)))
+          Alcotest.(check int) "value" 7 v))
 
 (** Test: FlatMapped generator sends start_span(FLAT_MAP)/stop_span. *)
 let test_flatmapped_generate_socketpair () =
@@ -358,11 +354,11 @@ let test_filtered_pass_first_socketpair () =
       Hegel.Client.run_test c ~name:"filter_pass" ~test_cases:1 (fun () ->
           let gen =
             filter
-              (fun v -> Hegel.Cbor_helpers.extract_int v mod 2 = 0)
+              (fun v -> v mod 2 = 0)
               (integers ~min_value:0 ~max_value:10 ())
           in
           let v = generate gen in
-          Alcotest.(check int) "value" 4 (Hegel.Cbor_helpers.extract_int v)))
+          Alcotest.(check int) "value" 4 v))
 
 (** Test: Filtered generator — fails first, passes second. *)
 let test_filtered_pass_after_reject_socketpair () =
@@ -404,11 +400,11 @@ let test_filtered_pass_after_reject_socketpair () =
       Hegel.Client.run_test c ~name:"filter_retry" ~test_cases:1 (fun () ->
           let gen =
             filter
-              (fun v -> Hegel.Cbor_helpers.extract_int v mod 2 = 0)
+              (fun v -> v mod 2 = 0)
               (integers ~min_value:0 ~max_value:10 ())
           in
           let v = generate gen in
-          Alcotest.(check int) "value" 4 (Hegel.Cbor_helpers.extract_int v)))
+          Alcotest.(check int) "value" 4 v))
 
 (** Test: Filtered generator — all 3 attempts fail → assume(false) → INVALID. *)
 let test_filtered_exhaustion_socketpair () =
@@ -469,10 +465,8 @@ let test_group_socketpair () =
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"group" ~test_cases:1 (fun () ->
-          let result = group 42 (fun () -> `Int 99) in
-          Alcotest.(check int)
-            "result" 99
-            (Hegel.Cbor_helpers.extract_int result)))
+          let result = group 42 (fun () -> 99) in
+          Alcotest.(check int) "result" 99 result))
 
 (** Test: discardable_group with success — stop_span(discard=false). *)
 let test_discardable_group_success_socketpair () =
@@ -495,10 +489,8 @@ let test_discardable_group_success_socketpair () =
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"disc_ok" ~test_cases:1 (fun () ->
-          let result = discardable_group 1 (fun () -> `Int 55) in
-          Alcotest.(check int)
-            "result" 55
-            (Hegel.Cbor_helpers.extract_int result)))
+          let result = discardable_group 1 (fun () -> 55) in
+          Alcotest.(check int) "result" 55 result))
 
 (** Test: discardable_group with exception — stop_span(discard=true). *)
 let test_discardable_group_exception_socketpair () =
@@ -680,18 +672,15 @@ let test_collection_reject_cached_name_socketpair () =
 let test_integers_in_range () =
   Hegel.Session.run_hegel_test ~name:"int_range" ~test_cases:10 (fun () ->
       let gen = integers ~min_value:0 ~max_value:100 () in
-      let v = Hegel.Cbor_helpers.extract_int (generate gen) in
+      let v = generate gen in
       assert (v >= 0 && v <= 100))
 
 (** Test: map doubles values correctly. *)
 let test_map_doubles_e2e () =
   Hegel.Session.run_hegel_test ~name:"map_double" ~test_cases:10 (fun () ->
-      let gen =
-        integers ~min_value:1 ~max_value:5 ()
-        |> map (fun v -> `Int (Hegel.Cbor_helpers.extract_int v * 2))
-      in
+      let gen = integers ~min_value:1 ~max_value:5 () |> map (fun v -> v * 2) in
       Alcotest.(check bool) "still basic" true (is_basic gen);
-      let v = Hegel.Cbor_helpers.extract_int (generate gen) in
+      let v = generate gen in
       assert (v >= 2 && v <= 10);
       assert (v mod 2 = 0))
 
@@ -700,8 +689,8 @@ let test_double_map_e2e () =
   Hegel.Session.run_hegel_test ~name:"double_map_e2e" ~test_cases:10 (fun () ->
       let gen =
         integers ~min_value:1 ~max_value:5 ()
-        |> map (fun v -> `Int (Hegel.Cbor_helpers.extract_int v * 2))
-        |> map (fun v -> `Int (Hegel.Cbor_helpers.extract_int v + 1))
+        |> map (fun v -> v * 2)
+        |> map (fun v -> v + 1)
       in
       Alcotest.(check bool) "still basic" true (is_basic gen);
       let s = schema gen in
@@ -713,7 +702,7 @@ let test_double_map_e2e () =
           in
           Alcotest.(check string) "schema type" "integer" typ
       | None -> Alcotest.fail "expected schema");
-      let v = Hegel.Cbor_helpers.extract_int (generate gen) in
+      let v = generate gen in
       assert (List.mem v [ 3; 5; 7; 9; 11 ]))
 
 (** Test: flat_map through server. *)
@@ -721,25 +710,21 @@ let test_flat_map_e2e () =
   Hegel.Session.run_hegel_test ~name:"flatmap_e2e" ~test_cases:10 (fun () ->
       let gen =
         flat_map
-          (fun v ->
-            let n = Hegel.Cbor_helpers.extract_int v in
-            integers ~min_value:0 ~max_value:(max 1 n) ())
+          (fun n -> integers ~min_value:0 ~max_value:(max 1 n) ())
           (integers ~min_value:1 ~max_value:5 ())
       in
       Alcotest.(check bool) "not basic" false (is_basic gen);
-      let v = Hegel.Cbor_helpers.extract_int (generate gen) in
+      let v = generate gen in
       assert (v >= 0))
 
 (** Test: filter through server. *)
 let test_filter_e2e () =
   Hegel.Session.run_hegel_test ~name:"filter_e2e" ~test_cases:10 (fun () ->
       let gen =
-        filter
-          (fun v -> Hegel.Cbor_helpers.extract_int v mod 2 = 0)
-          (integers ~min_value:0 ~max_value:100 ())
+        filter (fun v -> v mod 2 = 0) (integers ~min_value:0 ~max_value:100 ())
       in
       Alcotest.(check bool) "not basic" false (is_basic gen);
-      let v = Hegel.Cbor_helpers.extract_int (generate gen) in
+      let v = generate gen in
       assert (v mod 2 = 0))
 
 (** Test: filter exhaustion through server (always false → assume false). *)
@@ -841,16 +826,13 @@ let test_lists_basic_no_max_schema () =
     transform applies the element transform to every item in the result list. *)
 let test_lists_basic_with_element_transform () =
   (* Build a basic generator with a transform (doubles the value) *)
-  let elem =
-    map (fun v -> `Int (Hegel.Cbor_helpers.extract_int v * 2)) (integers ())
-  in
+  let elem = map (fun v -> v * 2) (integers ()) in
   Alcotest.(check bool) "elem is_basic" true (is_basic elem);
   let gen = lists elem () in
   Alcotest.(check bool) "gen is_basic" true (is_basic gen);
-  (* The generator has a transform *)
+  (* The generator has a transform — as_basic returns Some *)
   match as_basic gen with
-  | Some (_, Some _) -> () (* expected: transform present *)
-  | Some (_, None) -> Alcotest.fail "expected list transform"
+  | Some (_, _transform) -> () (* expected: transform present *)
   | None -> Alcotest.fail "expected basic"
 
 (** Test: lists(non_basic_elem) produces a CompositeList (not Basic). *)
@@ -889,8 +871,7 @@ let test_lists_basic_generate_socketpair () =
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"lists_basic" ~test_cases:1 (fun () ->
           let gen = lists (integers ~min_value:0 ~max_value:10 ()) () in
-          let v = generate gen in
-          let items = Hegel.Cbor_helpers.extract_list v in
+          let items = generate gen in
           Alcotest.(check int) "length" 2 (List.length items)))
 
 (** Test: lists(basic_elem_with_transform) applies the list transform. *)
@@ -911,16 +892,12 @@ let test_lists_basic_with_transform_generate_socketpair () =
       Hegel.Client.run_test c ~name:"lists_transform" ~test_cases:1 (fun () ->
           (* elem doubles values; list transform should double each item *)
           let elem =
-            map
-              (fun v -> `Int (Hegel.Cbor_helpers.extract_int v * 2))
-              (integers ~min_value:1 ~max_value:5 ())
+            map (fun v -> v * 2) (integers ~min_value:1 ~max_value:5 ())
           in
           let gen = lists elem () in
-          let v = generate gen in
-          let items = Hegel.Cbor_helpers.extract_list v in
+          let items = generate gen in
           (* The server returned [2, 4] as raw; the transform doubles them → [4, 8] *)
-          let ints = List.map Hegel.Cbor_helpers.extract_int items in
-          Alcotest.(check (list int)) "doubled" [ 4; 8 ] ints))
+          Alcotest.(check (list int)) "doubled" [ 4; 8 ] items))
 
 (** Test: lists(non_basic) uses collection protocol: start_span(LIST),
     new_collection, collection_more loop, stop_span, mark_complete. *)
@@ -983,8 +960,7 @@ let test_lists_composite_generate_socketpair () =
           in
           let gen = lists elem () in
           Alcotest.(check bool) "not basic" false (is_basic gen);
-          let v = generate gen in
-          let items = Hegel.Cbor_helpers.extract_list v in
+          let items = generate gen in
           Alcotest.(check int) "one element" 1 (List.length items)))
 
 (** Test: lists(non_basic) with StopTest during collection_more aborts cleanly.
@@ -1019,14 +995,9 @@ let test_lists_of_integers_e2e () =
         lists (integers ~min_value:0 ~max_value:100 ()) ~max_size:3 ()
       in
       Alcotest.(check bool) "is_basic" true (is_basic gen);
-      let v = generate gen in
-      let items = Hegel.Cbor_helpers.extract_list v in
+      let items = generate gen in
       Alcotest.(check bool) "max 3" true (List.length items <= 3);
-      List.iter
-        (fun item ->
-          let n = Hegel.Cbor_helpers.extract_int item in
-          assert (n >= 0 && n <= 100))
-        items)
+      List.iter (fun n -> assert (n >= 0 && n <= 100)) items)
 
 (** Test: lists(booleans, min_size=3, max_size=5) → length in [3,5]. *)
 let test_lists_booleans_bounds_e2e () =
@@ -1034,8 +1005,7 @@ let test_lists_booleans_bounds_e2e () =
     (fun () ->
       let gen = lists (booleans ()) ~min_size:3 ~max_size:5 () in
       Alcotest.(check bool) "is_basic" true (is_basic gen);
-      let v = generate gen in
-      let items = Hegel.Cbor_helpers.extract_list v in
+      let items = generate gen in
       let n = List.length items in
       assert (n >= 3 && n <= 5))
 
@@ -1044,21 +1014,14 @@ let test_lists_non_basic_e2e () =
   Hegel.Session.run_hegel_test ~name:"lists_nonbasic_e2e" ~test_cases:50
     (fun () ->
       let elem =
-        filter
-          (fun v -> Hegel.Cbor_helpers.extract_int v > 5)
-          (integers ~min_value:0 ~max_value:10 ())
+        filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ())
       in
       let gen = lists elem ~min_size:1 ~max_size:3 () in
       Alcotest.(check bool) "not basic" false (is_basic gen);
-      let v = generate gen in
-      let items = Hegel.Cbor_helpers.extract_list v in
+      let items = generate gen in
       let n = List.length items in
       assert (n >= 1 && n <= 3);
-      List.iter
-        (fun item ->
-          let x = Hegel.Cbor_helpers.extract_int item in
-          assert (x > 5))
-        items)
+      List.iter (fun x -> assert (x > 5)) items)
 
 (** Test: lists(lists(booleans)) → nested lists work. *)
 let test_lists_nested_e2e () =
@@ -1067,13 +1030,10 @@ let test_lists_nested_e2e () =
       let inner = lists (booleans ()) ~max_size:3 () in
       let gen = lists inner ~max_size:3 () in
       Alcotest.(check bool) "outer is_basic" true (is_basic gen);
-      let v = generate gen in
-      let outer_items = Hegel.Cbor_helpers.extract_list v in
+      let outer_items = generate gen in
       assert (List.length outer_items <= 3);
       List.iter
-        (fun inner_v ->
-          let inner_items = Hegel.Cbor_helpers.extract_list inner_v in
-          assert (List.length inner_items <= 3))
+        (fun inner_items -> assert (List.length inner_items <= 3))
         outer_items)
 
 let tests =

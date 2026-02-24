@@ -2,7 +2,6 @@
 
 open Hegel.Conformance
 open Hegel.Generators
-open Hegel.Cbor_helpers
 
 (** [utf8_length s] counts the number of Unicode codepoints in a UTF-8 string.
     Each codepoint can be 1-4 bytes. *)
@@ -30,7 +29,6 @@ let () =
   let max_size = Json_params.get_int_opt params "max_size" in
   let test_cases = get_test_cases () in
   Hegel.Session.run_hegel_test ~name:"test_text" ~test_cases (fun () ->
-      let v = generate (text ~min_size ?max_size ()) in
-      let s = extract_string v in
+      let s = generate (text ~min_size ?max_size ()) in
       let length = utf8_length s in
       write_metrics [ ("length", string_of_int length) ])

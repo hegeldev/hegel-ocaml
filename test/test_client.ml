@@ -120,14 +120,14 @@ let test_unrecognised_event () =
 
 (* ---- Tests using real hegel binary ---- *)
 
-(** Helper: run a test with a specific HEGEL_TEST_MODE. Restarts the session so
-    the new env var takes effect on the subprocess. *)
+(** Helper: run a test with a specific HEGEL_PROTOCOL_TEST_MODE. Restarts the
+    session so the new env var takes effect on the subprocess. *)
 let with_test_mode mode f =
   Hegel.Session.restart_session ();
-  Unix.putenv "HEGEL_TEST_MODE" mode;
+  Unix.putenv "HEGEL_PROTOCOL_TEST_MODE" mode;
   Fun.protect
     ~finally:(fun () ->
-      Unix.putenv "HEGEL_TEST_MODE" "";
+      Unix.putenv "HEGEL_PROTOCOL_TEST_MODE" "";
       Hegel.Session.restart_session ())
     f
 
@@ -195,7 +195,7 @@ let test_target_e2e () =
       let x = Hegel.Cbor_helpers.extract_int v in
       target (float_of_int x) "maximize_x")
 
-(* ---- HEGEL_TEST_MODE error injection tests ---- *)
+(* ---- HEGEL_PROTOCOL_TEST_MODE error injection tests ---- *)
 
 let test_stop_test_on_generate () =
   with_test_mode "stop_test_on_generate" (fun () ->
@@ -971,7 +971,7 @@ let tests =
     Alcotest.test_case "session start and run" `Quick test_session_start_and_run;
     Alcotest.test_case "run_hegel_test defaults" `Quick
       test_run_hegel_test_defaults;
-    (* HEGEL_TEST_MODE error injection - these restart the session *)
+    (* HEGEL_PROTOCOL_TEST_MODE error injection - these restart the session *)
     Alcotest.test_case "stop test on generate" `Quick test_stop_test_on_generate;
     Alcotest.test_case "stop test on mark complete" `Quick
       test_stop_test_on_mark_complete;
