@@ -1,9 +1,0 @@
-{
-  "task_id": "language-specific-features",
-  "stage": 7,
-  "name": "Language-Specific Features",
-  "completed_at": "2026-02-24T11:54:39",
-  "cost_usd": 10.39,
-  "model": "claude-sonnet-4-6",
-  "language": "ocaml"
-}

@@ -1,9 +1,0 @@
-{
-  "task_id": "conformance-tests",
-  "stage": 8,
-  "name": "Conformance Tests",
-  "completed_at": "2026-02-24T11:58:59",
-  "cost_usd": 1.53,
-  "model": "claude-sonnet-4-6",
-  "language": "ocaml"
-}
