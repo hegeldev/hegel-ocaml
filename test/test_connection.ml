@@ -613,12 +613,12 @@ let test_message_to_dead_channel () =
   let client_conn = create_connection s2 ~name:"Client" () in
   handshake_pair server_conn client_conn;
   let ch_client = new_channel client_conn () in
-  let _ch_server = connect_channel server_conn ch_client.channel_id () in
+  let ch_server = connect_channel server_conn ch_client.channel_id () in
   close_channel ch_client;
   (* Give time for close to be received *)
   Unix.sleepf 0.1;
   (* Now send a request to the dead channel from server *)
-  ignore (send_request _ch_server (`Map [ (`Text "test", `Text "data") ]));
+  ignore (send_request ch_server (`Map [ (`Text "test", `Text "data") ]));
   Unix.sleepf 0.1;
   close server_conn;
   close client_conn

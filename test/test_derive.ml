@@ -7,72 +7,11 @@
 
 open Hegel.Connection
 
-(* ==== Socketpair helpers ==== *)
-
-let with_fake_server server_fn client_fn =
-  let server_socket, client_socket =
-    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
-  in
-  let server_conn = create_connection server_socket ~name:"Server" () in
-  let client_conn = create_connection client_socket ~name:"Client" () in
-  let t = Thread.create server_fn server_conn in
-  client_fn client_conn;
-  close client_conn;
-  close server_conn;
-  Thread.join t
-
-let accept_run_test server_conn =
-  receive_handshake server_conn;
-  let control = control_channel server_conn in
-  let msg_id, message = receive_request control () in
-  let pairs = Hegel.Cbor_helpers.extract_dict message in
-  let test_ch_id =
-    Int32.of_int
-      (Hegel.Cbor_helpers.extract_int (List.assoc (`Text "channel") pairs))
-  in
-  let test_channel = connect_channel server_conn test_ch_id ~role:"Test" () in
-  send_response_value control msg_id (`Bool true);
-  test_channel
-
-let send_test_case server_conn test_channel =
-  let data_ch = new_channel server_conn ~role:"Data" () in
-  let req_id =
-    send_request test_channel
-      (`Map
-         [
-           (`Text "event", `Text "test_case");
-           (`Text "channel", `Int (Int32.to_int data_ch.channel_id));
-         ])
-  in
-  ignore (receive_response_raw test_channel req_id ());
-  data_ch
-
-let send_test_done test_channel ~interesting =
-  ignore
-    (pending_get
-       (request test_channel
-          (`Map
-             [
-               (`Text "event", `Text "test_done");
-               ( `Text "results",
-                 `Map
-                   [
-                     (`Text "passed", `Bool (interesting = 0));
-                     (`Text "test_cases", `Int 1);
-                     ( `Text "valid_test_cases",
-                       `Int (if interesting = 0 then 1 else 0) );
-                     (`Text "invalid_test_cases", `Int 0);
-                     (`Text "interesting_test_cases", `Int interesting);
-                   ] );
-             ])))
-
-let recv_command data_ch =
-  let msg_id, message = receive_request data_ch () in
-  let pairs = Hegel.Cbor_helpers.extract_dict message in
-  let cmd =
-    Hegel.Cbor_helpers.extract_string (List.assoc (`Text "command") pairs)
-  in
-  (msg_id, cmd, pairs)
+let with_fake_server = Test_helpers.with_fake_server
+let accept_run_test = Test_helpers.accept_run_test
+let send_test_case = Test_helpers.send_test_case
+let send_test_done = Test_helpers.send_test_done
+let recv_command = Test_helpers.recv_command
 
 (* ==== generate_option tests via socketpair ==== *)
 
