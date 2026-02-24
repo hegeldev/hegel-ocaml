@@ -327,3 +327,16 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
 21. **Or-patterns in match arms for deduplication**: When two match arms do the same thing with
     minor variation, use `(Some (Dead _) | None) as entry -> ...` and dispatch on the bound
     variable inside the arm body. This is cleaner than duplicating the entire block.
+
+22. **Test helper deduplication must include protocol helpers**: The `with_fake_server`,
+    `accept_run_test`, `send_test_case`, `send_test_done`, and `recv_command` helpers are
+    used across `test_client.ml`, `test_generators.ml`, and `test_derive.ml`. They all live
+    in `test_helpers.ml` and are re-exported via `let foo = Test_helpers.foo` in each test
+    file. This is idiomatic OCaml — module-level `let` aliases are cheap and keep the call
+    sites clean while eliminating copy-paste.
+
+23. **OCaml codebase is stable and well-structured after greybeard pass**: After two rounds
+    of expert review, the lib/ code has no reinvented wheels, no non-idiomatic patterns,
+    no needless complexity, no bad names, and no dead code. The `List.filter_map Fun.id`
+    pattern for optional schema fields, `Option.fold` for accumulator updates, and
+    `Fun.protect ~finally` for resource cleanup are all standard idiomatic OCaml.
