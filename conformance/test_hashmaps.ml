@@ -4,9 +4,6 @@ open Hegel.Conformance
 open Hegel.Generators
 open Hegel.Cbor_helpers
 
-(** [int_opt_to_json v] serializes an optional int to JSON. *)
-let int_opt_to_json = function None -> "null" | Some n -> string_of_int n
-
 let () =
   let params_str = if Array.length Sys.argv > 1 then Sys.argv.(1) else "{}" in
   let params = Json_params.parse params_str in
@@ -52,8 +49,8 @@ let () =
       write_metrics
         [
           ("size", string_of_int size);
-          ("min_key", int_opt_to_json min_key_result);
-          ("max_key", int_opt_to_json max_key_result);
-          ("min_value", int_opt_to_json min_val_result);
-          ("max_value", int_opt_to_json max_val_result);
+          ("min_key", Json_params.int_opt_to_json min_key_result);
+          ("max_key", Json_params.int_opt_to_json max_key_result);
+          ("min_value", Json_params.int_opt_to_json min_val_result);
+          ("max_value", Json_params.int_opt_to_json max_val_result);
         ])

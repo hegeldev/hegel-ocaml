@@ -1,17 +1,6 @@
 open Hegel.Protocol
 
-(** [contains_substring s sub] returns [true] if [sub] appears anywhere in [s].
-*)
-let contains_substring s sub =
-  let slen = String.length s and sublen = String.length sub in
-  if sublen > slen then false
-  else
-    let rec check i =
-      if i > slen - sublen then false
-      else if String.sub s i sublen = sub then true
-      else check (i + 1)
-    in
-    check 0
+let contains_substring = Test_helpers.contains_substring
 
 (** Helper: create a socketpair for testing. Returns (reader, writer). *)
 let with_socket_pair f =
@@ -37,7 +26,7 @@ let make_raw_packet ?(pkt_magic = magic) ?checksum ?(channel_id = 0l)
   let computed_checksum =
     match checksum with
     | Some c -> c
-    | None -> compute_crc32 (Bytes.to_string header_for_check ^ payload)
+    | None -> compute_crc32_parts (Bytes.to_string header_for_check) payload
   in
   (* Build final header with real checksum *)
   let header = Bytes.create header_size in
@@ -91,6 +80,19 @@ let test_crc32_single_byte () =
   (* Python: zlib.crc32(b'\x00') & 0xFFFFFFFF = 0xD202EF8D *)
   let crc = compute_crc32 "\x00" in
   Alcotest.(check int32) "CRC32 zero byte" 0xD202EF8Dl crc
+
+let test_crc32_parts_matches_single () =
+  let a = "hello " and b = "world" in
+  let single = compute_crc32 (a ^ b) in
+  let parts = compute_crc32_parts a b in
+  Alcotest.(check int32) "parts matches single" single parts
+
+let test_crc32_parts_empty_segments () =
+  let crc1 = compute_crc32_parts "" "hello" in
+  let crc2 = compute_crc32_parts "hello" "" in
+  let crc3 = compute_crc32 "hello" in
+  Alcotest.(check int32) "empty first" crc3 crc1;
+  Alcotest.(check int32) "empty second" crc3 crc2
 
 (* --- Packet round-trip tests --- *)
 
@@ -304,6 +306,10 @@ let tests =
     Alcotest.test_case "CRC32 known vector" `Quick test_crc32_known_vector;
     Alcotest.test_case "CRC32 empty string" `Quick test_crc32_empty;
     Alcotest.test_case "CRC32 single byte" `Quick test_crc32_single_byte;
+    Alcotest.test_case "CRC32 parts matches single" `Quick
+      test_crc32_parts_matches_single;
+    Alcotest.test_case "CRC32 parts empty segments" `Quick
+      test_crc32_parts_empty_segments;
     (* Packet round-trip *)
     Alcotest.test_case "round-trip simple" `Quick test_roundtrip_simple;
     Alcotest.test_case "round-trip empty payload" `Quick

@@ -42,7 +42,7 @@ type hegel_session = {
 (** Internal mutable session state. *)
 
 (** The global session singleton. *)
-let _session =
+let global_session =
   {
     process = None;
     connection = None;
@@ -136,7 +136,7 @@ let start session =
 
 (** [restart_session ()] forces a restart of the global session. Useful when
     environment variables (like [HEGEL_TEST_MODE]) have changed. *)
-let restart_session () = cleanup _session
+let restart_session () = cleanup global_session
 
 (** [run_hegel_test ?test_cases ?name test_fn] runs a property test using the
     shared hegeld process. This is the main public API.
@@ -145,5 +145,5 @@ let restart_session () = cleanup _session
     @param name test name (default ["test"])
     @param test_fn the test body function *)
 let run_hegel_test ?(test_cases = 100) ?(name = "test") test_fn =
-  start _session;
-  Client.run_test (Option.get _session.client) ~name ~test_cases test_fn
+  start global_session;
+  Client.run_test (Option.get global_session.client) ~name ~test_cases test_fn

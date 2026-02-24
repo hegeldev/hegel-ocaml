@@ -27,3 +27,9 @@ _coverage/
 *.native
 *.o
 *.a
+
+# Auto-generated opam files (dune generates these from dune-project)
+ppx_hegel_generator.opam
+
+# Hegelator internal (restored automatically on re-run)
+.hegelator/

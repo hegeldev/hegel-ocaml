@@ -5,7 +5,7 @@ description:
   "A property-based testing SDK that communicates with the Hegel server (hegeld) to enable universal property-based testing from OCaml."
 maintainer: ["Antithesis <engineering@antithesis.com>"]
 authors: ["Antithesis <engineering@antithesis.com>"]
-license: "ISC"
+license: "MIT"
 homepage: "https://github.com/antithesishq/hegel-ocaml"
 bug-reports: "https://github.com/antithesishq/hegel-ocaml/issues"
 depends: [

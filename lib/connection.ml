@@ -188,28 +188,16 @@ let run_reader conn ~until =
                 else begin
                   match Hashtbl.find_opt conn.channels pkt.channel_id with
                   | Some (Live ch) -> Queue.push (Pkt pkt) ch.inbox
-                  | Some (Dead _) ->
+                  | (Some (Dead _) | None) as entry ->
                       if not pkt.is_reply then begin
-                        let error_msg =
-                          Printf.sprintf "Message %ld sent to closed %s"
-                            pkt.message_id
-                            (entry_name conn pkt.channel_id)
+                        let disposition =
+                          match entry with
+                          | Some (Dead _) -> "closed"
+                          | _ -> "non-existent"
                         in
-                        send_packet conn
-                          {
-                            channel_id = pkt.channel_id;
-                            message_id = pkt.message_id;
-                            is_reply = true;
-                            payload =
-                              CBOR.Simple.encode
-                                (`Map [ (`Text "error", `Text error_msg) ]);
-                          }
-                      end
-                  | None ->
-                      if not pkt.is_reply then begin
                         let error_msg =
-                          Printf.sprintf "Message %ld sent to non-existent %s"
-                            pkt.message_id
+                          Printf.sprintf "Message %ld sent to %s %s"
+                            pkt.message_id disposition
                             (entry_name conn pkt.channel_id)
                         in
                         send_packet conn

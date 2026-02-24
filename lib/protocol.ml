@@ -61,6 +61,15 @@ let compute_crc32 data =
   in
   Optint.to_int32 crc
 
+(** [compute_crc32_parts a b] computes the CRC32 checksum over the concatenation
+    of strings [a] and [b] without allocating the concatenated string. *)
+let compute_crc32_parts a b =
+  let crc =
+    Checkseum.Crc32.digest_string a 0 (String.length a) Checkseum.Crc32.default
+  in
+  let crc = Checkseum.Crc32.digest_string b 0 (String.length b) crc in
+  Optint.to_int32 crc
+
 (** [pack_uint32_be buf offset value] writes [value] as a big-endian unsigned
     32-bit integer at [offset] in [buf]. *)
 let pack_uint32_be buf offset value =
@@ -143,10 +152,11 @@ let read_packet sock =
   (* Verify checksum: CRC32 over header with checksum field zeroed + payload *)
   let header_for_check = Bytes.copy header_buf in
   pack_uint32_be header_for_check 4 0l;
-  let check_data =
-    Bytes.to_string header_for_check ^ Bytes.to_string payload_buf
+  let computed_crc =
+    compute_crc32_parts
+      (Bytes.to_string header_for_check)
+      (Bytes.to_string payload_buf)
   in
-  let computed_crc = compute_crc32 check_data in
   if computed_crc <> checksum then
     failwith
       (Printf.sprintf "Checksum mismatch: expected 0x%08lX, got 0x%08lX"
@@ -160,26 +170,26 @@ let write_packet sock packet =
     if packet.is_reply then Int32.logor packet.message_id reply_bit
     else packet.message_id
   in
-  let payload_len = Int32.of_int (String.length packet.payload) in
+  let payload_len = String.length packet.payload in
   (* Build header with zeroed checksum for CRC computation *)
   let header_buf = Bytes.create header_size in
   pack_uint32_be header_buf 0 magic;
   pack_uint32_be header_buf 4 0l;
   pack_uint32_be header_buf 8 packet.channel_id;
   pack_uint32_be header_buf 12 wire_message_id;
-  pack_uint32_be header_buf 16 payload_len;
-  let check_data = Bytes.to_string header_buf ^ packet.payload in
-  let checksum = compute_crc32 check_data in
-  pack_uint32_be header_buf 4 checksum;
-  (* Write header + payload + terminator *)
-  let total =
-    Bytes.to_string header_buf ^ packet.payload
-    ^ String.make 1 (Char.chr terminator)
+  pack_uint32_be header_buf 16 (Int32.of_int payload_len);
+  let checksum =
+    compute_crc32_parts (Bytes.to_string header_buf) packet.payload
   in
-  let total_bytes = Bytes.of_string total in
-  let len = Bytes.length total_bytes in
+  pack_uint32_be header_buf 4 checksum;
+  (* Assemble into a single buffer: header + payload + terminator *)
+  let total_len = header_size + payload_len + 1 in
+  let buf = Bytes.create total_len in
+  Bytes.blit header_buf 0 buf 0 header_size;
+  Bytes.blit_string packet.payload 0 buf header_size payload_len;
+  Bytes.set buf (header_size + payload_len) (Char.chr terminator);
   let pos = ref 0 in
-  while !pos < len do
-    let written = Unix.write sock total_bytes !pos (len - !pos) in
+  while !pos < total_len do
+    let written = Unix.write sock buf !pos (total_len - !pos) in
     pos := !pos + written
   done

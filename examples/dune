@@ -1,3 +1,9 @@
 (executables
  (names basic_properties collections real_world)
  (libraries hegel))
+
+(executable
+ (name derived_types)
+ (libraries hegel)
+ (preprocess
+  (pps ppx_hegel_generator)))
