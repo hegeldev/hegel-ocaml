@@ -1,18 +1,7 @@
 open Hegel.Protocol
 open Hegel.Connection
 
-(** [contains_substring s sub] returns [true] if [sub] appears anywhere in [s].
-*)
-let contains_substring s sub =
-  let slen = String.length s and sublen = String.length sub in
-  if sublen > slen then false
-  else
-    let rec check i =
-      if i > slen - sublen then false
-      else if String.sub s i sublen = sub then true
-      else check (i + 1)
-    in
-    check 0
+let contains_substring = Test_helpers.contains_substring
 
 (** Helper: create a socketpair. Returns (fd1, fd2). *)
 let make_socket_pair () = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0

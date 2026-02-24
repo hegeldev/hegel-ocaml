@@ -303,3 +303,27 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
 16. **Trailing `(** ... *)` docs after `and` declarations in mutually recursive types**: For
     `type t = ... and u = ...`, OCamlFormat places the trailing doc after each `and` clause, not
     before. This is consistent with the single-type case. Do not attempt to restructure these.
+
+### Code Review (Greybeard Pass)
+
+17. **`Option.fold` is idiomatic OCaml for option-with-default-accumulator**: The pattern
+    `Option.fold ~none:acc ~some:(fun x -> Some x) opt` is the standard OCaml way to say
+    "if Some, replace the accumulator; if None, keep it." Don't replace it with a match — bisect_ppx
+    treats `Option.fold` as a single coverage point, but a match creates two branches, one of which
+    may be hard to cover in tests.
+
+18. **`Checkseum.Crc32.digest_string` supports incremental computation**: The `init` parameter of
+    `digest_string` can be the result of a previous digestion, enabling CRC32 over multiple
+    string segments without concatenation. Use `compute_crc32_parts` for two-segment CRC.
+
+19. **`Bytes.blit_string` for zero-copy assembly**: When building a buffer from header + payload +
+    terminator, use `Bytes.create` + `Bytes.blit` / `Bytes.blit_string` instead of string
+    concatenation followed by `Bytes.of_string`. This avoids intermediate string allocations.
+
+20. **Shared test helpers belong in `test/test_helpers.ml`**: Any utility function used across
+    multiple test modules (e.g. `contains_substring`) should live in a shared helper module listed
+    in the dune `(modules ...)` stanza. This avoids copy-paste and ensures consistent behavior.
+
+21. **Or-patterns in match arms for deduplication**: When two match arms do the same thing with
+    minor variation, use `(Some (Dead _) | None) as entry -> ...` and dispatch on the bound
+    variable inside the arm body. This is cleaner than duplicating the entire block.

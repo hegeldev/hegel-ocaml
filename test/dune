@@ -2,6 +2,7 @@
  (name test_hegel)
  (modules
   test_hegel
+  test_helpers
   test_protocol
   test_cbor_helpers
   test_connection
