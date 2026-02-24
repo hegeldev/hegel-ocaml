@@ -1,0 +1,44 @@
+(library
+ (name json_params)
+ (modules json_params)
+ (libraries yojson))
+
+(executable
+ (name test_booleans)
+ (modules test_booleans)
+ (libraries hegel json_params))
+
+(executable
+ (name test_integers)
+ (modules test_integers)
+ (libraries hegel json_params))
+
+(executable
+ (name test_floats)
+ (modules test_floats)
+ (libraries hegel json_params))
+
+(executable
+ (name test_text)
+ (modules test_text)
+ (libraries hegel json_params))
+
+(executable
+ (name test_binary)
+ (modules test_binary)
+ (libraries hegel json_params))
+
+(executable
+ (name test_lists)
+ (modules test_lists)
+ (libraries hegel json_params))
+
+(executable
+ (name test_sampled_from)
+ (modules test_sampled_from)
+ (libraries hegel json_params))
+
+(executable
+ (name test_hashmaps)
+ (modules test_hashmaps)
+ (libraries hegel json_params))

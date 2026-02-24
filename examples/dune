@@ -1,0 +1,3 @@
+(executables
+ (names basic_properties collections real_world)
+ (libraries hegel))

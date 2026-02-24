@@ -13,84 +13,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check-release:
-    name: check release
-    if: github.event_name == 'pull_request'
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Check release
-        run: python .github/scripts/release.py check "${{ github.base_ref }}"
 
-  format:
-    name: format
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ocaml/setup-ocaml@v3
-        with:
-          ocaml-compiler: '5.2'
-      - run: opam install ocamlformat.0.26.2
-      - name: format
-        run: |
-          opam exec -- dune fmt
-          git diff --exit-code
-
-  test:
-    name: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
       - uses: ./.github/actions/base
         with:
           ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
-      - uses: ocaml/setup-ocaml@v3
-        with:
-          ocaml-compiler: '5.2'
-          dune-cache: true
-      - run: opam install . --deps-only --with-test
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Install hegel
-        run: pip install git+ssh://git@github.com/antithesishq/hegel.git
-      - name: Test
-        run: opam exec -- dune runtest
 
-  release:
-    name: release
-    if: github.event_name == 'push' && github.repository == 'antithesishq/hegel-ocaml'
-    needs: [format, test]
+      - uses: extractions/setup-just@v2
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.2.1
+
+      - name: Install OCaml dependencies
+        run: opam install . --deps-only --with-test --with-doc --yes
+
+      - run: just setup
+      - run: just check
+
+  conformance:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Check for RELEASE.md
-        id: check
-        run: |
-          if [ ! -f RELEASE.md ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Generate app token
-        if: steps.check.outputs.skip != 'true'
-        uses: actions/create-github-app-token@v1
-        id: app-token
+      - uses: ./.github/actions/base
         with:
-          app-id: ${{ vars.HEGEL_RELEASE_APP_ID }}
-          private-key: ${{ secrets.HEGEL_RELEASE_APP_PRIVATE_KEY }}
+          ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
 
-      - name: Re-checkout with app token
-        if: steps.check.outputs.skip != 'true'
-        uses: actions/checkout@v4
+      - uses: extractions/setup-just@v2
+      - uses: astral-sh/setup-uv@v6
+
+      - uses: actions/setup-python@v5
         with:
-          token: ${{ steps.app-token.outputs.token }}
+          python-version: "3.13"
 
-      - name: Release
-        if: steps.check.outputs.skip != 'true'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: python .github/scripts/release.py release
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.2.1
+
+      - name: Install OCaml dependencies
+        run: opam install . --deps-only --with-test --yes
+
+      - run: just setup
+      - run: pip install pytest
+      - run: just conformance

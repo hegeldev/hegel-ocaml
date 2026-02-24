@@ -1,5 +1,0 @@
-(test
- (name test_unit)
- (libraries hegel alcotest)
- (deps
-  (:_ ../test/mock_hegel.exe)))

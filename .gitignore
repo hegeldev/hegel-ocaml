@@ -1,13 +1,29 @@
-_build/
-*.install
-.merlin
-*.byte
-*.native
+# Virtual environment
+.venv/
+
+
+# Test databases (created by hegel/hypothesis during test runs)
 .hegel/
 .hypothesis/
-.claude-reliability
-.claude/reliability-config.yml
-.clause/*.local.*
+
+# Python bytecode (from coverage scripts and conformance tests)
+__pycache__/
+*.pyc
+
+# Claude Code transient files
+.claude/plan.md
+
+# Hegelator state
+
+# Build artifacts (language-specific entries added in Stage 1)
+_build/
 _coverage/
-bisect*.coverage
-.venv/
+*.cmi
+*.cmx
+*.cmxa
+*.cmo
+*.cma
+*.byte
+*.native
+*.o
+*.a

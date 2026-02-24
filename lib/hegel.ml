@@ -1,14 +1,29 @@
-module Gen = Gen
-module Cbor = Cbor
+(** Hegel property-based testing SDK for OCaml.
+
+    This module provides the client SDK for communicating with the Hegel server
+    (hegeld, powered by Hypothesis) via Unix sockets using a binary protocol,
+    enabling property-based testing from OCaml. *)
+
+(** The current version of the Hegel OCaml SDK. *)
+let version = "0.1.0"
+
 module Protocol = Protocol
-module Crc32 = Crc32
-module State = State
+(** Binary wire protocol for packet serialization and deserialization. *)
 
-exception Assume_rejected = Gen.Assume_rejected
+module Cbor_helpers = Cbor_helpers
+(** CBOR encoding/decoding with type-safe extractor helpers. *)
 
-let run = Runner.run
-let find_hegel_path = Runner.find_hegel_path
-let extract_channel_id = Runner.extract_channel_id
-let assume condition = if not condition then raise Assume_rejected
-let note = Gen.note
-let target = Gen.target
+module Connection = Connection
+(** Multiplexed connection and channel abstractions. *)
+
+module Client = Client
+(** Test runner and lifecycle management. *)
+
+module Session = Session
+(** Global session management for running property tests. *)
+
+module Generators = Generators
+(** Generator combinators for composable test data generation. *)
+
+module Conformance = Conformance
+(** Conformance test helpers for writing conformance binaries. *)
