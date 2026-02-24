@@ -1,0 +1,9 @@
+{
+  "task_id": "good-taste-audit",
+  "stage": 10,
+  "name": "Good Taste Audit",
+  "completed_at": "2026-02-24T12:11:21",
+  "cost_usd": 3.92,
+  "model": "claude-sonnet-4-6",
+  "language": "ocaml"
+}
