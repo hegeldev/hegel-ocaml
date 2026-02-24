@@ -42,3 +42,18 @@
   (yojson
    (>= 1.7))
   (odoc :with-doc)))
+
+(package
+ (name ppx_hegel_generator)
+ (synopsis "PPX deriver for Hegel generator derivation")
+ (description
+  "Automatically derives Hegel generators for OCaml types annotated with [@@deriving generator].")
+ (depends
+  (ocaml
+   (>= 5.2))
+  (dune
+   (>= 3.16))
+  (ppxlib
+   (>= 0.28))
+  (hegel
+   (= :version))))

@@ -12,4 +12,5 @@ let () =
       ("generators", Test_generators.tests);
       ("showcase", Test_showcase.tests);
       ("conformance_helpers", Test_conformance_helpers.tests);
+      ("derive", Test_derive.tests);
     ]

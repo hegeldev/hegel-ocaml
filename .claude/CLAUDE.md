@@ -21,6 +21,7 @@ just check       # Run lint + docs + test (the full CI check)
 - **Formatter**: OCamlFormat 0.28.1 (version pinned in .ocamlformat)
 - **Documentation**: odoc 3.1.0
 - **Package manager**: opam 2.1.5
+- **PPX derivation**: ppxlib 0.35.0 (for `[@@deriving generator]`)
 
 ## Project Structure
 
@@ -35,9 +36,14 @@ lib/                         # Library source (the SDK itself)
   session.ml                 # Global hegeld subprocess management
   generators.ml              # Generator combinators (booleans, integers, lists, …)
   conformance.ml             # Conformance test helpers (get_test_cases, write_metrics)
+  derive.ml                  # Runtime support for [@@deriving generator]
+
+ppx/                         # PPX deriver package (ppx_hegel_generator)
+  dune                       # PPX library build config (depends on ppxlib)
+  ppx_hegel_generator.ml     # Deriver: reads type decls, emits generator functions
 
 test/                        # Alcotest test suite
-  dune                       # Test build config
+  dune                       # Test build config (two executables: test_hegel, test_ppx_derive)
   test_hegel.ml              # Top-level Alcotest runner
   test_protocol.ml           # Wire protocol tests
   test_cbor_helpers.ml       # CBOR helper tests
@@ -46,6 +52,8 @@ test/                        # Alcotest test suite
   test_generators.ml         # Generator combinator tests
   test_showcase.ml           # End-to-end example property tests
   test_conformance_helpers.ml # Conformance helper and new-generator tests
+  test_derive.ml             # Derive module runtime helper tests
+  test_ppx_derive.ml         # PPX deriver E2E tests (uses ppx_hegel_generator)
 
 conformance/                 # Conformance test binaries (compiled executables)
   dune                       # Builds json_params library + 8 executables
@@ -70,6 +78,7 @@ examples/                    # Example programs demonstrating the SDK
   basic_properties.ml        # Primitive generators: integers, booleans, floats
   collections.ml             # Collections and combinators: lists, filter, map
   real_world.ml              # Real-world scenario: sorted-merge property test
+  derived_types.ml           # Derived generators via [@@deriving generator]
 
 scripts/
   check-coverage.py          # Parses bisect-ppx-report, enforces 100%
@@ -103,6 +112,53 @@ Generators are a discriminated union:
 - **Filtered** — wraps source + predicate. Up to `max_filter_attempts` retries before `assume false`.
 - **CompositeList** — used when list elements are non-Basic. Uses the collection protocol (new_collection / collection_more) to generate elements one at a time.
 
+### Type-Directed Derivation (ppx/ + lib/derive.ml)
+
+The `ppx_hegel_generator` PPX deriver synthesizes `unit -> 'a` generator functions
+from type declarations annotated with `[@@deriving generator]`. The generated code:
+
+1. For **records**: generates each field by calling the appropriate primitive
+   generator, then constructs the record value.
+2. For **variants**: picks a constructor index uniformly at random via
+   `sampled_from`, then generates arguments for the chosen constructor.
+3. For **type aliases**: delegates to the generator for the aliased type.
+4. For **nested types**: calls `<type>_generator ()` (user-defined generators
+   must exist in scope).
+
+The PPX emits code that calls `Hegel.Generators.generate` directly — no
+intermediate `generator` value is produced. The `Hegel.Derive` module provides
+runtime helpers for option and list types.
+
+**Usage example:**
+
+```ocaml
+(* In your dune file, add: (preprocess (pps ppx_hegel_generator)) *)
+
+type point = { x : int; y : int } [@@deriving generator]
+type color = Red | Green | Blue [@@deriving generator]
+type entity = { name : string; tag : int option; active : bool }
+[@@deriving generator]
+
+(* Use inside a Hegel test body: *)
+let () =
+  Hegel.Session.run_hegel_test ~name:"my_test" ~test_cases:100 (fun () ->
+    let p = point_generator () in
+    let c = color_generator () in
+    let e = entity_generator () in
+    (* p.x, p.y are ints; c is Red|Green|Blue; e has typed fields *)
+    ignore (p, c, e))
+```
+
+**Supported field types:**
+- `int` — bounded integers (±1073741823 to fit OCaml native int)
+- `bool` — booleans
+- `float` — finite floats (NaN and infinity disabled)
+- `string` — text strings
+- `t list` — lists of derived elements (max size 20)
+- `t option` — `Some v` or `None`
+- Named types `t` — calls `t_generator ()` (must be in scope)
+- Tuples `(t1 * t2 * ...)` — generates each component
+
 ### Collection Protocol
 
 Non-basic list elements use a server-side collection handle:
@@ -131,6 +187,7 @@ A singleton `_session` lazily starts the `hegel` binary as a subprocess on first
 - Every lib module has a corresponding `test/test_<module>.ml`
 - Unit tests use socketpair-based fake servers to avoid depending on the real hegel binary
 - End-to-end tests (tagged `_e2e`) require the real binary and live under the same test file
+- PPX-derived tests live in `test/test_ppx_derive.ml` (separate executable with PPX preprocessing)
 - 100% branch and line coverage is mandatory — no exceptions, no `[@coverage off]`
 
 ### Error Handling
@@ -157,4 +214,36 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
 - `scripts/check-coverage.py` parses `bisect-ppx-report summary` output
 - Unreachable server-contract violations use `failwith "..."` (tested via unit tests on the transform)
 - `[@coverage off]` annotations are never used
-- Only `lib/` code is instrumented; conformance binaries and examples are not measured
+- Only `lib/` code is instrumented; conformance binaries, examples, and PPX code are not measured
+
+## Lessons Learned
+
+### PPX Deriver Implementation
+
+1. **PPX generates `unit -> 'a` functions, not `generator` values**: The Hegel generator
+   system operates at the CBOR level — `generate gen` returns `CBOR.Simple.t`. For
+   type-directed derivation to be ergonomic, the PPX generates functions that call
+   `generate` internally and extract typed OCaml values. This means derived generators
+   are `unit -> my_type` thunks, not `Hegel.Generators.generator` values.
+
+2. **Unbounded integers cause CBOR bigint issues**: `integers()` without bounds can
+   generate numbers too large for OCaml's native int. The CBOR library encodes these
+   as tagged bigints that `extract_int` can't decode. The PPX bounds ints to
+   ±1073741823 (30-bit) to avoid this. Users needing different ranges should use
+   the manual `Generators.integers ~min_value ~max_value ()` API.
+
+3. **PPX tests need a separate executable**: Because the PPX needs
+   `(preprocess (pps ppx_hegel_generator))`, the test file using `[@@deriving generator]`
+   must be in a separate `(test ...)` stanza from the main test suite. Both test
+   executables are run by `dune runtest`.
+
+4. **ppxlib.metaquot is essential**: The PPX uses `[%expr ...]` and `[%stri ...]`
+   metaquot syntax for readable AST construction. This requires
+   `(preprocess (pps ppxlib.metaquot))` in the PPX's own dune file.
+
+5. **Runtime helpers in lib/derive.ml**: For option and list types, the PPX delegates
+   to runtime helpers `Hegel.Derive.generate_option` and `Hegel.Derive.generate_list`.
+   These live in the main library (not the PPX) so they're covered by bisect_ppx.
+
+6. **Floats default to finite**: The PPX generates `floats ~allow_nan:false ~allow_infinity:false ()`
+   to avoid NaN/infinity in derived types, which would cause issues in most user code.

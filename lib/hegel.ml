@@ -27,3 +27,6 @@ module Generators = Generators
 
 module Conformance = Conformance
 (** Conformance test helpers for writing conformance binaries. *)
+
+module Derive = Derive
+(** Runtime support for [@@deriving generator]. *)

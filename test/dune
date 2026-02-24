@@ -8,5 +8,13 @@
   test_client
   test_generators
   test_showcase
-  test_conformance_helpers)
+  test_conformance_helpers
+  test_derive)
  (libraries hegel alcotest unix threads.posix))
+
+(test
+ (name test_ppx_derive)
+ (modules test_ppx_derive)
+ (libraries hegel alcotest unix threads.posix)
+ (preprocess
+  (pps ppx_hegel_generator)))
