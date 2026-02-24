@@ -247,3 +247,34 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
 
 6. **Floats default to finite**: The PPX generates `floats ~allow_nan:false ~allow_infinity:false ()`
    to avoid NaN/infinity in derived types, which would cause issues in most user code.
+
+### Documentation and Polish Stage
+
+7. **`just docs` already enforces zero warnings**: The `dune build @doc` target is strict — any
+   undocumented public value produces a warning that fails the build. All lib modules must have
+   `(** ... *)` doc comments on every public type, function, constant, and exception. This is
+   enforced in CI via `just check: lint docs test`.
+
+8. **odoc module-level comment must come first**: The module-level `(** ... *)` comment must appear
+   before any `open` statements or definitions. odoc picks up only the first doc comment as the
+   module doc. Comments placed after the first definition are treated as item-level docs.
+
+9. **README under 200 lines**: The full API reference belongs in odoc comments, not the README.
+   README should cover: what it is, installation, a quick-start example, a generator/combinator
+   table, mention of the PPX deriver, project layout, and build commands. All API detail goes
+   in `just docs` output.
+
+10. **Getting Started tutorial in `docs/getting-started.md`**: Plain Markdown, not an odoc page.
+    Reference it from README.md. Translate all Python SDK examples to idiomatic OCaml, adding
+    short notes where the OCaml API differs (no decorator, no `.generate()` method, etc.).
+
+11. **Four example programs covers the full surface area**: `basic_properties.ml` (primitives,
+    assume, note), `collections.ml` (lists, map, flat_map, filter, sampled_from, hashmaps),
+    `real_world.ml` (sorted-merge property test), `derived_types.ml` (PPX deriver). Each has a
+    standalone `main`; derived_types needs a separate dune stanza with PPX preprocessing.
+
+12. **opam not on PATH in shell spawned by `just`**: The `just` tool starts a fresh shell that
+    does not source `.bashrc` or `.profile`. Fix: add
+    `export PATH := env("HOME") + "/.opam/5.2.1/bin:" + env("PATH")` at the top of the
+    justfile, and use `eval $(opam env)` inside recipes that need the full opam environment.
+    The `export PATH` line in justfile is evaluated by `just` itself, not the shell.

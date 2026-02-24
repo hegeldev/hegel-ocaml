@@ -9,13 +9,13 @@ the simplest counterexample.
 
 ## Installation
 
-1. Install opam dependencies:
+1. Install the opam package:
 
 ```bash
 opam install hegel
 ```
 
-2. Run setup to fetch the `hegel` binary:
+2. Run setup to fetch the `hegel` binary and create a Python venv:
 
 ```bash
 just setup
@@ -29,7 +29,7 @@ HEGEL_BINARY=/path/to/hegel just setup
 
 ## Quick Start
 
-Add `hegel` to your library's dependencies in `dune`:
+Add `hegel` to your dune library dependencies:
 
 ```
 (executable
@@ -37,7 +37,7 @@ Add `hegel` to your library's dependencies in `dune`:
  (libraries hegel alcotest))
 ```
 
-Then write a property test:
+Write a property test:
 
 ```ocaml
 open Hegel.Generators
@@ -45,15 +45,13 @@ open Hegel.Generators
 let test_addition_commutative () =
   Hegel.Session.run_hegel_test ~name:"add_commutative" ~test_cases:100
     (fun () ->
-      let a = Hegel.Cbor_helpers.extract_int (generate (integers ~min_value:(-1000) ~max_value:1000 ())) in
-      let b = Hegel.Cbor_helpers.extract_int (generate (integers ~min_value:(-1000) ~max_value:1000 ())) in
+      let a = Hegel.Cbor_helpers.extract_int
+                (generate (integers ~min_value:(-1000) ~max_value:1000 ())) in
+      let b = Hegel.Cbor_helpers.extract_int
+                (generate (integers ~min_value:(-1000) ~max_value:1000 ())) in
       assert (a + b = b + a))
-```
 
-Run with:
-
-```bash
-just test
+let () = test_addition_commutative ()
 ```
 
 Hegel generates 100 random pairs `(a, b)`, checks the property, and reports
@@ -67,7 +65,7 @@ values.
 ```ocaml
 Hegel.Session.run_hegel_test
   ~name:"my_property"   (* test name shown in reports *)
-  ~test_cases:100        (* number of inputs to try *)
+  ~test_cases:100        (* number of inputs to try, default 100 *)
   (fun () ->
     (* generate values and assert properties here *)
     ())
@@ -76,7 +74,8 @@ Hegel.Session.run_hegel_test
 ### Generators
 
 All generators live in `Hegel.Generators`. Call `generate gen` inside a test
-to draw a value:
+body to draw a value (returned as `CBOR.Simple.t`; use `Hegel.Cbor_helpers`
+extractors to get typed OCaml values):
 
 | Generator | Description |
 |-----------|-------------|
@@ -85,7 +84,7 @@ to draw a value:
 | `floats ?min_value ?max_value ?allow_nan ?allow_infinity ()` | Floats |
 | `text ?min_size ?max_size ()` | Unicode strings |
 | `binary ?min_size ?max_size ()` | Byte strings |
-| `sampled_from options` | One value from a list |
+| `sampled_from options` | One value from a CBOR list |
 | `lists elements ?min_size ?max_size ()` | Lists of generated elements |
 | `hashmaps keys values ?min_size ?max_size ()` | Dictionaries |
 
@@ -96,11 +95,11 @@ to draw a value:
 let doubled = map (fun v -> `Int (Hegel.Cbor_helpers.extract_int v * 2))
                   (integers ~min_value:1 ~max_value:10 ())
 
-(* Filter values *)
+(* Filter values — retries up to 3 times before discarding the test case *)
 let even = filter (fun v -> Hegel.Cbor_helpers.extract_int v mod 2 = 0)
                   (integers ())
 
-(* Dependent generation *)
+(* Dependent generation — second generator depends on the first *)
 let pair = flat_map
   (fun n_v ->
     let n = Hegel.Cbor_helpers.extract_int n_v in
@@ -112,16 +111,45 @@ let pair = flat_map
 ### Helpers
 
 ```ocaml
-Hegel.Client.assume (x <> 0)         (* discard this test case if false *)
+Hegel.Client.assume (x <> 0)              (* discard this test case if false *)
 Hegel.Client.note (Printf.sprintf "x=%d" x)  (* print only on failure *)
-Hegel.Client.target score "label"    (* guide search toward higher scores *)
+Hegel.Client.target score "label"         (* guide search toward higher scores *)
 ```
+
+### Type-directed generation (PPX)
+
+Add `ppx_hegel_generator` to your dune file:
+
+```
+(executable
+ (name my_tests)
+ (libraries hegel alcotest)
+ (preprocess (pps ppx_hegel_generator)))
+```
+
+Then annotate types with `[@@deriving generator]`:
+
+```ocaml
+type point = { x : int; y : int } [@@deriving generator]
+type color = Red | Green | Blue [@@deriving generator]
+
+let () =
+  Hegel.Session.run_hegel_test ~name:"point_test" ~test_cases:100 (fun () ->
+    let p = point_generator () in
+    let c = color_generator () in
+    ignore (p, c))
+```
+
+The PPX synthesises `<type>_generator : unit -> <type>` functions for records,
+variants, type aliases, and nested types. Supported field types: `int`, `bool`,
+`float`, `string`, `t list`, `t option`, and named types.
 
 ## Project Layout
 
 ```
-lib/          SDK source (hegel, hegel.generators, hegel.session, …)
-test/         Alcotest test suite
+lib/          SDK source (hegel library — protocol, connection, generators, …)
+ppx/          PPX deriver (ppx_hegel_generator)
+test/         Alcotest unit and end-to-end test suite
 examples/     Standalone example programs
 docs/         Getting Started tutorial
 conformance/  Compiled conformance test binaries
@@ -130,9 +158,12 @@ conformance/  Compiled conformance test binaries
 ## Building and Testing
 
 ```bash
-just check      # Full CI: lint + docs + tests with 100% coverage
-just docs       # Build API docs (output in _build/default/_doc/)
-just format     # Auto-format all source files
+just check        # Full CI: lint + docs + tests with 100% coverage
+just test         # Tests only (with coverage check)
+just docs         # Build API docs (output in _build/default/_doc/)
+just format       # Auto-format all source files
+just lint         # Check formatting only
+just conformance  # Run conformance tests against the Hegel server
 ```
 
 ## Full API Reference
@@ -141,4 +172,5 @@ Run `just docs` to build the full API documentation with odoc. The generated
 HTML is written to `_build/default/_doc/_html/hegel/`. Open
 `_build/default/_doc/_html/hegel/index.html` in your browser.
 
-See `docs/getting-started.md` for a step-by-step tutorial.
+See `docs/getting-started.md` for a step-by-step tutorial with examples for
+every major feature.
