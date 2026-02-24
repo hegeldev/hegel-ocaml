@@ -41,7 +41,7 @@ let send_test_case fd test_channel_id =
       (Hegel.Cbor.Map
          [
            (Hegel.Cbor.Text "event", Hegel.Cbor.Text "test_case");
-           (Hegel.Cbor.Text "channel", Hegel.Cbor.Unsigned tc_id);
+           (Hegel.Cbor.Text "channel_id", Hegel.Cbor.Unsigned tc_id);
          ])
   in
   let _msg_id = send_request fd test_channel_id event in
@@ -102,7 +102,7 @@ let () =
   let packet = Hegel.Protocol.read_packet client in
   let run_test = Hegel.Cbor.decode_string packet.payload in
   let test_channel_id =
-    match Hegel.Cbor.map_get run_test "channel" with
+    match Hegel.Cbor.map_get run_test "channel_id" with
     | Some v -> (
         match Hegel.Cbor.as_int v with
         | Some n -> n
