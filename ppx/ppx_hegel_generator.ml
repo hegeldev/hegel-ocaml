@@ -281,6 +281,6 @@ let generate_impl ~ctxt
       [%stri let [%p Ast_builder.Default.pvar ~loc gen_name] = [%e gen_expr]])
     type_decls
 
-let _my_deriver =
+let _deriver =
   Deriving.add "generator"
     ~str_type_decl:(Deriving.Generator.V2.make_noarg generate_impl)

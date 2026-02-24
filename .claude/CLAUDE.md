@@ -278,3 +278,28 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
     `export PATH := env("HOME") + "/.opam/5.2.1/bin:" + env("PATH")` at the top of the
     justfile, and use `eval $(opam env)` inside recipes that need the full opam environment.
     The `export PATH` line in justfile is evaluated by `just` itself, not the shell.
+
+### Good-Taste Audit
+
+13. **OCamlFormat is the authority on doc comment placement**: OCaml has two valid placements for
+    documentation comments — before an item (`(** doc *) type t = ...`) or after it
+    (`type t = ... (** doc *)`). Both are accepted by odoc. However, **OCamlFormat enforces the
+    trailing form** for `type` and `exception` declarations — it will revert any "before" placement
+    on format. Trust the formatter; do not fight it. Trailing doc comments after type/exception
+    declarations are the OCamlFormat-canonical style.
+
+14. **`_foo` naming convention**: In OCaml, a leading `_` on a name signals "intentionally unused"
+    and suppresses the unused-variable warning. Using `_foo` for a module-level binding that IS
+    used (e.g. `let _session = ...` that is referenced throughout the module) is misleading and
+    confusing. Only use `_foo` or `_` for genuinely unused bindings. The exception is ppxlib's
+    `let _deriver = Deriving.add ...` pattern, where the value IS intentionally unused (the
+    registration side-effect is what matters). Avoid `_my_foo` — `_deriver` or `_` are cleaner.
+
+15. **`_foo` used immediately after binding is a genuine bad taste**: `let _msg = ...` then
+    `let pairs = extract_dict _msg` — where the `_msg` binding is immediately used — is wrong.
+    The `_` prefix should only appear on bindings that are structurally required but whose value
+    is intentionally discarded. If you access the value, drop the underscore prefix.
+
+16. **Trailing `(** ... *)` docs after `and` declarations in mutually recursive types**: For
+    `type t = ... and u = ...`, OCamlFormat places the trailing doc after each `and` clause, not
+    before. This is consistent with the single-type case. Do not attempt to restructure these.

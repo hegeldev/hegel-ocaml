@@ -496,8 +496,8 @@ let test_filtered_exhaustion_socketpair () =
         send_response_value data_ch msg_id `Null
       done;
       (* mark_complete with INVALID *)
-      let msg_id, _msg = receive_request data_ch () in
-      let pairs = Hegel.Cbor_helpers.extract_dict _msg in
+      let msg_id, msg = receive_request data_ch () in
+      let pairs = Hegel.Cbor_helpers.extract_dict msg in
       let status =
         Hegel.Cbor_helpers.extract_string (List.assoc (`Text "status") pairs)
       in
