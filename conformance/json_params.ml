@@ -64,3 +64,7 @@ let get_int_array pairs key =
           | `Int n -> Some n | `Float f -> Some (int_of_float f) | _ -> None)
         items
   | _ -> []
+
+(** [int_opt_to_json v] serializes an optional int to JSON: [Some n] becomes the
+    string representation of [n], [None] becomes ["null"]. *)
+let int_opt_to_json = function None -> "null" | Some n -> string_of_int n

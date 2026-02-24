@@ -11,7 +11,7 @@
 
 (maintainers "Antithesis <engineering@antithesis.com>")
 
-(license ISC)
+(license MIT)
 
 (package
  (name hegel)
