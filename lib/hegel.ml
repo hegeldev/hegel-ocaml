@@ -33,7 +33,8 @@ module Derive = Derive
 
 (** {2 Convenience re-exports} *)
 
-(** [assume condition] rejects the current test case if [condition] is [false]. *)
+(** [assume condition] rejects the current test case if [condition] is [false].
+*)
 let assume = Client.assume
 
 (** [note message] records a message that will be printed on the final (failing)

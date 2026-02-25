@@ -23,78 +23,77 @@ module Labels : sig
   val enum_variant : int
 end
 
+type 'a generator
 (** The type of generators. Generators produce typed OCaml values and can be
     combined using {!map}, {!flat_map}, and {!filter}. *)
-type 'a generator
 
-(** Maximum number of filter attempts before calling [assume false]. *)
 val max_filter_attempts : int
+(** Maximum number of filter attempts before calling [assume false]. *)
 
+val group : int -> (unit -> 'a) -> 'a
 (** [group label f] runs [f ()] inside a span with the given [label]. The span
     is stopped with [discard:false] regardless of whether [f] raises. *)
-val group : int -> (unit -> 'a) -> 'a
 
-(** [discardable_group label f] runs [f ()] inside a span with [label]. If [f]
-    raises, the span is stopped with [discard:true]; otherwise [discard:false]. *)
 val discardable_group : int -> (unit -> 'a) -> 'a
+(** [discardable_group label f] runs [f ()] inside a span with [label]. If [f]
+    raises, the span is stopped with [discard:true]; otherwise [discard:false].
+*)
 
-(** A collection handle for generating variable-length sequences. *)
 type collection = {
   mutable finished : bool;
   mutable server_name : CBOR.Simple.t option;
   min_size : int;
   max_size : int option;
 }
+(** A collection handle for generating variable-length sequences. *)
 
-(** [new_collection ~min_size ?max_size ()] creates a new collection handle. *)
 val new_collection : min_size:int -> ?max_size:int -> unit -> collection
+(** [new_collection ~min_size ?max_size ()] creates a new collection handle. *)
 
+val collection_more : collection -> bool
 (** [collection_more coll] returns [true] if more elements should be generated,
     [false] when the collection is complete. *)
-val collection_more : collection -> bool
 
-(** [collection_reject coll] rejects the last element of the collection. *)
 val collection_reject : collection -> unit
+(** [collection_reject coll] rejects the last element of the collection. *)
 
-(** [generate gen] produces a typed value from generator [gen]. *)
 val generate : 'a generator -> 'a
+(** [generate gen] produces a typed value from generator [gen]. *)
 
+val map : ('a -> 'b) -> 'a generator -> 'b generator
 (** [map f gen] transforms values from [gen] using [f].
 
     When [gen] is a [Basic] generator, the schema is preserved and transforms
     are composed. Otherwise, a [Mapped] generator is created. *)
-val map : ('a -> 'b) -> 'a generator -> 'b generator
 
+val flat_map : ('a -> 'b generator) -> 'a generator -> 'b generator
 (** [flat_map f gen] creates a dependent generator. The function [f] receives
     the generated value and returns a new generator whose value is the final
     result. *)
-val flat_map : ('a -> 'b generator) -> 'a generator -> 'b generator
 
+val filter : ('a -> bool) -> 'a generator -> 'a generator
 (** [filter predicate gen] filters values from [gen] using [predicate]. Tries
     multiple times; calls [assume false] if all attempts fail. *)
-val filter : ('a -> bool) -> 'a generator -> 'a generator
 
-(** [schema gen] returns the schema for a [Basic] generator, or [None]. *)
 val schema : 'a generator -> CBOR.Simple.t option
+(** [schema gen] returns the schema for a [Basic] generator, or [None]. *)
 
-(** [is_basic gen] returns [true] if [gen] is a [Basic] generator. *)
 val is_basic : 'a generator -> bool
+(** [is_basic gen] returns [true] if [gen] is a [Basic] generator. *)
 
+val as_basic : 'a generator -> (CBOR.Simple.t * (CBOR.Simple.t -> 'a)) option
 (** [as_basic gen] returns [Some (schema, transform)] if [gen] is [Basic], or
     [None] otherwise. *)
-val as_basic : 'a generator -> (CBOR.Simple.t * (CBOR.Simple.t -> 'a)) option
 
 (** {2 Primitive generators} *)
 
-(** [booleans ()] creates a generator for boolean values. *)
 val booleans : unit -> bool generator
+(** [booleans ()] creates a generator for boolean values. *)
 
+val integers : ?min_value:int -> ?max_value:int -> unit -> int generator
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
     the given bounds. *)
-val integers : ?min_value:int -> ?max_value:int -> unit -> int generator
 
-(** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
-    ?allow_infinity ()] creates a generator for floating-point values. *)
 val floats :
   ?min_value:float ->
   ?max_value:float ->
@@ -104,23 +103,26 @@ val floats :
   ?allow_infinity:bool ->
   unit ->
   float generator
+(** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
+     ?allow_infinity ()] creates a generator for floating-point values. *)
 
-(** [text ?min_size ?max_size ()] creates a generator for Unicode text strings. *)
 val text : ?min_size:int -> ?max_size:int -> unit -> string generator
+(** [text ?min_size ?max_size ()] creates a generator for Unicode text strings.
+*)
 
-(** [binary ?min_size ?max_size ()] creates a generator for binary byte strings. *)
 val binary : ?min_size:int -> ?max_size:int -> unit -> string generator
+(** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.
+*)
 
-(** [just value] creates a generator that always produces [value]. *)
 val just : 'a -> 'a generator
+(** [just value] creates a generator that always produces [value]. *)
 
 (** {2 Collection generators} *)
 
+val lists :
+  'a generator -> ?min_size:int -> ?max_size:int -> unit -> 'a list generator
 (** [lists elements ?min_size ?max_size ()] creates a generator for lists. *)
-val lists : 'a generator -> ?min_size:int -> ?max_size:int -> unit -> 'a list generator
 
-(** [hashmaps keys values ?min_size ?max_size ()] creates a generator for
-    dictionaries (hash maps). [keys] and [values] must be basic generators. *)
 val hashmaps :
   'a generator ->
   'b generator ->
@@ -128,58 +130,61 @@ val hashmaps :
   ?max_size:int ->
   unit ->
   ('a * 'b) list generator
+(** [hashmaps keys values ?min_size ?max_size ()] creates a generator for
+    dictionaries (hash maps). [keys] and [values] must be basic generators. *)
 
+val sampled_from : 'a list -> 'a generator
 (** [sampled_from options] creates a generator that samples uniformly from a
     non-empty list of values. *)
-val sampled_from : 'a list -> 'a generator
 
+val one_of : 'a generator list -> 'a generator
 (** [one_of generators] creates a generator that picks from one of the given
     [generators]. Requires at least 2 generators. *)
-val one_of : 'a generator list -> 'a generator
 
+val optional : 'a generator -> 'a option generator
 (** [optional element] creates a generator that produces either [None] or
     [Some value] from [element]. *)
-val optional : 'a generator -> 'a option generator
 
 (** {2 Tuple generators} *)
 
-(** [tuples2 g1 g2] creates a generator for 2-element tuples. *)
 val tuples2 : 'a generator -> 'b generator -> ('a * 'b) generator
+(** [tuples2 g1 g2] creates a generator for 2-element tuples. *)
 
+val tuples3 :
+  'a generator -> 'b generator -> 'c generator -> ('a * 'b * 'c) generator
 (** [tuples3 g1 g2 g3] creates a generator for 3-element tuples. *)
-val tuples3 : 'a generator -> 'b generator -> 'c generator -> ('a * 'b * 'c) generator
 
-(** [tuples4 g1 g2 g3 g4] creates a generator for 4-element tuples. *)
 val tuples4 :
   'a generator ->
   'b generator ->
   'c generator ->
   'd generator ->
   ('a * 'b * 'c * 'd) generator
+(** [tuples4 g1 g2 g3 g4] creates a generator for 4-element tuples. *)
 
 (** {2 Format generators} *)
 
-(** [emails ()] creates a generator for valid email address strings. *)
 val emails : unit -> string generator
+(** [emails ()] creates a generator for valid email address strings. *)
 
-(** [urls ()] creates a generator for valid URL strings. *)
 val urls : unit -> string generator
+(** [urls ()] creates a generator for valid URL strings. *)
 
-(** [domains ?max_length ()] creates a generator for domain name strings. *)
 val domains : ?max_length:int -> unit -> string generator
+(** [domains ?max_length ()] creates a generator for domain name strings. *)
 
-(** [dates ()] creates a generator for ISO 8601 date strings (YYYY-MM-DD). *)
 val dates : unit -> string generator
+(** [dates ()] creates a generator for ISO 8601 date strings (YYYY-MM-DD). *)
 
-(** [times ()] creates a generator for time strings. *)
 val times : unit -> string generator
+(** [times ()] creates a generator for time strings. *)
 
-(** [datetimes ()] creates a generator for ISO 8601 datetime strings. *)
 val datetimes : unit -> string generator
+(** [datetimes ()] creates a generator for ISO 8601 datetime strings. *)
 
-(** [ip_addresses ?version ()] creates a generator for IP address strings. *)
 val ip_addresses : ?version:int -> unit -> string generator
+(** [ip_addresses ?version ()] creates a generator for IP address strings. *)
 
+val from_regex : string -> ?fullmatch:bool -> unit -> string generator
 (** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
     a regular expression [pattern]. *)
-val from_regex : string -> ?fullmatch:bool -> unit -> string generator

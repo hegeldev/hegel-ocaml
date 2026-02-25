@@ -416,8 +416,7 @@ let lists elements ?(min_size = 0) ?max_size () =
         match raw_list with
         | `Array items -> List.map elem_transform items
         | _ ->
-            failwith
-              "Internal error: server returned non-array for list schema"
+            failwith "Internal error: server returned non-array for list schema"
       in
       Basic { schema = raw_schema; transform = list_transform }
   | None ->
@@ -549,8 +548,8 @@ let one_of (generators : 'a generator list) =
           | Basic { schema; transform } -> (schema, transform)
           | _ ->
               failwith
-                "Internal error: one_of generator is not Basic after \
-                 all_basic check")
+                "Internal error: one_of generator is not Basic after all_basic \
+                 check")
         generators
     in
     (* Check if all have identity transforms by testing if the transform is

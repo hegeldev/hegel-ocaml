@@ -6,7 +6,6 @@
     The main entry point is {!run_hegel_test}, which the user calls without
     needing to manage connections or sessions directly. *)
 
-(** Internal mutable session state. *)
 type hegel_session = {
   mutable process : int option;
   mutable connection : Connection.connection option;
@@ -15,31 +14,32 @@ type hegel_session = {
   mutable temp_dir : string option;
   lock : Mutex.t;
 }
+(** Internal mutable session state. *)
 
+val find_hegeld : unit -> string
 (** [find_hegeld ()] locates the hegeld binary. Checks, in order:
     - [HEGEL_BINARY] environment variable
     - [hegel] on [PATH] Returns the path or raises [Failure]. *)
-val find_hegeld : unit -> string
 
+val has_working_client : hegel_session -> bool
 (** [has_working_client session] returns [true] if the session has a live
     client. *)
-val has_working_client : hegel_session -> bool
 
+val cleanup : hegel_session -> unit
 (** [cleanup session] cleans up the session, killing the subprocess and closing
     the connection. *)
-val cleanup : hegel_session -> unit
 
-(** [start session] starts hegeld if not already running. *)
 val start : hegel_session -> unit
+(** [start session] starts hegeld if not already running. *)
 
+val run_hegel_test : ?test_cases:int -> ?name:string -> (unit -> unit) -> unit
 (** [run_hegel_test ?test_cases ?name test_fn] runs a property test using the
     shared hegeld process. This is the main public API.
 
     @param test_cases number of test cases (default 100)
     @param name test name (default ["test"])
     @param test_fn the test body function *)
-val run_hegel_test : ?test_cases:int -> ?name:string -> (unit -> unit) -> unit
 
+val restart_session : unit -> unit
 (** [restart_session ()] forces a restart of the global session. Useful when
     environment variables (like [HEGEL_PROTOCOL_TEST_MODE]) have changed. *)
-val restart_session : unit -> unit
