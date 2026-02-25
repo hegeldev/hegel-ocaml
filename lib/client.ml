@@ -15,19 +15,19 @@ exception Assume_rejected
 exception Data_exhausted
 (** Raised when the server runs out of test data (StopTest). *)
 
-(** Current test case channel. Set for the duration of each test case. Not
-    thread-safe: only one test may run at a time (enforced by the client lock in
-    {!run_test}). *)
-let current_channel : channel option ref = ref None
+(** Current test case channel. Set for the duration of each test case.
+    Domain-local so each domain has its own independent test state. *)
+let current_channel : channel option Domain.DLS.key =
+  Domain.DLS.new_key (fun () -> None)
 
 (** Whether this is the final (replay) run for a failing test case. *)
-let is_final_run : bool ref = ref false
+let is_final_run : bool Domain.DLS.key = Domain.DLS.new_key (fun () -> false)
 
 (** Whether the server sent StopTest during this test case. *)
-let test_aborted : bool ref = ref false
+let test_aborted : bool Domain.DLS.key = Domain.DLS.new_key (fun () -> false)
 
 (** Whether we are currently inside a test case body. *)
-let in_test : bool ref = ref false
+let in_test : bool Domain.DLS.key = Domain.DLS.new_key (fun () -> false)
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available. *)
@@ -54,7 +54,7 @@ let extract_origin exn =
 (** [get_channel ()] returns the current test data channel, raising [Failure] if
     not in a test context. *)
 let get_channel () =
-  match !current_channel with
+  match Domain.DLS.get current_channel with
   | None ->
       failwith
         "Not in a test context - must be called from within a test function"
@@ -70,7 +70,7 @@ let generate_from_schema schema =
       (request channel
          (`Map [ (`Text "command", `Text "generate"); (`Text "schema", schema) ]))
   with Request_error e when e.error_type = "StopTest" ->
-    test_aborted := true;
+    Domain.DLS.set test_aborted true;
     raise Data_exhausted
 
 (** [assume condition] rejects the current test case if [condition] is [false].
@@ -79,7 +79,8 @@ let assume condition = if not condition then raise Assume_rejected
 
 (** [note message] records a message that will be printed on the final (failing)
     run. *)
-let note message = if !is_final_run then Printf.eprintf "%s\n%!" message
+let note message =
+  if Domain.DLS.get is_final_run then Printf.eprintf "%s\n%!" message
 
 (** [target value label] sends a target command to guide the search engine
     toward higher values. *)
@@ -97,7 +98,7 @@ let target value label =
 
 (** [start_span ?label ()] starts a generation span for better shrinking. *)
 let start_span ?(label = 0) () =
-  if !test_aborted then ()
+  if Domain.DLS.get test_aborted then ()
   else begin
     let channel = get_channel () in
     ignore
@@ -112,7 +113,7 @@ let start_span ?(label = 0) () =
 
 (** [stop_span ?discard ()] ends the current generation span. *)
 let stop_span ?(discard = false) () =
-  if !test_aborted then ()
+  if Domain.DLS.get test_aborted then ()
   else begin
     let channel = get_channel () in
     ignore
@@ -145,12 +146,12 @@ let create_client connection =
     Sets up thread-local state and calls [test_fn]. Reports status via
     mark_complete. *)
 let run_test_case _client channel test_fn ~is_final =
-  if !current_channel <> None then
+  if Domain.DLS.get current_channel <> None then
     failwith "Cannot nest test cases - already inside a test case";
-  current_channel := Some channel;
-  is_final_run := is_final;
-  test_aborted := false;
-  in_test := true;
+  Domain.DLS.set current_channel (Some channel);
+  Domain.DLS.set is_final_run is_final;
+  Domain.DLS.set test_aborted false;
+  Domain.DLS.set in_test true;
   let already_complete = ref false in
   let status = ref "VALID" in
   let origin = ref `Null in
@@ -162,10 +163,10 @@ let run_test_case _client channel test_fn ~is_final =
       status := "INTERESTING";
       origin := `Text (extract_origin exn);
       if is_final then final_exn := Some exn);
-  current_channel := None;
-  is_final_run := false;
-  test_aborted := false;
-  in_test := false;
+  Domain.DLS.set current_channel None;
+  Domain.DLS.set is_final_run false;
+  Domain.DLS.set test_aborted false;
+  Domain.DLS.set in_test false;
   (if not !already_complete then
      try
        ignore
@@ -183,7 +184,7 @@ let run_test_case _client channel test_fn ~is_final =
 
 (** [run_test client ~name ~test_cases test_fn] runs a property test. *)
 let run_test client ~name ~test_cases test_fn =
-  if !in_test then
+  if Domain.DLS.get in_test then
     failwith "Cannot nest test cases - already inside a test case";
   let test_channel = new_channel client.connection ~role:"Test" () in
   Mutex.lock client.lock;
@@ -199,7 +200,7 @@ let run_test client ~name ~test_cases test_fn =
                    (`Text "name", `Text name);
                    (`Text "test_cases", `Int test_cases);
                    ( `Text "channel_id",
-                     `Int (Int32.to_int test_channel.channel_id) );
+                     `Int (Int32.to_int (channel_id test_channel)) );
                  ]))));
   let result_data = ref None in
   let continue = ref true in
@@ -242,7 +243,11 @@ let run_test client ~name ~test_cases test_fn =
                 (`Text "type", `Text "InvalidMessage");
               ]))
   done;
-  let results = match !result_data with Some r -> r | None -> assert false in
+  let results =
+    match !result_data with
+    | Some r -> r
+    | None -> failwith "Internal error: test results were not populated"
+  in
   let n_interesting =
     match List.assoc_opt (`Text "interesting_test_cases") results with
     | Some v -> Cbor_helpers.extract_int v

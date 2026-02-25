@@ -123,7 +123,7 @@ let get_server_name coll =
                     (`Text "max_size", max_size_val);
                   ]))
         with Request_error e when e.error_type = "StopTest" ->
-          Client.test_aborted := true;
+          Domain.DLS.set Client.test_aborted true;
           raise Client.Data_exhausted
       in
       coll.server_name <- Some result;
@@ -148,7 +148,7 @@ let collection_more coll =
                   (`Text "collection", server_name);
                 ]))
       with Request_error e when e.error_type = "StopTest" ->
-        Client.test_aborted := true;
+        Domain.DLS.set Client.test_aborted true;
         raise Client.Data_exhausted
     in
     let more = Cbor_helpers.extract_bool result in
@@ -416,8 +416,8 @@ let lists elements ?(min_size = 0) ?max_size () =
         match raw_list with
         | `Array items -> List.map elem_transform items
         | _ ->
-            (* Server always returns Array for list schema *)
-            assert false
+            failwith
+              "Internal error: server returned non-array for list schema"
       in
       Basic { schema = raw_schema; transform = list_transform }
   | None ->
@@ -547,7 +547,10 @@ let one_of (generators : 'a generator list) =
         (fun g ->
           match g with
           | Basic { schema; transform } -> (schema, transform)
-          | _ -> assert false)
+          | _ ->
+              failwith
+                "Internal error: one_of generator is not Basic after \
+                 all_basic check")
         generators
     in
     (* Check if all have identity transforms by testing if the transform is

@@ -5,48 +5,48 @@
     enabling property-based testing from OCaml. *)
 
 (** The current version of the Hegel OCaml SDK. *)
-let version = "0.1.0"
+val version : string
 
-module Protocol = Protocol
 (** Binary wire protocol for packet serialization and deserialization. *)
+module Protocol = Protocol
 
-module Cbor_helpers = Cbor_helpers
 (** CBOR encoding/decoding with type-safe extractor helpers. *)
+module Cbor_helpers = Cbor_helpers
 
-module Connection = Connection
 (** Multiplexed connection and channel abstractions. *)
+module Connection = Connection
 
-module Client = Client
 (** Test runner and lifecycle management. *)
+module Client = Client
 
-module Session = Session
 (** Global session management for running property tests. *)
+module Session = Session
 
-module Generators = Generators
 (** Generator combinators for composable test data generation. *)
+module Generators = Generators
 
-module Conformance = Conformance
 (** Conformance test helpers for writing conformance binaries. *)
+module Conformance = Conformance
 
-module Derive = Derive
 (** Runtime support for [@@deriving generator]. *)
+module Derive = Derive
 
 (** {2 Convenience re-exports} *)
 
 (** [assume condition] rejects the current test case if [condition] is [false]. *)
-let assume = Client.assume
+val assume : bool -> unit
 
 (** [note message] records a message that will be printed on the final (failing)
     run. *)
-let note = Client.note
+val note : string -> unit
 
 (** [target value label] sends a target command to guide the search engine
     toward higher values. *)
-let target = Client.target
+val target : float -> string -> unit
 
 (** [generate gen] produces a typed value from generator [gen]. *)
-let generate = Generators.generate
+val generate : 'a Generators.generator -> 'a
 
 (** [run_hegel_test ?test_cases ?name test_fn] runs a property test using the
     shared hegeld process. *)
-let run_hegel_test = Session.run_hegel_test
+val run_hegel_test : ?test_cases:int -> ?name:string -> (unit -> unit) -> unit

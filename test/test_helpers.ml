@@ -51,7 +51,7 @@ let send_test_case server_conn test_channel =
       (`Map
          [
            (`Text "event", `Text "test_case");
-           (`Text "channel_id", `Int (Int32.to_int data_ch.channel_id));
+           (`Text "channel_id", `Int (Int32.to_int (channel_id data_ch)));
          ])
   in
   ignore (receive_response_raw test_channel req_id ());

@@ -23,13 +23,13 @@ let test_get_channel_outside_context () =
   Alcotest.(check bool) "raised" true !raised
 
 let test_note_when_not_final () =
-  is_final_run := false;
+  Domain.DLS.set is_final_run false;
   note "should not print"
 
 let test_note_when_final () =
-  is_final_run := true;
+  Domain.DLS.set is_final_run true;
   note "test message from note";
-  is_final_run := false
+  Domain.DLS.set is_final_run false
 
 let test_extract_origin_no_backtrace () =
   let origin = extract_origin (Failure "test") in
@@ -47,20 +47,20 @@ let test_extract_origin_with_backtrace () =
     (contains_substring origin "test_client.ml")
 
 let test_start_span_when_aborted () =
-  test_aborted := true;
+  Domain.DLS.set test_aborted true;
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
-  current_channel := Some (control_channel conn);
+  Domain.DLS.set current_channel (Some (control_channel conn));
   start_span ();
   stop_span ();
-  current_channel := None;
-  test_aborted := false;
+  Domain.DLS.set current_channel None;
+  Domain.DLS.set test_aborted false;
   close conn;
   Unix.close s2
 
 let test_nested_test_raises () =
   (* Set the in_test flag to simulate being inside a test *)
-  in_test := true;
+  Domain.DLS.set in_test true;
   let raised = ref false in
   (try Hegel.Session.run_hegel_test ~name:"nested" ~test_cases:1 (fun () -> ())
    with Failure msg ->
@@ -68,7 +68,7 @@ let test_nested_test_raises () =
      Alcotest.(check bool)
        "has 'Cannot nest'" true
        (contains_substring msg "Cannot nest"));
-  in_test := false;
+  Domain.DLS.set in_test false;
   Alcotest.(check bool) "raised" true !raised
 
 (* ---- Unrecognised event test using socketpair ---- *)
@@ -698,7 +698,7 @@ let test_no_event_field () =
 let test_run_test_case_nest () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
-  current_channel := Some (control_channel conn);
+  Domain.DLS.set current_channel (Some (control_channel conn));
   let raised = ref false in
   (try
      run_test_case
@@ -712,7 +712,7 @@ let test_run_test_case_nest () =
        ~is_final:false
    with Failure _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised;
-  current_channel := None;
+  Domain.DLS.set current_channel None;
   close conn;
   Unix.close s2
 

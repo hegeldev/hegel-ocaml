@@ -87,6 +87,9 @@ and channel = {
 }
 (** Logical channel for request/response messaging. *)
 
+(** [channel_id ch] returns the channel ID of [ch]. *)
+let channel_id ch = ch.channel_id
+
 (** [channel_name ch] returns a human-readable name for channel [ch]. *)
 let channel_name ch =
   match (ch.role, ch.conn.name) with
