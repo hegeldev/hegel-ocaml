@@ -21,10 +21,11 @@ HEGEL_BINARY=/path/to/hegel just setup
 Create `example.ml`:
 
 ```ocaml
+open Hegel
 open Hegel.Generators
 
 let test_integers () =
-  Hegel.Session.run_hegel_test ~name:"test_integers" ~test_cases:100
+  run_hegel_test ~name:"test_integers" ~test_cases:100
     (fun () ->
       let n = generate (integers ()) in
       Printf.printf "called with %d\n%!" n;
@@ -36,33 +37,22 @@ let () = test_integers ()
 Inside the test body you call `generate` on generators to produce random values.
 The `generate` function returns a typed OCaml value directly — no extraction
 step is needed. When executed, Hegel generates random inputs matching the
-generator's specification. Running `./example.exe` produces output like:
+generator's specification. If any assertion fails, Hegel shrinks the inputs to
+a minimal counterexample.
 
-```
-called with 0
-called with -18588
-called with -672780074
-called with 32616
-...
-```
-
-By default, `run_hegel_test` generates 100 random inputs. Control this with
+By default, `run_hegel_test` generates **100 test cases**. Override this with
 the `~test_cases` parameter: `run_hegel_test ~test_cases:500 ...`.
-
-> **Note:** The Python SDK uses a `@hegel` decorator to mark test functions,
-> and `.generate()` method calls to draw values. In OCaml there are no
-> decorators, so you call `run_hegel_test` directly and use `generate gen`
-> (a plain function call) inside the body.
 
 ## Running in a test suite
 
 Hegel integrates with [Alcotest](https://github.com/mirage/alcotest):
 
 ```ocaml
+open Hegel
 open Hegel.Generators
 
 let test_integers_bounded () =
-  Hegel.Session.run_hegel_test ~name:"integers_bounded" ~test_cases:100
+  run_hegel_test ~name:"integers_bounded" ~test_cases:100
     (fun () ->
       let n = generate (integers ~min_value:0 ~max_value:200 ()) in
       assert (n < 50))  (* this will fail! *)
@@ -72,23 +62,24 @@ let () =
     [("properties", [Alcotest.test_case "integers < 50" `Quick test_integers_bounded])]
 ```
 
-Running the tests demonstrates failure detection and simplification. Hegel
-will find the smallest counterexample — in this case, `n = 50`.
+When a test fails, Hegel shrinks the counterexample to the smallest value that
+still triggers the failure — in this case, `n = 50`.
 
 ## Generating multiple values
 
 Call `generate` multiple times to produce multiple values in a single test:
 
 ```ocaml
+open Hegel
 open Hegel.Generators
 
 let test_multiple_values () =
-  Hegel.Session.run_hegel_test ~name:"multiple_values" ~test_cases:50
+  run_hegel_test ~name:"multiple_values" ~test_cases:50
     (fun () ->
       let n = generate (integers ()) in
       let s = generate (text ()) in
-      assert (n = n);          (* integers are reflexive *)
-      assert (String.length s >= 0))  (* strings have non-negative length *)
+      assert (n = n);
+      assert (String.length s >= 0))
 ```
 
 Because generation is imperative, you can generate values at any point —
@@ -99,10 +90,11 @@ including conditionally or inside loops.
 Use `filter` on a generator for simple conditions:
 
 ```ocaml
+open Hegel
 open Hegel.Generators
 
 let test_even_integers () =
-  Hegel.Session.run_hegel_test ~name:"even_integers" ~test_cases:50
+  run_hegel_test ~name:"even_integers" ~test_cases:50
     (fun () ->
       let n = generate (filter (fun v -> v mod 2 = 0) (integers ())) in
       assert (n mod 2 = 0))
@@ -112,11 +104,11 @@ For conditions that depend on multiple generated values, use `assume` inside
 the test body:
 
 ```ocaml
+open Hegel
 open Hegel.Generators
-open Hegel.Client
 
 let test_division () =
-  Hegel.Session.run_hegel_test ~name:"division" ~test_cases:100
+  run_hegel_test ~name:"division" ~test_cases:100
     (fun () ->
       let n1 = generate (integers ()) in
       let n2 = generate (integers ()) in
@@ -125,18 +117,19 @@ let test_division () =
       assert (n1 = (n1 / n2) * n2 + (n1 mod n2)))
 ```
 
-> **Note:** Python's `assume()` is a free function imported from `hegel_sdk`.
-> In OCaml it lives in `Hegel.Client.assume`.
+Using bounds and `map` is more efficient than `filter` or `assume` because
+they avoid generating values that will be rejected.
 
 ## Transforming generated values
 
 Use `map` to transform values after generation:
 
 ```ocaml
+open Hegel
 open Hegel.Generators
 
 let test_string_integers () =
-  Hegel.Session.run_hegel_test ~name:"string_integers" ~test_cases:50
+  run_hegel_test ~name:"string_integers" ~test_cases:50
     (fun () ->
       let s =
         generate
@@ -153,10 +146,11 @@ Because generation in Hegel is imperative, you can use earlier results to
 configure later generators directly:
 
 ```ocaml
+open Hegel
 open Hegel.Generators
 
 let test_list_with_valid_index () =
-  Hegel.Session.run_hegel_test ~name:"list_index" ~test_cases:50
+  run_hegel_test ~name:"list_index" ~test_cases:50
     (fun () ->
       let n = generate (integers ~min_value:1 ~max_value:10 ()) in
       let lst = generate (lists (integers ()) ~min_size:n ~max_size:n ()) in
@@ -168,10 +162,11 @@ You can also use `flat_map` for dependent generation within a single
 generator expression:
 
 ```ocaml
+open Hegel
 open Hegel.Generators
 
 let test_list_with_valid_index_flatmap () =
-  Hegel.Session.run_hegel_test ~name:"list_index_flatmap" ~test_cases:50
+  run_hegel_test ~name:"list_index_flatmap" ~test_cases:50
     (fun () ->
       let n, lst =
         generate
@@ -186,115 +181,110 @@ let test_list_with_valid_index_flatmap () =
 
 ## What you can generate
 
-Hegel provides generators for all common data types.
-
 ### Primitive types
 
 ```ocaml
 booleans ()
-(* Produces: true or false — type: bool generator *)
+(* bool — true or false *)
 
 integers ~min_value:(-100) ~max_value:100 ()
-(* Produces: integer values, optionally bounded — type: int generator *)
+(* int — optionally bounded *)
 
 floats ~min_value:0.0 ~max_value:1.0 ~allow_nan:false ~allow_infinity:false ()
-(* Produces: floating-point numbers — type: float generator *)
-(* allow_nan defaults to true only when no bounds are set *)
-(* allow_infinity defaults to true when at most one bound is set *)
+(* float — floating-point numbers *)
 
 text ~min_size:0 ~max_size:100 ()
-(* Produces: Unicode strings — type: string generator *)
+(* string — Unicode strings *)
 
 binary ~min_size:0 ~max_size:64 ()
-(* Produces: byte strings — type: string generator *)
+(* string — byte strings *)
 ```
 
 ### Constants and choices
 
 ```ocaml
 just 42
-(* type: int generator — always produces 42 *)
+(* int generator — always produces 42 *)
 
 sampled_from [1; 2; 3]
-(* Picks uniformly from the given list — type: int generator *)
-
-from_regex "^[a-z]{3,8}$" ()
-(* Produces: strings matching the regex — type: string generator *)
+(* int generator — picks uniformly from the given list *)
 ```
 
 ### Collections
 
 ```ocaml
 lists (integers ~min_value:0 ~max_value:100 ()) ~min_size:1 ~max_size:10 ()
-(* Produces: int list — a list of integers *)
+(* int list *)
 
 hashmaps
-  (integers ~min_value:0 ~max_value:999 ())  (* keys: int generator *)
-  (text ~max_size:20 ())                      (* values: string generator *)
+  (integers ~min_value:0 ~max_value:999 ())
+  (text ~max_size:20 ())
   ~min_size:0 ~max_size:5 ()
-(* Produces: (int * string) list — a list of key-value pairs *)
+(* (int * string) list — key-value pairs *)
 
 tuples2 (integers ()) (text ())
-(* Produces: (int * string) — a 2-element tuple *)
+(* (int * string) *)
 
 tuples3 (booleans ()) (integers ()) (text ())
-(* Produces: (bool * int * string) — a 3-element tuple *)
+(* (bool * int * string) *)
 ```
 
 ### Combinators
 
 ```ocaml
 one_of [integers (); map float_of_int (integers ())]
-(* Picks from one of multiple generators *)
+(* picks from one of multiple generators *)
 
 optional (text ())
-(* Produces: string option — None or Some value *)
+(* string option — None or Some value *)
 
 map f gen          (* transform: apply f to each generated value *)
 flat_map f gen     (* chain: f receives a value and returns a new generator *)
 filter pred gen    (* keep only values satisfying pred *)
 ```
 
-### Formats and addresses
+### Formats and patterns
 
 ```ocaml
-emails ()          (* Email address strings *)
+emails ()          (* email address strings *)
 urls ()            (* URL strings *)
-domains ()         (* Domain name strings *)
+domains ()         (* domain name strings *)
 dates ()           (* ISO 8601 date strings: YYYY-MM-DD *)
-times ()           (* Time strings *)
+times ()           (* time strings *)
 datetimes ()       (* ISO 8601 datetime strings *)
 ip_addresses ()    (* IPv4 or IPv6 address strings *)
+from_regex "^[a-z]{3,8}$" ()  (* strings matching the regex *)
 ```
 
 ## Debugging with note()
 
-Use `Hegel.Client.note` to print debug information. Messages appear only when
-Hegel replays the minimal failing example:
+Use `note` to print debug information. Messages appear only when Hegel replays
+the minimal failing example:
 
 ```ocaml
+open Hegel
 open Hegel.Generators
-open Hegel.Client
 
 let test_something () =
-  Hegel.Session.run_hegel_test ~name:"note_example" ~test_cases:100
+  run_hegel_test ~name:"note_example" ~test_cases:100
     (fun () ->
       let x = generate (integers ()) in
       let y = generate (integers ()) in
       note (Printf.sprintf "trying x=%d, y=%d" x y);
-      assert (x + y <> x - y || x = 0 || y = 0))
+      assert (x + y = y + x))  (* commutativity — always true *)
 ```
 
 ## Guiding generation with target()
 
-Use `Hegel.Client.target` to guide Hegel toward interesting values:
+Use `target` to guide Hegel toward interesting values, making it more likely to
+find boundary failures:
 
 ```ocaml
+open Hegel
 open Hegel.Generators
-open Hegel.Client
 
 let test_optimization () =
-  Hegel.Session.run_hegel_test ~name:"optimization" ~test_cases:1000
+  run_hegel_test ~name:"optimization" ~test_cases:1000
     (fun () ->
       let x =
         generate
@@ -302,7 +292,7 @@ let test_optimization () =
              ~allow_nan:false ~allow_infinity:false ())
       in
       target x "maximize_x";
-      assert (x < 9999.0))
+      assert (x <= 9999.0))
 ```
 
 `target value label` sends a floating-point score to the Hegel engine, which
@@ -323,11 +313,13 @@ Add `ppx_hegel_generator` to your dune file:
 Then annotate types with `[@@deriving generator]`:
 
 ```ocaml
+open Hegel
+
 type point = { x : int; y : int } [@@deriving generator]
 type color = Red | Green | Blue [@@deriving generator]
 
 let () =
-  Hegel.Session.run_hegel_test ~name:"derived_test" ~test_cases:100 (fun () ->
+  run_hegel_test ~name:"derived_test" ~test_cases:100 (fun () ->
     let p = point_generator () in
     let c = color_generator () in
     assert (p.x = p.x);
@@ -340,8 +332,5 @@ variants, type aliases, and nested types. Supported field types: `int`, `bool`,
 
 ## Next steps
 
-- Run `just docs` to build the full odoc API documentation. The generated HTML is
-  written to `_build/default/_doc/_html/hegel/`.
+- Run `just docs` to build the full odoc API documentation.
 - Browse the [`examples/`](../examples/) directory for runnable programs.
-- Read the [Hypothesis documentation](https://hypothesis.readthedocs.io/) for background
-  on property-based testing concepts.
