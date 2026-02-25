@@ -2,21 +2,7 @@ open Hegel.Connection
 open Hegel.Client
 
 let contains_substring = Test_helpers.contains_substring
-
-let find_cmd cmd =
-  let inp_channel = Unix.open_process_in ("which " ^ cmd) in
-  let output = String.trim (In_channel.input_all inp_channel) in
-  let exit_code = Unix.close_process_in inp_channel in
-  match exit_code with
-  | WEXITED 0 -> output
-  | exit_code ->
-      raise
-        (Failure
-           (Printf.sprintf "Command failed with status: %s"
-              (match exit_code with
-              | WEXITED code -> string_of_int code
-              | WSIGNALED sign -> "signaled: " ^ string_of_int sign
-              | WSTOPPED sign -> "stopped: " ^ string_of_int sign)))
+let find_cmd = Test_helpers.find_cmd
 
 (* ---- Unit tests for helpers that don't need a server ---- *)
 

@@ -85,3 +85,19 @@ let recv_command data_ch =
     Hegel.Cbor_helpers.extract_string (List.assoc (`Text "command") pairs)
   in
   (msg_id, cmd, pairs)
+
+(** Helper: check where a given command is *)
+let find_cmd cmd =
+  let inp_channel = Unix.open_process_in ("which " ^ cmd) in
+  let output = String.trim (In_channel.input_all inp_channel) in
+  let exit_code = Unix.close_process_in inp_channel in
+  match exit_code with
+  | WEXITED 0 -> output
+  | exit_code ->
+      raise
+        (Failure
+           (Printf.sprintf "Command failed with status: %s"
+              (match exit_code with
+              | WEXITED code -> string_of_int code
+              | WSIGNALED sign -> "signaled: " ^ string_of_int sign
+              | WSTOPPED sign -> "stopped: " ^ string_of_int sign)))
