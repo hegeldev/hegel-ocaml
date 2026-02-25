@@ -3,6 +3,21 @@ open Hegel.Client
 
 let contains_substring = Test_helpers.contains_substring
 
+let find_cmd cmd =
+  let inp_channel = Unix.open_process_in ("which " ^ cmd) in
+  let output = String.trim (In_channel.input_all inp_channel) in
+  let exit_code = Unix.close_process_in inp_channel in
+  match exit_code with
+  | WEXITED 0 -> output
+  | exit_code ->
+      raise
+        (Failure
+           (Printf.sprintf "Command failed with status: %s"
+              (match exit_code with
+              | WEXITED code -> string_of_int code
+              | WSIGNALED sign -> "signaled: " ^ string_of_int sign
+              | WSTOPPED sign -> "stopped: " ^ string_of_int sign)))
+
 (* ---- Unit tests for helpers that don't need a server ---- *)
 
 let test_assume_true () = assume true
@@ -622,9 +637,10 @@ let test_session_cleanup_bad_paths () =
 
 (** Test: cleanup a session with a process (uses /bin/sleep for a real PID). *)
 let test_session_cleanup_with_process () =
+  let sleep_cmd = find_cmd "sleep" in
   let pid =
-    Unix.create_process "/bin/sleep" [| "/bin/sleep"; "60" |] Unix.stdin
-      Unix.stderr Unix.stderr
+    Unix.create_process sleep_cmd [| sleep_cmd; "60" |] Unix.stdin Unix.stderr
+      Unix.stderr
   in
   let session : Hegel.Session.hegel_session =
     {
@@ -642,8 +658,9 @@ let test_session_cleanup_with_process () =
 (** Test: cleanup with already-dead process (covers kill error catch). *)
 let test_session_cleanup_dead_process () =
   (* Start a process that exits immediately *)
+  let true_cmd = find_cmd "true" in
   let pid =
-    Unix.create_process "/bin/true" [| "/bin/true" |] Unix.stdin Unix.stderr
+    Unix.create_process true_cmd [| true_cmd |] Unix.stdin Unix.stderr
       Unix.stderr
   in
   (* Wait for it to finish *)
