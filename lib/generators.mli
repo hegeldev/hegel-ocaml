@@ -23,9 +23,43 @@ module Labels : sig
   val enum_variant : int
 end
 
-type 'a generator
-(** The type of generators. Generators produce typed OCaml values and can be
-    combined using {!map}, {!flat_map}, and {!filter}. *)
+type 'a generator =
+  | Basic : {
+      schema : CBOR.Simple.t;
+      transform : CBOR.Simple.t -> 'a;
+    }
+      -> 'a generator
+  | Mapped : { source : 'b generator; f : 'b -> 'a } -> 'a generator
+  | FlatMapped : {
+      source : 'b generator;
+      f : 'b -> 'a generator;
+    }
+      -> 'a generator
+  | Filtered : { source : 'a generator; predicate : 'a -> bool } -> 'a generator
+  | CompositeList : {
+      elements : 'a generator;
+      min_size : int;
+      max_size : int option;
+    }
+      -> 'a list generator
+  | Composite : { label : int; generate_fn : unit -> 'a } -> 'a generator
+      (** The type of generators. Generators produce typed OCaml values and can
+          be combined using {!map}, {!flat_map}, and {!filter}.
+
+          - [Basic] generators hold a raw schema and a mandatory client-side
+            transform. Calling {!map} on a [Basic] generator preserves the
+            schema and composes transforms.
+          - [Mapped] generators wrap a source generator and a transform
+            function.
+          - [FlatMapped] generators wrap a source and a function returning a
+            generator.
+          - [Filtered] generators wrap a source and a predicate.
+          - [CompositeList] generators use the collection protocol to generate
+            lists of non-basic elements, creating a fresh collection per
+            generate call.
+          - [Composite] generators wrap a [generate_fn] thunk inside a span with
+            the given [label]. Used for tuples and one_of with non-basic
+            elements. *)
 
 val max_filter_attempts : int
 (** Maximum number of filter attempts before calling [assume false]. *)

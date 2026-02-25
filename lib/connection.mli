@@ -17,6 +17,10 @@ exception
   }
 (** Error response from the peer. *)
 
+val result_or_error : CBOR.Simple.t -> CBOR.Simple.t
+(** [result_or_error body] extracts the ["result"] field from a CBOR map, or
+    raises {!Request_error} if an ["error"] field is present. *)
+
 (** Connection state after handshake. *)
 type connection_state = Unresolved | Client | Server
 
@@ -141,6 +145,15 @@ val pending_get : pending_request -> CBOR.Simple.t
 (** [pending_get pr] blocks until the response arrives and returns the result.
     Caches the response so subsequent calls return the same value or raise the
     same error. *)
+
+val process_one_message : channel -> ?timeout:float -> unit -> unit
+(** [process_one_message ch ?timeout ()] reads and routes one incoming message
+    for channel [ch]. Dispatches replies to the channel's responses table and
+    requests to the channel's request queue. *)
+
+val run_reader : connection -> until:(unit -> bool) -> unit
+(** [run_reader conn ~until] reads packets from the socket and dispatches them
+    to channel inboxes until [until ()] returns [true]. *)
 
 val handle_requests : channel -> (CBOR.Simple.t -> CBOR.Simple.t) -> unit
 (** [handle_requests ch handler] processes incoming requests, calling [handler]
