@@ -517,8 +517,8 @@ let datetimes () =
 let one_of (generators : 'a generator list) =
   if List.length generators < 2 then
     failwith "one_of requires at least 2 generators";
-  let all_basic = List.for_all is_basic generators in
-  if not all_basic then begin
+  let basics = List.filter_map as_basic generators in
+  if List.length basics <> List.length generators then begin
     (* Path 3: composite — generate index in ONE_OF span, then delegate *)
     let gens = Array.of_list generators in
     let n = Array.length gens in
@@ -541,17 +541,6 @@ let one_of (generators : 'a generator list) =
       }
   end
   else
-    let basics =
-      List.map
-        (fun g ->
-          match g with
-          | Basic { schema; transform } -> (schema, transform)
-          | _ ->
-              failwith
-                "Internal error: one_of generator is not Basic after all_basic \
-                 check")
-        generators
-    in
     (* Check if all have identity transforms by testing if the transform is
        literally the identity. We can't test function equality, so we check
        if all transforms act as identity on a canary value. Instead, we use

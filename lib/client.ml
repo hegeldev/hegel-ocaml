@@ -202,9 +202,7 @@ let run_test client ~name ~test_cases test_fn =
                    ( `Text "channel_id",
                      `Int (Int32.to_int (channel_id test_channel)) );
                  ]))));
-  let result_data = ref None in
-  let continue = ref true in
-  while !continue do
+  let rec receive_events () =
     let message_id, message = receive_request test_channel () in
     let pairs = Cbor_helpers.extract_dict message in
     let event =
@@ -222,18 +220,16 @@ let run_test client ~name ~test_cases test_fn =
       let test_case_channel =
         connect_channel client.connection channel_id ~role:"Test Case" ()
       in
-      run_test_case client test_case_channel test_fn ~is_final:false
+      run_test_case client test_case_channel test_fn ~is_final:false;
+      receive_events ()
     end
     else if event = "test_done" then begin
       send_response_value test_channel message_id (`Bool true);
-      result_data :=
-        Some
-          (match List.assoc_opt (`Text "results") pairs with
-          | Some v -> Cbor_helpers.extract_dict v
-          | None -> failwith "test_done event missing 'results' field");
-      continue := false
+      match List.assoc_opt (`Text "results") pairs with
+      | Some v -> Cbor_helpers.extract_dict v
+      | None -> failwith "test_done event missing 'results' field"
     end
-    else
+    else begin
       send_response_raw test_channel message_id
         (CBOR.Simple.encode
            (`Map
@@ -241,13 +237,11 @@ let run_test client ~name ~test_cases test_fn =
                 ( `Text "error",
                   `Text (Printf.sprintf "Unrecognised event %s" event) );
                 (`Text "type", `Text "InvalidMessage");
-              ]))
-  done;
-  let results =
-    match !result_data with
-    | Some r -> r
-    | None -> failwith "Internal error: test results were not populated"
+              ]));
+      receive_events ()
+    end
   in
+  let results = receive_events () in
   let n_interesting =
     match List.assoc_opt (`Text "interesting_test_cases") results with
     | Some v -> Cbor_helpers.extract_int v

@@ -58,6 +58,20 @@ let test_start_span_when_aborted () =
   close conn;
   Unix.close s2
 
+(** Test: Domain.DLS initializers for is_final_run and test_aborted return false
+    when accessed from a fresh domain. This covers the (fun () -> false)
+    initializers that are otherwise never triggered in the main domain. *)
+let test_dls_initializers_in_new_domain () =
+  let result =
+    Domain.spawn (fun () ->
+        let final = Domain.DLS.get is_final_run in
+        let aborted = Domain.DLS.get test_aborted in
+        (final, aborted))
+  in
+  let final, aborted = Domain.join result in
+  Alcotest.(check bool) "is_final_run default" false final;
+  Alcotest.(check bool) "test_aborted default" false aborted
+
 let test_nested_test_raises () =
   (* Set the in_test flag to simulate being inside a test *)
   Domain.DLS.set in_test true;
@@ -909,6 +923,8 @@ let tests =
       test_extract_origin_with_backtrace;
     Alcotest.test_case "start/stop span when aborted" `Quick
       test_start_span_when_aborted;
+    Alcotest.test_case "DLS initializers in new domain" `Quick
+      test_dls_initializers_in_new_domain;
     Alcotest.test_case "nested test raises" `Quick test_nested_test_raises;
     Alcotest.test_case "unrecognised event" `Quick test_unrecognised_event;
     (* Socketpair-based coverage tests *)

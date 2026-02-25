@@ -843,6 +843,16 @@ let test_lists_non_basic_is_not_basic () =
   Alcotest.(check bool) "gen not basic" false (is_basic gen);
   Alcotest.(check bool) "as_basic None" true (as_basic gen = None)
 
+(** Test: lists basic transform raises on non-array input. *)
+let test_lists_basic_non_array_raises () =
+  let gen = lists (integers ()) () in
+  match gen with
+  | Basic { transform; _ } ->
+      let raised = ref false in
+      (try ignore (transform (`Int 42)) with Failure _ -> raised := true);
+      Alcotest.(check bool) "raised" true !raised
+  | _ -> Alcotest.fail "expected Basic"
+
 (* ==== Socketpair tests for lists ==== *)
 
 (** Test: lists(basic_elem) sends a generate command with list schema. *)
@@ -1661,6 +1671,8 @@ let tests =
       test_lists_basic_with_element_transform;
     Alcotest.test_case "lists non-basic is not basic" `Quick
       test_lists_non_basic_is_not_basic;
+    Alcotest.test_case "lists basic non-array raises" `Quick
+      test_lists_basic_non_array_raises;
     (* Socketpair tests for lists *)
     Alcotest.test_case "lists basic generate socketpair" `Quick
       test_lists_basic_generate_socketpair;
