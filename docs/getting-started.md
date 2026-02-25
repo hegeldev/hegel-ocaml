@@ -2,19 +2,18 @@
 
 ## Install Hegel
 
-Install the opam package and fetch the `hegel` binary:
-
 ```bash
 opam install hegel
-just setup
 ```
 
-If you already have the `hegel` binary available, set `HEGEL_BINARY` before
-running `just setup`:
+The SDK requires the `hegel` CLI on your PATH:
 
 ```bash
-HEGEL_BINARY=/path/to/hegel just setup
+pip install "git+ssh://git@github.com/antithesishq/hegel-core.git"
 ```
+
+If you are working inside this repository, `just setup` handles the CLI
+installation.
 
 ## Write your first test
 
