@@ -92,9 +92,7 @@ let test_multiple_values () =
 ```
 
 Because generation is imperative, you can generate values at any point —
-including conditionally or inside loops. This is more flexible than
-Hypothesis's `@given` decorator, which requires all inputs to be declared
-upfront as function parameters.
+including conditionally or inside loops.
 
 ## Filtering
 
@@ -165,10 +163,6 @@ let test_list_with_valid_index () =
       let index = generate (integers ~min_value:0 ~max_value:(n - 1) ()) in
       assert (index >= 0 && index < List.length lst))
 ```
-
-> **Note:** In Hypothesis, this pattern requires `@composite` or `data()`.
-> In Hegel it falls out naturally from the imperative `generate` style —
-> just use earlier values to set bounds on later generators.
 
 You can also use `flat_map` for dependent generation within a single
 generator expression:
@@ -349,5 +343,5 @@ variants, type aliases, and nested types. Supported field types: `int`, `bool`,
 - Run `just docs` to build the full odoc API documentation. The generated HTML is
   written to `_build/default/_doc/_html/hegel/`.
 - Browse the [`examples/`](../examples/) directory for runnable programs.
-- Read the [Hypothesis documentation](https://hypothesis.readthedocs.io/) for deeper
-  background on property-based testing strategies.
+- Read the [Hypothesis documentation](https://hypothesis.readthedocs.io/) for background
+  on property-based testing concepts.
