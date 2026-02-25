@@ -218,18 +218,15 @@ binary ~min_size:0 ~max_size:64 ()
 ### Constants and choices
 
 ```ocaml
-(* OCaml has no just() built-in, but you can wrap with map: *)
-map (fun _ -> 42) (booleans ())
+just 42
 (* type: int generator — always produces 42 *)
 
 sampled_from [1; 2; 3]
 (* Picks uniformly from the given list — type: int generator *)
-```
 
-> **Note:** The Python SDK provides `just(value)` and `tuples(...)` as
-> top-level generators. The OCaml SDK does not expose these directly; use
-> `map` and `flat_map` to compose dependent generators, and use multiple
-> `generate` calls for tuple-like patterns.
+from_regex "^[a-z]{3,8}$" ()
+(* Produces: strings matching the regex — type: string generator *)
+```
 
 ### Collections
 
@@ -242,14 +239,38 @@ hashmaps
   (text ~max_size:20 ())                      (* values: string generator *)
   ~min_size:0 ~max_size:5 ()
 (* Produces: (int * string) list — a list of key-value pairs *)
+
+tuples2 (integers ()) (text ())
+(* Produces: (int * string) — a 2-element tuple *)
+
+tuples3 (booleans ()) (integers ()) (text ())
+(* Produces: (bool * int * string) — a 3-element tuple *)
 ```
 
 ### Combinators
 
 ```ocaml
+one_of [integers (); map float_of_int (integers ())]
+(* Picks from one of multiple generators *)
+
+optional (text ())
+(* Produces: string option — None or Some value *)
+
 map f gen          (* transform: apply f to each generated value *)
 flat_map f gen     (* chain: f receives a value and returns a new generator *)
 filter pred gen    (* keep only values satisfying pred *)
+```
+
+### Formats and addresses
+
+```ocaml
+emails ()          (* Email address strings *)
+urls ()            (* URL strings *)
+domains ()         (* Domain name strings *)
+dates ()           (* ISO 8601 date strings: YYYY-MM-DD *)
+times ()           (* Time strings *)
+datetimes ()       (* ISO 8601 datetime strings *)
+ip_addresses ()    (* IPv4 or IPv6 address strings *)
 ```
 
 ## Debugging with note()
@@ -294,8 +315,39 @@ let test_optimization () =
 uses it to guide subsequent generation toward higher scores — making it more
 likely to find boundary cases.
 
-## Full API Reference
+## Type-directed derivation
 
-Run `just docs` to build the full odoc API documentation. The output is
-written to `_build/default/_doc/_html/hegel/`. Open `index.html` in your
-browser for the complete reference.
+Add `ppx_hegel_generator` to your dune file:
+
+```
+(executable
+ (name my_tests)
+ (libraries hegel)
+ (preprocess (pps ppx_hegel_generator)))
+```
+
+Then annotate types with `[@@deriving generator]`:
+
+```ocaml
+type point = { x : int; y : int } [@@deriving generator]
+type color = Red | Green | Blue [@@deriving generator]
+
+let () =
+  Hegel.Session.run_hegel_test ~name:"derived_test" ~test_cases:100 (fun () ->
+    let p = point_generator () in
+    let c = color_generator () in
+    assert (p.x = p.x);
+    ignore c)
+```
+
+The PPX synthesises `<type>_generator : unit -> <type>` functions for records,
+variants, type aliases, and nested types. Supported field types: `int`, `bool`,
+`float`, `string`, `t list`, `t option`, tuples, and named types.
+
+## Next steps
+
+- Run `just docs` to build the full odoc API documentation. The generated HTML is
+  written to `_build/default/_doc/_html/hegel/`.
+- Browse the [`examples/`](../examples/) directory for runnable programs.
+- Read the [Hypothesis documentation](https://hypothesis.readthedocs.io/) for deeper
+  background on property-based testing strategies.

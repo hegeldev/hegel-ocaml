@@ -45,10 +45,8 @@ open Hegel.Generators
 let test_addition_commutative () =
   Hegel.Session.run_hegel_test ~name:"add_commutative" ~test_cases:100
     (fun () ->
-      let a = Hegel.Cbor_helpers.extract_int
-                (generate (integers ~min_value:(-1000) ~max_value:1000 ())) in
-      let b = Hegel.Cbor_helpers.extract_int
-                (generate (integers ~min_value:(-1000) ~max_value:1000 ())) in
+      let a = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in
+      let b = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in
       assert (a + b = b + a))
 
 let () = test_addition_commutative ()
@@ -74,36 +72,40 @@ Hegel.Session.run_hegel_test
 ### Generators
 
 All generators live in `Hegel.Generators`. Call `generate gen` inside a test
-body to draw a value (returned as `CBOR.Simple.t`; use `Hegel.Cbor_helpers`
-extractors to get typed OCaml values):
+body to draw a typed OCaml value:
 
-| Generator | Description |
-|-----------|-------------|
-| `booleans ()` | `true` or `false` |
-| `integers ?min_value ?max_value ()` | Integers, optionally bounded |
-| `floats ?min_value ?max_value ?allow_nan ?allow_infinity ()` | Floats |
-| `text ?min_size ?max_size ()` | Unicode strings |
-| `binary ?min_size ?max_size ()` | Byte strings |
-| `sampled_from options` | One value from a CBOR list |
-| `lists elements ?min_size ?max_size ()` | Lists of generated elements |
-| `hashmaps keys values ?min_size ?max_size ()` | Dictionaries |
+| Generator | Type | Description |
+|-----------|------|-------------|
+| `booleans ()` | `bool` | `true` or `false` |
+| `integers ?min_value ?max_value ()` | `int` | Integers, optionally bounded |
+| `floats ?min_value ?max_value ?allow_nan ?allow_infinity ()` | `float` | Floats |
+| `text ?min_size ?max_size ()` | `string` | Unicode strings |
+| `binary ?min_size ?max_size ()` | `string` | Byte strings |
+| `just value` | `'a` | Constant value |
+| `sampled_from options` | `'a` | One value from a list |
+| `from_regex pattern ()` | `string` | Strings matching a regex |
+| `lists elements ?min_size ?max_size ()` | `'a list` | Lists of generated elements |
+| `hashmaps keys values ?min_size ?max_size ()` | `('k * 'v) list` | Dictionaries |
+| `tuples2 g1 g2` | `'a * 'b` | 2-element tuples |
+| `one_of generators` | `'a` | Choose from multiple generators |
+| `optional element` | `'a option` | `None` or `Some value` |
+| `emails ()`, `urls ()`, `domains ()` | `string` | Format-specific strings |
+| `dates ()`, `times ()`, `datetimes ()` | `string` | ISO date/time strings |
+| `ip_addresses ()` | `string` | IPv4 or IPv6 addresses |
 
 ### Combinators
 
 ```ocaml
 (* Transform values *)
-let doubled = map (fun v -> `Int (Hegel.Cbor_helpers.extract_int v * 2))
-                  (integers ~min_value:1 ~max_value:10 ())
+let doubled = map (fun n -> n * 2) (integers ~min_value:1 ~max_value:10 ())
 
 (* Filter values — retries up to 3 times before discarding the test case *)
-let even = filter (fun v -> Hegel.Cbor_helpers.extract_int v mod 2 = 0)
-                  (integers ())
+let even = filter (fun n -> n mod 2 = 0) (integers ())
 
 (* Dependent generation — second generator depends on the first *)
 let pair = flat_map
-  (fun n_v ->
-    let n = Hegel.Cbor_helpers.extract_int n_v in
-    map (fun lst -> `Array [n_v; lst])
+  (fun n ->
+    map (fun lst -> (n, lst))
         (lists (integers ()) ~min_size:n ~max_size:n ()))
   (integers ~min_value:1 ~max_value:5 ())
 ```
