@@ -109,24 +109,26 @@ let start session =
           in
           session.process <- Some pid;
           (* Wait for socket to appear and connect *)
-          let sock = ref None in
-          let attempts = ref 0 in
-          while !sock = None && !attempts < 50 do
-            incr attempts;
-            if Sys.file_exists socket_path then
+          let rec try_connect attempts =
+            if attempts >= 50 then begin
+              Unix.kill pid Sys.sigkill;
+              failwith "Timeout waiting for hegeld to start"
+            end
+            else if Sys.file_exists socket_path then (
               try
                 let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
                 Unix.connect s (Unix.ADDR_UNIX socket_path);
-                sock := Some s
-              with Unix.Unix_error _ -> Unix.sleepf 0.1
-            else Unix.sleepf 0.1
-          done;
-          (match !sock with
-          | None ->
-              Unix.kill pid Sys.sigkill;
-              failwith "Timeout waiting for hegeld to start"
-          | _ -> ());
-          let conn = create_connection (Option.get !sock) ~name:"SDK" () in
+                s
+              with Unix.Unix_error _ ->
+                Unix.sleepf 0.1;
+                try_connect (attempts + 1))
+            else begin
+              Unix.sleepf 0.1;
+              try_connect (attempts + 1)
+            end
+          in
+          let sock = try_connect 0 in
+          let conn = create_connection sock ~name:"SDK" () in
           session.connection <- Some conn;
           let c = Client.create_client conn in
           session.client <- Some c;

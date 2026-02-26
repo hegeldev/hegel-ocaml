@@ -26,9 +26,8 @@ let standard_respond ?(generate_value = `Int 42) () data_ch msg_id cmd _pairs =
 
 (** Helper: handle N commands with a standard responder. *)
 let handle_n_commands data_ch n ?(generate_value = `Int 42) () =
-  for _ = 1 to n do
-    ignore (handle_one data_ch (standard_respond ~generate_value ()))
-  done
+  let respond = standard_respond ~generate_value () in
+  List.iter (fun _ -> ignore (handle_one data_ch respond)) (List.init n Fun.id)
 
 (* ==== Unit tests (no server needed) ==== *)
 
@@ -245,31 +244,43 @@ let test_mapped_generate_socketpair () =
     (fun server_conn ->
       let test_channel = accept_run_test server_conn in
       let data_ch = send_test_case server_conn test_channel in
-      let cmds = Array.make 6 "" in
-      let span_labels = Array.make 6 0 in
-      for i = 0 to 5 do
-        let msg_id, cmd, pairs = recv_command data_ch in
-        cmds.(i) <- cmd;
-        match cmd with
-        | "start_span" ->
-            let label =
-              Hegel.Cbor_helpers.extract_int (List.assoc (`Text "label") pairs)
-            in
-            span_labels.(i) <- label;
-            send_response_value data_ch msg_id `Null
-        | "generate" -> send_response_value data_ch msg_id (`Int 7)
-        | "stop_span" -> send_response_value data_ch msg_id `Null
-        | "mark_complete" -> send_response_value data_ch msg_id `Null
-        | other -> failwith (Printf.sprintf "Unexpected command: %s" other)
-      done;
-      Alcotest.(check string) "cmd 0" "start_span" cmds.(0);
-      Alcotest.(check int) "label 0 MAPPED" Labels.mapped span_labels.(0);
-      Alcotest.(check string) "cmd 1" "start_span" cmds.(1);
-      Alcotest.(check int) "label 1 FILTER" Labels.filter span_labels.(1);
-      Alcotest.(check string) "cmd 2" "generate" cmds.(2);
-      Alcotest.(check string) "cmd 3" "stop_span" cmds.(3);
-      Alcotest.(check string) "cmd 4" "stop_span" cmds.(4);
-      Alcotest.(check string) "cmd 5" "mark_complete" cmds.(5);
+      let rec handle_n_cmds n acc =
+        if n = 0 then List.rev acc
+        else
+          let msg_id, cmd, pairs = recv_command data_ch in
+          let label =
+            match cmd with
+            | "start_span" ->
+                let l =
+                  Hegel.Cbor_helpers.extract_int
+                    (List.assoc (`Text "label") pairs)
+                in
+                send_response_value data_ch msg_id `Null;
+                l
+            | "generate" ->
+                send_response_value data_ch msg_id (`Int 7);
+                0
+            | "stop_span" ->
+                send_response_value data_ch msg_id `Null;
+                0
+            | "mark_complete" ->
+                send_response_value data_ch msg_id `Null;
+                0
+            | other -> failwith (Printf.sprintf "Unexpected command: %s" other)
+          in
+          handle_n_cmds (n - 1) ((cmd, label) :: acc)
+      in
+      let steps = handle_n_cmds 6 [] in
+      let cmd i = fst (List.nth steps i) in
+      let label i = snd (List.nth steps i) in
+      Alcotest.(check string) "cmd 0" "start_span" (cmd 0);
+      Alcotest.(check int) "label 0 MAPPED" Labels.mapped (label 0);
+      Alcotest.(check string) "cmd 1" "start_span" (cmd 1);
+      Alcotest.(check int) "label 1 FILTER" Labels.filter (label 1);
+      Alcotest.(check string) "cmd 2" "generate" (cmd 2);
+      Alcotest.(check string) "cmd 3" "stop_span" (cmd 3);
+      Alcotest.(check string) "cmd 4" "stop_span" (cmd 4);
+      Alcotest.(check string) "cmd 5" "mark_complete" (cmd 5);
       send_test_done test_channel ~interesting:0)
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
@@ -286,27 +297,31 @@ let test_flatmapped_generate_socketpair () =
       let data_ch = send_test_case server_conn test_channel in
       (* Expect: start_span(FLAT_MAP=11), generate(first), generate(second),
          stop_span, mark_complete *)
-      let cmds = Array.make 5 "" in
-      for i = 0 to 4 do
-        let msg_id, cmd, pairs = recv_command data_ch in
-        cmds.(i) <- cmd;
-        match cmd with
-        | "start_span" ->
-            let label =
-              Hegel.Cbor_helpers.extract_int (List.assoc (`Text "label") pairs)
-            in
-            Alcotest.(check int) "label is FLAT_MAP" Labels.flat_map label;
-            send_response_value data_ch msg_id `Null
-        | "generate" -> send_response_value data_ch msg_id (`Int 5)
-        | "stop_span" -> send_response_value data_ch msg_id `Null
-        | "mark_complete" -> send_response_value data_ch msg_id `Null
-        | other -> failwith (Printf.sprintf "Unexpected command: %s" other)
-      done;
-      Alcotest.(check string) "cmd 0" "start_span" cmds.(0);
-      Alcotest.(check string) "cmd 1" "generate" cmds.(1);
-      Alcotest.(check string) "cmd 2" "generate" cmds.(2);
-      Alcotest.(check string) "cmd 3" "stop_span" cmds.(3);
-      Alcotest.(check string) "cmd 4" "mark_complete" cmds.(4);
+      let rec handle_n_cmds n acc =
+        if n = 0 then List.rev acc
+        else
+          let msg_id, cmd, pairs = recv_command data_ch in
+          (match cmd with
+          | "start_span" ->
+              let label =
+                Hegel.Cbor_helpers.extract_int
+                  (List.assoc (`Text "label") pairs)
+              in
+              Alcotest.(check int) "label is FLAT_MAP" Labels.flat_map label;
+              send_response_value data_ch msg_id `Null
+          | "generate" -> send_response_value data_ch msg_id (`Int 5)
+          | "stop_span" -> send_response_value data_ch msg_id `Null
+          | "mark_complete" -> send_response_value data_ch msg_id `Null
+          | other -> failwith (Printf.sprintf "Unexpected command: %s" other));
+          handle_n_cmds (n - 1) (cmd :: acc)
+      in
+      let cmds = handle_n_cmds 5 [] in
+      let cmd i = List.nth cmds i in
+      Alcotest.(check string) "cmd 0" "start_span" (cmd 0);
+      Alcotest.(check string) "cmd 1" "generate" (cmd 1);
+      Alcotest.(check string) "cmd 2" "generate" (cmd 2);
+      Alcotest.(check string) "cmd 3" "stop_span" (cmd 3);
+      Alcotest.(check string) "cmd 4" "mark_complete" (cmd 4);
       send_test_done test_channel ~interesting:0)
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
@@ -326,28 +341,31 @@ let test_filtered_pass_first_socketpair () =
       let data_ch = send_test_case server_conn test_channel in
       (* Expect: start_span(FILTER=12), generate, stop_span(discard=false),
          mark_complete *)
-      let cmds = Array.make 4 "" in
-      for i = 0 to 3 do
-        let msg_id, cmd, pairs = recv_command data_ch in
-        cmds.(i) <- cmd;
-        match cmd with
-        | "start_span" ->
-            let label =
-              Hegel.Cbor_helpers.extract_int (List.assoc (`Text "label") pairs)
-            in
-            Alcotest.(check int) "label is FILTER" Labels.filter label;
-            send_response_value data_ch msg_id `Null
-        | "generate" -> send_response_value data_ch msg_id (`Int 4)
-        | "stop_span" ->
-            let discard =
-              Hegel.Cbor_helpers.extract_bool
-                (List.assoc (`Text "discard") pairs)
-            in
-            Alcotest.(check bool) "discard false" false discard;
-            send_response_value data_ch msg_id `Null
-        | "mark_complete" -> send_response_value data_ch msg_id `Null
-        | other -> failwith (Printf.sprintf "Unexpected command: %s" other)
-      done;
+      let rec handle_n_cmds n acc =
+        if n = 0 then List.rev acc
+        else
+          let msg_id, cmd, pairs = recv_command data_ch in
+          (match cmd with
+          | "start_span" ->
+              let label =
+                Hegel.Cbor_helpers.extract_int
+                  (List.assoc (`Text "label") pairs)
+              in
+              Alcotest.(check int) "label is FILTER" Labels.filter label;
+              send_response_value data_ch msg_id `Null
+          | "generate" -> send_response_value data_ch msg_id (`Int 4)
+          | "stop_span" ->
+              let discard =
+                Hegel.Cbor_helpers.extract_bool
+                  (List.assoc (`Text "discard") pairs)
+              in
+              Alcotest.(check bool) "discard false" false discard;
+              send_response_value data_ch msg_id `Null
+          | "mark_complete" -> send_response_value data_ch msg_id `Null
+          | other -> failwith (Printf.sprintf "Unexpected command: %s" other));
+          handle_n_cmds (n - 1) (cmd :: acc)
+      in
+      ignore (handle_n_cmds 4 []);
       send_test_done test_channel ~interesting:0)
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
@@ -369,31 +387,38 @@ let test_filtered_pass_after_reject_socketpair () =
       (* Attempt 1: start_span, generate(odd=3), stop_span(discard=true)
          Attempt 2: start_span, generate(even=4), stop_span(discard=false)
          Then mark_complete *)
-      let generate_count = ref 0 in
-      let cmd_count = ref 0 in
-      for _ = 1 to 7 do
-        let msg_id, cmd, pairs = recv_command data_ch in
-        incr cmd_count;
-        match cmd with
-        | "start_span" -> send_response_value data_ch msg_id `Null
-        | "generate" ->
-            incr generate_count;
-            if !generate_count = 1 then
-              send_response_value data_ch msg_id (`Int 3)
-            else send_response_value data_ch msg_id (`Int 4)
-        | "stop_span" ->
-            let discard =
-              Hegel.Cbor_helpers.extract_bool
-                (List.assoc (`Text "discard") pairs)
-            in
-            if !generate_count = 1 then
-              Alcotest.(check bool) "first discard=true" true discard
-            else Alcotest.(check bool) "second discard=false" false discard;
-            send_response_value data_ch msg_id `Null
-        | "mark_complete" -> send_response_value data_ch msg_id `Null
-        | other -> failwith (Printf.sprintf "Unexpected command: %s" other)
-      done;
-      Alcotest.(check int) "total cmds" 7 !cmd_count;
+      let rec handle_cmds remaining gen_count =
+        if remaining = 0 then gen_count
+        else
+          let msg_id, cmd, pairs = recv_command data_ch in
+          let gen_count' =
+            match cmd with
+            | "start_span" ->
+                send_response_value data_ch msg_id `Null;
+                gen_count
+            | "generate" ->
+                let gc = gen_count + 1 in
+                if gc = 1 then send_response_value data_ch msg_id (`Int 3)
+                else send_response_value data_ch msg_id (`Int 4);
+                gc
+            | "stop_span" ->
+                let discard =
+                  Hegel.Cbor_helpers.extract_bool
+                    (List.assoc (`Text "discard") pairs)
+                in
+                if gen_count = 1 then
+                  Alcotest.(check bool) "first discard=true" true discard
+                else Alcotest.(check bool) "second discard=false" false discard;
+                send_response_value data_ch msg_id `Null;
+                gen_count
+            | "mark_complete" ->
+                send_response_value data_ch msg_id `Null;
+                gen_count
+            | other -> failwith (Printf.sprintf "Unexpected command: %s" other)
+          in
+          handle_cmds (remaining - 1) gen_count'
+      in
+      ignore (handle_cmds 7 0);
       send_test_done test_channel ~interesting:0)
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
@@ -414,17 +439,18 @@ let test_filtered_exhaustion_socketpair () =
       let data_ch = send_test_case server_conn test_channel in
       (* 3 attempts: each is start_span, generate(odd), stop_span(discard=true)
          Then mark_complete with status=INVALID *)
-      for _ = 1 to 3 do
-        (* start_span *)
-        let msg_id, _cmd, _pairs = recv_command data_ch in
-        send_response_value data_ch msg_id `Null;
-        (* generate *)
-        let msg_id, _cmd, _pairs = recv_command data_ch in
-        send_response_value data_ch msg_id (`Int 3);
-        (* stop_span *)
-        let msg_id, _cmd, _pairs = recv_command data_ch in
-        send_response_value data_ch msg_id `Null
-      done;
+      List.iter
+        (fun _ ->
+          (* start_span *)
+          let msg_id, _cmd, _pairs = recv_command data_ch in
+          send_response_value data_ch msg_id `Null;
+          (* generate *)
+          let msg_id, _cmd, _pairs = recv_command data_ch in
+          send_response_value data_ch msg_id (`Int 3);
+          (* stop_span *)
+          let msg_id, _cmd, _pairs = recv_command data_ch in
+          send_response_value data_ch msg_id `Null)
+        (List.init 3 Fun.id);
       (* mark_complete with INVALID *)
       let msg_id, msg = receive_request data_ch () in
       let pairs = Hegel.Cbor_helpers.extract_dict msg in
@@ -927,14 +953,15 @@ let test_lists_composite_generate_socketpair () =
          collection_more → false
          stop_span               ← LIST span
          mark_complete *)
-      let steps = ref [] in
-      let done_ = ref false in
-      while not !done_ do
+      let rec handle_cmds collection_more_count =
         let msg_id, cmd, pairs = recv_command data_ch in
-        steps := cmd :: !steps;
         match cmd with
-        | "start_span" -> send_response_value data_ch msg_id `Null
-        | "stop_span" -> send_response_value data_ch msg_id `Null
+        | "start_span" ->
+            send_response_value data_ch msg_id `Null;
+            handle_cmds collection_more_count
+        | "stop_span" ->
+            send_response_value data_ch msg_id `Null;
+            handle_cmds collection_more_count
         | "new_collection" ->
             let min_s =
               Hegel.Cbor_helpers.extract_int
@@ -945,22 +972,21 @@ let test_lists_composite_generate_socketpair () =
             Alcotest.(check bool)
               "max_size null" true
               (Hegel.Cbor_helpers.is_null max_s);
-            send_response_value data_ch msg_id (`Text "coll1")
+            send_response_value data_ch msg_id (`Text "coll1");
+            handle_cmds collection_more_count
         | "collection_more" ->
+            let cm = collection_more_count + 1 in
             (* Return true once, then false *)
-            let already_done =
-              List.length (List.filter (( = ) "collection_more") !steps) >= 2
-            in
-            if already_done then begin
-              send_response_value data_ch msg_id (`Bool false)
-            end
-            else send_response_value data_ch msg_id (`Bool true)
-        | "generate" -> send_response_value data_ch msg_id (`Int 9)
-        | "mark_complete" ->
-            send_response_value data_ch msg_id `Null;
-            done_ := true
+            if cm >= 2 then send_response_value data_ch msg_id (`Bool false)
+            else send_response_value data_ch msg_id (`Bool true);
+            handle_cmds cm
+        | "generate" ->
+            send_response_value data_ch msg_id (`Int 9);
+            handle_cmds collection_more_count
+        | "mark_complete" -> send_response_value data_ch msg_id `Null
         | other -> failwith (Printf.sprintf "Unexpected: %s" other)
-      done;
+      in
+      handle_cmds 0;
       send_test_done test_channel ~interesting:0)
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in

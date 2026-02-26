@@ -206,11 +206,11 @@ let rec generate : type a. a generator -> a =
   | CompositeList { elements; min_size; max_size } ->
       group Labels.list (fun () ->
           let coll = new_collection ~min_size ?max_size () in
-          let result = ref [] in
-          while collection_more coll do
-            result := generate elements :: !result
-          done;
-          List.rev !result)
+          let rec collect acc =
+            if collection_more coll then collect (generate elements :: acc)
+            else List.rev acc
+          in
+          collect [])
   | Composite { label; generate_fn } -> group label (fun () -> generate_fn ())
 
 (** [map f gen] transforms values from [gen] using [f].

@@ -24,21 +24,18 @@ let test_generate_option_some_socketpair () =
       (* generate_option calls generate(booleans()) first.
          If true → calls gen_fn() which calls generate(integers()).
          Sequence: generate(bool=true), generate(int=42), mark_complete *)
-      let gen_count = ref 0 in
-      let done_ = ref false in
-      while not !done_ do
+      let rec handle_cmds gen_count =
         let msg_id, cmd, _pairs = recv_command data_ch in
         match cmd with
         | "generate" ->
-            incr gen_count;
-            if !gen_count = 1 then
-              send_response_value data_ch msg_id (`Bool true)
-            else send_response_value data_ch msg_id (`Int 42)
-        | "mark_complete" ->
-            send_response_value data_ch msg_id `Null;
-            done_ := true
+            let gc = gen_count + 1 in
+            if gc = 1 then send_response_value data_ch msg_id (`Bool true)
+            else send_response_value data_ch msg_id (`Int 42);
+            handle_cmds gc
+        | "mark_complete" -> send_response_value data_ch msg_id `Null
         | other -> failwith (Printf.sprintf "Unexpected: %s" other)
-      done;
+      in
+      handle_cmds 0;
       send_test_done test_channel ~interesting:0)
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
@@ -58,16 +55,16 @@ let test_generate_option_none_socketpair () =
       let test_channel = accept_run_test server_conn in
       let data_ch = send_test_case server_conn test_channel in
       (* generate_option calls generate(booleans()) = false → None *)
-      let done_ = ref false in
-      while not !done_ do
+      let rec handle_cmds () =
         let msg_id, cmd, _pairs = recv_command data_ch in
         match cmd with
-        | "generate" -> send_response_value data_ch msg_id (`Bool false)
-        | "mark_complete" ->
-            send_response_value data_ch msg_id `Null;
-            done_ := true
+        | "generate" ->
+            send_response_value data_ch msg_id (`Bool false);
+            handle_cmds ()
+        | "mark_complete" -> send_response_value data_ch msg_id `Null
         | other -> failwith (Printf.sprintf "Unexpected: %s" other)
-      done;
+      in
+      handle_cmds ();
       send_test_done test_channel ~interesting:0)
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
@@ -88,24 +85,22 @@ let test_generate_list_socketpair () =
       let data_ch = send_test_case server_conn test_channel in
       (* generate_list calls generate(integers(0,20)) for length first.
          Then gen_fn() N times, each calling generate(integers()). *)
-      let gen_count = ref 0 in
-      let done_ = ref false in
-      while not !done_ do
+      let rec handle_cmds gen_count =
         let msg_id, cmd, _pairs = recv_command data_ch in
         match cmd with
         | "generate" ->
-            incr gen_count;
-            if !gen_count = 1 then
+            let gc = gen_count + 1 in
+            if gc = 1 then
               (* Length = 3 *)
               send_response_value data_ch msg_id (`Int 3)
             else
               (* Element values *)
-              send_response_value data_ch msg_id (`Int (10 * !gen_count))
-        | "mark_complete" ->
-            send_response_value data_ch msg_id `Null;
-            done_ := true
+              send_response_value data_ch msg_id (`Int (10 * gc));
+            handle_cmds gc
+        | "mark_complete" -> send_response_value data_ch msg_id `Null
         | other -> failwith (Printf.sprintf "Unexpected: %s" other)
-      done;
+      in
+      handle_cmds 0;
       send_test_done test_channel ~interesting:0)
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
@@ -122,18 +117,17 @@ let test_generate_list_empty_socketpair () =
     (fun server_conn ->
       let test_channel = accept_run_test server_conn in
       let data_ch = send_test_case server_conn test_channel in
-      let done_ = ref false in
-      while not !done_ do
+      let rec handle_cmds () =
         let msg_id, cmd, _pairs = recv_command data_ch in
         match cmd with
         | "generate" ->
             (* Length = 0 *)
-            send_response_value data_ch msg_id (`Int 0)
-        | "mark_complete" ->
-            send_response_value data_ch msg_id `Null;
-            done_ := true
+            send_response_value data_ch msg_id (`Int 0);
+            handle_cmds ()
+        | "mark_complete" -> send_response_value data_ch msg_id `Null
         | other -> failwith (Printf.sprintf "Unexpected: %s" other)
-      done;
+      in
+      handle_cmds ();
       send_test_done test_channel ~interesting:0)
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in

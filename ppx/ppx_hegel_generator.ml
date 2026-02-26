@@ -32,8 +32,8 @@ let rec generate_expr_of_core_type (ct : core_type) : expression =
       [%expr
         fun () ->
           Hegel.Generators.generate
-            (Hegel.Generators.integers ~min_value:(-1073741823)
-               ~max_value:1073741823 ())]
+            (Hegel.Generators.integers ~min_value:Int.min_int
+               ~max_value:Int.max_int ())]
   | Ptyp_constr ({ txt = Lident "bool"; _ }, []) ->
       [%expr fun () -> Hegel.Generators.generate (Hegel.Generators.booleans ())]
   | Ptyp_constr ({ txt = Lident "float"; _ }, []) ->

@@ -133,18 +133,23 @@ type client = { connection : connection; control : channel; lock : Mutex.t }
     connection must not yet have had its handshake performed. *)
 let create_client connection =
   let server_version = float_of_string (send_handshake connection) in
-  if server_version < 0.1 || server_version > 0.1 then
+  if server_version <> 0.1 then
     failwith
       (Printf.sprintf
-         "hegel-ocaml supports protocol versions 0.1 through 0.1, but got \
-          server version %g. Upgrading hegel-ocaml or downgrading your hegel \
-          cli might help."
+         "hegel-ocaml supports protocol version 0.1, but got server version \
+          %g. Upgrading hegel-ocaml or downgrading your hegel cli might help."
          server_version);
   { connection; control = control_channel connection; lock = Mutex.create () }
 
 (** [run_test_case client channel test_fn ~is_final] runs a single test case.
     Sets up thread-local state and calls [test_fn]. Reports status via
     mark_complete. *)
+type test_outcome =
+  | Valid
+  | Invalid
+  | Data_was_exhausted
+  | Interesting of { origin_text : string; exn : exn option }
+
 let run_test_case _client channel test_fn ~is_final =
   if Domain.DLS.get current_channel <> None then
     failwith "Cannot nest test cases - already inside a test case";
@@ -152,35 +157,47 @@ let run_test_case _client channel test_fn ~is_final =
   Domain.DLS.set is_final_run is_final;
   Domain.DLS.set test_aborted false;
   Domain.DLS.set in_test true;
-  let already_complete = ref false in
-  let status = ref "VALID" in
-  let origin = ref `Null in
-  let final_exn = ref None in
-  (try test_fn () with
-  | Assume_rejected -> status := "INVALID"
-  | Data_exhausted -> already_complete := true
-  | exn ->
-      status := "INTERESTING";
-      origin := `Text (extract_origin exn);
-      if is_final then final_exn := Some exn);
+  let outcome =
+    try
+      test_fn ();
+      Valid
+    with
+    | Assume_rejected -> Invalid
+    | Data_exhausted -> Data_was_exhausted
+    | exn ->
+        Interesting
+          {
+            origin_text = extract_origin exn;
+            exn = (if is_final then Some exn else None);
+          }
+  in
   Domain.DLS.set current_channel None;
   Domain.DLS.set is_final_run false;
   Domain.DLS.set test_aborted false;
   Domain.DLS.set in_test false;
-  (if not !already_complete then
-     try
-       ignore
-         (pending_get
-            (request channel
-               (`Map
-                  [
-                    (`Text "command", `Text "mark_complete");
-                    (`Text "status", `Text !status);
-                    (`Text "origin", !origin);
-                  ])))
-     with Request_error e when e.error_type = "StopTest" -> ());
+  (match outcome with
+  | Data_was_exhausted -> ()
+  | Valid | Invalid | Interesting _ -> (
+      let status, origin =
+        match outcome with
+        | Valid -> ("VALID", `Null)
+        | Invalid -> ("INVALID", `Null)
+        | Interesting { origin_text; _ } -> ("INTERESTING", `Text origin_text)
+        | Data_was_exhausted -> assert false
+      in
+      try
+        ignore
+          (pending_get
+             (request channel
+                (`Map
+                   [
+                     (`Text "command", `Text "mark_complete");
+                     (`Text "status", `Text status);
+                     (`Text "origin", origin);
+                   ])))
+      with Request_error e when e.error_type = "StopTest" -> ()));
   close_channel channel;
-  match !final_exn with Some e -> raise e | None -> ()
+  match outcome with Interesting { exn = Some e; _ } -> raise e | _ -> ()
 
 (** [run_test client ~name ~test_cases test_fn] runs a property test. *)
 let run_test client ~name ~test_cases test_fn =
@@ -202,6 +219,21 @@ let run_test client ~name ~test_cases test_fn =
                    ( `Text "channel_id",
                      `Int (Int32.to_int (channel_id test_channel)) );
                  ]))));
+  let extract_channel_id pairs context =
+    match List.assoc_opt (`Text "channel_id") pairs with
+    | Some v -> Int32.of_int (Cbor_helpers.extract_int v)
+    | None -> failwith (context ^ " missing 'channel_id' field")
+  in
+  let receive_and_run_test_case ~is_final =
+    let message_id, message = receive_request test_channel () in
+    let pairs = Cbor_helpers.extract_dict message in
+    let ch_id = extract_channel_id pairs "test_case event" in
+    send_response_value test_channel message_id `Null;
+    let test_case_channel =
+      connect_channel client.connection ch_id ~role:"Test Case" ()
+    in
+    run_test_case client test_case_channel test_fn ~is_final
+  in
   let rec receive_events () =
     let message_id, message = receive_request test_channel () in
     let pairs = Cbor_helpers.extract_dict message in
@@ -211,14 +243,10 @@ let run_test client ~name ~test_cases test_fn =
       | None -> ""
     in
     if event = "test_case" then begin
-      let channel_id =
-        match List.assoc_opt (`Text "channel_id") pairs with
-        | Some v -> Int32.of_int (Cbor_helpers.extract_int v)
-        | None -> failwith "test_case event missing 'channel_id' field"
-      in
+      let ch_id = extract_channel_id pairs "test_case event" in
       send_response_value test_channel message_id `Null;
       let test_case_channel =
-        connect_channel client.connection channel_id ~role:"Test Case" ()
+        connect_channel client.connection ch_id ~role:"Test Case" ()
       in
       run_test_case client test_case_channel test_fn ~is_final:false;
       receive_events ()
@@ -249,46 +277,24 @@ let run_test client ~name ~test_cases test_fn =
         failwith "test_done results missing 'interesting_test_cases' field"
   in
   if n_interesting = 0 then ()
-  else if n_interesting = 1 then begin
-    let message_id, message = receive_request test_channel () in
-    let pairs = Cbor_helpers.extract_dict message in
-    let channel_id =
-      match List.assoc_opt (`Text "channel_id") pairs with
-      | Some v -> Int32.of_int (Cbor_helpers.extract_int v)
-      | None ->
-          failwith "interesting test_case event missing 'channel_id' field"
-    in
-    send_response_value test_channel message_id `Null;
-    let test_case_channel =
-      connect_channel client.connection channel_id ~role:"Test Case" ()
-    in
-    run_test_case client test_case_channel test_fn ~is_final:true
-  end
+  else if n_interesting = 1 then receive_and_run_test_case ~is_final:true
   else
-    let exceptions = ref [] in
-    for _i = 0 to n_interesting - 1 do
-      try
-        let message_id, message = receive_request test_channel () in
-        let pairs = Cbor_helpers.extract_dict message in
-        let channel_id =
-          match List.assoc_opt (`Text "channel_id") pairs with
-          | Some v -> Int32.of_int (Cbor_helpers.extract_int v)
-          | None ->
-              failwith "interesting test_case event missing 'channel_id' field"
+    let rec replay_interesting remaining acc =
+      if remaining = 0 then List.rev acc
+      else
+        let result =
+          try
+            receive_and_run_test_case ~is_final:true;
+            Error
+              (Failure
+                 (Printf.sprintf "Expected test case %d to fail but it didn't"
+                    (List.length acc)))
+          with e -> Error e
         in
-        send_response_value test_channel message_id `Null;
-        let test_case_channel =
-          connect_channel client.connection channel_id ~role:"Test Case" ()
-        in
-        run_test_case client test_case_channel test_fn ~is_final:true;
-        exceptions :=
-          Failure
-            (Printf.sprintf "Expected test case %d to fail but it didn't"
-               (List.length !exceptions))
-          :: !exceptions
-      with e -> exceptions := e :: !exceptions
-    done;
-    let exns = List.rev !exceptions in
+        let exn = match result with Error e -> e | Ok () -> assert false in
+        replay_interesting (remaining - 1) (exn :: acc)
+    in
+    let exns = replay_interesting n_interesting [] in
     raise
       (Failure
          (Printf.sprintf "Multiple failures (%d):\n%s" (List.length exns)

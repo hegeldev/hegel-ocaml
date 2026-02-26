@@ -1,13 +1,13 @@
 # Hegel SDK for OCaml
 # This justfile provides the standard build recipes.
 
-export PATH := env("HOME") + "/.opam/5.2.1/bin:" + env("PATH")
-
 # Install dependencies and the hegel binary.
 # If HEGEL_BINARY is set, symlinks it into .venv/bin instead of installing from git.
 setup:
     #!/usr/bin/env bash
     set -euo pipefail
+    eval $(opam env)
+    opam install --yes odoc
     uv venv .venv
     if [ -n "${HEGEL_BINARY:-}" ]; then
         mkdir -p .venv/bin

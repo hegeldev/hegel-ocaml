@@ -40,11 +40,12 @@ let make_raw_packet ?(pkt_magic = magic) ?checksum ?(channel_id = 0l)
 let sendall fd data =
   let bytes = Bytes.of_string data in
   let len = Bytes.length bytes in
-  let pos = ref 0 in
-  while !pos < len do
-    let written = Unix.write fd bytes !pos (len - !pos) in
-    pos := !pos + written
-  done
+  let rec write_all pos =
+    if pos < len then
+      let written = Unix.write fd bytes pos (len - pos) in
+      write_all (pos + written)
+  in
+  write_all 0
 
 (* --- Constants tests --- *)
 
@@ -127,8 +128,14 @@ let test_roundtrip_large_payload () =
       let pkt =
         { channel_id = 42l; message_id = 99l; is_reply = false; payload }
       in
-      write_packet writer pkt;
+      (* Write in a separate thread to avoid deadlock: the 65KB payload exceeds
+         the OS socket buffer, so write_packet blocks until the reader drains
+         some data. *)
+      let writer_thread =
+        Thread.create (fun () -> write_packet writer pkt) ()
+      in
       let pkt2 = read_packet reader in
+      Thread.join writer_thread;
       Alcotest.(check packet_testable) "round-trip large payload" pkt pkt2)
 
 let test_roundtrip_max_channel_id () =

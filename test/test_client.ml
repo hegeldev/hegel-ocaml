@@ -400,20 +400,20 @@ let test_multiple_interesting () =
      with_fake_server
        (fun server_conn ->
          let test_channel = accept_run_test server_conn in
+         let send_n_test_cases n =
+           List.iter
+             (fun _ ->
+               let data_ch = send_test_case server_conn test_channel in
+               handle_generate data_ch;
+               handle_mark_complete data_ch)
+             (List.init n Fun.id)
+         in
          (* Send 2 test cases, both will be INTERESTING *)
-         for _ = 1 to 2 do
-           let data_ch = send_test_case server_conn test_channel in
-           handle_generate data_ch;
-           handle_mark_complete data_ch
-         done;
+         send_n_test_cases 2;
          (* Send test_done with interesting=2 *)
          send_test_done test_channel ~interesting:2;
          (* Send 2 replay test cases *)
-         for _ = 1 to 2 do
-           let data_ch = send_test_case server_conn test_channel in
-           handle_generate data_ch;
-           handle_mark_complete data_ch
-         done)
+         send_n_test_cases 2)
        (fun client_conn ->
          let c = create_client client_conn in
          run_test c ~name:"multi_interesting" ~test_cases:2 (fun () ->
@@ -433,20 +433,20 @@ let test_multiple_interesting_pass () =
      with_fake_server
        (fun server_conn ->
          let test_channel = accept_run_test server_conn in
+         let send_n_test_cases n =
+           List.iter
+             (fun _ ->
+               let data_ch = send_test_case server_conn test_channel in
+               handle_generate data_ch;
+               handle_mark_complete data_ch)
+             (List.init n Fun.id)
+         in
          (* Send 2 test cases, both will be INTERESTING *)
-         for _ = 1 to 2 do
-           let data_ch = send_test_case server_conn test_channel in
-           handle_generate data_ch;
-           handle_mark_complete data_ch
-         done;
+         send_n_test_cases 2;
          (* Send test_done with interesting=2 *)
          send_test_done test_channel ~interesting:2;
          (* Send 2 replay test cases - this time test will pass *)
-         for _ = 1 to 2 do
-           let data_ch = send_test_case server_conn test_channel in
-           handle_generate data_ch;
-           handle_mark_complete data_ch
-         done)
+         send_n_test_cases 2)
        (fun client_conn ->
          let c = create_client client_conn in
          let count = ref 0 in

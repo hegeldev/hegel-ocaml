@@ -107,18 +107,21 @@ let recv_exact sock n =
   if n = 0 then Bytes.empty
   else begin
     let buf = Bytes.create n in
-    let pos = ref 0 in
-    while !pos < n do
-      let chunk = Unix.read sock buf !pos (n - !pos) in
-      if chunk = 0 then begin
-        if !pos > 0 then
-          raise (Connection_closed "Connection closed while reading data")
-        else
-          raise
-            (Partial_packet "Connection closed partway through reading packet.")
-      end;
-      pos := !pos + chunk
-    done;
+    let rec read_all pos =
+      if pos < n then begin
+        let chunk = Unix.read sock buf pos (n - pos) in
+        if chunk = 0 then begin
+          if pos > 0 then
+            raise (Connection_closed "Connection closed while reading data")
+          else
+            raise
+              (Partial_packet
+                 "Connection closed partway through reading packet.")
+        end;
+        read_all (pos + chunk)
+      end
+    in
+    read_all 0;
     buf
   end
 
@@ -188,8 +191,9 @@ let write_packet sock packet =
   Bytes.blit header_buf 0 buf 0 header_size;
   Bytes.blit_string packet.payload 0 buf header_size payload_len;
   Bytes.set buf (header_size + payload_len) (Char.chr terminator);
-  let pos = ref 0 in
-  while !pos < total_len do
-    let written = Unix.write sock buf !pos (total_len - !pos) in
-    pos := !pos + written
-  done
+  let rec write_all pos =
+    if pos < total_len then
+      let written = Unix.write sock buf pos (total_len - pos) in
+      write_all (pos + written)
+  in
+  write_all 0

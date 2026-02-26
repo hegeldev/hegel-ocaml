@@ -39,7 +39,7 @@ def test_conformance(subtests: pytest.Subtests) -> None:
     """Run all conformance tests for the OCaml SDK."""
     tests = [
         BooleanConformance(binary("test_booleans")),
-        IntegerConformance(binary("test_integers"), min_value=-10**9, max_value=10**9),
+        IntegerConformance(binary("test_integers"), min_value=-(2**62), max_value=2**62-1),
         FloatConformance(binary("test_floats")),
         TextConformance(binary("test_text")),
         BinaryConformance(binary("test_binary")),
