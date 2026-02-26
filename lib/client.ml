@@ -199,8 +199,12 @@ let run_test_case _client channel test_fn ~is_final =
   close_channel channel;
   match outcome with Interesting { exn = Some e; _ } -> raise e | _ -> ()
 
-(** [run_test client ~name ~test_cases test_fn] runs a property test. *)
-let run_test client ~name ~test_cases test_fn =
+(** [run_test client ~name ~test_cases ?seed test_fn] runs a property test.
+
+    @param seed
+      optional seed for deterministic replay. If [None], the server generates
+      its own seed. *)
+let run_test client ~name ~test_cases ?seed test_fn =
   if Domain.DLS.get in_test then
     failwith "Cannot nest test cases - already inside a test case";
   let test_channel = new_channel client.connection ~role:"Test" () in
@@ -208,6 +212,7 @@ let run_test client ~name ~test_cases test_fn =
   Fun.protect
     ~finally:(fun () -> Mutex.unlock client.lock)
     (fun () ->
+      let seed_value = match seed with Some s -> `Int s | None -> `Null in
       ignore
         (pending_get
            (request client.control
@@ -216,6 +221,7 @@ let run_test client ~name ~test_cases test_fn =
                    (`Text "command", `Text "run_test");
                    (`Text "name", `Text name);
                    (`Text "test_cases", `Int test_cases);
+                   (`Text "seed", seed_value);
                    ( `Text "channel_id",
                      `Int (Int32.to_int (channel_id test_channel)) );
                  ]))));

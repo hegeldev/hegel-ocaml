@@ -48,6 +48,7 @@ val target : float -> string -> unit
 val generate : 'a Generators.generator -> 'a
 (** [generate gen] produces a typed value from generator [gen]. *)
 
-val run_hegel_test : ?test_cases:int -> ?name:string -> (unit -> unit) -> unit
-(** [run_hegel_test ?test_cases ?name test_fn] runs a property test using the
-    shared hegeld process. *)
+val run_hegel_test :
+  ?test_cases:int -> ?name:string -> ?seed:int -> (unit -> unit) -> unit
+(** [run_hegel_test ?test_cases ?name ?seed test_fn] runs a property test using
+    the shared hegeld process. *)

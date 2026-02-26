@@ -71,5 +71,10 @@ val run_test_case :
     Sets up domain-local state and calls [test_fn]. Reports status via
     mark_complete. *)
 
-val run_test : client -> name:string -> test_cases:int -> (unit -> unit) -> unit
-(** [run_test client ~name ~test_cases test_fn] runs a property test. *)
+val run_test :
+  client -> name:string -> test_cases:int -> ?seed:int -> (unit -> unit) -> unit
+(** [run_test client ~name ~test_cases ?seed test_fn] runs a property test.
+
+    @param seed
+      optional seed for deterministic replay. If [None], the server generates
+      its own seed. *)

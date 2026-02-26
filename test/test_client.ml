@@ -359,6 +359,38 @@ let test_version_mismatch_low () =
   close server_conn;
   Thread.join t
 
+(** Test: run_test with explicit seed sends seed in command. *)
+let test_run_test_with_seed () =
+  with_fake_server
+    (fun server_conn ->
+      receive_handshake server_conn;
+      let control = control_channel server_conn in
+      let msg_id, message = receive_request control () in
+      let pairs = Hegel.Cbor_helpers.extract_dict message in
+      (* Verify seed is sent as an integer *)
+      let seed_value = List.assoc (`Text "seed") pairs in
+      Alcotest.(check int)
+        "seed value" 42
+        (Hegel.Cbor_helpers.extract_int seed_value);
+      let test_ch_id =
+        Int32.of_int
+          (Hegel.Cbor_helpers.extract_int
+             (List.assoc (`Text "channel_id") pairs))
+      in
+      let test_channel =
+        connect_channel server_conn test_ch_id ~role:"Test" ()
+      in
+      send_response_value control msg_id (`Bool true);
+      let data_ch = send_test_case server_conn test_channel in
+      handle_generate data_ch;
+      handle_mark_complete data_ch;
+      send_test_done test_channel ~interesting:0)
+    (fun client_conn ->
+      let c = create_client client_conn in
+      run_test c ~name:"seed_test" ~test_cases:1 ~seed:42 (fun () ->
+          ignore
+            (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]))))
+
 (** Test: Data_exhausted path (StopTest on generate). *)
 let test_data_exhausted_via_socketpair () =
   with_fake_server
@@ -934,6 +966,7 @@ let tests =
     Alcotest.test_case "start/stop span live" `Quick test_start_stop_span_live;
     Alcotest.test_case "version mismatch" `Quick test_version_mismatch;
     Alcotest.test_case "version mismatch low" `Quick test_version_mismatch_low;
+    Alcotest.test_case "run_test with seed" `Quick test_run_test_with_seed;
     Alcotest.test_case "data exhausted via socketpair" `Quick
       test_data_exhausted_via_socketpair;
     Alcotest.test_case "StopTest on mark_complete socketpair" `Quick
