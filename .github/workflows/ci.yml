@@ -6,91 +6,129 @@ on:
   pull_request:
     branches: [main]
 
-# Cancel in-progress PR builds if another commit is pushed.
-# On non-PR builds, fall back to the globally-unique run_id and don't cancel.
+permissions: {}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  check-release:
-    name: check release
-    if: github.event_name == 'pull_request'
+  lint:
+    name: lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          fetch-depth: 0
-      - name: Check release
-        run: python .github/scripts/release.py check "${{ github.base_ref }}"
+          persist-credentials: false
 
-  format:
-    name: format
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ocaml/setup-ocaml@v3
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
         with:
-          ocaml-compiler: '5.2'
-      - run: opam install ocamlformat.0.26.2
-      - name: format
-        run: |
-          opam exec -- dune fmt
-          git diff --exit-code
+          ocaml-compiler: 5.2.1
+
+      - name: Install ocamlformat
+        run: opam install ocamlformat.0.28.1
+
+      - name: Check formatting
+        run: opam exec -- dune fmt && git diff --exit-code
 
   test:
     name: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
       - uses: ./.github/actions/base
         with:
           ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
-      - uses: ocaml/setup-ocaml@v3
-        with:
-          ocaml-compiler: '5.2'
-          dune-cache: true
-      - run: opam install . --deps-only --with-test
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Install hegel
-        run: pip install git+ssh://git@github.com/antithesishq/hegel.git
-      - name: Test
-        run: opam exec -- dune runtest
 
-  release:
-    name: release
-    if: github.event_name == 'push' && github.repository == 'antithesishq/hegel-ocaml'
-    needs: [format, test]
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
+        with:
+          ocaml-compiler: 5.2.1
+
+      - name: Install OCaml dependencies
+        run: opam install . --deps-only --with-test --with-doc --yes
+
+      - run: just setup
+      - name: Run tests
+        run: just test
+
+  docs:
+    name: docs
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Check for RELEASE.md
-        id: check
-        run: |
-          if [ ! -f RELEASE.md ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Generate app token
-        if: steps.check.outputs.skip != 'true'
-        uses: actions/create-github-app-token@v1
-        id: app-token
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          app-id: ${{ vars.HEGEL_RELEASE_APP_ID }}
-          private-key: ${{ secrets.HEGEL_RELEASE_APP_PRIVATE_KEY }}
+          persist-credentials: false
 
-      - name: Re-checkout with app token
-        if: steps.check.outputs.skip != 'true'
-        uses: actions/checkout@v4
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
         with:
-          token: ${{ steps.app-token.outputs.token }}
+          ocaml-compiler: 5.2.1
 
-      - name: Release
-        if: steps.check.outputs.skip != 'true'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: python .github/scripts/release.py release
+      - name: Install OCaml dependencies
+        run: opam install . --deps-only --with-test --with-doc --yes
+
+      - name: Build docs
+        run: opam exec -- dune build @doc
+
+  conformance:
+    name: conformance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/base
+        with:
+          ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
+
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
+        with:
+          ocaml-compiler: 5.2.1
+
+      - name: Install OCaml dependencies
+        run: opam install . --deps-only --with-test --yes
+
+      - run: just setup
+      - run: pip install pytest
+      - run: just conformance
+
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Install zizmor
+        run: pipx install zizmor
+      - name: Run zizmor
+        run: zizmor --format plain .github/

@@ -1,38 +1,54 @@
-(** Hegel - Property-based testing for OCaml.
+(** Hegel property-based testing SDK for OCaml.
 
-    Hegel is a universal property-based testing framework. This SDK communicates
-    with the Hegel server (powered by Hypothesis) to generate test data and
-    perform shrinking. *)
+    This module provides the client SDK for communicating with the Hegel server
+    (hegeld, powered by Hypothesis) via Unix sockets using a binary protocol,
+    enabling property-based testing from OCaml. *)
 
-module Gen = Gen
-module Cbor = Cbor
+val version : string
+(** The current version of the Hegel OCaml SDK. *)
+
 module Protocol = Protocol
-module Crc32 = Crc32
-module State = State
+(** Binary wire protocol for packet serialization and deserialization. *)
 
-val run : ?test_cases:int -> ?hegel_path:string -> (unit -> unit) -> unit
-(** Run a property-based test. The test function is called repeatedly with
-    generated data. If any invocation raises an exception, Hegel will shrink
-    the inputs and report the minimal failing case. *)
+module Cbor_helpers = Cbor_helpers
+(** CBOR encoding/decoding with type-safe extractor helpers. *)
 
-val find_hegel_path : unit -> string option
-(** Search PATH for the hegel binary. Returns [None] if not found. *)
+module Connection = Connection
+(** Multiplexed connection and channel abstractions. *)
 
-val extract_channel_id : Cbor.t -> int
-(** Extract the channel ID from a CBOR event map. Raises [Failure] if missing or invalid. *)
+module Client = Client
+(** Test runner and lifecycle management. *)
+
+module Session = Session
+(** Global session management for running property tests. *)
+
+module Generators = Generators
+(** Generator combinators for composable test data generation. *)
+
+module Conformance = Conformance
+(** Conformance test helpers for writing conformance binaries. *)
+
+module Derive = Derive
+(** Runtime support for [@@deriving generator]. *)
+
+(** {2 Convenience re-exports} *)
 
 val assume : bool -> unit
-(** [assume cond] rejects the current test input if [cond] is false.
-    This does not count as a test failure; it simply skips the input. *)
+(** [assume condition] rejects the current test case if [condition] is [false].
+*)
 
 val note : string -> unit
-(** [note msg] records a message that will be displayed with any failing
-    test case. Only prints on the final replay. *)
+(** [note message] records a message that will be printed on the final (failing)
+    run. *)
 
-val target : ?label:string -> float -> unit
-(** [target value ~label] guides the test engine toward higher values
-    of a numeric metric. The engine will try to maximize the target value,
-    which can help find edge cases. *)
+val target : float -> string -> unit
+(** [target value label] sends a target command to guide the search engine
+    toward higher values. *)
 
-exception Assume_rejected
-(** Raised internally when [assume false] is called. *)
+val generate : 'a Generators.generator -> 'a
+(** [generate gen] produces a typed value from generator [gen]. *)
+
+val run_hegel_test :
+  ?test_cases:int -> ?name:string -> ?seed:int -> (unit -> unit) -> unit
+(** [run_hegel_test ?test_cases ?name ?seed test_fn] runs a property test using
+    the shared hegeld process. *)

@@ -1,8 +1,7 @@
 (library
- (name ppx_hegel)
- (public_name ppx_hegel)
+ (name ppx_hegel_generator)
+ (public_name ppx_hegel_generator)
  (kind ppx_deriver)
  (libraries ppxlib)
  (preprocess
-  (pps ppxlib.metaquot))
- (ppx_runtime_libraries hegel))
+  (pps ppxlib.metaquot)))

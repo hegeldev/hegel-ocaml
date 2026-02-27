@@ -1,7 +1,21 @@
-(tests
- (names test_hegel test_failing test_generators test_docs test_coverage)
- (libraries hegel alcotest))
+(test
+ (name test_hegel)
+ (modules
+  test_hegel
+  test_helpers
+  test_protocol
+  test_cbor_helpers
+  test_connection
+  test_client
+  test_generators
+  test_showcase
+  test_conformance_helpers
+  test_derive)
+ (libraries hegel alcotest unix threads.posix))
 
-(executable
- (name mock_hegel)
- (libraries hegel))
+(test
+ (name test_ppx_derive)
+ (modules test_ppx_derive)
+ (libraries hegel alcotest unix threads.posix)
+ (preprocess
+  (pps ppx_hegel_generator)))

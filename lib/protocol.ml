@@ -1,244 +1,199 @@
-let magic = 0x4845474C (* "HEGL" *)
+(** Wire protocol for the Hegel SDK.
+
+    This module defines the binary packet format used for communication between
+    the Hegel SDK and the Hegel server. Messages are serialized as packets with
+    a 20-byte header, a CBOR-encoded payload, and a terminator byte.
+
+    The header consists of 5 big-endian unsigned 32-bit integers:
+    - Magic number (0x4845474C, "HEGL")
+    - CRC32 checksum
+    - Channel ID
+    - Message ID (high bit = reply flag)
+    - Payload length *)
+
+(** Magic number identifying Hegel packets ("HEGL" in hex). *)
+let magic = 0x4845474Cl
+
+(** Size of the packet header in bytes (5 big-endian uint32 fields). *)
 let header_size = 20
-let reply_bit = 1 lsl 31
+
+(** Terminator byte appended after the payload. *)
 let terminator = 0x0A
-let close_channel_payload = "\xFE"
-let close_channel_message_id = (1 lsl 31) - 1
-let supported_protocol_versions = (0.1, 0.1)
-let handshake_string = "hegel_handshake_start"
+
+(** Bit flag indicating a reply message. When set in the message ID field, the
+    message is a response to a previous request. *)
+let reply_bit = Int32.shift_left 1l 31
+
+(** Special message ID used when closing a channel. *)
+let close_channel_message_id = Int32.sub (Int32.shift_left 1l 31) 1l
+
+(** Special payload byte sent when closing a channel. Chosen to be invalid CBOR
+    per RFC 8949 (reserved tag byte 0xFE). *)
+let close_channel_payload = Bytes.make 1 '\xFE' |> Bytes.to_string
 
 type packet = {
-  channel : int;
-  message_id : int;
-  is_reply : bool;
-  payload : string;
+  channel_id : int32;  (** The logical channel this packet belongs to. *)
+  message_id : int32;  (** Identifier for request/response correlation. *)
+  is_reply : bool;  (** Whether this is a reply to a previous request. *)
+  payload : string;  (** The raw payload bytes (typically CBOR-encoded). *)
 }
+(** A single message in the wire protocol. *)
 
-(* ---- Low-level I/O ---- *)
+(** [equal_packet a b] returns [true] if packets [a] and [b] have identical
+    fields. *)
+let equal_packet a b =
+  a.channel_id = b.channel_id
+  && a.message_id = b.message_id
+  && a.is_reply = b.is_reply && a.payload = b.payload
 
-let write_all fd s =
-  let len = String.length s in
-  let written = ref 0 in
-  while !written < len do
-    let n = Unix.write_substring fd s !written (len - !written) in
-    (* Blocking sockets never return 0 from write — they write or raise *)
-    assert (n > 0);
-    written := !written + n
-  done
+(** [pp_packet fmt p] pretty-prints packet [p] to formatter [fmt]. *)
+let pp_packet fmt p =
+  Format.fprintf fmt
+    "{channel_id=%ld; message_id=%ld; is_reply=%b; payload=<%d bytes>}"
+    p.channel_id p.message_id p.is_reply (String.length p.payload)
 
-let read_exact fd n =
-  let buf = Bytes.create n in
-  let read = ref 0 in
-  while !read < n do
-    let got = Unix.read fd buf !read (n - !read) in
-    if got = 0 then failwith "read_exact: connection closed";
-    read := !read + got
-  done;
-  Bytes.to_string buf
-
-(* ---- Packet I/O ---- *)
-
-let put_u32_be buf off v =
-  Bytes.set buf off (Char.chr ((v lsr 24) land 0xff));
-  Bytes.set buf (off + 1) (Char.chr ((v lsr 16) land 0xff));
-  Bytes.set buf (off + 2) (Char.chr ((v lsr 8) land 0xff));
-  Bytes.set buf (off + 3) (Char.chr (v land 0xff))
-
-let get_u32_be s off =
-  (Char.code s.[off] lsl 24)
-  lor (Char.code s.[off + 1] lsl 16)
-  lor (Char.code s.[off + 2] lsl 8)
-  lor Char.code s.[off + 3]
-  land 0xFFFFFFFF
-
-let write_packet fd packet =
-  let message_id_wire =
-    if packet.is_reply then packet.message_id lor reply_bit
-    else packet.message_id
+(** [compute_crc32 data] computes the CRC32 checksum of [data] and returns it as
+    an [int32]. *)
+let compute_crc32 data =
+  let crc =
+    Checkseum.Crc32.digest_string data 0 (String.length data)
+      Checkseum.Crc32.default
   in
-  let header = Bytes.create header_size in
-  put_u32_be header 0 magic;
-  (* checksum placeholder at 4..8 *)
-  Bytes.fill header 4 4 '\x00';
-  put_u32_be header 8 packet.channel;
-  put_u32_be header 12 message_id_wire;
-  put_u32_be header 16 (String.length packet.payload);
-  (* compute CRC32 over header (with zeroed checksum) + payload *)
-  let header_str = Bytes.to_string header in
-  let checksum = Crc32.compute (header_str ^ packet.payload) in
-  put_u32_be header 4 (Int32.to_int checksum);
-  write_all fd (Bytes.to_string header);
-  write_all fd packet.payload;
-  write_all fd (String.make 1 (Char.chr terminator))
+  Optint.to_int32 crc
 
-let read_packet fd =
-  let header = read_exact fd header_size in
-  let packet_magic = get_u32_be header 0 in
-  if packet_magic <> magic then
+(** [compute_crc32_parts a b] computes the CRC32 checksum over the concatenation
+    of strings [a] and [b] without allocating the concatenated string. *)
+let compute_crc32_parts a b =
+  let crc =
+    Checkseum.Crc32.digest_string a 0 (String.length a) Checkseum.Crc32.default
+  in
+  let crc = Checkseum.Crc32.digest_string b 0 (String.length b) crc in
+  Optint.to_int32 crc
+
+(** [pack_uint32_be buf offset value] writes [value] as a big-endian unsigned
+    32-bit integer at [offset] in [buf]. *)
+let pack_uint32_be buf offset value =
+  Bytes.set buf offset
+    (Char.chr (Int32.to_int (Int32.shift_right_logical value 24) land 0xFF));
+  Bytes.set buf (offset + 1)
+    (Char.chr (Int32.to_int (Int32.shift_right_logical value 16) land 0xFF));
+  Bytes.set buf (offset + 2)
+    (Char.chr (Int32.to_int (Int32.shift_right_logical value 8) land 0xFF));
+  Bytes.set buf (offset + 3) (Char.chr (Int32.to_int value land 0xFF))
+
+(** [unpack_uint32_be data offset] reads a big-endian unsigned 32-bit integer
+    from [data] at [offset]. *)
+let unpack_uint32_be data offset =
+  let b0 = Int32.of_int (Char.code (Bytes.get data offset)) in
+  let b1 = Int32.of_int (Char.code (Bytes.get data (offset + 1))) in
+  let b2 = Int32.of_int (Char.code (Bytes.get data (offset + 2))) in
+  let b3 = Int32.of_int (Char.code (Bytes.get data (offset + 3))) in
+  Int32.logor
+    (Int32.logor (Int32.shift_left b0 24) (Int32.shift_left b1 16))
+    (Int32.logor (Int32.shift_left b2 8) b3)
+
+exception Partial_packet of string
+(** Exception raised when the connection is closed partway through reading a
+    packet. *)
+
+exception Connection_closed of string
+(** Exception raised when the connection is closed while reading data and some
+    bytes have already been received. *)
+
+(** [recv_exact sock n] reads exactly [n] bytes from Unix file descriptor
+    [sock]. Raises {!Partial_packet} if the connection closes with no data read,
+    or {!Connection_closed} if it closes after partial data. *)
+let recv_exact sock n =
+  if n = 0 then Bytes.empty
+  else begin
+    let buf = Bytes.create n in
+    let rec read_all pos =
+      if pos < n then begin
+        let chunk = Unix.read sock buf pos (n - pos) in
+        if chunk = 0 then begin
+          if pos > 0 then
+            raise (Connection_closed "Connection closed while reading data")
+          else
+            raise
+              (Partial_packet
+                 "Connection closed partway through reading packet.")
+        end;
+        read_all (pos + chunk)
+      end
+    in
+    read_all 0;
+    buf
+  end
+
+(** [read_packet sock] reads and parses a single packet from Unix file
+    descriptor [sock].
+
+    Raises [Failure] if the magic number is invalid, the terminator byte is
+    invalid, or the CRC32 checksum does not match. *)
+let read_packet sock =
+  let header_buf = recv_exact sock header_size in
+  let pkt_magic = unpack_uint32_be header_buf 0 in
+  let checksum = unpack_uint32_be header_buf 4 in
+  let channel_id = unpack_uint32_be header_buf 8 in
+  let raw_message_id = unpack_uint32_be header_buf 12 in
+  let length = unpack_uint32_be header_buf 16 in
+  let is_reply = Int32.logand raw_message_id reply_bit <> 0l in
+  let message_id =
+    if is_reply then Int32.logxor raw_message_id reply_bit else raw_message_id
+  in
+  if pkt_magic <> magic then
     failwith
-      (Printf.sprintf "Invalid magic: expected 0x%08X, got 0x%08X" magic
-         packet_magic);
-  let checksum = get_u32_be header 4 in
-  let channel = get_u32_be header 8 in
-  let message_id_raw = get_u32_be header 12 in
-  let length = get_u32_be header 16 in
-  let is_reply = message_id_raw land reply_bit <> 0 in
-  let message_id = message_id_raw land lnot reply_bit in
-  let payload = read_exact fd length in
-  let term = read_exact fd 1 in
-  if Char.code term.[0] <> terminator then
+      (Printf.sprintf "Invalid magic number: expected 0x%08lX, got 0x%08lX"
+         magic pkt_magic);
+  let payload_buf = recv_exact sock (Int32.to_int length) in
+  let term_buf = recv_exact sock 1 in
+  let term_byte = Char.code (Bytes.get term_buf 0) in
+  if term_byte <> terminator then
     failwith
       (Printf.sprintf "Invalid terminator: expected 0x%02X, got 0x%02X"
-         terminator
-         (Char.code term.[0]));
-  (* verify checksum *)
-  let header_for_check =
-    String.sub header 0 4 ^ "\x00\x00\x00\x00" ^ String.sub header 8 12
+         terminator term_byte);
+  (* Verify checksum: CRC32 over header with checksum field zeroed + payload *)
+  let header_for_check = Bytes.copy header_buf in
+  pack_uint32_be header_for_check 4 0l;
+  let computed_crc =
+    compute_crc32_parts
+      (Bytes.to_string header_for_check)
+      (Bytes.to_string payload_buf)
   in
-  let computed =
-    Int32.to_int (Crc32.compute (header_for_check ^ payload)) land 0xFFFFFFFF
-  in
-  if computed <> checksum then
+  if computed_crc <> checksum then
     failwith
-      (Printf.sprintf "Checksum mismatch: expected 0x%08X, got 0x%08X" checksum
-         computed);
-  { channel; message_id; is_reply; payload }
+      (Printf.sprintf "Checksum mismatch: expected 0x%08lX, got 0x%08lX"
+         checksum computed_crc);
+  { channel_id; message_id; is_reply; payload = Bytes.to_string payload_buf }
 
-(* ---- Connection ---- *)
-
-module Connection = struct
-  type t = {
-    fd : Unix.file_descr;
-    lock : Mutex.t;
-    mutable next_channel_id : int;
-    pending : (int, packet Queue.t) Hashtbl.t;
-  }
-
-  let create fd =
-    {
-      fd;
-      lock = Mutex.create ();
-      next_channel_id = 1;
-      pending = Hashtbl.create 16;
-    }
-
-  let send_packet conn packet =
-    Mutex.lock conn.lock;
-    Fun.protect
-      ~finally:(fun () -> Mutex.unlock conn.lock)
-      (fun () -> write_packet conn.fd packet)
-
-  let receive_packet_for_channel conn channel_id =
-    (* check pending first *)
-    (match Hashtbl.find_opt conn.pending channel_id with
-    | Some q when not (Queue.is_empty q) -> Some (Queue.pop q)
-    | _ -> None)
-    |> function
-    | Some packet -> packet
-    | None ->
-        let rec loop () =
-          let packet = read_packet conn.fd in
-          if packet.channel = channel_id then packet
-          else
-            let q =
-              match Hashtbl.find_opt conn.pending packet.channel with
-              | Some q -> q
-              | None ->
-                  let q = Queue.create () in
-                  Hashtbl.replace conn.pending packet.channel q;
-                  q
-            in
-            Queue.push packet q;
-            loop ()
-        in
-        loop ()
-
-  let control_channel conn = (conn, 0)
-
-  let new_channel conn =
-    let next = conn.next_channel_id in
-    conn.next_channel_id <- next + 1;
-    let channel_id = (next lsl 1) lor 1 in
-    (conn, channel_id)
-
-  let connect_channel conn channel_id = (conn, channel_id)
-
-  let close conn =
-    (try Unix.shutdown conn.fd Unix.SHUTDOWN_ALL with Unix.Unix_error _ -> ());
-    Unix.close conn.fd
-end
-
-(* ---- Channel ---- *)
-
-module Channel = struct
-  type t = Connection.t * int
-
-  let channel_id (_, id) = id
-  let next_msg_id = ref 1
-
-  let send_request (conn, chan_id) payload =
-    let msg_id = !next_msg_id in
-    next_msg_id := msg_id + 1;
-    Connection.send_packet conn
-      { channel = chan_id; message_id = msg_id; is_reply = false; payload };
-    msg_id
-
-  let send_response (conn, chan_id) msg_id payload =
-    Connection.send_packet conn
-      { channel = chan_id; message_id = msg_id; is_reply = true; payload }
-
-  let receive_response (conn, _chan_id) msg_id =
-    let packet = Connection.receive_packet_for_channel conn _chan_id in
-    if packet.is_reply && packet.message_id = msg_id then packet.payload
-    else
-      (* receive_packet_for_channel always returns same-channel packets,
-         so re-queuing and looping would be infinite. Fail fast instead. *)
-      failwith
-        (Printf.sprintf
-           "receive_response: unexpected packet (is_reply=%b, msg_id=%d, \
-            expected=%d)"
-           packet.is_reply packet.message_id msg_id)
-
-  let receive_request (conn, _chan_id) =
-    let packet = Connection.receive_packet_for_channel conn _chan_id in
-    if not packet.is_reply then (packet.message_id, packet.payload)
-    else
-      (* receive_packet_for_channel always returns same-channel packets,
-         so re-queuing a reply and looping would be infinite. Fail fast. *)
-      failwith
-        (Printf.sprintf
-           "receive_request: unexpected reply (msg_id=%d) on channel %d"
-           packet.message_id _chan_id)
-
-  let request_cbor ((_, _) as ch) message =
-    let payload = Cbor.encode_to_string message in
-    let msg_id = send_request ch payload in
-    let response_bytes = receive_response ch msg_id in
-    let response = Cbor.decode_string response_bytes in
-    (* check for error response *)
-    (match Cbor.map_get response "error" with
-    | Some err ->
-        let error_type =
-          match Cbor.map_get response "type" with
-          | Some (Cbor.Text s) -> s
-          | _ -> "unknown"
-        in
-        let err_str =
-          match err with Cbor.Text s -> s | _ -> Cbor.encode_to_string err
-        in
-        failwith (Printf.sprintf "Server error (%s): %s" error_type err_str)
-    | None -> ());
-    (* extract result field if present *)
-    match Cbor.map_get response "result" with
-    | Some result -> result
-    | None -> response
-
-  let close (conn, chan_id) =
-    Connection.send_packet conn
-      {
-        channel = chan_id;
-        message_id = close_channel_message_id;
-        is_reply = false;
-        payload = close_channel_payload;
-      }
-end
+(** [write_packet sock packet] serializes and writes [packet] to Unix file
+    descriptor [sock]. *)
+let write_packet sock packet =
+  let wire_message_id =
+    if packet.is_reply then Int32.logor packet.message_id reply_bit
+    else packet.message_id
+  in
+  let payload_len = String.length packet.payload in
+  (* Build header with zeroed checksum for CRC computation *)
+  let header_buf = Bytes.create header_size in
+  pack_uint32_be header_buf 0 magic;
+  pack_uint32_be header_buf 4 0l;
+  pack_uint32_be header_buf 8 packet.channel_id;
+  pack_uint32_be header_buf 12 wire_message_id;
+  pack_uint32_be header_buf 16 (Int32.of_int payload_len);
+  let checksum =
+    compute_crc32_parts (Bytes.to_string header_buf) packet.payload
+  in
+  pack_uint32_be header_buf 4 checksum;
+  (* Assemble into a single buffer: header + payload + terminator *)
+  let total_len = header_size + payload_len + 1 in
+  let buf = Bytes.create total_len in
+  Bytes.blit header_buf 0 buf 0 header_size;
+  Bytes.blit_string packet.payload 0 buf header_size payload_len;
+  Bytes.set buf (header_size + payload_len) (Char.chr terminator);
+  let rec write_all pos =
+    if pos < total_len then
+      let written = Unix.write sock buf pos (total_len - pos) in
+      write_all (pos + written)
+  in
+  write_all 0
