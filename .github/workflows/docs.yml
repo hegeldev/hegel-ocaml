@@ -1,4 +1,4 @@
-name: Check
+name: Docs
 
 on:
   push:
@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: check
+  docs:
+    name: docs
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,15 +22,6 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
-
-      - uses: ./.github/actions/base
-        with:
-          ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
-
-      - name: Install just
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
-      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
 
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
@@ -40,5 +31,5 @@ jobs:
       - name: Install OCaml dependencies
         run: opam install . --deps-only --with-test --with-doc --yes
 
-      - run: just setup
-      - run: just check
+      - name: Build docs
+        run: opam exec -- dune build @doc
