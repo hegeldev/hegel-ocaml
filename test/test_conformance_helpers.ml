@@ -127,7 +127,7 @@ let test_floats_schema_no_bounds () =
       let typ =
         Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
       in
-      Alcotest.(check string) "type" "number" typ;
+      Alcotest.(check string) "type" "float" typ;
       (* No bounds when not specified *)
       Alcotest.(check bool)
         "no min_value" false

@@ -12,7 +12,7 @@
 open Protocol
 
 (** Protocol version sent during handshake. *)
-let protocol_version = "0.1"
+let protocol_version = "0.3"
 
 (** Handshake string sent by the client to initiate the protocol. *)
 let handshake_string = "hegel_handshake_start"

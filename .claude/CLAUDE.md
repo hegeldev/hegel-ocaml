@@ -201,7 +201,7 @@ A singleton `_session` lazily starts the `hegel` binary as a subprocess on first
 The Hegel server speaks CBOR. Generator schemas are CBOR maps:
 - `{"type": "boolean"}` — booleans
 - `{"type": "integer", "min_value"?: N, "max_value"?: N}` — integers
-- `{"type": "number", "allow_nan": bool, "allow_infinity": bool, "width": 64, "exclude_min": bool, "exclude_max": bool, "min_value"?: f, "max_value"?: f}` — floats
+- `{"type": "float", "allow_nan": bool, "allow_infinity": bool, "width": 64, "exclude_min": bool, "exclude_max": bool, "min_value"?: f, "max_value"?: f}` — floats
 - `{"type": "string", "min_size": N, "max_size"?: N}` — text
 - `{"type": "binary", "min_size": N, "max_size"?: N}` — binary
 - sampled_from: uses `{"type": "integer", "min_value": 0, "max_value": N-1}` with a map transform to index into the values array

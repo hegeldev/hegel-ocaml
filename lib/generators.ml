@@ -275,7 +275,7 @@ let booleans () =
 (** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
      ?allow_infinity ()] creates a generator for floating-point values.
 
-    Uses schema type ["number"] as required by the Hegel server. The fields
+    Uses schema type ["float"] as required by the Hegel server. The fields
     [allow_nan], [allow_infinity], [exclude_min], [exclude_max], and [width] are
     always sent (required by the server). Defaults follow Hypothesis:
     - [allow_nan]: [true] only when no bounds are set
@@ -294,7 +294,7 @@ let floats ?min_value ?max_value ?(exclude_min = false) ?(exclude_max = false)
   in
   let pairs =
     [
-      (`Text "type", `Text "number");
+      (`Text "type", `Text "float");
       (`Text "allow_nan", `Bool eff_allow_nan);
       (`Text "allow_infinity", `Bool eff_allow_infinity);
       (`Text "exclude_min", `Bool exclude_min);
