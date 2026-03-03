@@ -63,7 +63,7 @@ conformance:
     # Build conformance binaries
     dune build conformance/
     # Run Python conformance tests
-    .venv/bin/python -m pytest tests/conformance/ -v
+    .venv/bin/python -m pytest test/conformance/ -v
 
 # Run lint + docs + test (the full CI check).
 check: lint docs test
