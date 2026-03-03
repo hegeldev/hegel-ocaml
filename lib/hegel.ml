@@ -5,7 +5,7 @@
     enabling property-based testing from OCaml. *)
 
 (** The current version of the Hegel OCaml SDK. *)
-let version = "0.1.0"
+let version = "0.1.1"
 
 module Protocol = Protocol
 (** Binary wire protocol for packet serialization and deserialization. *)
