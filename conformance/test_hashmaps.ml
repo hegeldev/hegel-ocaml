@@ -22,7 +22,7 @@ let () =
           integers ~min_value:min_value_p ~max_value:max_value_p ()
         in
         let map_gen = hashmaps key_gen val_gen ~min_size ~max_size () in
-        let pairs = generate map_gen in
+        let pairs = Hegel.draw map_gen in
         let size = List.length pairs in
         let values = List.map snd pairs in
         let min_val_result =
@@ -48,7 +48,7 @@ let () =
           integers ~min_value:min_value_p ~max_value:max_value_p ()
         in
         let map_gen = hashmaps key_gen val_gen ~min_size ~max_size () in
-        let pairs = generate map_gen in
+        let pairs = Hegel.draw map_gen in
         let size = List.length pairs in
         let keys = List.map fst pairs in
         let values = List.map snd pairs in

@@ -10,20 +10,20 @@ open Hegel.Generators
 let test_addition_commutative () =
   Hegel.Session.run_hegel_test ~name:"addition_commutative" ~test_cases:50
     (fun () ->
-      let a = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in
-      let b = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in
+      let a = Hegel.draw (integers ~min_value:(-1000) ~max_value:1000 ()) in
+      let b = Hegel.draw (integers ~min_value:(-1000) ~max_value:1000 ()) in
       assert (a + b = b + a))
 
 (** Property: double negation of an integer is identity. *)
 let test_double_negation () =
   Hegel.Session.run_hegel_test ~name:"double_negation" ~test_cases:50 (fun () ->
-      let x = generate (integers ~min_value:(-10000) ~max_value:10000 ()) in
+      let x = Hegel.draw (integers ~min_value:(-10000) ~max_value:10000 ()) in
       assert (- (-x) = x))
 
 (** Property: absolute value is always non-negative. *)
 let test_abs_nonnegative () =
   Hegel.Session.run_hegel_test ~name:"abs_nonnegative" ~test_cases:50 (fun () ->
-      let x = generate (integers ~min_value:(-10000) ~max_value:10000 ()) in
+      let x = Hegel.draw (integers ~min_value:(-10000) ~max_value:10000 ()) in
       assert (abs x >= 0))
 
 (** Property: filter(x > 50) on integers(0, 100) always yields x > 50.
@@ -35,7 +35,7 @@ let test_filter_greater_than () =
       let gen =
         filter (fun v -> v > 50) (integers ~min_value:0 ~max_value:100 ())
       in
-      let x = generate gen in
+      let x = Hegel.draw gen in
       assert (x > 50);
       assert (x <= 100))
 
@@ -48,7 +48,7 @@ let test_filter_even () =
       let gen =
         filter (fun v -> v mod 2 = 0) (integers ~min_value:0 ~max_value:10 ())
       in
-      let x = generate gen in
+      let x = Hegel.draw gen in
       assert (x mod 2 = 0);
       assert (x / 2 * 2 = x);
       assert (x >= 0 && x <= 10))
@@ -63,7 +63,7 @@ let test_list_reverse_involution () =
       let gen =
         lists (integers ~min_value:(-100) ~max_value:100 ()) ~max_size:10 ()
       in
-      let ints = generate gen in
+      let ints = Hegel.draw gen in
       assert (List.rev (List.rev ints) = ints))
 
 (** Property: sum of a non-negative integer list is non-negative.
@@ -75,7 +75,7 @@ let test_list_sum_nonnegative () =
       let gen =
         lists (integers ~min_value:0 ~max_value:100 ()) ~max_size:10 ()
       in
-      let ints = generate gen in
+      let ints = Hegel.draw gen in
       let sum = List.fold_left ( + ) 0 ints in
       assert (sum >= 0);
       List.iter (fun x -> assert (x >= 0 && x <= 100)) ints)
@@ -91,7 +91,7 @@ let test_list_filter_preserves_predicate () =
         filter (fun v -> v mod 2 = 0) (integers ~min_value:0 ~max_value:50 ())
       in
       let gen = lists elem ~max_size:5 () in
-      let items = generate gen in
+      let items = Hegel.draw gen in
       assert (List.length items <= 5);
       List.iter
         (fun x ->

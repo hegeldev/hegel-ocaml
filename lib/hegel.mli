@@ -45,8 +45,9 @@ val target : float -> string -> unit
 (** [target value label] sends a target command to guide the search engine
     toward higher values. *)
 
-val generate : 'a Generators.generator -> 'a
-(** [generate gen] produces a typed value from generator [gen]. *)
+val draw : 'a Generators.generator -> 'a
+(** [draw gen] produces a typed value from generator [gen]. Must be called from
+    within a Hegel test body. *)
 
 val run_hegel_test :
   ?test_cases:int -> ?name:string -> ?seed:int -> (unit -> unit) -> unit

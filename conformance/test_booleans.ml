@@ -6,5 +6,5 @@ open Hegel.Generators
 let () =
   let test_cases = get_test_cases () in
   Hegel.Session.run_hegel_test ~name:"test_booleans" ~test_cases (fun () ->
-      let b = generate (booleans ()) in
+      let b = Hegel.draw (booleans ()) in
       write_metrics [ ("value", if b then "true" else "false") ])

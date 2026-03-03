@@ -42,7 +42,11 @@ type 'a generator =
       max_size : int option;
     }
       -> 'a list generator
-  | Composite : { label : int; generate_fn : unit -> 'a } -> 'a generator
+  | Composite : {
+      label : int;
+      generate_fn : Client.test_case_data -> 'a;
+    }
+      -> 'a generator
       (** The type of generators. Generators produce typed OCaml values and can
           be combined using {!map}, {!flat_map}, and {!filter}.
 
@@ -57,21 +61,21 @@ type 'a generator =
           - [CompositeList] generators use the collection protocol to generate
             lists of non-basic elements, creating a fresh collection per
             generate call.
-          - [Composite] generators wrap a [generate_fn] thunk inside a span with
-            the given [label]. Used for tuples and one_of with non-basic
-            elements. *)
+          - [Composite] generators wrap a [generate_fn] taking test case data
+            inside a span with the given [label]. Used for tuples and one_of
+            with non-basic elements. *)
 
 val max_filter_attempts : int
 (** Maximum number of filter attempts before calling [assume false]. *)
 
-val group : int -> (unit -> 'a) -> 'a
-(** [group label f] runs [f ()] inside a span with the given [label]. The span
-    is stopped with [discard:false] regardless of whether [f] raises. *)
+val group : int -> Client.test_case_data -> (unit -> 'a) -> 'a
+(** [group label data f] runs [f ()] inside a span with the given [label]. The
+    span is stopped with [discard:false] regardless of whether [f] raises. *)
 
-val discardable_group : int -> (unit -> 'a) -> 'a
-(** [discardable_group label f] runs [f ()] inside a span with [label]. If [f]
-    raises, the span is stopped with [discard:true]; otherwise [discard:false].
-*)
+val discardable_group : int -> Client.test_case_data -> (unit -> 'a) -> 'a
+(** [discardable_group label data f] runs [f ()] inside a span with [label]. If
+    [f] raises, the span is stopped with [discard:true]; otherwise
+    [discard:false]. *)
 
 type collection = {
   mutable finished : bool;
@@ -81,18 +85,25 @@ type collection = {
 }
 (** A collection handle for generating variable-length sequences. *)
 
-val new_collection : min_size:int -> ?max_size:int -> unit -> collection
-(** [new_collection ~min_size ?max_size ()] creates a new collection handle. *)
+val new_collection :
+  min_size:int -> ?max_size:int -> Client.test_case_data -> unit -> collection
+(** [new_collection ~min_size ?max_size data ()] creates a new collection
+    handle. *)
 
-val collection_more : collection -> bool
-(** [collection_more coll] returns [true] if more elements should be generated,
-    [false] when the collection is complete. *)
+val collection_more : collection -> Client.test_case_data -> bool
+(** [collection_more coll data] returns [true] if more elements should be
+    generated, [false] when the collection is complete. *)
 
-val collection_reject : collection -> unit
-(** [collection_reject coll] rejects the last element of the collection. *)
+val collection_reject : collection -> Client.test_case_data -> unit
+(** [collection_reject coll data] rejects the last element of the collection. *)
 
-val generate : 'a generator -> 'a
-(** [generate gen] produces a typed value from generator [gen]. *)
+val do_draw : 'a generator -> Client.test_case_data -> 'a
+(** [do_draw gen data] produces a typed value from generator [gen] using the
+    given test case [data]. *)
+
+val draw : 'a generator -> 'a
+(** [draw gen] produces a typed value from generator [gen]. Must be called from
+    within a Hegel test body. *)
 
 val map : ('a -> 'b) -> 'a generator -> 'b generator
 (** [map f gen] transforms values from [gen] using [f].

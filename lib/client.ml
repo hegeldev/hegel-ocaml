@@ -15,19 +15,23 @@ exception Assume_rejected
 exception Data_exhausted
 (** Raised when the server runs out of test data (StopTest). *)
 
-(** Current test case channel. Set for the duration of each test case.
+type test_case_data = {
+  channel : channel;
+  is_final : bool;
+  mutable test_aborted : bool;
+}
+(** Per-test-case data, consolidating channel, final-run flag, and abort state.
     Domain-local so each domain has its own independent test state. *)
-let current_channel : channel option Domain.DLS.key =
+
+let current_data : test_case_data option Domain.DLS.key =
   Domain.DLS.new_key (fun () -> None)
 
-(** Whether this is the final (replay) run for a failing test case. *)
-let is_final_run : bool Domain.DLS.key = Domain.DLS.new_key (fun () -> false)
-
-(** Whether the server sent StopTest during this test case. *)
-let test_aborted : bool Domain.DLS.key = Domain.DLS.new_key (fun () -> false)
-
-(** Whether we are currently inside a test case body. *)
-let in_test : bool Domain.DLS.key = Domain.DLS.new_key (fun () -> false)
+(** [get_data ()] returns the current test case data, raising [Failure] if not
+    in a test context. *)
+let get_data () =
+  match Domain.DLS.get current_data with
+  | None -> failwith "Not in a test context"
+  | Some d -> d
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available. *)
@@ -51,41 +55,38 @@ let extract_origin exn =
   | Some (file, line) ->
       Printf.sprintf "%s at %s:%d" (Printexc.exn_slot_name exn) file line
 
-(** [get_channel ()] returns the current test data channel, raising [Failure] if
-    not in a test context. *)
-let get_channel () =
-  match Domain.DLS.get current_channel with
-  | None ->
-      failwith
-        "Not in a test context - must be called from within a test function"
-  | Some ch -> ch
-
-(** [generate_from_schema schema] generates a value from a schema by sending a
-    generate command to the server. Raises {!Data_exhausted} if the server
-    signals StopTest. *)
-let generate_from_schema schema =
-  let channel = get_channel () in
+(** [generate_from_schema schema data] generates a value from a schema by
+    sending a generate command to the server. Raises {!Data_exhausted} if the
+    server signals StopTest. *)
+let generate_from_schema schema data =
+  let channel = data.channel in
   try
     pending_get
       (request channel
          (`Map [ (`Text "command", `Text "generate"); (`Text "schema", schema) ]))
   with Request_error e when e.error_type = "StopTest" ->
-    Domain.DLS.set test_aborted true;
+    data.test_aborted <- true;
     raise Data_exhausted
 
 (** [assume condition] rejects the current test case if [condition] is [false].
 *)
-let assume condition = if not condition then raise Assume_rejected
+let assume condition =
+  if Domain.DLS.get current_data = None then
+    failwith "assume() cannot be called outside of a Hegel test";
+  if not condition then raise Assume_rejected
 
 (** [note message] records a message that will be printed on the final (failing)
     run. *)
 let note message =
-  if Domain.DLS.get is_final_run then Printf.eprintf "%s\n%!" message
+  match Domain.DLS.get current_data with
+  | None -> failwith "note() cannot be called outside of a Hegel test"
+  | Some data -> if data.is_final then Printf.eprintf "%s\n%!" message
 
 (** [target value label] sends a target command to guide the search engine
     toward higher values. *)
 let target value label =
-  let channel = get_channel () in
+  let data = get_data () in
+  let channel = data.channel in
   ignore
     (pending_get
        (request channel
@@ -96,11 +97,11 @@ let target value label =
                (`Text "label", `Text label);
              ])))
 
-(** [start_span ?label ()] starts a generation span for better shrinking. *)
-let start_span ?(label = 0) () =
-  if Domain.DLS.get test_aborted then ()
+(** [start_span ?label data] starts a generation span for better shrinking. *)
+let start_span ?(label = 0) data =
+  if data.test_aborted then ()
   else begin
-    let channel = get_channel () in
+    let channel = data.channel in
     ignore
       (pending_get
          (request channel
@@ -111,11 +112,11 @@ let start_span ?(label = 0) () =
                ])))
   end
 
-(** [stop_span ?discard ()] ends the current generation span. *)
-let stop_span ?(discard = false) () =
-  if Domain.DLS.get test_aborted then ()
+(** [stop_span ?discard data] ends the current generation span. *)
+let stop_span ?(discard = false) data =
+  if data.test_aborted then ()
   else begin
-    let channel = get_channel () in
+    let channel = data.channel in
     ignore
       (pending_get
          (request channel
@@ -133,11 +134,12 @@ type client = { connection : connection; control : channel; lock : Mutex.t }
     connection must not yet have had its handshake performed. *)
 let create_client connection =
   let server_version = float_of_string (send_handshake connection) in
-  if server_version <> 0.1 then
+  if server_version < 0.1 || server_version > 0.3 then
     failwith
       (Printf.sprintf
-         "hegel-ocaml supports protocol version 0.1, but got server version \
-          %g. Upgrading hegel-ocaml or downgrading your hegel cli might help."
+         "hegel-ocaml supports protocol versions 0.1 through 0.3, but got \
+          server version %g. Upgrading hegel-ocaml or downgrading your hegel \
+          cli might help."
          server_version);
   { connection; control = control_channel connection; lock = Mutex.create () }
 
@@ -151,12 +153,10 @@ type test_outcome =
   | Interesting of { origin_text : string; exn : exn option }
 
 let run_test_case _client channel test_fn ~is_final =
-  if Domain.DLS.get current_channel <> None then
+  if Domain.DLS.get current_data <> None then
     failwith "Cannot nest test cases - already inside a test case";
-  Domain.DLS.set current_channel (Some channel);
-  Domain.DLS.set is_final_run is_final;
-  Domain.DLS.set test_aborted false;
-  Domain.DLS.set in_test true;
+  let data = { channel; is_final; test_aborted = false } in
+  Domain.DLS.set current_data (Some data);
   let outcome =
     try
       test_fn ();
@@ -171,10 +171,7 @@ let run_test_case _client channel test_fn ~is_final =
             exn = (if is_final then Some exn else None);
           }
   in
-  Domain.DLS.set current_channel None;
-  Domain.DLS.set is_final_run false;
-  Domain.DLS.set test_aborted false;
-  Domain.DLS.set in_test false;
+  Domain.DLS.set current_data None;
   (match outcome with
   | Data_was_exhausted -> ()
   | Valid | Invalid | Interesting _ -> (
@@ -205,7 +202,7 @@ let run_test_case _client channel test_fn ~is_final =
       optional seed for deterministic replay. If [None], the server generates
       its own seed. *)
 let run_test client ~name ~test_cases ?seed test_fn =
-  if Domain.DLS.get in_test then
+  if Domain.DLS.get current_data <> None then
     failwith "Cannot nest test cases - already inside a test case";
   let test_channel = new_channel client.connection ~role:"Test" () in
   Mutex.lock client.lock;
