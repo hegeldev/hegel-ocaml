@@ -1,34 +1,7 @@
 open Hegel.Connection
 open Hegel.Generators
 
-let with_fake_server = Test_helpers.with_fake_server
-let accept_run_test = Test_helpers.accept_run_test
-let send_test_case = Test_helpers.send_test_case
-let send_test_done = Test_helpers.send_test_done
-let recv_command = Test_helpers.recv_command
 let contains_substring = Test_helpers.contains_substring
-
-(** Helper: handle one command, dispatching to the appropriate handler. Returns
-    the command name for verification. *)
-let handle_one data_ch respond =
-  let msg_id, cmd, pairs = recv_command data_ch in
-  respond data_ch msg_id cmd pairs;
-  cmd
-
-(** Standard responder: generate returns `Int value, start/stop span return
-    Null, mark_complete returns Null. *)
-let standard_respond ?(generate_value = `Int 42) () data_ch msg_id cmd _pairs =
-  match cmd with
-  | "generate" -> send_response_value data_ch msg_id generate_value
-  | "start_span" | "stop_span" | "mark_complete" ->
-      send_response_value data_ch msg_id `Null
-  | other ->
-      failwith (Printf.sprintf "Unexpected command in standard: %s" other)
-
-(** Helper: handle N commands with a standard responder. *)
-let handle_n_commands data_ch n ?(generate_value = `Int 42) () =
-  let respond = standard_respond ~generate_value () in
-  List.iter (fun _ -> ignore (handle_one data_ch respond)) (List.init n Fun.id)
 
 (* ==== Unit tests (no server needed) ==== *)
 
@@ -193,544 +166,106 @@ let test_collection_reject_when_finished () =
   close conn;
   Unix.close s2
 
-(* ==== Socketpair-based tests (fake server protocol verification) ==== *)
+(** Test: collection_more returns false when already finished. *)
+let test_collection_more_when_finished () =
+  let data, conn, s2 = dummy_data () in
+  let coll = new_collection ~min_size:0 data () in
+  coll.finished <- true;
+  let result = collection_more coll data in
+  Alcotest.(check bool) "returns false" false result;
+  close conn;
+  Unix.close s2
 
-(** Test: Basic generator without transform sends generate command. *)
-let test_basic_generate_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* Handle generate request → respond with `Int 42 *)
-      let msg_id, cmd, _pairs = recv_command data_ch in
-      Alcotest.(check string) "cmd" "generate" cmd;
-      send_response_value data_ch msg_id (`Int 42);
-      (* Handle mark_complete *)
-      let msg_id, _msg = receive_request data_ch () in
-      send_response_value data_ch msg_id `Null;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"basic_gen" ~test_cases:1 (fun () ->
-          let gen = integers ~min_value:0 ~max_value:100 () in
-          let v = Hegel.draw gen in
-          Alcotest.(check int) "value" 42 v))
+(** Test: discardable_group exception path — stop_span with discard. *)
+let test_discardable_group_exception () =
+  let data, conn, s2 = dummy_data () in
+  data.Hegel.Client.test_aborted <- true;
+  let raised = ref false in
+  (try ignore (discardable_group Labels.flat_map data (fun () -> raise Exit))
+   with Exit -> raised := true);
+  Alcotest.(check bool) "raised Exit" true !raised;
+  close conn;
+  Unix.close s2
 
-(** Test: Basic generator with transform applies transform. *)
-let test_basic_generate_with_transform_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* Handle generate → respond with `Int 5 *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_value data_ch msg_id (`Int 5);
-      (* Handle mark_complete *)
-      let msg_id, _msg = receive_request data_ch () in
-      send_response_value data_ch msg_id `Null;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"transform_gen" ~test_cases:1 (fun () ->
-          let gen =
-            map (fun v -> v * 2) (integers ~min_value:0 ~max_value:10 ())
-          in
-          let v = Hegel.draw gen in
-          Alcotest.(check int) "value" 10 v))
+(** Test: collection_more raises Data_exhausted on StopTest (socketpair). *)
+let test_collection_more_stoptest () =
+  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let conn = create_connection s1 ~name:"Client" () in
+  let peer_conn = create_connection s2 ~name:"Peer" () in
+  let t_hs =
+    Thread.create
+      (fun () ->
+        Test_helpers.raw_handshake_responder peer_conn.socket;
+        peer_conn.connection_state <- Client)
+      ()
+  in
+  ignore (send_handshake conn);
+  Thread.join t_hs;
+  let ch = new_channel conn ~role:"Data" () in
+  let data =
+    Hegel.Client.{ channel = ch; is_final = false; test_aborted = false }
+  in
+  let coll = new_collection ~min_size:0 data () in
+  let peer_ch = connect_channel peer_conn (channel_id ch) ~role:"Peer" () in
+  let t_peer =
+    Thread.create
+      (fun () ->
+        let msg_id, _msg = receive_request peer_ch () in
+        send_response_raw peer_ch msg_id
+          (CBOR.Simple.encode
+             (`Map
+                [
+                  (`Text "error", `Text "Test case is being abandoned");
+                  (`Text "type", `Text "StopTest");
+                ])))
+      ()
+  in
+  let raised = ref false in
+  (try ignore (collection_more coll data)
+   with Hegel.Client.Data_exhausted -> raised := true);
+  Thread.join t_peer;
+  Alcotest.(check bool) "raised Data_exhausted" true !raised;
+  Alcotest.(check bool) "test_aborted" true data.test_aborted;
+  close conn;
+  close peer_conn
 
-(** Test: Double-map on basic composes transforms correctly via socketpair. *)
-let test_double_map_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* Handle generate → respond with `Int 3 *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_value data_ch msg_id (`Int 3);
-      (* Handle mark_complete *)
-      let msg_id, _msg = receive_request data_ch () in
-      send_response_value data_ch msg_id `Null;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"double_map" ~test_cases:1 (fun () ->
-          let gen =
-            integers ~min_value:1 ~max_value:5 ()
-            |> map (fun v -> v * 2)
-            |> map (fun v -> v + 1)
-          in
-          (* schema should be unchanged *)
-          Alcotest.(check bool) "still basic" true (is_basic gen);
-          let v = Hegel.draw gen in
-          (* 3*2+1 = 7 *)
-          Alcotest.(check int) "value" 7 v))
-
-(** Test: Mapped generator on non-basic sends start_span(MAPPED)/stop_span. The
-    inner filter also sends span commands, so the full sequence is:
-    start_span(MAPPED), start_span(FILTER), generate, stop_span, stop_span,
-    mark_complete. *)
-let test_mapped_generate_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      let rec handle_n_cmds n acc =
-        if n = 0 then List.rev acc
-        else
-          let msg_id, cmd, pairs = recv_command data_ch in
-          let label =
-            match cmd with
-            | "start_span" ->
-                let l =
-                  Hegel.Cbor_helpers.extract_int
-                    (List.assoc (`Text "label") pairs)
-                in
-                send_response_value data_ch msg_id `Null;
-                l
-            | "generate" ->
-                send_response_value data_ch msg_id (`Int 7);
-                0
-            | "stop_span" ->
-                send_response_value data_ch msg_id `Null;
-                0
-            | "mark_complete" ->
-                send_response_value data_ch msg_id `Null;
-                0
-            | other -> failwith (Printf.sprintf "Unexpected command: %s" other)
-          in
-          handle_n_cmds (n - 1) ((cmd, label) :: acc)
-      in
-      let steps = handle_n_cmds 6 [] in
-      let cmd i = fst (List.nth steps i) in
-      let label i = snd (List.nth steps i) in
-      Alcotest.(check string) "cmd 0" "start_span" (cmd 0);
-      Alcotest.(check int) "label 0 MAPPED" Labels.mapped (label 0);
-      Alcotest.(check string) "cmd 1" "start_span" (cmd 1);
-      Alcotest.(check int) "label 1 FILTER" Labels.filter (label 1);
-      Alcotest.(check string) "cmd 2" "generate" (cmd 2);
-      Alcotest.(check string) "cmd 3" "stop_span" (cmd 3);
-      Alcotest.(check string) "cmd 4" "stop_span" (cmd 4);
-      Alcotest.(check string) "cmd 5" "mark_complete" (cmd 5);
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"mapped_gen" ~test_cases:1 (fun () ->
-          let gen = integers () |> filter (fun _ -> true) |> map (fun x -> x) in
-          let v = Hegel.draw gen in
-          Alcotest.(check int) "value" 7 v))
-
-(** Test: FlatMapped generator sends start_span(FLAT_MAP)/stop_span. *)
-let test_flatmapped_generate_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* Expect: start_span(FLAT_MAP=11), generate(first), generate(second),
-         stop_span, mark_complete *)
-      let rec handle_n_cmds n acc =
-        if n = 0 then List.rev acc
-        else
-          let msg_id, cmd, pairs = recv_command data_ch in
-          (match cmd with
-          | "start_span" ->
-              let label =
-                Hegel.Cbor_helpers.extract_int
-                  (List.assoc (`Text "label") pairs)
-              in
-              Alcotest.(check int) "label is FLAT_MAP" Labels.flat_map label;
-              send_response_value data_ch msg_id `Null
-          | "generate" -> send_response_value data_ch msg_id (`Int 5)
-          | "stop_span" -> send_response_value data_ch msg_id `Null
-          | "mark_complete" -> send_response_value data_ch msg_id `Null
-          | other -> failwith (Printf.sprintf "Unexpected command: %s" other));
-          handle_n_cmds (n - 1) (cmd :: acc)
-      in
-      let cmds = handle_n_cmds 5 [] in
-      let cmd i = List.nth cmds i in
-      Alcotest.(check string) "cmd 0" "start_span" (cmd 0);
-      Alcotest.(check string) "cmd 1" "generate" (cmd 1);
-      Alcotest.(check string) "cmd 2" "generate" (cmd 2);
-      Alcotest.(check string) "cmd 3" "stop_span" (cmd 3);
-      Alcotest.(check string) "cmd 4" "mark_complete" (cmd 4);
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"flatmap_gen" ~test_cases:1 (fun () ->
-          let gen =
-            flat_map
-              (fun _ -> integers ~min_value:0 ~max_value:10 ())
-              (integers ~min_value:1 ~max_value:3 ())
-          in
-          ignore (Hegel.draw gen)))
-
-(** Test: Filtered generator — passes on first attempt. *)
-let test_filtered_pass_first_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* Expect: start_span(FILTER=12), generate, stop_span(discard=false),
-         mark_complete *)
-      let rec handle_n_cmds n acc =
-        if n = 0 then List.rev acc
-        else
-          let msg_id, cmd, pairs = recv_command data_ch in
-          (match cmd with
-          | "start_span" ->
-              let label =
-                Hegel.Cbor_helpers.extract_int
-                  (List.assoc (`Text "label") pairs)
-              in
-              Alcotest.(check int) "label is FILTER" Labels.filter label;
-              send_response_value data_ch msg_id `Null
-          | "generate" -> send_response_value data_ch msg_id (`Int 4)
-          | "stop_span" ->
-              let discard =
-                Hegel.Cbor_helpers.extract_bool
-                  (List.assoc (`Text "discard") pairs)
-              in
-              Alcotest.(check bool) "discard false" false discard;
-              send_response_value data_ch msg_id `Null
-          | "mark_complete" -> send_response_value data_ch msg_id `Null
-          | other -> failwith (Printf.sprintf "Unexpected command: %s" other));
-          handle_n_cmds (n - 1) (cmd :: acc)
-      in
-      ignore (handle_n_cmds 4 []);
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"filter_pass" ~test_cases:1 (fun () ->
-          let gen =
-            filter
-              (fun v -> v mod 2 = 0)
-              (integers ~min_value:0 ~max_value:10 ())
-          in
-          let v = Hegel.draw gen in
-          Alcotest.(check int) "value" 4 v))
-
-(** Test: Filtered generator — fails first, passes second. *)
-let test_filtered_pass_after_reject_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* Attempt 1: start_span, generate(odd=3), stop_span(discard=true)
-         Attempt 2: start_span, generate(even=4), stop_span(discard=false)
-         Then mark_complete *)
-      let rec handle_cmds remaining gen_count =
-        if remaining = 0 then gen_count
-        else
-          let msg_id, cmd, pairs = recv_command data_ch in
-          let gen_count' =
-            match cmd with
-            | "start_span" ->
-                send_response_value data_ch msg_id `Null;
-                gen_count
-            | "generate" ->
-                let gc = gen_count + 1 in
-                if gc = 1 then send_response_value data_ch msg_id (`Int 3)
-                else send_response_value data_ch msg_id (`Int 4);
-                gc
-            | "stop_span" ->
-                let discard =
-                  Hegel.Cbor_helpers.extract_bool
-                    (List.assoc (`Text "discard") pairs)
-                in
-                if gen_count = 1 then
-                  Alcotest.(check bool) "first discard=true" true discard
-                else Alcotest.(check bool) "second discard=false" false discard;
-                send_response_value data_ch msg_id `Null;
-                gen_count
-            | "mark_complete" ->
-                send_response_value data_ch msg_id `Null;
-                gen_count
-            | other -> failwith (Printf.sprintf "Unexpected command: %s" other)
-          in
-          handle_cmds (remaining - 1) gen_count'
-      in
-      ignore (handle_cmds 7 0);
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"filter_retry" ~test_cases:1 (fun () ->
-          let gen =
-            filter
-              (fun v -> v mod 2 = 0)
-              (integers ~min_value:0 ~max_value:10 ())
-          in
-          let v = Hegel.draw gen in
-          Alcotest.(check int) "value" 4 v))
-
-(** Test: Filtered generator — all 3 attempts fail → assume(false) → INVALID. *)
-let test_filtered_exhaustion_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* 3 attempts: each is start_span, generate(odd), stop_span(discard=true)
-         Then mark_complete with status=INVALID *)
-      List.iter
-        (fun _ ->
-          (* start_span *)
-          let msg_id, _cmd, _pairs = recv_command data_ch in
-          send_response_value data_ch msg_id `Null;
-          (* generate *)
-          let msg_id, _cmd, _pairs = recv_command data_ch in
-          send_response_value data_ch msg_id (`Int 3);
-          (* stop_span *)
-          let msg_id, _cmd, _pairs = recv_command data_ch in
-          send_response_value data_ch msg_id `Null)
-        (List.init 3 Fun.id);
-      (* mark_complete with INVALID *)
-      let msg_id, msg = receive_request data_ch () in
-      let pairs = Hegel.Cbor_helpers.extract_dict msg in
-      let status =
-        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "status") pairs)
-      in
-      Alcotest.(check string) "status" "INVALID" status;
-      send_response_value data_ch msg_id `Null;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"filter_exhaust" ~test_cases:1 (fun () ->
-          let gen =
-            filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ())
-          in
-          ignore (Hegel.draw gen)))
-
-(** Test: group helper wraps start_span/stop_span correctly. *)
-let test_group_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* Expect: start_span(42), stop_span, mark_complete *)
-      let msg_id, cmd, pairs = recv_command data_ch in
-      Alcotest.(check string) "start_span" "start_span" cmd;
-      let label =
-        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "label") pairs)
-      in
-      Alcotest.(check int) "label" 42 label;
-      send_response_value data_ch msg_id `Null;
-      let msg_id, cmd, _pairs = recv_command data_ch in
-      Alcotest.(check string) "stop_span" "stop_span" cmd;
-      send_response_value data_ch msg_id `Null;
-      let msg_id, _msg = receive_request data_ch () in
-      send_response_value data_ch msg_id `Null;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"group" ~test_cases:1 (fun () ->
-          let data = Hegel.Client.get_data () in
-          let result = group 42 data (fun () -> 99) in
-          Alcotest.(check int) "result" 99 result))
-
-(** Test: discardable_group with success — stop_span(discard=false). *)
-let test_discardable_group_success_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* start_span, stop_span(discard=false), mark_complete *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_value data_ch msg_id `Null;
-      let msg_id, _cmd, pairs = recv_command data_ch in
-      let discard =
-        Hegel.Cbor_helpers.extract_bool (List.assoc (`Text "discard") pairs)
-      in
-      Alcotest.(check bool) "discard false" false discard;
-      send_response_value data_ch msg_id `Null;
-      let msg_id, _msg = receive_request data_ch () in
-      send_response_value data_ch msg_id `Null;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"disc_ok" ~test_cases:1 (fun () ->
-          let data = Hegel.Client.get_data () in
-          let result = discardable_group 1 data (fun () -> 55) in
-          Alcotest.(check int) "result" 55 result))
-
-(** Test: discardable_group with exception — stop_span(discard=true). *)
-let test_discardable_group_exception_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* start_span, stop_span(discard=true), mark_complete(INTERESTING) *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_value data_ch msg_id `Null;
-      let msg_id, _cmd, pairs = recv_command data_ch in
-      let discard =
-        Hegel.Cbor_helpers.extract_bool (List.assoc (`Text "discard") pairs)
-      in
-      Alcotest.(check bool) "discard true" true discard;
-      send_response_value data_ch msg_id `Null;
-      let msg_id, _msg = receive_request data_ch () in
-      send_response_value data_ch msg_id `Null;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"disc_err" ~test_cases:1 (fun () ->
-          let data = Hegel.Client.get_data () in
-          (try
-             ignore (discardable_group 1 data (fun () -> failwith "test error"))
-           with Failure _ -> ());
-          ()))
-
-(** Test: collection new_collection / collection_more / collection_reject
-    protocol. *)
-let test_collection_protocol_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* 1. new_collection command *)
-      let msg_id, cmd, pairs = recv_command data_ch in
-      Alcotest.(check string) "new_collection" "new_collection" cmd;
-      let min_size =
-        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "min_size") pairs)
-      in
-      Alcotest.(check int) "min_size" 1 min_size;
-      let max_size =
-        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "max_size") pairs)
-      in
-      Alcotest.(check int) "max_size" 3 max_size;
-      send_response_value data_ch msg_id (`Text "coll_handle");
-      (* 2. collection_more → true *)
-      let msg_id, cmd, _pairs = recv_command data_ch in
-      Alcotest.(check string) "collection_more" "collection_more" cmd;
-      send_response_value data_ch msg_id (`Bool true);
-      (* 3. generate (element) *)
-      let msg_id, cmd, _pairs = recv_command data_ch in
-      Alcotest.(check string) "generate" "generate" cmd;
-      send_response_value data_ch msg_id (`Int 7);
-      (* 4. collection_reject *)
-      let msg_id, cmd, _pairs = recv_command data_ch in
-      Alcotest.(check string) "collection_reject" "collection_reject" cmd;
-      send_response_value data_ch msg_id `Null;
-      (* 5. collection_more → false *)
-      let msg_id, cmd, _pairs = recv_command data_ch in
-      Alcotest.(check string) "collection_more 2" "collection_more" cmd;
-      send_response_value data_ch msg_id (`Bool false);
-      (* 6. mark_complete *)
-      let msg_id, _msg = receive_request data_ch () in
-      send_response_value data_ch msg_id `Null;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"coll_proto" ~test_cases:1 (fun () ->
-          let data = Hegel.Client.get_data () in
-          let coll = new_collection ~min_size:1 ~max_size:3 data () in
-          Alcotest.(check bool) "more 1" true (collection_more coll data);
-          (* Generate an element *)
-          ignore
-            (Hegel.Client.generate_from_schema
-               (`Map [ (`Text "type", `Text "integer") ])
-               data);
-          (* Reject it *)
-          collection_reject coll data;
-          (* Collection says done *)
-          Alcotest.(check bool) "more 2" false (collection_more coll data);
-          (* After finished, more returns false immediately *)
-          Alcotest.(check bool) "more 3" false (collection_more coll data);
-          (* reject is no-op when finished *)
-          collection_reject coll data))
-
-(** Test: collection with no max_size sends Null for max_size. *)
-let test_collection_no_max_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* new_collection with max_size=Null *)
-      let msg_id, cmd, pairs = recv_command data_ch in
-      Alcotest.(check string) "new_collection" "new_collection" cmd;
-      let max_size_val = List.assoc (`Text "max_size") pairs in
-      Alcotest.(check bool)
-        "max_size is null" true
-        (Hegel.Cbor_helpers.is_null max_size_val);
-      send_response_value data_ch msg_id (`Text "coll2");
-      (* collection_more → false *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_value data_ch msg_id (`Bool false);
-      (* mark_complete *)
-      let msg_id, _msg = receive_request data_ch () in
-      send_response_value data_ch msg_id `Null;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"coll_nomax" ~test_cases:1 (fun () ->
-          let data = Hegel.Client.get_data () in
-          let coll = new_collection ~min_size:0 data () in
-          ignore (collection_more coll data)))
-
-(** Test: StopTest during new_collection raises Data_exhausted. *)
-let test_collection_stoptest_new_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* Respond to new_collection with StopTest *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_error data_ch msg_id ~error:"Stop" ~error_type:"StopTest" ();
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"coll_stop_new" ~test_cases:1 (fun () ->
-          let data = Hegel.Client.get_data () in
-          let coll = new_collection ~min_size:0 data () in
-          ignore (collection_more coll data)))
-
-(** Test: StopTest during collection_more raises Data_exhausted. *)
-let test_collection_stoptest_more_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* new_collection succeeds *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_value data_ch msg_id (`Text "coll_handle");
-      (* collection_more responds with StopTest *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_error data_ch msg_id ~error:"Stop" ~error_type:"StopTest" ();
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"coll_stop_more" ~test_cases:1 (fun () ->
-          let data = Hegel.Client.get_data () in
-          let coll = new_collection ~min_size:0 data () in
-          ignore (collection_more coll data)))
-
-(** Test: collection_reject when server_name is already cached. *)
-let test_collection_reject_cached_name_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* new_collection *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_value data_ch msg_id (`Text "coll_h");
-      (* collection_more → true *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_value data_ch msg_id (`Bool true);
-      (* collection_reject *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_value data_ch msg_id `Null;
-      (* collection_more → false *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_value data_ch msg_id (`Bool false);
-      (* mark_complete *)
-      let msg_id, _msg = receive_request data_ch () in
-      send_response_value data_ch msg_id `Null;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"coll_rej" ~test_cases:1 (fun () ->
-          let data = Hegel.Client.get_data () in
-          let coll = new_collection ~min_size:1 ~max_size:3 data () in
-          Alcotest.(check bool) "more" true (collection_more coll data);
-          collection_reject coll data;
-          ignore (collection_more coll data)))
+(** Test: collection_reject sends command when not finished (socketpair). *)
+let test_collection_reject_live () =
+  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let conn = create_connection s1 ~name:"Client" () in
+  let peer_conn = create_connection s2 ~name:"Peer" () in
+  let t_hs =
+    Thread.create
+      (fun () ->
+        Test_helpers.raw_handshake_responder peer_conn.socket;
+        peer_conn.connection_state <- Client)
+      ()
+  in
+  ignore (send_handshake conn);
+  Thread.join t_hs;
+  let ch = new_channel conn ~role:"Data" () in
+  let data =
+    Hegel.Client.{ channel = ch; is_final = false; test_aborted = false }
+  in
+  let coll = new_collection ~min_size:0 data () in
+  coll.server_name <- Some (`Text "test_coll");
+  let peer_ch = connect_channel peer_conn (channel_id ch) ~role:"Peer" () in
+  let received_cmd = ref "" in
+  let t_peer =
+    Thread.create
+      (fun () ->
+        let msg_id, msg = receive_request peer_ch () in
+        let pairs = Hegel.Cbor_helpers.extract_dict msg in
+        received_cmd :=
+          Hegel.Cbor_helpers.extract_string (List.assoc (`Text "command") pairs);
+        send_response_value peer_ch msg_id `Null)
+      ()
+  in
+  collection_reject coll data;
+  Thread.join t_peer;
+  Alcotest.(check string) "command" "collection_reject" !received_cmd;
+  close conn;
+  close peer_conn
 
 (* ==== E2E tests (real hegel binary) ==== *)
 
@@ -770,6 +305,16 @@ let test_double_map_e2e () =
       | None -> Alcotest.fail "expected schema");
       let v = Hegel.draw gen in
       assert (List.mem v [ 3; 5; 7; 9; 11 ]))
+
+(** Test: map on non-basic (Mapped branch of do_draw). *)
+let test_map_on_filtered_e2e () =
+  Hegel.Session.run_hegel_test ~name:"map_on_filter" ~test_cases:10 (fun () ->
+      let gen =
+        filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ())
+        |> map (fun v -> v * 2)
+      in
+      let v = Hegel.draw gen in
+      assert (v > 10 && v <= 20))
 
 (** Test: flat_map through server. *)
 let test_flat_map_e2e () =
@@ -923,149 +468,6 @@ let test_lists_basic_non_array_raises () =
       Alcotest.(check bool) "raised" true !raised
   | _ -> Alcotest.fail "expected Basic"
 
-(* ==== Socketpair tests for lists ==== *)
-
-(** Test: lists(basic_elem) sends a generate command with list schema. *)
-let test_lists_basic_generate_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* Expect: generate{schema:{type:list,...}}, mark_complete *)
-      let msg_id, cmd, pairs = recv_command data_ch in
-      Alcotest.(check string) "cmd" "generate" cmd;
-      let schema_v = List.assoc (`Text "schema") pairs in
-      let schema_pairs = Hegel.Cbor_helpers.extract_dict schema_v in
-      let typ =
-        Hegel.Cbor_helpers.extract_string
-          (List.assoc (`Text "type") schema_pairs)
-      in
-      Alcotest.(check string) "schema type" "list" typ;
-      (* Server returns an array *)
-      send_response_value data_ch msg_id (`Array [ `Int 3; `Int 7 ]);
-      (* mark_complete *)
-      let msg_id, _msg = receive_request data_ch () in
-      send_response_value data_ch msg_id `Null;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"lists_basic" ~test_cases:1 (fun () ->
-          let gen = lists (integers ~min_value:0 ~max_value:10 ()) () in
-          let items = Hegel.draw gen in
-          Alcotest.(check int) "length" 2 (List.length items)))
-
-(** Test: lists(basic_elem_with_transform) applies the list transform. *)
-let test_lists_basic_with_transform_generate_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* generate → array of [2, 4] *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_value data_ch msg_id (`Array [ `Int 2; `Int 4 ]);
-      (* mark_complete *)
-      let msg_id, _msg = receive_request data_ch () in
-      send_response_value data_ch msg_id `Null;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"lists_transform" ~test_cases:1 (fun () ->
-          (* elem doubles values; list transform should double each item *)
-          let elem =
-            map (fun v -> v * 2) (integers ~min_value:1 ~max_value:5 ())
-          in
-          let gen = lists elem () in
-          let items = Hegel.draw gen in
-          (* The server returned [2, 4] as raw; the transform doubles them → [4, 8] *)
-          Alcotest.(check (list int)) "doubled" [ 4; 8 ] items))
-
-(** Test: lists(non_basic) uses collection protocol: start_span(LIST),
-    new_collection, collection_more loop, stop_span, mark_complete. *)
-let test_lists_composite_generate_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* Sequence:
-         start_span(LIST=1)
-         start_span(FILTER=12)   ← from the filter in elem
-         new_collection
-         collection_more → true
-         start_span(FILTER=12)   ← filter attempt for element
-         generate
-         stop_span               ← filter span
-         collection_more → false
-         stop_span               ← LIST span
-         mark_complete *)
-      let rec handle_cmds collection_more_count =
-        let msg_id, cmd, pairs = recv_command data_ch in
-        match cmd with
-        | "start_span" ->
-            send_response_value data_ch msg_id `Null;
-            handle_cmds collection_more_count
-        | "stop_span" ->
-            send_response_value data_ch msg_id `Null;
-            handle_cmds collection_more_count
-        | "new_collection" ->
-            let min_s =
-              Hegel.Cbor_helpers.extract_int
-                (List.assoc (`Text "min_size") pairs)
-            in
-            Alcotest.(check int) "min_size" 0 min_s;
-            let max_s = List.assoc (`Text "max_size") pairs in
-            Alcotest.(check bool)
-              "max_size null" true
-              (Hegel.Cbor_helpers.is_null max_s);
-            send_response_value data_ch msg_id (`Text "coll1");
-            handle_cmds collection_more_count
-        | "collection_more" ->
-            let cm = collection_more_count + 1 in
-            (* Return true once, then false *)
-            if cm >= 2 then send_response_value data_ch msg_id (`Bool false)
-            else send_response_value data_ch msg_id (`Bool true);
-            handle_cmds cm
-        | "generate" ->
-            send_response_value data_ch msg_id (`Int 9);
-            handle_cmds collection_more_count
-        | "mark_complete" -> send_response_value data_ch msg_id `Null
-        | other -> failwith (Printf.sprintf "Unexpected: %s" other)
-      in
-      handle_cmds 0;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"lists_composite" ~test_cases:1 (fun () ->
-          let elem =
-            filter (fun _ -> true) (integers ~min_value:0 ~max_value:10 ())
-          in
-          let gen = lists elem () in
-          Alcotest.(check bool) "not basic" false (is_basic gen);
-          let items = Hegel.draw gen in
-          Alcotest.(check int) "one element" 1 (List.length items)))
-
-(** Test: lists(non_basic) with StopTest during collection_more aborts cleanly.
-*)
-let test_lists_composite_stoptest_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* start_span(LIST) *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_value data_ch msg_id `Null;
-      (* new_collection succeeds *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_value data_ch msg_id (`Text "coll_x");
-      (* collection_more → StopTest *)
-      let msg_id, _cmd, _pairs = recv_command data_ch in
-      send_response_error data_ch msg_id ~error:"Stop" ~error_type:"StopTest" ();
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = Hegel.Client.create_client client_conn in
-      Hegel.Client.run_test c ~name:"lists_stoptest" ~test_cases:1 (fun () ->
-          let elem = filter (fun _ -> true) (integers ()) in
-          ignore (Hegel.draw (lists elem ()))))
-
 (* ==== E2E tests for lists ==== *)
 
 (** Test: lists(integers) generates a list where all elements are in range. *)
@@ -1102,6 +504,16 @@ let test_lists_non_basic_e2e () =
       let n = List.length items in
       assert (n >= 1 && n <= 3);
       List.iter (fun x -> assert (x > 5)) items)
+
+(** Test: lists(non-basic) without max_size (max_size=None in collection). *)
+let test_lists_non_basic_no_max_e2e () =
+  Hegel.Session.run_hegel_test ~name:"lists_nb_nomax" ~test_cases:10 (fun () ->
+      let elem =
+        filter (fun _ -> true) (integers ~min_value:0 ~max_value:10 ())
+      in
+      let gen = lists elem () in
+      let items = Hegel.draw gen in
+      List.iter (fun x -> assert (x >= 0 && x <= 10)) items)
 
 (** Test: lists(lists(booleans)) → nested lists work. *)
 let test_lists_nested_e2e () =
@@ -1702,37 +1114,14 @@ let tests =
     Alcotest.test_case "collection new no max" `Quick test_collection_new_no_max;
     Alcotest.test_case "collection reject when finished" `Quick
       test_collection_reject_when_finished;
-    (* Socketpair tests *)
-    Alcotest.test_case "basic generate socketpair" `Quick
-      test_basic_generate_socketpair;
-    Alcotest.test_case "basic generate with transform socketpair" `Quick
-      test_basic_generate_with_transform_socketpair;
-    Alcotest.test_case "double map socketpair" `Quick test_double_map_socketpair;
-    Alcotest.test_case "mapped generate socketpair" `Quick
-      test_mapped_generate_socketpair;
-    Alcotest.test_case "flatmapped generate socketpair" `Quick
-      test_flatmapped_generate_socketpair;
-    Alcotest.test_case "filtered pass first socketpair" `Quick
-      test_filtered_pass_first_socketpair;
-    Alcotest.test_case "filtered pass after reject socketpair" `Quick
-      test_filtered_pass_after_reject_socketpair;
-    Alcotest.test_case "filtered exhaustion socketpair" `Quick
-      test_filtered_exhaustion_socketpair;
-    Alcotest.test_case "group socketpair" `Quick test_group_socketpair;
-    Alcotest.test_case "discardable_group success socketpair" `Quick
-      test_discardable_group_success_socketpair;
-    Alcotest.test_case "discardable_group exception socketpair" `Quick
-      test_discardable_group_exception_socketpair;
-    Alcotest.test_case "collection protocol socketpair" `Quick
-      test_collection_protocol_socketpair;
-    Alcotest.test_case "collection no max socketpair" `Quick
-      test_collection_no_max_socketpair;
-    Alcotest.test_case "collection StopTest new socketpair" `Quick
-      test_collection_stoptest_new_socketpair;
-    Alcotest.test_case "collection StopTest more socketpair" `Quick
-      test_collection_stoptest_more_socketpair;
-    Alcotest.test_case "collection reject cached socketpair" `Quick
-      test_collection_reject_cached_name_socketpair;
+    Alcotest.test_case "collection_more when finished" `Quick
+      test_collection_more_when_finished;
+    Alcotest.test_case "discardable_group exception" `Quick
+      test_discardable_group_exception;
+    Alcotest.test_case "collection_more StopTest" `Quick
+      test_collection_more_stoptest;
+    Alcotest.test_case "collection_reject live" `Quick
+      test_collection_reject_live;
     (* Unit tests for lists/booleans *)
     Alcotest.test_case "booleans schema" `Quick test_booleans_schema;
     Alcotest.test_case "lists basic schema" `Quick test_lists_basic_schema;
@@ -1744,19 +1133,11 @@ let tests =
       test_lists_non_basic_is_not_basic;
     Alcotest.test_case "lists basic non-array raises" `Quick
       test_lists_basic_non_array_raises;
-    (* Socketpair tests for lists *)
-    Alcotest.test_case "lists basic generate socketpair" `Quick
-      test_lists_basic_generate_socketpair;
-    Alcotest.test_case "lists basic with transform generate socketpair" `Quick
-      test_lists_basic_with_transform_generate_socketpair;
-    Alcotest.test_case "lists composite generate socketpair" `Quick
-      test_lists_composite_generate_socketpair;
-    Alcotest.test_case "lists composite stoptest socketpair" `Quick
-      test_lists_composite_stoptest_socketpair;
     (* E2E tests *)
     Alcotest.test_case "integers in range" `Quick test_integers_in_range;
     Alcotest.test_case "map doubles e2e" `Quick test_map_doubles_e2e;
     Alcotest.test_case "double map e2e" `Quick test_double_map_e2e;
+    Alcotest.test_case "map on filtered e2e" `Quick test_map_on_filtered_e2e;
     Alcotest.test_case "flat_map e2e" `Quick test_flat_map_e2e;
     Alcotest.test_case "filter e2e" `Quick test_filter_e2e;
     Alcotest.test_case "filter exhaustion e2e" `Quick test_filter_exhaustion_e2e;
@@ -1767,6 +1148,8 @@ let tests =
     Alcotest.test_case "lists booleans bounds e2e" `Quick
       test_lists_booleans_bounds_e2e;
     Alcotest.test_case "lists non-basic e2e" `Quick test_lists_non_basic_e2e;
+    Alcotest.test_case "lists non-basic no max e2e" `Quick
+      test_lists_non_basic_no_max_e2e;
     Alcotest.test_case "lists nested e2e" `Quick test_lists_nested_e2e;
     (* Unit tests for new generators *)
     Alcotest.test_case "just schema" `Quick test_just_schema;

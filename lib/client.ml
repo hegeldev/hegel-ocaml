@@ -222,15 +222,13 @@ let run_test client ~name ~test_cases ?seed test_fn =
                    ( `Text "channel_id",
                      `Int (Int32.to_int (channel_id test_channel)) );
                  ]))));
-  let extract_channel_id pairs context =
-    match List.assoc_opt (`Text "channel_id") pairs with
-    | Some v -> Int32.of_int (Cbor_helpers.extract_int v)
-    | None -> failwith (context ^ " missing 'channel_id' field")
-  in
   let receive_and_run_test_case ~is_final =
     let message_id, message = receive_request test_channel () in
     let pairs = Cbor_helpers.extract_dict message in
-    let ch_id = extract_channel_id pairs "test_case event" in
+    let ch_id =
+      Int32.of_int
+        (Cbor_helpers.extract_int (List.assoc (`Text "channel_id") pairs))
+    in
     send_response_value test_channel message_id `Null;
     let test_case_channel =
       connect_channel client.connection ch_id ~role:"Test Case" ()
@@ -241,12 +239,13 @@ let run_test client ~name ~test_cases ?seed test_fn =
     let message_id, message = receive_request test_channel () in
     let pairs = Cbor_helpers.extract_dict message in
     let event =
-      match List.assoc_opt (`Text "event") pairs with
-      | Some v -> Cbor_helpers.extract_string v
-      | None -> ""
+      Cbor_helpers.extract_string (List.assoc (`Text "event") pairs)
     in
     if event = "test_case" then begin
-      let ch_id = extract_channel_id pairs "test_case event" in
+      let ch_id =
+        Int32.of_int
+          (Cbor_helpers.extract_int (List.assoc (`Text "channel_id") pairs))
+      in
       send_response_value test_channel message_id `Null;
       let test_case_channel =
         connect_channel client.connection ch_id ~role:"Test Case" ()
@@ -256,9 +255,7 @@ let run_test client ~name ~test_cases ?seed test_fn =
     end
     else if event = "test_done" then begin
       send_response_value test_channel message_id (`Bool true);
-      match List.assoc_opt (`Text "results") pairs with
-      | Some v -> Cbor_helpers.extract_dict v
-      | None -> failwith "test_done event missing 'results' field"
+      Cbor_helpers.extract_dict (List.assoc (`Text "results") pairs)
     end
     else begin
       send_response_raw test_channel message_id
@@ -274,10 +271,8 @@ let run_test client ~name ~test_cases ?seed test_fn =
   in
   let results = receive_events () in
   let n_interesting =
-    match List.assoc_opt (`Text "interesting_test_cases") results with
-    | Some v -> Cbor_helpers.extract_int v
-    | None ->
-        failwith "test_done results missing 'interesting_test_cases' field"
+    Cbor_helpers.extract_int
+      (List.assoc (`Text "interesting_test_cases") results)
   in
   if n_interesting = 0 then ()
   else if n_interesting = 1 then receive_and_run_test_case ~is_final:true
@@ -285,16 +280,16 @@ let run_test client ~name ~test_cases ?seed test_fn =
     let rec replay_interesting remaining acc =
       if remaining = 0 then List.rev acc
       else
-        let result =
+        let msg =
+          Printf.sprintf "Expected test case %d to fail but it didn't"
+            (List.length acc)
+        in
+        let exn =
           try
             receive_and_run_test_case ~is_final:true;
-            Error
-              (Failure
-                 (Printf.sprintf "Expected test case %d to fail but it didn't"
-                    (List.length acc)))
-          with e -> Error e
+            Failure msg
+          with e -> e
         in
-        let exn = match result with Error e -> e | Ok () -> assert false in
         replay_interesting (remaining - 1) (exn :: acc)
     in
     let exns = replay_interesting n_interesting [] in

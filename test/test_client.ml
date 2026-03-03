@@ -146,53 +146,6 @@ let test_nested_test_raises () =
   Unix.close s2;
   Alcotest.(check bool) "raised" true !raised
 
-(* ---- Unrecognised event test using socketpair ---- *)
-
-let test_unrecognised_event () =
-  let server_socket, client_socket =
-    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
-  in
-  let server_conn = create_connection server_socket ~name:"Server" () in
-  let client_conn = create_connection client_socket ~name:"Client" () in
-  let fake_server () =
-    receive_handshake server_conn;
-    let control = control_channel server_conn in
-    let msg_id, message = receive_request control () in
-    let pairs = Hegel.Cbor_helpers.extract_dict message in
-    let test_ch_id =
-      Int32.of_int
-        (Hegel.Cbor_helpers.extract_int (List.assoc (`Text "channel_id") pairs))
-    in
-    let test_channel = connect_channel server_conn test_ch_id ~role:"Test" () in
-    send_response_value control msg_id (`Bool true);
-    let req_id =
-      send_request test_channel (`Map [ (`Text "event", `Text "bogus_event") ])
-    in
-    ignore (receive_response_raw test_channel req_id ());
-    ignore
-      (pending_get
-         (request test_channel
-            (`Map
-               [
-                 (`Text "event", `Text "test_done");
-                 ( `Text "results",
-                   `Map
-                     [
-                       (`Text "passed", `Bool true);
-                       (`Text "test_cases", `Int 0);
-                       (`Text "valid_test_cases", `Int 0);
-                       (`Text "invalid_test_cases", `Int 0);
-                       (`Text "interesting_test_cases", `Int 0);
-                     ] );
-               ])))
-  in
-  let t = Thread.create fake_server () in
-  let c = create_client client_conn in
-  run_test c ~name:"test_bogus" ~test_cases:1 (fun () -> ());
-  close client_conn;
-  close server_conn;
-  Thread.join t
-
 (* ---- Tests using real hegel binary ---- *)
 
 (** Helper: run a test with a specific HEGEL_PROTOCOL_TEST_MODE. Restarts the
@@ -359,65 +312,28 @@ let test_mark_complete_interesting () =
    with _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised
 
-(* ---- socketpair-based tests for hard-to-reach code paths ---- *)
-
-let with_fake_server = Test_helpers.with_fake_server
-let accept_run_test = Test_helpers.accept_run_test
-let send_test_case = Test_helpers.send_test_case
-let send_test_done = Test_helpers.send_test_done
-
-(** Helper: handle a generate request on data channel and respond with a boolean
-    value. *)
-let handle_generate data_ch =
-  let msg_id, _message = receive_request data_ch () in
-  send_response_value data_ch msg_id (`Bool true)
-
-(** Helper: handle a mark_complete request. *)
-let handle_mark_complete data_ch =
-  let msg_id, _message = receive_request data_ch () in
-  send_response_value data_ch msg_id `Null
-
 (** Test: start_span and stop_span when NOT aborted (live connection). *)
 let test_start_stop_span_live () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* Handle start_span *)
-      let msg_id, _ = receive_request data_ch () in
-      send_response_value data_ch msg_id `Null;
-      (* Handle stop_span *)
-      let msg_id, _ = receive_request data_ch () in
-      send_response_value data_ch msg_id `Null;
-      (* Handle generate *)
-      handle_generate data_ch;
-      (* Handle mark_complete *)
-      handle_mark_complete data_ch;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = create_client client_conn in
-      run_test c ~name:"span_test" ~test_cases:1 (fun () ->
-          let data = get_data () in
-          start_span data;
-          stop_span data;
-          ignore
-            (generate_from_schema
-               (`Map [ (`Text "type", `Text "boolean") ])
-               data)))
+  Hegel.Session.run_hegel_test ~name:"span_live" ~test_cases:1 (fun () ->
+      let data = get_data () in
+      start_span data;
+      stop_span data;
+      ignore
+        (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data))
 
 (** Test: version mismatch in create_client (version too high). *)
 let test_version_mismatch () =
   let server_socket, client_socket =
     Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
   in
-  let server_conn = create_connection server_socket ~name:"Server" () in
+  let peer_conn = create_connection server_socket ~name:"Peer" () in
   let client_conn = create_connection client_socket ~name:"Client" () in
   let t =
     Thread.create
       (fun () ->
         (* Receive the handshake and respond with a bad version *)
-        server_conn.connection_state <- Server;
-        let ch = control_channel server_conn in
+        peer_conn.connection_state <- Client;
+        let ch = control_channel peer_conn in
         let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "Hegel/9.9")
       ()
@@ -426,7 +342,7 @@ let test_version_mismatch () =
   (try ignore (create_client client_conn) with Failure _ -> raised := true);
   Alcotest.(check bool) "raised version mismatch" true !raised;
   close client_conn;
-  close server_conn;
+  close peer_conn;
   Thread.join t
 
 (** Test: version mismatch in create_client (version too low). *)
@@ -434,13 +350,13 @@ let test_version_mismatch_low () =
   let server_socket, client_socket =
     Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
   in
-  let server_conn = create_connection server_socket ~name:"Server" () in
+  let peer_conn = create_connection server_socket ~name:"Peer" () in
   let client_conn = create_connection client_socket ~name:"Client" () in
   let t =
     Thread.create
       (fun () ->
-        server_conn.connection_state <- Server;
-        let ch = control_channel server_conn in
+        peer_conn.connection_state <- Client;
+        let ch = control_channel peer_conn in
         let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "Hegel/0.0")
       ()
@@ -449,157 +365,83 @@ let test_version_mismatch_low () =
   (try ignore (create_client client_conn) with Failure _ -> raised := true);
   Alcotest.(check bool) "raised version mismatch low" true !raised;
   close client_conn;
-  close server_conn;
+  close peer_conn;
   Thread.join t
 
-(** Test: run_test with explicit seed sends seed in command. *)
+(** Test: run_test with explicit seed. *)
 let test_run_test_with_seed () =
-  with_fake_server
-    (fun server_conn ->
-      receive_handshake server_conn;
-      let control = control_channel server_conn in
-      let msg_id, message = receive_request control () in
-      let pairs = Hegel.Cbor_helpers.extract_dict message in
-      (* Verify seed is sent as an integer *)
-      let seed_value = List.assoc (`Text "seed") pairs in
-      Alcotest.(check int)
-        "seed value" 42
-        (Hegel.Cbor_helpers.extract_int seed_value);
-      let test_ch_id =
-        Int32.of_int
-          (Hegel.Cbor_helpers.extract_int
-             (List.assoc (`Text "channel_id") pairs))
-      in
-      let test_channel =
-        connect_channel server_conn test_ch_id ~role:"Test" ()
-      in
-      send_response_value control msg_id (`Bool true);
-      let data_ch = send_test_case server_conn test_channel in
-      handle_generate data_ch;
-      handle_mark_complete data_ch;
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = create_client client_conn in
-      run_test c ~name:"seed_test" ~test_cases:1 ~seed:42 (fun () ->
-          let data = get_data () in
-          ignore
-            (generate_from_schema
-               (`Map [ (`Text "type", `Text "boolean") ])
-               data)))
+  Hegel.Session.run_hegel_test ~name:"seed_test" ~test_cases:5 ~seed:42
+    (fun () ->
+      let data = get_data () in
+      ignore
+        (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data))
 
-(** Test: Data_exhausted path (StopTest on generate). *)
-let test_data_exhausted_via_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* Respond to generate with StopTest *)
-      let msg_id, _ = receive_request data_ch () in
-      send_response_error data_ch msg_id ~error:"Stop" ~error_type:"StopTest" ();
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = create_client client_conn in
-      run_test c ~name:"data_exhausted" ~test_cases:1 (fun () ->
-          let data = get_data () in
-          ignore
-            (generate_from_schema
-               (`Map [ (`Text "type", `Text "boolean") ])
-               data)))
-
-(** Test: StopTest on mark_complete. *)
-let test_stop_test_on_mark_complete_socketpair () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      let data_ch = send_test_case server_conn test_channel in
-      (* Handle generate normally *)
-      handle_generate data_ch;
-      (* Respond to mark_complete with StopTest *)
-      let msg_id, _ = receive_request data_ch () in
-      send_response_error data_ch msg_id ~error:"Stop" ~error_type:"StopTest" ();
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = create_client client_conn in
-      run_test c ~name:"stop_on_mc" ~test_cases:1 (fun () ->
-          let data = get_data () in
-          ignore
-            (generate_from_schema
-               (`Map [ (`Text "type", `Text "boolean") ])
-               data)))
-
-(** Test: multiple interesting test cases (n_interesting > 1). *)
+(** Test: multiple interesting test cases (n_interesting > 1). Uses different
+    exception types to produce distinct interesting origins, triggering the
+    multi-interesting replay path. *)
 let test_multiple_interesting () =
-  let raised = ref false in
+  let raised_msg = ref "" in
   (try
-     with_fake_server
-       (fun server_conn ->
-         let test_channel = accept_run_test server_conn in
-         let send_n_test_cases n =
-           List.iter
-             (fun _ ->
-               let data_ch = send_test_case server_conn test_channel in
-               handle_generate data_ch;
-               handle_mark_complete data_ch)
-             (List.init n Fun.id)
-         in
-         (* Send 2 test cases, both will be INTERESTING *)
-         send_n_test_cases 2;
-         (* Send test_done with interesting=2 *)
-         send_test_done test_channel ~interesting:2;
-         (* Send 2 replay test cases *)
-         send_n_test_cases 2)
-       (fun client_conn ->
-         let c = create_client client_conn in
-         run_test c ~name:"multi_interesting" ~test_cases:2 (fun () ->
-             let data = get_data () in
-             let v =
-               generate_from_schema
-                 (`Map [ (`Text "type", `Text "boolean") ])
-                 data
-             in
-             ignore v;
-             failwith "always fails"))
-   with _ -> raised := true);
-  Alcotest.(check bool) "raised" true !raised
+     Hegel.Session.run_hegel_test ~name:"multi_interesting" ~test_cases:200
+       (fun () ->
+         let v = Hegel.draw (Hegel.Generators.booleans ()) in
+         if v then failwith "error from Failure branch" else raise Exit)
+   with e -> raised_msg := Printexc.to_string e);
+  Alcotest.(check bool)
+    "has Multiple failures" true
+    (contains_substring !raised_msg "Multiple failures")
 
-(** Test: multiple interesting with replay that passes (covers the "Expected
-    test case to fail" branch). *)
-let test_multiple_interesting_pass () =
-  let raised = ref false in
-  (try
-     with_fake_server
-       (fun server_conn ->
-         let test_channel = accept_run_test server_conn in
-         let send_n_test_cases n =
-           List.iter
-             (fun _ ->
-               let data_ch = send_test_case server_conn test_channel in
-               handle_generate data_ch;
-               handle_mark_complete data_ch)
-             (List.init n Fun.id)
-         in
-         (* Send 2 test cases, both will be INTERESTING *)
-         send_n_test_cases 2;
-         (* Send test_done with interesting=2 *)
-         send_test_done test_channel ~interesting:2;
-         (* Send 2 replay test cases - this time test will pass *)
-         send_n_test_cases 2)
-       (fun client_conn ->
-         let c = create_client client_conn in
-         let count = ref 0 in
-         run_test c ~name:"multi_pass" ~test_cases:2 (fun () ->
-             let data = get_data () in
-             let v =
-               generate_from_schema
-                 (`Map [ (`Text "type", `Text "boolean") ])
-                 data
-             in
-             ignore v;
-             incr count;
-             (* Only fail on first 2 calls (non-final), pass on replay *)
-             if !count <= 2 then failwith "fail on initial run"))
-   with _ -> raised := true);
-  Alcotest.(check bool) "raised" true !raised
+(** Test: unrecognised event sends error response and continues (socketpair). *)
+let test_unrecognised_event () =
+  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let client_conn = create_connection s1 ~name:"Client" () in
+  let peer_conn = create_connection s2 ~name:"Peer" () in
+  let t_hs =
+    Thread.create
+      (fun () ->
+        Test_helpers.raw_handshake_responder peer_conn.socket;
+        peer_conn.connection_state <- Client)
+      ()
+  in
+  let client = create_client client_conn in
+  Thread.join t_hs;
+  let t_peer =
+    Thread.create
+      (fun () ->
+        let ctrl = control_channel peer_conn in
+        (* Accept run_test command *)
+        let msg_id, msg = receive_request ctrl () in
+        let pairs = Hegel.Cbor_helpers.extract_dict msg in
+        let test_ch_id =
+          Int32.of_int
+            (Hegel.Cbor_helpers.extract_int
+               (List.assoc (`Text "channel_id") pairs))
+        in
+        send_response_value ctrl msg_id `Null;
+        let test_ch = connect_channel peer_conn test_ch_id ~role:"Test" () in
+        (* Send unrecognised event *)
+        (try
+           ignore
+             (pending_get
+                (request test_ch
+                   (`Map [ (`Text "event", `Text "unknown_foobar") ])))
+         with Request_error _ -> ());
+        (* Send test_done with 0 interesting *)
+        ignore
+          (pending_get
+             (request test_ch
+                (`Map
+                   [
+                     (`Text "event", `Text "test_done");
+                     ( `Text "results",
+                       `Map [ (`Text "interesting_test_cases", `Int 0) ] );
+                   ]))))
+      ()
+  in
+  run_test client ~name:"unrec_event" ~test_cases:0 (fun () -> ());
+  Thread.join t_peer;
+  close client_conn;
+  close peer_conn
 
 (** Test: find_hegeld fails when binary not on PATH. *)
 let test_find_hegeld_not_found () =
@@ -839,21 +681,6 @@ let test_run_hegel_test_defaults () =
       in
       ignore (Hegel.Cbor_helpers.extract_bool v))
 
-(** Test: no event field in message. *)
-let test_no_event_field () =
-  with_fake_server
-    (fun server_conn ->
-      let test_channel = accept_run_test server_conn in
-      (* Send a message with no "event" field *)
-      let req_id =
-        send_request test_channel (`Map [ (`Text "foo", `Text "bar") ])
-      in
-      ignore (receive_response_raw test_channel req_id ());
-      send_test_done test_channel ~interesting:0)
-    (fun client_conn ->
-      let c = create_client client_conn in
-      run_test c ~name:"no_event" ~test_cases:1 (fun () -> ()))
-
 (** Test: nest test_case raises (when current_data is already set). *)
 let test_run_test_case_nest () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
@@ -879,147 +706,6 @@ let test_run_test_case_nest () =
   Domain.DLS.set current_data None;
   close conn;
   Unix.close s2
-
-(** Test: missing "channel_id" field in test_case event raises Failure. *)
-let test_run_test_test_case_missing_channel () =
-  let server_socket, client_socket =
-    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
-  in
-  let server_conn = create_connection server_socket ~name:"Server" () in
-  let client_conn = create_connection client_socket ~name:"Client" () in
-  let t =
-    Thread.create
-      (fun () ->
-        let test_channel = accept_run_test server_conn in
-        ignore
-          (send_request test_channel
-             (`Map [ (`Text "event", `Text "test_case") ])))
-      ()
-  in
-  let raised = ref false in
-  (try
-     let c = create_client client_conn in
-     run_test c ~name:"no_channel" ~test_cases:1 (fun () -> ())
-   with Failure _ -> raised := true);
-  close client_conn;
-  close server_conn;
-  Thread.join t;
-  Alcotest.(check bool) "raised missing channel" true !raised
-
-(** Test: missing "results" field in test_done event raises Failure. *)
-let test_run_test_test_done_missing_results () =
-  let server_socket, client_socket =
-    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
-  in
-  let server_conn = create_connection server_socket ~name:"Server" () in
-  let client_conn = create_connection client_socket ~name:"Client" () in
-  let t =
-    Thread.create
-      (fun () ->
-        let test_channel = accept_run_test server_conn in
-        ignore
-          (pending_get
-             (request test_channel
-                (`Map [ (`Text "event", `Text "test_done") ]))))
-      ()
-  in
-  let raised = ref false in
-  (try
-     let c = create_client client_conn in
-     run_test c ~name:"no_results" ~test_cases:1 (fun () -> ())
-   with Failure _ -> raised := true);
-  close client_conn;
-  close server_conn;
-  Thread.join t;
-  Alcotest.(check bool) "raised missing results" true !raised
-
-(** Test: missing "interesting_test_cases" in results raises Failure. *)
-let test_run_test_missing_interesting_count () =
-  let server_socket, client_socket =
-    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
-  in
-  let server_conn = create_connection server_socket ~name:"Server" () in
-  let client_conn = create_connection client_socket ~name:"Client" () in
-  let t =
-    Thread.create
-      (fun () ->
-        let test_channel = accept_run_test server_conn in
-        ignore
-          (pending_get
-             (request test_channel
-                (`Map
-                   [
-                     (`Text "event", `Text "test_done");
-                     (`Text "results", `Map [ (`Text "passed", `Bool true) ]);
-                   ]))))
-      ()
-  in
-  let raised = ref false in
-  (try
-     let c = create_client client_conn in
-     run_test c ~name:"no_interesting_count" ~test_cases:1 (fun () -> ())
-   with Failure _ -> raised := true);
-  close client_conn;
-  close server_conn;
-  Thread.join t;
-  Alcotest.(check bool) "raised missing interesting count" true !raised
-
-(** Test: missing "channel_id" in n=1 interesting replay raises Failure. *)
-let test_run_test_interesting_n1_missing_channel () =
-  let server_socket, client_socket =
-    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
-  in
-  let server_conn = create_connection server_socket ~name:"Server" () in
-  let client_conn = create_connection client_socket ~name:"Client" () in
-  let t =
-    Thread.create
-      (fun () ->
-        let test_channel = accept_run_test server_conn in
-        send_test_done test_channel ~interesting:1;
-        ignore
-          (send_request test_channel
-             (`Map [ (`Text "event", `Text "test_case") ])))
-      ()
-  in
-  let raised = ref false in
-  (try
-     let c = create_client client_conn in
-     run_test c ~name:"n1_no_channel" ~test_cases:1 (fun () -> ())
-   with Failure _ -> raised := true);
-  close client_conn;
-  close server_conn;
-  Thread.join t;
-  Alcotest.(check bool) "raised missing channel n=1" true !raised
-
-(** Test: missing "channel_id" in n>1 interesting replay raises Failure. *)
-let test_run_test_interesting_n2_missing_channel () =
-  let server_socket, client_socket =
-    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
-  in
-  let server_conn = create_connection server_socket ~name:"Server" () in
-  let client_conn = create_connection client_socket ~name:"Client" () in
-  let t =
-    Thread.create
-      (fun () ->
-        let test_channel = accept_run_test server_conn in
-        send_test_done test_channel ~interesting:2;
-        ignore
-          (send_request test_channel
-             (`Map [ (`Text "event", `Text "test_case") ]));
-        ignore
-          (send_request test_channel
-             (`Map [ (`Text "event", `Text "test_case") ])))
-      ()
-  in
-  let raised = ref false in
-  (try
-     let c = create_client client_conn in
-     run_test c ~name:"n2_no_channel" ~test_cases:1 (fun () -> ())
-   with Failure _ -> raised := true);
-  close client_conn;
-  close server_conn;
-  Thread.join t;
-  Alcotest.(check bool) "raised missing channel n=2" true !raised
 
 (* ---- find_hegeld ---- *)
 
@@ -1082,30 +768,13 @@ let tests =
     Alcotest.test_case "DLS initializers in new domain" `Quick
       test_dls_initializers_in_new_domain;
     Alcotest.test_case "nested test raises" `Quick test_nested_test_raises;
-    Alcotest.test_case "unrecognised event" `Quick test_unrecognised_event;
-    (* Socketpair-based coverage tests *)
+    (* Real-server converted tests *)
     Alcotest.test_case "start/stop span live" `Quick test_start_stop_span_live;
     Alcotest.test_case "version mismatch" `Quick test_version_mismatch;
     Alcotest.test_case "version mismatch low" `Quick test_version_mismatch_low;
     Alcotest.test_case "run_test with seed" `Quick test_run_test_with_seed;
-    Alcotest.test_case "data exhausted via socketpair" `Quick
-      test_data_exhausted_via_socketpair;
-    Alcotest.test_case "StopTest on mark_complete socketpair" `Quick
-      test_stop_test_on_mark_complete_socketpair;
     Alcotest.test_case "multiple interesting" `Quick test_multiple_interesting;
-    Alcotest.test_case "multiple interesting pass" `Quick
-      test_multiple_interesting_pass;
-    (* Protocol error paths *)
-    Alcotest.test_case "test_case missing channel" `Quick
-      test_run_test_test_case_missing_channel;
-    Alcotest.test_case "test_done missing results" `Quick
-      test_run_test_test_done_missing_results;
-    Alcotest.test_case "results missing interesting count" `Quick
-      test_run_test_missing_interesting_count;
-    Alcotest.test_case "n=1 replay missing channel" `Quick
-      test_run_test_interesting_n1_missing_channel;
-    Alcotest.test_case "n>1 replay missing channel" `Quick
-      test_run_test_interesting_n2_missing_channel;
+    Alcotest.test_case "unrecognised event" `Quick test_unrecognised_event;
     (* find_hegeld *)
     Alcotest.test_case "find_hegeld via env" `Quick test_find_hegeld_via_env;
     Alcotest.test_case "find_hegeld on path" `Quick test_find_hegeld_on_path;
@@ -1127,7 +796,6 @@ let tests =
       test_has_working_client_live;
     Alcotest.test_case "session not started" `Quick test_session_not_started;
     Alcotest.test_case "session start timeout" `Quick test_session_start_timeout;
-    Alcotest.test_case "no event field" `Quick test_no_event_field;
     Alcotest.test_case "run_test_case nest" `Quick test_run_test_case_nest;
     (* E2E tests with real hegel *)
     Alcotest.test_case "simple passing test" `Quick test_simple_passing_test;

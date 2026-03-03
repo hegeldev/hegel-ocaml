@@ -22,7 +22,7 @@ val result_or_error : CBOR.Simple.t -> CBOR.Simple.t
     raises {!Request_error} if an ["error"] field is present. *)
 
 (** Connection state after handshake. *)
-type connection_state = Unresolved | Client | Server
+type connection_state = Unresolved | Client
 
 (** A channel entry in the connection's channel table. *)
 type channel_entry =
@@ -122,11 +122,6 @@ val send_response_value : channel -> int32 -> CBOR.Simple.t -> unit
 (** [send_response_value ch message_id value] sends a success response with
     [value] wrapped as [{"result": value}]. *)
 
-val send_response_error :
-  channel -> int32 -> error:string -> error_type:string -> unit -> unit
-(** [send_response_error ch message_id ~error ~error_type ()] sends an error
-    response. *)
-
 val close_channel : channel -> unit
 (** [close_channel ch] closes the channel and notifies the peer. Idempotent. *)
 
@@ -155,16 +150,9 @@ val run_reader : connection -> until:(unit -> bool) -> unit
 (** [run_reader conn ~until] reads packets from the socket and dispatches them
     to channel inboxes until [until ()] returns [true]. *)
 
-val handle_requests : channel -> (CBOR.Simple.t -> CBOR.Simple.t) -> unit
-(** [handle_requests ch handler] processes incoming requests, calling [handler]
-    for each one. Runs until the connection closes. *)
-
 val send_handshake : connection -> string
 (** [send_handshake conn] initiates the handshake as a client. Returns the
     server protocol version string. *)
-
-val receive_handshake : connection -> unit
-(** [receive_handshake conn] accepts the handshake as a server. *)
 
 val control_channel : connection -> channel
 (** [control_channel conn] returns the control channel (channel 0). *)
