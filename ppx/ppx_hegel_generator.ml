@@ -4,8 +4,8 @@
     synthesizes generator functions of type [unit -> t].
 
     When called inside a Hegel test body, these functions generate a value of
-    the declared type by calling [Hegel.Generators.generate] with appropriate
-    generators and returning typed OCaml values directly.
+    the declared type by calling [Hegel.draw] with appropriate generators and
+    returning typed OCaml values directly.
 
     Supported types:
     - Records: generates all fields, then constructs the record
@@ -31,18 +31,18 @@ let rec generate_expr_of_core_type (ct : core_type) : expression =
   | Ptyp_constr ({ txt = Lident "int"; _ }, []) ->
       [%expr
         fun () ->
-          Hegel.Generators.generate
+          Hegel.draw
             (Hegel.Generators.integers ~min_value:Int.min_int
                ~max_value:Int.max_int ())]
   | Ptyp_constr ({ txt = Lident "bool"; _ }, []) ->
-      [%expr fun () -> Hegel.Generators.generate (Hegel.Generators.booleans ())]
+      [%expr fun () -> Hegel.draw (Hegel.Generators.booleans ())]
   | Ptyp_constr ({ txt = Lident "float"; _ }, []) ->
       [%expr
         fun () ->
-          Hegel.Generators.generate
+          Hegel.draw
             (Hegel.Generators.floats ~allow_nan:false ~allow_infinity:false ())]
   | Ptyp_constr ({ txt = Lident "string"; _ }, []) ->
-      [%expr fun () -> Hegel.Generators.generate (Hegel.Generators.text ())]
+      [%expr fun () -> Hegel.draw (Hegel.Generators.text ())]
   | Ptyp_constr ({ txt = Lident "list"; _ }, [ elem_type ]) ->
       let elem_gen_fn = generate_expr_of_core_type elem_type in
       [%expr fun () -> Hegel.Derive.generate_list [%e elem_gen_fn]]
@@ -235,7 +235,7 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) :
   [%expr
     fun () ->
       let _variant_idx =
-        Hegel.Generators.generate
+        Hegel.draw
           (Hegel.Generators.sampled_from
              [%e Ast_builder.Default.elist ~loc index_options])
       in

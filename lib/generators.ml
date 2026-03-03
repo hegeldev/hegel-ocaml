@@ -62,28 +62,32 @@ type 'a generator =
       max_size : int option;
     }
       -> 'a list generator
-  | Composite : { label : int; generate_fn : unit -> 'a } -> 'a generator
+  | Composite : {
+      label : int;
+      generate_fn : Client.test_case_data -> 'a;
+    }
+      -> 'a generator
 
 (** Maximum number of filter attempts before calling [assume false]. *)
 let max_filter_attempts = 3
 
-(** [group label f] runs [f ()] inside a span with the given [label]. The span
-    is stopped with [discard:false] regardless of whether [f] raises. *)
-let group label f =
-  Client.start_span ~label ();
-  Fun.protect ~finally:(fun () -> Client.stop_span ()) (fun () -> f ())
+(** [group label data f] runs [f ()] inside a span with the given [label]. The
+    span is stopped with [discard:false] regardless of whether [f] raises. *)
+let group label data f =
+  Client.start_span ~label data;
+  Fun.protect ~finally:(fun () -> Client.stop_span data) (fun () -> f ())
 
-(** [discardable_group label f] runs [f ()] inside a span with [label]. If [f]
-    raises, the span is stopped with [discard:true]; otherwise [discard:false].
-*)
-let discardable_group label f =
-  Client.start_span ~label ();
+(** [discardable_group label data f] runs [f ()] inside a span with [label]. If
+    [f] raises, the span is stopped with [discard:true]; otherwise
+    [discard:false]. *)
+let discardable_group label data f =
+  Client.start_span ~label data;
   match f () with
   | v ->
-      Client.stop_span ();
+      Client.stop_span data;
       v
   | exception e ->
-      Client.stop_span ~discard:true ();
+      Client.stop_span ~discard:true data;
       raise e
 
 type collection = {
@@ -98,17 +102,19 @@ type collection = {
     elements. The [finished] flag short-circuits subsequent {!collection_more}
     calls once the server signals completion. *)
 
-(** [new_collection ~min_size ?max_size ()] creates a new collection handle. *)
-let new_collection ~min_size ?max_size () =
+(** [new_collection ~min_size ?max_size data ()] creates a new collection
+    handle. *)
+let new_collection ~min_size ?max_size data () =
+  ignore data;
   { finished = false; server_name = None; min_size; max_size }
 
-(** [get_server_name coll] lazily initializes the server-side collection and
-    returns its handle. Raises {!Client.Data_exhausted} on StopTest. *)
-let get_server_name coll =
+(** [get_server_name coll data] lazily initializes the server-side collection
+    and returns its handle. Raises {!Client.Data_exhausted} on StopTest. *)
+let get_server_name coll data =
   match coll.server_name with
   | Some name -> name
   | None ->
-      let channel = Client.get_channel () in
+      let channel = data.Client.channel in
       let max_size_val =
         match coll.max_size with Some ms -> `Int ms | None -> `Null
       in
@@ -123,21 +129,21 @@ let get_server_name coll =
                     (`Text "max_size", max_size_val);
                   ]))
         with Request_error e when e.error_type = "StopTest" ->
-          Domain.DLS.set Client.test_aborted true;
+          data.test_aborted <- true;
           raise Client.Data_exhausted
       in
       coll.server_name <- Some result;
       result
 
-(** [collection_more coll] returns [true] if more elements should be generated,
-    [false] when the collection is complete. Once it returns [false], subsequent
-    calls return [false] immediately. Raises {!Client.Data_exhausted} on
-    StopTest. *)
-let collection_more coll =
+(** [collection_more coll data] returns [true] if more elements should be
+    generated, [false] when the collection is complete. Once it returns [false],
+    subsequent calls return [false] immediately. Raises {!Client.Data_exhausted}
+    on StopTest. *)
+let collection_more coll data =
   if coll.finished then false
   else
-    let server_name = get_server_name coll in
-    let channel = Client.get_channel () in
+    let server_name = get_server_name coll data in
+    let channel = data.Client.channel in
     let result =
       try
         pending_get
@@ -148,19 +154,19 @@ let collection_more coll =
                   (`Text "collection", server_name);
                 ]))
       with Request_error e when e.error_type = "StopTest" ->
-        Domain.DLS.set Client.test_aborted true;
+        data.test_aborted <- true;
         raise Client.Data_exhausted
     in
     let more = Cbor_helpers.extract_bool result in
     if not more then coll.finished <- true;
     more
 
-(** [collection_reject coll] rejects the last element of the collection. No-op
-    if the collection is already finished. *)
-let collection_reject coll =
+(** [collection_reject coll data] rejects the last element of the collection.
+    No-op if the collection is already finished. *)
+let collection_reject coll data =
   if not coll.finished then begin
-    let server_name = get_server_name coll in
-    let channel = Client.get_channel () in
+    let server_name = get_server_name coll data in
+    let channel = data.Client.channel in
     ignore
       (pending_get
          (request channel
@@ -171,47 +177,57 @@ let collection_reject coll =
                ])))
   end
 
-(** [generate gen] produces a typed value from generator [gen]. *)
-let rec generate : type a. a generator -> a =
- fun gen ->
+(** [do_draw gen data] produces a typed value from generator [gen] using the
+    given test case [data]. *)
+let rec do_draw : type a. a generator -> Client.test_case_data -> a =
+ fun gen data ->
   match gen with
   | Basic { schema; transform } ->
-      transform (Client.generate_from_schema schema)
+      transform (Client.generate_from_schema schema data)
   | Mapped { source; f } ->
-      group Labels.mapped (fun () ->
-          let value = generate source in
+      group Labels.mapped data (fun () ->
+          let value = do_draw source data in
           f value)
   | FlatMapped { source; f } ->
-      group Labels.flat_map (fun () ->
-          let first = generate source in
+      discardable_group Labels.flat_map data (fun () ->
+          let first = do_draw source data in
           let second_gen = f first in
-          generate second_gen)
+          do_draw second_gen data)
   | Filtered { source; predicate } ->
       let rec attempt i =
         if i > max_filter_attempts then raise Client.Assume_rejected
         else begin
-          Client.start_span ~label:Labels.filter ();
-          let value = generate source in
+          Client.start_span ~label:Labels.filter data;
+          let value = do_draw source data in
           if predicate value then begin
-            Client.stop_span ();
+            Client.stop_span data;
             value
           end
           else begin
-            Client.stop_span ~discard:true ();
+            Client.stop_span ~discard:true data;
             attempt (i + 1)
           end
         end
       in
       attempt 1
   | CompositeList { elements; min_size; max_size } ->
-      group Labels.list (fun () ->
-          let coll = new_collection ~min_size ?max_size () in
+      group Labels.list data (fun () ->
+          let coll = new_collection ~min_size ?max_size data () in
           let rec collect acc =
-            if collection_more coll then collect (generate elements :: acc)
+            if collection_more coll data then
+              collect (do_draw elements data :: acc)
             else List.rev acc
           in
           collect [])
-  | Composite { label; generate_fn } -> group label (fun () -> generate_fn ())
+  | Composite { label; generate_fn } ->
+      group label data (fun () -> generate_fn data)
+
+(** [draw gen] produces a typed value from generator [gen]. Must be called from
+    within a Hegel test body. *)
+let draw gen =
+  match Domain.DLS.get Client.current_data with
+  | None -> failwith "draw() cannot be called outside of a Hegel test"
+  | Some data -> do_draw gen data
 
 (** [map f gen] transforms values from [gen] using [f].
 
@@ -526,7 +542,7 @@ let one_of (generators : 'a generator list) =
       {
         label = Labels.one_of;
         generate_fn =
-          (fun () ->
+          (fun data ->
             let idx =
               Cbor_helpers.extract_int
                 (Client.generate_from_schema
@@ -535,9 +551,10 @@ let one_of (generators : 'a generator list) =
                         (`Text "type", `Text "integer");
                         (`Text "min_value", `Int 0);
                         (`Text "max_value", `Int (n - 1));
-                      ]))
+                      ])
+                   data)
             in
-            generate gens.(idx));
+            do_draw gens.(idx) data);
       }
   end
   else
@@ -627,9 +644,9 @@ let tuples2 (type a b) (g1 : a generator) (g2 : b generator) : (a * b) generator
         {
           label = Labels.tuple;
           generate_fn =
-            (fun () ->
-              let a = generate g1 in
-              let b = generate g2 in
+            (fun data ->
+              let a = do_draw g1 data in
+              let b = do_draw g2 data in
               (a, b));
         }
 
@@ -662,10 +679,10 @@ let tuples3 (type a b c) (g1 : a generator) (g2 : b generator)
         {
           label = Labels.tuple;
           generate_fn =
-            (fun () ->
-              let a = generate g1 in
-              let b = generate g2 in
-              let c = generate g3 in
+            (fun data ->
+              let a = do_draw g1 data in
+              let b = do_draw g2 data in
+              let c = do_draw g3 data in
               (a, b, c));
         }
 
@@ -698,10 +715,10 @@ let tuples4 (type a b c d) (g1 : a generator) (g2 : b generator)
         {
           label = Labels.tuple;
           generate_fn =
-            (fun () ->
-              let a = generate g1 in
-              let b = generate g2 in
-              let c = generate g3 in
-              let d = generate g4 in
+            (fun data ->
+              let a = do_draw g1 data in
+              let b = do_draw g2 data in
+              let c = do_draw g3 data in
+              let d = do_draw g4 data in
               (a, b, c, d));
         }

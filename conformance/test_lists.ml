@@ -24,7 +24,7 @@ let () =
         filter (fun _ -> true) (integers ?min_value ?max_value ())
       in
       let list_gen = lists elem_gen ~min_size ?max_size () in
-      let items = generate list_gen in
+      let items = Hegel.draw list_gen in
       let size = List.length items in
       let min_element =
         if size = 0 then None

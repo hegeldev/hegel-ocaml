@@ -10,5 +10,5 @@ let () =
   let max_value = Json_params.get_int_opt params "max_value" in
   let test_cases = get_test_cases () in
   Hegel.Session.run_hegel_test ~name:"test_integers" ~test_cases (fun () ->
-      let n = generate (integers ?min_value ?max_value ()) in
+      let n = Hegel.draw (integers ?min_value ?max_value ()) in
       write_metrics [ ("value", string_of_int n) ])

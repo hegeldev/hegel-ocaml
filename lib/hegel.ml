@@ -45,8 +45,9 @@ let note = Client.note
     toward higher values. *)
 let target = Client.target
 
-(** [generate gen] produces a typed value from generator [gen]. *)
-let generate = Generators.generate
+(** [draw gen] produces a typed value from generator [gen]. Must be called from
+    within a Hegel test body. *)
+let draw = Generators.draw
 
 (** [run_hegel_test ?test_cases ?name test_fn] runs a property test using the
     shared hegeld process. *)

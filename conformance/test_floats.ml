@@ -21,7 +21,7 @@ let () =
   let test_cases = get_test_cases () in
   Hegel.Session.run_hegel_test ~name:"test_floats" ~test_cases (fun () ->
       let f =
-        generate
+        Hegel.draw
           (floats ?min_value ?max_value ~exclude_min ~exclude_max ?allow_nan
              ?allow_infinity ())
       in

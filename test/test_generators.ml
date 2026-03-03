@@ -6,6 +6,7 @@ let accept_run_test = Test_helpers.accept_run_test
 let send_test_case = Test_helpers.send_test_case
 let send_test_done = Test_helpers.send_test_done
 let recv_command = Test_helpers.recv_command
+let contains_substring = Test_helpers.contains_substring
 
 (** Helper: handle one command, dispatching to the appropriate handler. Returns
     the command name for verification. *)
@@ -30,6 +31,17 @@ let handle_n_commands data_ch n ?(generate_value = `Int 42) () =
   List.iter (fun _ -> ignore (handle_one data_ch respond)) (List.init n Fun.id)
 
 (* ==== Unit tests (no server needed) ==== *)
+
+(** Test: draw outside test context raises. *)
+let test_draw_outside_context () =
+  let raised = ref false in
+  (try ignore (draw (integers ()))
+   with Failure msg ->
+     raised := true;
+     Alcotest.(check bool)
+       "has 'outside of a Hegel test'" true
+       (contains_substring msg "outside of a Hegel test"));
+  Alcotest.(check bool) "raised" true !raised
 
 let test_span_label_constants () =
   let open Labels in
@@ -148,20 +160,38 @@ let test_as_basic_on_non_basic () =
 let test_max_filter_attempts () =
   Alcotest.(check int) "max attempts" 3 max_filter_attempts
 
+let dummy_data () =
+  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let conn = create_connection s1 ~name:"Dummy" () in
+  let data =
+    Hegel.Client.
+      { channel = control_channel conn; is_final = false; test_aborted = false }
+  in
+  (data, conn, s2)
+
 let test_collection_new () =
-  let coll = new_collection ~min_size:0 ~max_size:5 () in
-  Alcotest.(check bool) "not finished" false coll.finished
+  let data, conn, s2 = dummy_data () in
+  let coll = new_collection ~min_size:0 ~max_size:5 data () in
+  Alcotest.(check bool) "not finished" false coll.finished;
+  close conn;
+  Unix.close s2
 
 let test_collection_new_no_max () =
-  let coll = new_collection ~min_size:0 () in
+  let data, conn, s2 = dummy_data () in
+  let coll = new_collection ~min_size:0 data () in
   Alcotest.(check bool) "not finished" false coll.finished;
-  Alcotest.(check bool) "max_size is None" true (coll.max_size = None)
+  Alcotest.(check bool) "max_size is None" true (coll.max_size = None);
+  close conn;
+  Unix.close s2
 
 let test_collection_reject_when_finished () =
-  let coll = new_collection ~min_size:0 () in
+  let data, conn, s2 = dummy_data () in
+  let coll = new_collection ~min_size:0 data () in
   coll.finished <- true;
   (* Should be a no-op, not send any commands *)
-  collection_reject coll
+  collection_reject coll data;
+  close conn;
+  Unix.close s2
 
 (* ==== Socketpair-based tests (fake server protocol verification) ==== *)
 
@@ -183,7 +213,7 @@ let test_basic_generate_socketpair () =
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"basic_gen" ~test_cases:1 (fun () ->
           let gen = integers ~min_value:0 ~max_value:100 () in
-          let v = generate gen in
+          let v = Hegel.draw gen in
           Alcotest.(check int) "value" 42 v))
 
 (** Test: Basic generator with transform applies transform. *)
@@ -205,7 +235,7 @@ let test_basic_generate_with_transform_socketpair () =
           let gen =
             map (fun v -> v * 2) (integers ~min_value:0 ~max_value:10 ())
           in
-          let v = generate gen in
+          let v = Hegel.draw gen in
           Alcotest.(check int) "value" 10 v))
 
 (** Test: Double-map on basic composes transforms correctly via socketpair. *)
@@ -231,7 +261,7 @@ let test_double_map_socketpair () =
           in
           (* schema should be unchanged *)
           Alcotest.(check bool) "still basic" true (is_basic gen);
-          let v = generate gen in
+          let v = Hegel.draw gen in
           (* 3*2+1 = 7 *)
           Alcotest.(check int) "value" 7 v))
 
@@ -286,7 +316,7 @@ let test_mapped_generate_socketpair () =
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"mapped_gen" ~test_cases:1 (fun () ->
           let gen = integers () |> filter (fun _ -> true) |> map (fun x -> x) in
-          let v = generate gen in
+          let v = Hegel.draw gen in
           Alcotest.(check int) "value" 7 v))
 
 (** Test: FlatMapped generator sends start_span(FLAT_MAP)/stop_span. *)
@@ -331,7 +361,7 @@ let test_flatmapped_generate_socketpair () =
               (fun _ -> integers ~min_value:0 ~max_value:10 ())
               (integers ~min_value:1 ~max_value:3 ())
           in
-          ignore (generate gen)))
+          ignore (Hegel.draw gen)))
 
 (** Test: Filtered generator — passes on first attempt. *)
 let test_filtered_pass_first_socketpair () =
@@ -375,7 +405,7 @@ let test_filtered_pass_first_socketpair () =
               (fun v -> v mod 2 = 0)
               (integers ~min_value:0 ~max_value:10 ())
           in
-          let v = generate gen in
+          let v = Hegel.draw gen in
           Alcotest.(check int) "value" 4 v))
 
 (** Test: Filtered generator — fails first, passes second. *)
@@ -428,7 +458,7 @@ let test_filtered_pass_after_reject_socketpair () =
               (fun v -> v mod 2 = 0)
               (integers ~min_value:0 ~max_value:10 ())
           in
-          let v = generate gen in
+          let v = Hegel.draw gen in
           Alcotest.(check int) "value" 4 v))
 
 (** Test: Filtered generator — all 3 attempts fail → assume(false) → INVALID. *)
@@ -466,7 +496,7 @@ let test_filtered_exhaustion_socketpair () =
           let gen =
             filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ())
           in
-          ignore (generate gen)))
+          ignore (Hegel.draw gen)))
 
 (** Test: group helper wraps start_span/stop_span correctly. *)
 let test_group_socketpair () =
@@ -491,7 +521,8 @@ let test_group_socketpair () =
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"group" ~test_cases:1 (fun () ->
-          let result = group 42 (fun () -> 99) in
+          let data = Hegel.Client.get_data () in
+          let result = group 42 data (fun () -> 99) in
           Alcotest.(check int) "result" 99 result))
 
 (** Test: discardable_group with success — stop_span(discard=false). *)
@@ -515,7 +546,8 @@ let test_discardable_group_success_socketpair () =
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"disc_ok" ~test_cases:1 (fun () ->
-          let result = discardable_group 1 (fun () -> 55) in
+          let data = Hegel.Client.get_data () in
+          let result = discardable_group 1 data (fun () -> 55) in
           Alcotest.(check int) "result" 55 result))
 
 (** Test: discardable_group with exception — stop_span(discard=true). *)
@@ -539,7 +571,9 @@ let test_discardable_group_exception_socketpair () =
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"disc_err" ~test_cases:1 (fun () ->
-          (try ignore (discardable_group 1 (fun () -> failwith "test error"))
+          let data = Hegel.Client.get_data () in
+          (try
+             ignore (discardable_group 1 data (fun () -> failwith "test error"))
            with Failure _ -> ());
           ()))
 
@@ -585,20 +619,22 @@ let test_collection_protocol_socketpair () =
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"coll_proto" ~test_cases:1 (fun () ->
-          let coll = new_collection ~min_size:1 ~max_size:3 () in
-          Alcotest.(check bool) "more 1" true (collection_more coll);
+          let data = Hegel.Client.get_data () in
+          let coll = new_collection ~min_size:1 ~max_size:3 data () in
+          Alcotest.(check bool) "more 1" true (collection_more coll data);
           (* Generate an element *)
           ignore
             (Hegel.Client.generate_from_schema
-               (`Map [ (`Text "type", `Text "integer") ]));
+               (`Map [ (`Text "type", `Text "integer") ])
+               data);
           (* Reject it *)
-          collection_reject coll;
+          collection_reject coll data;
           (* Collection says done *)
-          Alcotest.(check bool) "more 2" false (collection_more coll);
+          Alcotest.(check bool) "more 2" false (collection_more coll data);
           (* After finished, more returns false immediately *)
-          Alcotest.(check bool) "more 3" false (collection_more coll);
+          Alcotest.(check bool) "more 3" false (collection_more coll data);
           (* reject is no-op when finished *)
-          collection_reject coll))
+          collection_reject coll data))
 
 (** Test: collection with no max_size sends Null for max_size. *)
 let test_collection_no_max_socketpair () =
@@ -624,8 +660,9 @@ let test_collection_no_max_socketpair () =
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"coll_nomax" ~test_cases:1 (fun () ->
-          let coll = new_collection ~min_size:0 () in
-          ignore (collection_more coll)))
+          let data = Hegel.Client.get_data () in
+          let coll = new_collection ~min_size:0 data () in
+          ignore (collection_more coll data)))
 
 (** Test: StopTest during new_collection raises Data_exhausted. *)
 let test_collection_stoptest_new_socketpair () =
@@ -640,8 +677,9 @@ let test_collection_stoptest_new_socketpair () =
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"coll_stop_new" ~test_cases:1 (fun () ->
-          let coll = new_collection ~min_size:0 () in
-          ignore (collection_more coll)))
+          let data = Hegel.Client.get_data () in
+          let coll = new_collection ~min_size:0 data () in
+          ignore (collection_more coll data)))
 
 (** Test: StopTest during collection_more raises Data_exhausted. *)
 let test_collection_stoptest_more_socketpair () =
@@ -659,8 +697,9 @@ let test_collection_stoptest_more_socketpair () =
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"coll_stop_more" ~test_cases:1 (fun () ->
-          let coll = new_collection ~min_size:0 () in
-          ignore (collection_more coll)))
+          let data = Hegel.Client.get_data () in
+          let coll = new_collection ~min_size:0 data () in
+          ignore (collection_more coll data)))
 
 (** Test: collection_reject when server_name is already cached. *)
 let test_collection_reject_cached_name_socketpair () =
@@ -687,10 +726,11 @@ let test_collection_reject_cached_name_socketpair () =
     (fun client_conn ->
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"coll_rej" ~test_cases:1 (fun () ->
-          let coll = new_collection ~min_size:1 ~max_size:3 () in
-          Alcotest.(check bool) "more" true (collection_more coll);
-          collection_reject coll;
-          ignore (collection_more coll)))
+          let data = Hegel.Client.get_data () in
+          let coll = new_collection ~min_size:1 ~max_size:3 data () in
+          Alcotest.(check bool) "more" true (collection_more coll data);
+          collection_reject coll data;
+          ignore (collection_more coll data)))
 
 (* ==== E2E tests (real hegel binary) ==== *)
 
@@ -698,7 +738,7 @@ let test_collection_reject_cached_name_socketpair () =
 let test_integers_in_range () =
   Hegel.Session.run_hegel_test ~name:"int_range" ~test_cases:10 (fun () ->
       let gen = integers ~min_value:0 ~max_value:100 () in
-      let v = generate gen in
+      let v = Hegel.draw gen in
       assert (v >= 0 && v <= 100))
 
 (** Test: map doubles values correctly. *)
@@ -706,7 +746,7 @@ let test_map_doubles_e2e () =
   Hegel.Session.run_hegel_test ~name:"map_double" ~test_cases:10 (fun () ->
       let gen = integers ~min_value:1 ~max_value:5 () |> map (fun v -> v * 2) in
       Alcotest.(check bool) "still basic" true (is_basic gen);
-      let v = generate gen in
+      let v = Hegel.draw gen in
       assert (v >= 2 && v <= 10);
       assert (v mod 2 = 0))
 
@@ -728,7 +768,7 @@ let test_double_map_e2e () =
           in
           Alcotest.(check string) "schema type" "integer" typ
       | None -> Alcotest.fail "expected schema");
-      let v = generate gen in
+      let v = Hegel.draw gen in
       assert (List.mem v [ 3; 5; 7; 9; 11 ]))
 
 (** Test: flat_map through server. *)
@@ -740,7 +780,7 @@ let test_flat_map_e2e () =
           (integers ~min_value:1 ~max_value:5 ())
       in
       Alcotest.(check bool) "not basic" false (is_basic gen);
-      let v = generate gen in
+      let v = Hegel.draw gen in
       assert (v >= 0))
 
 (** Test: filter through server. *)
@@ -750,7 +790,7 @@ let test_filter_e2e () =
         filter (fun v -> v mod 2 = 0) (integers ~min_value:0 ~max_value:100 ())
       in
       Alcotest.(check bool) "not basic" false (is_basic gen);
-      let v = generate gen in
+      let v = Hegel.draw gen in
       assert (v mod 2 = 0))
 
 (** Test: filter exhaustion through server (always false → assume false). *)
@@ -760,20 +800,22 @@ let test_filter_exhaustion_e2e () =
       let gen =
         filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ())
       in
-      ignore (generate gen))
+      ignore (Hegel.draw gen))
 
 (** Test: group helper through server. *)
 let test_group_e2e () =
   Hegel.Session.run_hegel_test ~name:"group_e2e" ~test_cases:5 (fun () ->
+      let data = Hegel.Client.get_data () in
       let v =
-        group Labels.list (fun () ->
+        group Labels.list data (fun () ->
             Hegel.Client.generate_from_schema
               (`Map
                  [
                    (`Text "type", `Text "integer");
                    (`Text "min_value", `Int 0);
                    (`Text "max_value", `Int 10);
-                 ]))
+                 ])
+              data)
       in
       let n = Hegel.Cbor_helpers.extract_int v in
       assert (n >= 0 && n <= 10))
@@ -781,15 +823,17 @@ let test_group_e2e () =
 (** Test: discardable_group through server — success path. *)
 let test_discardable_group_e2e () =
   Hegel.Session.run_hegel_test ~name:"disc_group_e2e" ~test_cases:5 (fun () ->
+      let data = Hegel.Client.get_data () in
       let v =
-        discardable_group Labels.tuple (fun () ->
+        discardable_group Labels.tuple data (fun () ->
             Hegel.Client.generate_from_schema
               (`Map
                  [
                    (`Text "type", `Text "integer");
                    (`Text "min_value", `Int 0);
                    (`Text "max_value", `Int 10);
-                 ]))
+                 ])
+              data)
       in
       let n = Hegel.Cbor_helpers.extract_int v in
       assert (n >= 0 && n <= 10))
@@ -907,7 +951,7 @@ let test_lists_basic_generate_socketpair () =
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"lists_basic" ~test_cases:1 (fun () ->
           let gen = lists (integers ~min_value:0 ~max_value:10 ()) () in
-          let items = generate gen in
+          let items = Hegel.draw gen in
           Alcotest.(check int) "length" 2 (List.length items)))
 
 (** Test: lists(basic_elem_with_transform) applies the list transform. *)
@@ -931,7 +975,7 @@ let test_lists_basic_with_transform_generate_socketpair () =
             map (fun v -> v * 2) (integers ~min_value:1 ~max_value:5 ())
           in
           let gen = lists elem () in
-          let items = generate gen in
+          let items = Hegel.draw gen in
           (* The server returned [2, 4] as raw; the transform doubles them → [4, 8] *)
           Alcotest.(check (list int)) "doubled" [ 4; 8 ] items))
 
@@ -996,7 +1040,7 @@ let test_lists_composite_generate_socketpair () =
           in
           let gen = lists elem () in
           Alcotest.(check bool) "not basic" false (is_basic gen);
-          let items = generate gen in
+          let items = Hegel.draw gen in
           Alcotest.(check int) "one element" 1 (List.length items)))
 
 (** Test: lists(non_basic) with StopTest during collection_more aborts cleanly.
@@ -1020,7 +1064,7 @@ let test_lists_composite_stoptest_socketpair () =
       let c = Hegel.Client.create_client client_conn in
       Hegel.Client.run_test c ~name:"lists_stoptest" ~test_cases:1 (fun () ->
           let elem = filter (fun _ -> true) (integers ()) in
-          ignore (generate (lists elem ()))))
+          ignore (Hegel.draw (lists elem ()))))
 
 (* ==== E2E tests for lists ==== *)
 
@@ -1031,7 +1075,7 @@ let test_lists_of_integers_e2e () =
         lists (integers ~min_value:0 ~max_value:100 ()) ~max_size:3 ()
       in
       Alcotest.(check bool) "is_basic" true (is_basic gen);
-      let items = generate gen in
+      let items = Hegel.draw gen in
       Alcotest.(check bool) "max 3" true (List.length items <= 3);
       List.iter (fun n -> assert (n >= 0 && n <= 100)) items)
 
@@ -1041,7 +1085,7 @@ let test_lists_booleans_bounds_e2e () =
     (fun () ->
       let gen = lists (booleans ()) ~min_size:3 ~max_size:5 () in
       Alcotest.(check bool) "is_basic" true (is_basic gen);
-      let items = generate gen in
+      let items = Hegel.draw gen in
       let n = List.length items in
       assert (n >= 3 && n <= 5))
 
@@ -1054,7 +1098,7 @@ let test_lists_non_basic_e2e () =
       in
       let gen = lists elem ~min_size:1 ~max_size:3 () in
       Alcotest.(check bool) "not basic" false (is_basic gen);
-      let items = generate gen in
+      let items = Hegel.draw gen in
       let n = List.length items in
       assert (n >= 1 && n <= 3);
       List.iter (fun x -> assert (x > 5)) items)
@@ -1066,7 +1110,7 @@ let test_lists_nested_e2e () =
       let inner = lists (booleans ()) ~max_size:3 () in
       let gen = lists inner ~max_size:3 () in
       Alcotest.(check bool) "outer is_basic" true (is_basic gen);
-      let outer_items = generate gen in
+      let outer_items = Hegel.draw gen in
       assert (List.length outer_items <= 3);
       List.iter
         (fun inner_items -> assert (List.length inner_items <= 3))
@@ -1457,25 +1501,25 @@ let test_tuples4_non_basic () =
 (** Test: just always returns the constant. *)
 let test_just_e2e () =
   Hegel.Session.run_hegel_test ~name:"just_e2e" ~test_cases:10 (fun () ->
-      let v = generate (just 42) in
+      let v = Hegel.draw (just 42) in
       Alcotest.(check int) "always 42" 42 v)
 
 (** Test: from_regex generates matching strings. *)
 let test_from_regex_e2e () =
   Hegel.Session.run_hegel_test ~name:"from_regex_e2e" ~test_cases:10 (fun () ->
-      let v = generate (from_regex "[0-9]+" ()) in
+      let v = Hegel.draw (from_regex "[0-9]+" ()) in
       assert (String.length v > 0))
 
 (** Test: emails generates strings containing at-sign. *)
 let test_emails_e2e () =
   Hegel.Session.run_hegel_test ~name:"emails_e2e" ~test_cases:10 (fun () ->
-      let v = generate (emails ()) in
+      let v = Hegel.draw (emails ()) in
       assert (String.contains v '@'))
 
 (** Test: urls generates strings starting with http. *)
 let test_urls_e2e () =
   Hegel.Session.run_hegel_test ~name:"urls_e2e" ~test_cases:10 (fun () ->
-      let v = generate (urls ()) in
+      let v = Hegel.draw (urls ()) in
       assert (
         String.length v >= 7
         && (String.sub v 0 7 = "http://" || String.sub v 0 8 = "https://")))
@@ -1483,32 +1527,32 @@ let test_urls_e2e () =
 (** Test: domains generates non-empty strings. *)
 let test_domains_e2e () =
   Hegel.Session.run_hegel_test ~name:"domains_e2e" ~test_cases:10 (fun () ->
-      let v = generate (domains ()) in
+      let v = Hegel.draw (domains ()) in
       assert (String.length v > 0))
 
 (** Test: dates generates YYYY-MM-DD strings. *)
 let test_dates_e2e () =
   Hegel.Session.run_hegel_test ~name:"dates_e2e" ~test_cases:10 (fun () ->
-      let v = generate (dates ()) in
+      let v = Hegel.draw (dates ()) in
       assert (String.contains v '-'))
 
 (** Test: times generates strings with colons. *)
 let test_times_e2e () =
   Hegel.Session.run_hegel_test ~name:"times_e2e" ~test_cases:10 (fun () ->
-      let v = generate (times ()) in
+      let v = Hegel.draw (times ()) in
       assert (String.contains v ':'))
 
 (** Test: datetimes generates strings with T. *)
 let test_datetimes_e2e () =
   Hegel.Session.run_hegel_test ~name:"datetimes_e2e" ~test_cases:10 (fun () ->
-      let v = generate (datetimes ()) in
+      let v = Hegel.draw (datetimes ()) in
       assert (String.contains v 'T'))
 
 (** Test: one_of with basic generators works e2e. *)
 let test_one_of_e2e () =
   Hegel.Session.run_hegel_test ~name:"one_of_e2e" ~test_cases:50 (fun () ->
       let gen = one_of [ integers ~min_value:0 ~max_value:10 (); just 99 ] in
-      let v = generate gen in
+      let v = Hegel.draw gen in
       assert ((v >= 0 && v <= 10) || v = 99))
 
 (** Test: one_of with non-basic generators works e2e. *)
@@ -1520,7 +1564,7 @@ let test_one_of_non_basic_e2e () =
       let gen =
         one_of [ filtered; integers ~min_value:100 ~max_value:200 () ]
       in
-      let v = generate gen in
+      let v = Hegel.draw gen in
       assert ((v > 5 && v <= 10) || (v >= 100 && v <= 200)))
 
 (** Test: optional produces None or Some e2e. *)
@@ -1529,7 +1573,7 @@ let test_optional_e2e () =
   let saw_none = ref false in
   Hegel.Session.run_hegel_test ~name:"optional_e2e" ~test_cases:50 (fun () ->
       let gen = optional (integers ~min_value:1 ~max_value:100 ()) in
-      match generate gen with
+      match Hegel.draw gen with
       | Some v ->
           saw_some := true;
           assert (v >= 1 && v <= 100)
@@ -1541,15 +1585,15 @@ let test_optional_e2e () =
 (** Test: ip_addresses generates valid IPs e2e. *)
 let test_ip_addresses_e2e () =
   Hegel.Session.run_hegel_test ~name:"ip_e2e" ~test_cases:20 (fun () ->
-      let v4 = generate (ip_addresses ~version:4 ()) in
+      let v4 = Hegel.draw (ip_addresses ~version:4 ()) in
       assert (String.contains v4 '.');
-      let v6 = generate (ip_addresses ~version:6 ()) in
+      let v6 = Hegel.draw (ip_addresses ~version:6 ()) in
       assert (String.contains v6 ':'))
 
 (** Test: ip_addresses default generates either v4 or v6 e2e. *)
 let test_ip_both_e2e () =
   Hegel.Session.run_hegel_test ~name:"ip_both_e2e" ~test_cases:20 (fun () ->
-      let v = generate (ip_addresses ()) in
+      let v = Hegel.draw (ip_addresses ()) in
       assert (String.contains v '.' || String.contains v ':'))
 
 (** Test: tuples2 basic e2e. *)
@@ -1558,7 +1602,7 @@ let test_tuples2_e2e () =
       let gen =
         tuples2 (integers ~min_value:0 ~max_value:10 ()) (booleans ())
       in
-      let a, _b = generate gen in
+      let a, _b = Hegel.draw gen in
       assert (a >= 0 && a <= 10))
 
 (** Test: tuples2 composite e2e. *)
@@ -1569,7 +1613,7 @@ let test_tuples2_composite_e2e () =
         filter (fun x -> x > 5) (integers ~min_value:0 ~max_value:10 ())
       in
       let gen = tuples2 filtered (booleans ()) in
-      let a, _b = generate gen in
+      let a, _b = Hegel.draw gen in
       assert (a > 5 && a <= 10))
 
 (** Test: tuples3 basic e2e. *)
@@ -1581,7 +1625,7 @@ let test_tuples3_e2e () =
           (booleans ())
           (integers ~min_value:100 ~max_value:200 ())
       in
-      let a, _b, c = generate gen in
+      let a, _b, c = Hegel.draw gen in
       assert (a >= 0 && a <= 10);
       assert (c >= 100 && c <= 200))
 
@@ -1596,7 +1640,7 @@ let test_tuples3_composite_e2e () =
         tuples3 filtered (booleans ())
           (integers ~min_value:100 ~max_value:200 ())
       in
-      let a, _b, c = generate gen in
+      let a, _b, c = Hegel.draw gen in
       assert (a > 5 && a <= 10);
       assert (c >= 100 && c <= 200))
 
@@ -1610,7 +1654,7 @@ let test_tuples4_e2e () =
           (integers ~min_value:100 ~max_value:200 ())
           (floats ~min_value:0.0 ~max_value:1.0 ())
       in
-      let a, _b, c, d = generate gen in
+      let a, _b, c, d = Hegel.draw gen in
       assert (a >= 0 && a <= 10);
       assert (c >= 100 && c <= 200);
       assert (d >= 0.0 && d <= 1.0))
@@ -1627,7 +1671,7 @@ let test_tuples4_composite_e2e () =
           (integers ~min_value:100 ~max_value:200 ())
           (floats ~min_value:0.0 ~max_value:1.0 ())
       in
-      let a, _b, c, d = generate gen in
+      let a, _b, c, d = Hegel.draw gen in
       assert (a > 5 && a <= 10);
       assert (c >= 100 && c <= 200);
       assert (d >= 0.0 && d <= 1.0))
@@ -1635,6 +1679,7 @@ let test_tuples4_composite_e2e () =
 let tests =
   [
     (* Unit tests *)
+    Alcotest.test_case "draw outside context" `Quick test_draw_outside_context;
     Alcotest.test_case "span label constants" `Quick test_span_label_constants;
     Alcotest.test_case "basic generator schema" `Quick
       test_basic_generator_schema;

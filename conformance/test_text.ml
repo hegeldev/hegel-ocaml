@@ -28,6 +28,6 @@ let () =
   let max_size = Json_params.get_int_opt params "max_size" in
   let test_cases = get_test_cases () in
   Hegel.Session.run_hegel_test ~name:"test_text" ~test_cases (fun () ->
-      let s = generate (text ~min_size ?max_size ()) in
+      let s = Hegel.draw (text ~min_size ?max_size ()) in
       let length = utf8_length s in
       write_metrics [ ("length", string_of_int length) ])
