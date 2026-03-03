@@ -11,9 +11,6 @@
 
 open Protocol
 
-(** Protocol version sent during handshake. *)
-let protocol_version = "0.3"
-
 (** Handshake string sent by the client to initiate the protocol. *)
 let handshake_string = "hegel_handshake_start"
 
@@ -55,7 +52,7 @@ let result_or_error body =
     | None -> failwith "Response has neither 'result' nor 'error'"
 
 (** Connection state after handshake. *)
-type connection_state = Unresolved | Client | Server
+type connection_state = Unresolved | Client
 
 (** A channel entry in the connection's channel table. *)
 type channel_entry =
@@ -275,8 +272,7 @@ let new_channel conn ?role () =
   if conn.connection_state = Unresolved then
     failwith "Cannot create a new channel before handshake has been performed."
   else begin
-    let parity = if conn.connection_state = Client then 1 else 0 in
-    let channel_id = Int32.of_int ((conn.next_channel_id lsl 1) lor parity) in
+    let channel_id = Int32.of_int ((conn.next_channel_id lsl 1) lor 1) in
     conn.next_channel_id <- conn.next_channel_id + 1;
     let ch = make_channel conn channel_id ~role in
     Mutex.lock conn.writer_lock;
@@ -384,13 +380,6 @@ let send_response_value ch message_id value =
   send_response_raw ch message_id
     (CBOR.Simple.encode (`Map [ (`Text "result", value) ]))
 
-(** [send_response_error ch message_id ~error ~error_type ()] sends an error
-    response. *)
-let send_response_error ch message_id ~error ~error_type () =
-  send_response_raw ch message_id
-    (CBOR.Simple.encode
-       (`Map [ (`Text "error", `Text error); (`Text "type", `Text error_type) ]))
-
 (** [close_channel ch] closes the channel and notifies the peer. Idempotent. *)
 let close_channel ch =
   if ch.closed then ()
@@ -445,24 +434,6 @@ let pending_get pr =
       pr.pr_value <- Some v;
       result_or_error v
 
-(** [handle_requests ch handler] processes incoming requests, calling [handler]
-    for each one. Sends the return value as a success response, or sends an
-    error response if [handler] raises an exception. Runs until the connection
-    closes. *)
-let handle_requests ch handler =
-  try
-    while true do
-      let message_id, message = receive_request ch () in
-      try
-        let result = handler message in
-        send_response_value ch message_id result
-      with exn ->
-        let error = Printexc.to_string exn in
-        let error_type = Printexc.exn_slot_name exn in
-        send_response_error ch message_id ~error ~error_type ()
-    done
-  with Failure _ -> ()
-
 (* --- Handshake --- *)
 
 (** [send_handshake conn] initiates the handshake as a client. Returns the
@@ -477,16 +448,3 @@ let send_handshake conn =
   if String.length response < 6 || String.sub response 0 6 <> "Hegel/" then
     failwith (Printf.sprintf "Bad handshake response: %S" response)
   else String.sub response 6 (String.length response - 6)
-
-(** [receive_handshake conn] accepts the handshake as a server. *)
-let receive_handshake conn =
-  if conn.connection_state <> Unresolved then
-    failwith "Handshake already established";
-  conn.connection_state <- Server;
-  let ch = control_channel conn in
-  let message_id, payload = receive_request_raw ch () in
-  if payload <> handshake_string then
-    failwith
-      (Printf.sprintf "Bad handshake: expected %S, got %S" handshake_string
-         payload);
-  send_response_raw ch message_id ("Hegel/" ^ protocol_version)

@@ -67,7 +67,7 @@ conformance/                 # Conformance test binaries (compiled executables)
   test_sampled_from.ml       # SampledFrom conformance binary
   test_hashmaps.ml           # Hashmap (dict) conformance binary
 
-tests/conformance/           # Python conformance test harness
+test/conformance/            # Python conformance test harness
   test_conformance.py        # pytest file — imports from hegel.conformance
 
 docs/                        # Tutorial and guide documents
