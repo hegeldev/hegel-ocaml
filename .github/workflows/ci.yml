@@ -50,6 +50,9 @@ jobs:
       - name: Check formatting
         run: opam exec -- dune fmt && git diff --exit-code
 
+      - name: Check opam files are up to date
+        run: opam exec -- dune build hegel.opam && git diff --exit-code '*.opam'
+
   test:
     name: test
     runs-on: ubuntu-latest
