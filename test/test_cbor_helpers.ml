@@ -1,4 +1,5 @@
-open Hegel.Cbor_helpers
+open Hegel
+open Cbor_helpers
 
 (* --- Round-trip tests --- *)
 

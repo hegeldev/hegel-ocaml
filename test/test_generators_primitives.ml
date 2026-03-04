@@ -1,0 +1,226 @@
+open Hegel
+open Generators
+
+(** Test: booleans() produces a Basic generator with type=boolean schema. *)
+let test_booleans_schema () =
+  let gen = booleans () in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
+      Alcotest.(check string) "type" "boolean" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: integers(0, 100) generates values in range. *)
+let test_integers_in_range () =
+  Session.run_hegel_test ~name:"int_range" ~test_cases:10 (fun () ->
+      let gen = integers ~min_value:0 ~max_value:100 () in
+      let v = Hegel.draw gen in
+      assert (v >= 0 && v <= 100))
+
+(** Test: just schema is const null. *)
+let test_just_schema () =
+  let gen = just 42 in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      Alcotest.(check int) "one pair" 1 (List.length pairs);
+      Alcotest.(check bool)
+        "const is null" true
+        (Cbor_helpers.is_null (List.assoc (`Text "const") pairs))
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: just transform ignores server value. *)
+let test_just_transform () =
+  let gen = just "hello" in
+  match gen with
+  | Basic { transform; _ } ->
+      Alcotest.(check string) "ignores server" "hello" (transform (`Int 999))
+  | _ -> Alcotest.fail "expected Basic"
+
+(** Test: from_regex schema with default fullmatch. *)
+let test_from_regex_schema () =
+  let gen = from_regex "[a-z]+" () in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
+      Alcotest.(check string) "type" "regex" typ;
+      let pat =
+        Cbor_helpers.extract_string (List.assoc (`Text "pattern") pairs)
+      in
+      Alcotest.(check string) "pattern" "[a-z]+" pat;
+      let fm =
+        Cbor_helpers.extract_bool (List.assoc (`Text "fullmatch") pairs)
+      in
+      Alcotest.(check bool) "fullmatch" true fm
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: from_regex with fullmatch=false. *)
+let test_from_regex_no_fullmatch () =
+  let gen = from_regex "abc" ~fullmatch:false () in
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let fm =
+        Cbor_helpers.extract_bool (List.assoc (`Text "fullmatch") pairs)
+      in
+      Alcotest.(check bool) "fullmatch false" false fm
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: emails schema. *)
+let test_emails_schema () =
+  let gen = emails () in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
+      Alcotest.(check string) "type" "email" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: urls schema. *)
+let test_urls_schema () =
+  let gen = urls () in
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
+      Alcotest.(check string) "type" "url" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: domains schema without max_length. *)
+let test_domains_schema () =
+  let gen = domains () in
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
+      Alcotest.(check string) "type" "domain" typ;
+      Alcotest.(check bool)
+        "no max_length" false
+        (List.mem_assoc (`Text "max_length") pairs)
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: domains schema with max_length. *)
+let test_domains_max_length () =
+  let gen = domains ~max_length:100 () in
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let ml =
+        Cbor_helpers.extract_int (List.assoc (`Text "max_length") pairs)
+      in
+      Alcotest.(check int) "max_length" 100 ml
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: dates schema. *)
+let test_dates_schema () =
+  let gen = dates () in
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
+      Alcotest.(check string) "type" "date" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: times schema. *)
+let test_times_schema () =
+  let gen = times () in
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
+      Alcotest.(check string) "type" "time" typ
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: datetimes schema. *)
+let test_datetimes_schema () =
+  let gen = datetimes () in
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
+      Alcotest.(check string) "type" "datetime" typ
+  | None -> Alcotest.fail "expected schema"
+
+(* ==== E2E tests ==== *)
+
+(** Test: just always returns the constant. *)
+let test_just_e2e () =
+  Session.run_hegel_test ~name:"just_e2e" ~test_cases:10 (fun () ->
+      let v = Hegel.draw (just 42) in
+      Alcotest.(check int) "always 42" 42 v)
+
+(** Test: from_regex generates matching strings. *)
+let test_from_regex_e2e () =
+  Session.run_hegel_test ~name:"from_regex_e2e" ~test_cases:10 (fun () ->
+      let v = Hegel.draw (from_regex "[0-9]+" ()) in
+      assert (String.length v > 0))
+
+(** Test: emails generates strings containing at-sign. *)
+let test_emails_e2e () =
+  Session.run_hegel_test ~name:"emails_e2e" ~test_cases:10 (fun () ->
+      let v = Hegel.draw (emails ()) in
+      assert (String.contains v '@'))
+
+(** Test: urls generates strings starting with http. *)
+let test_urls_e2e () =
+  Session.run_hegel_test ~name:"urls_e2e" ~test_cases:10 (fun () ->
+      let v = Hegel.draw (urls ()) in
+      assert (
+        String.length v >= 7
+        && (String.sub v 0 7 = "http://" || String.sub v 0 8 = "https://")))
+
+(** Test: domains generates non-empty strings. *)
+let test_domains_e2e () =
+  Session.run_hegel_test ~name:"domains_e2e" ~test_cases:10 (fun () ->
+      let v = Hegel.draw (domains ()) in
+      assert (String.length v > 0))
+
+(** Test: dates generates YYYY-MM-DD strings. *)
+let test_dates_e2e () =
+  Session.run_hegel_test ~name:"dates_e2e" ~test_cases:10 (fun () ->
+      let v = Hegel.draw (dates ()) in
+      assert (String.contains v '-'))
+
+(** Test: times generates strings with colons. *)
+let test_times_e2e () =
+  Session.run_hegel_test ~name:"times_e2e" ~test_cases:10 (fun () ->
+      let v = Hegel.draw (times ()) in
+      assert (String.contains v ':'))
+
+(** Test: datetimes generates strings with T. *)
+let test_datetimes_e2e () =
+  Session.run_hegel_test ~name:"datetimes_e2e" ~test_cases:10 (fun () ->
+      let v = Hegel.draw (datetimes ()) in
+      assert (String.contains v 'T'))
+
+let tests =
+  [
+    Alcotest.test_case "booleans schema" `Quick test_booleans_schema;
+    Alcotest.test_case "integers in range" `Quick test_integers_in_range;
+    Alcotest.test_case "just schema" `Quick test_just_schema;
+    Alcotest.test_case "just transform" `Quick test_just_transform;
+    Alcotest.test_case "from_regex schema" `Quick test_from_regex_schema;
+    Alcotest.test_case "from_regex no fullmatch" `Quick
+      test_from_regex_no_fullmatch;
+    Alcotest.test_case "emails schema" `Quick test_emails_schema;
+    Alcotest.test_case "urls schema" `Quick test_urls_schema;
+    Alcotest.test_case "domains schema" `Quick test_domains_schema;
+    Alcotest.test_case "domains max_length" `Quick test_domains_max_length;
+    Alcotest.test_case "dates schema" `Quick test_dates_schema;
+    Alcotest.test_case "times schema" `Quick test_times_schema;
+    Alcotest.test_case "datetimes schema" `Quick test_datetimes_schema;
+    Alcotest.test_case "just e2e" `Quick test_just_e2e;
+    Alcotest.test_case "from_regex e2e" `Quick test_from_regex_e2e;
+    Alcotest.test_case "emails e2e" `Quick test_emails_e2e;
+    Alcotest.test_case "urls e2e" `Quick test_urls_e2e;
+    Alcotest.test_case "domains e2e" `Quick test_domains_e2e;
+    Alcotest.test_case "dates e2e" `Quick test_dates_e2e;
+    Alcotest.test_case "times e2e" `Quick test_times_e2e;
+    Alcotest.test_case "datetimes e2e" `Quick test_datetimes_e2e;
+  ]

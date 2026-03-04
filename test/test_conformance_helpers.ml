@@ -1,6 +1,7 @@
 (** Tests for the Conformance helper module and new generator types. *)
 
-open Hegel.Generators
+open Hegel
+open Generators
 
 (* ==== Conformance helper tests ==== *)
 
@@ -123,10 +124,8 @@ let test_floats_schema_no_bounds () =
   Alcotest.(check bool) "is_basic" true (is_basic gen);
   match schema gen with
   | Some s ->
-      let pairs = Hegel.Cbor_helpers.extract_dict s in
-      let typ =
-        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
-      in
+      let pairs = Cbor_helpers.extract_dict s in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
       Alcotest.(check string) "type" "float" typ;
       (* No bounds when not specified *)
       Alcotest.(check bool)
@@ -134,7 +133,7 @@ let test_floats_schema_no_bounds () =
         (List.mem_assoc (`Text "min_value") pairs);
       (* allow_nan defaults to true when no bounds *)
       let allow_nan =
-        Hegel.Cbor_helpers.extract_bool (List.assoc (`Text "allow_nan") pairs)
+        Cbor_helpers.extract_bool (List.assoc (`Text "allow_nan") pairs)
       in
       Alcotest.(check bool) "allow_nan default true (no bounds)" true allow_nan
   | None -> Alcotest.fail "expected schema"
@@ -148,22 +147,18 @@ let test_floats_schema_all_options () =
   Alcotest.(check bool) "is_basic" true (is_basic gen);
   match schema gen with
   | Some s ->
-      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let pairs = Cbor_helpers.extract_dict s in
       let get_float k =
-        Hegel.Cbor_helpers.extract_float (List.assoc (`Text k) pairs)
+        Cbor_helpers.extract_float (List.assoc (`Text k) pairs)
       in
-      let get_bool k =
-        Hegel.Cbor_helpers.extract_bool (List.assoc (`Text k) pairs)
-      in
+      let get_bool k = Cbor_helpers.extract_bool (List.assoc (`Text k) pairs) in
       Alcotest.(check (float 1e-10)) "min_value" (-1.0) (get_float "min_value");
       Alcotest.(check (float 1e-10)) "max_value" 1.0 (get_float "max_value");
       Alcotest.(check bool) "exclude_min" true (get_bool "exclude_min");
       Alcotest.(check bool) "exclude_max" true (get_bool "exclude_max");
       Alcotest.(check bool) "allow_nan" false (get_bool "allow_nan");
       Alcotest.(check bool) "allow_infinity" false (get_bool "allow_infinity");
-      let width =
-        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "width") pairs)
-      in
+      let width = Cbor_helpers.extract_int (List.assoc (`Text "width") pairs) in
       Alcotest.(check int) "width" 64 width
   | None -> Alcotest.fail "expected schema"
 
@@ -173,10 +168,8 @@ let test_floats_schema_exclude_false () =
   let gen = floats ~min_value:0.0 ~max_value:1.0 () in
   match schema gen with
   | Some s ->
-      let pairs = Hegel.Cbor_helpers.extract_dict s in
-      let get_bool k =
-        Hegel.Cbor_helpers.extract_bool (List.assoc (`Text k) pairs)
-      in
+      let pairs = Cbor_helpers.extract_dict s in
+      let get_bool k = Cbor_helpers.extract_bool (List.assoc (`Text k) pairs) in
       (* exclude_min/max default to false but are always present *)
       Alcotest.(check bool) "exclude_min false" false (get_bool "exclude_min");
       Alcotest.(check bool) "exclude_max false" false (get_bool "exclude_max");
@@ -194,10 +187,8 @@ let test_floats_schema_only_min () =
   let gen = floats ~min_value:0.0 () in
   match schema gen with
   | Some s ->
-      let pairs = Hegel.Cbor_helpers.extract_dict s in
-      let get_bool k =
-        Hegel.Cbor_helpers.extract_bool (List.assoc (`Text k) pairs)
-      in
+      let pairs = Cbor_helpers.extract_dict s in
+      let get_bool k = Cbor_helpers.extract_bool (List.assoc (`Text k) pairs) in
       (* allow_nan false when any bound set *)
       Alcotest.(check bool) "allow_nan false" false (get_bool "allow_nan");
       (* allow_infinity true when only one bound set (no max) *)
@@ -212,13 +203,11 @@ let test_text_schema () =
   Alcotest.(check bool) "is_basic" true (is_basic gen);
   match schema gen with
   | Some s ->
-      let pairs = Hegel.Cbor_helpers.extract_dict s in
-      let typ =
-        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
-      in
+      let pairs = Cbor_helpers.extract_dict s in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
       Alcotest.(check string) "type" "string" typ;
       let min_size =
-        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "min_size") pairs)
+        Cbor_helpers.extract_int (List.assoc (`Text "min_size") pairs)
       in
       Alcotest.(check int) "min_size default 0" 0 min_size
   | None -> Alcotest.fail "expected schema"
@@ -228,12 +217,12 @@ let test_text_schema_with_max () =
   let gen = text ~min_size:2 ~max_size:10 () in
   match schema gen with
   | Some s ->
-      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let pairs = Cbor_helpers.extract_dict s in
       let min_size =
-        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "min_size") pairs)
+        Cbor_helpers.extract_int (List.assoc (`Text "min_size") pairs)
       in
       let max_size =
-        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "max_size") pairs)
+        Cbor_helpers.extract_int (List.assoc (`Text "max_size") pairs)
       in
       Alcotest.(check int) "min_size" 2 min_size;
       Alcotest.(check int) "max_size" 10 max_size
@@ -244,7 +233,7 @@ let test_text_schema_no_max () =
   let gen = text ~min_size:0 () in
   match schema gen with
   | Some s ->
-      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let pairs = Cbor_helpers.extract_dict s in
       Alcotest.(check bool)
         "no max_size" false
         (List.mem_assoc (`Text "max_size") pairs)
@@ -256,13 +245,11 @@ let test_binary_schema () =
   Alcotest.(check bool) "is_basic" true (is_basic gen);
   match schema gen with
   | Some s ->
-      let pairs = Hegel.Cbor_helpers.extract_dict s in
-      let typ =
-        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
-      in
+      let pairs = Cbor_helpers.extract_dict s in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
       Alcotest.(check string) "type" "binary" typ;
       let min_size =
-        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "min_size") pairs)
+        Cbor_helpers.extract_int (List.assoc (`Text "min_size") pairs)
       in
       Alcotest.(check int) "min_size default 0" 0 min_size
   | None -> Alcotest.fail "expected schema"
@@ -272,9 +259,9 @@ let test_binary_schema_with_max () =
   let gen = binary ~min_size:1 ~max_size:20 () in
   match schema gen with
   | Some s ->
-      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let pairs = Cbor_helpers.extract_dict s in
       let max_size =
-        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "max_size") pairs)
+        Cbor_helpers.extract_int (List.assoc (`Text "max_size") pairs)
       in
       Alcotest.(check int) "max_size" 20 max_size
   | None -> Alcotest.fail "expected schema"
@@ -284,7 +271,7 @@ let test_binary_schema_no_max () =
   let gen = binary () in
   match schema gen with
   | Some s ->
-      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let pairs = Cbor_helpers.extract_dict s in
       Alcotest.(check bool)
         "no max_size" false
         (List.mem_assoc (`Text "max_size") pairs)
@@ -299,21 +286,19 @@ let test_sampled_from_schema () =
   Alcotest.(check bool) "is_basic" true (is_basic gen);
   match schema gen with
   | Some s ->
-      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let pairs = Cbor_helpers.extract_dict s in
       (* sampled_from uses an integer index schema *)
       Alcotest.(check bool)
         "has type field" true
         (List.mem_assoc (`Text "type") pairs);
-      let typ =
-        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
-      in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
       Alcotest.(check string) "type is integer" "integer" typ;
       let min_v =
-        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "min_value") pairs)
+        Cbor_helpers.extract_int (List.assoc (`Text "min_value") pairs)
       in
       Alcotest.(check int) "min_value 0" 0 min_v;
       let max_v =
-        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "max_value") pairs)
+        Cbor_helpers.extract_int (List.assoc (`Text "max_value") pairs)
       in
       Alcotest.(check int) "max_value 2 (n-1)" 2 max_v
   | None -> Alcotest.fail "expected schema"
@@ -327,16 +312,14 @@ let test_hashmaps_schema () =
   Alcotest.(check bool) "is_basic" true (is_basic gen);
   match as_basic gen with
   | Some (s, _transform) ->
-      let pairs = Hegel.Cbor_helpers.extract_dict s in
-      let typ =
-        Hegel.Cbor_helpers.extract_string (List.assoc (`Text "type") pairs)
-      in
+      let pairs = Cbor_helpers.extract_dict s in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
       Alcotest.(check string) "type" "dict" typ;
       let min_size =
-        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "min_size") pairs)
+        Cbor_helpers.extract_int (List.assoc (`Text "min_size") pairs)
       in
       let max_size =
-        Hegel.Cbor_helpers.extract_int (List.assoc (`Text "max_size") pairs)
+        Cbor_helpers.extract_int (List.assoc (`Text "max_size") pairs)
       in
       Alcotest.(check int) "min_size" 2 min_size;
       Alcotest.(check int) "max_size" 5 max_size
@@ -349,7 +332,7 @@ let test_hashmaps_schema_no_max () =
   let gen = hashmaps key_gen val_gen () in
   match schema gen with
   | Some s ->
-      let pairs = Hegel.Cbor_helpers.extract_dict s in
+      let pairs = Cbor_helpers.extract_dict s in
       Alcotest.(check bool)
         "no max_size" false
         (List.mem_assoc (`Text "max_size") pairs)
@@ -428,14 +411,13 @@ let test_hashmaps_non_basic_values_raises () =
 
 (** Test: floats() E2E — values are floats. *)
 let test_floats_e2e () =
-  Hegel.Session.run_hegel_test ~name:"floats_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~name:"floats_e2e" ~test_cases:10 (fun () ->
       let f = Hegel.draw (floats ~allow_nan:false ~allow_infinity:false ()) in
       assert (Float.is_finite f))
 
 (** Test: floats() with bounds E2E — values within range. *)
 let test_floats_bounds_e2e () =
-  Hegel.Session.run_hegel_test ~name:"floats_bounds_e2e" ~test_cases:10
-    (fun () ->
+  Session.run_hegel_test ~name:"floats_bounds_e2e" ~test_cases:10 (fun () ->
       let f =
         Hegel.draw
           (floats ~min_value:0.0 ~max_value:1.0 ~allow_nan:false
@@ -445,27 +427,26 @@ let test_floats_bounds_e2e () =
 
 (** Test: text() E2E — values are text strings. *)
 let test_text_e2e () =
-  Hegel.Session.run_hegel_test ~name:"text_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~name:"text_e2e" ~test_cases:10 (fun () ->
       let s = Hegel.draw (text ~min_size:1 ~max_size:10 ()) in
       assert (String.length s >= 1))
 
 (** Test: binary() E2E — values are byte strings. *)
 let test_binary_e2e () =
-  Hegel.Session.run_hegel_test ~name:"binary_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~name:"binary_e2e" ~test_cases:10 (fun () ->
       let b = Hegel.draw (binary ~min_size:0 ~max_size:10 ()) in
       assert (String.length b >= 0))
 
 (** Test: sampled_from() E2E — values come from the options list. *)
 let test_sampled_from_e2e () =
   let options = [ 10; 20; 30 ] in
-  Hegel.Session.run_hegel_test ~name:"sampled_from_e2e" ~test_cases:10
-    (fun () ->
+  Session.run_hegel_test ~name:"sampled_from_e2e" ~test_cases:10 (fun () ->
       let n = Hegel.draw (sampled_from options) in
       assert (List.mem n [ 10; 20; 30 ]))
 
 (** Test: hashmaps() E2E — values are maps. *)
 let test_hashmaps_e2e () =
-  Hegel.Session.run_hegel_test ~name:"hashmaps_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~name:"hashmaps_e2e" ~test_cases:10 (fun () ->
       let key_gen = integers ~min_value:0 ~max_value:100 () in
       let val_gen = integers ~min_value:0 ~max_value:100 () in
       let gen = hashmaps key_gen val_gen ~min_size:0 ~max_size:5 () in

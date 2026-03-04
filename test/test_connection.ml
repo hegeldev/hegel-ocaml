@@ -1,5 +1,6 @@
-open Hegel.Protocol
-open Hegel.Connection
+open Hegel
+open Protocol
+open Connection
 
 let contains_substring = Test_helpers.contains_substring
 let raw_handshake_responder = Test_helpers.raw_handshake_responder
@@ -298,14 +299,12 @@ let test_request_response () =
            while true do
              let msg_id, message = receive_request ch () in
              let x =
-               Hegel.Cbor_helpers.extract_int
-                 (List.assoc (`Text "x")
-                    (Hegel.Cbor_helpers.extract_dict message))
+               Cbor_helpers.extract_int
+                 (List.assoc (`Text "x") (Cbor_helpers.extract_dict message))
              in
              let y =
-               Hegel.Cbor_helpers.extract_int
-                 (List.assoc (`Text "y")
-                    (Hegel.Cbor_helpers.extract_dict message))
+               Cbor_helpers.extract_int
+                 (List.assoc (`Text "y") (Cbor_helpers.extract_dict message))
              in
              send_response_value ch msg_id
                (`Map [ (`Text "sum", `Int (x + y)) ])
@@ -322,8 +321,8 @@ let test_request_response () =
       (request send_ch (`Map [ (`Text "x", `Int 2); (`Text "y", `Int 3) ]))
   in
   let sum =
-    Hegel.Cbor_helpers.extract_int
-      (List.assoc (`Text "sum") (Hegel.Cbor_helpers.extract_dict result))
+    Cbor_helpers.extract_int
+      (List.assoc (`Text "sum") (Cbor_helpers.extract_dict result))
   in
   Alcotest.(check int) "sum" 5 sum;
   close client_conn;
@@ -352,7 +351,7 @@ let test_receive_response () =
   let ch = connect_channel client_conn 3l () in
   let msg_id = send_request ch (`Map [ (`Text "test", `Bool true) ]) in
   let result = receive_response ch msg_id () in
-  Alcotest.(check int) "result" 42 (Hegel.Cbor_helpers.extract_int result);
+  Alcotest.(check int) "result" 42 (Cbor_helpers.extract_int result);
   close client_conn;
   Thread.join t;
   close peer_conn
@@ -373,9 +372,8 @@ let test_pending_request_caching () =
           while true do
             let msg_id, message = receive_request ch () in
             let v =
-              Hegel.Cbor_helpers.extract_int
-                (List.assoc (`Text "value")
-                   (Hegel.Cbor_helpers.extract_dict message))
+              Cbor_helpers.extract_int
+                (List.assoc (`Text "value") (Cbor_helpers.extract_dict message))
             in
             send_response_value ch msg_id (`Int (v * 2))
           done
@@ -386,11 +384,9 @@ let test_pending_request_caching () =
   let ch = connect_channel client_conn 3l () in
   let pending = request ch (`Map [ (`Text "value", `Int 21) ]) in
   let r1 = pending_get pending in
-  Alcotest.(check int) "first get" 42 (Hegel.Cbor_helpers.extract_int r1);
+  Alcotest.(check int) "first get" 42 (Cbor_helpers.extract_int r1);
   let r2 = pending_get pending in
-  Alcotest.(check int)
-    "second get (cached)" 42
-    (Hegel.Cbor_helpers.extract_int r2);
+  Alcotest.(check int) "second get (cached)" 42 (Cbor_helpers.extract_int r2);
   close client_conn;
   Thread.join t;
   close peer_conn
@@ -417,7 +413,7 @@ let test_request_error () =
 let test_result_or_error_returns_result () =
   let body = `Map [ (`Text "result", `Int 42) ] in
   let result = result_or_error body in
-  Alcotest.(check int) "result" 42 (Hegel.Cbor_helpers.extract_int result)
+  Alcotest.(check int) "result" 42 (Cbor_helpers.extract_int result)
 
 let test_result_or_error_raises () =
   let body =
@@ -558,8 +554,8 @@ let test_close_channel_creates_dead_channel_with_connect () =
         let ch = control_channel peer_conn in
         let msg_id, msg = receive_request ch () in
         let channel_id =
-          Hegel.Cbor_helpers.extract_int
-            (List.assoc (`Text "channel") (Hegel.Cbor_helpers.extract_dict msg))
+          Cbor_helpers.extract_int
+            (List.assoc (`Text "channel") (Cbor_helpers.extract_dict msg))
         in
         ignore
           (connect_channel peer_conn (Int32.of_int channel_id) ~role:"Hello" ());

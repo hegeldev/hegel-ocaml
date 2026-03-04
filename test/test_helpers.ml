@@ -1,5 +1,7 @@
 (** Shared test utilities used across test modules. *)
 
+open Hegel
+
 (** [contains_substring s sub] returns [true] if [sub] appears anywhere in [s].
 *)
 let contains_substring s sub =
@@ -15,11 +17,11 @@ let contains_substring s sub =
 
 (** [raw_handshake_responder fd] reads one raw handshake packet from [fd] and
     responds with ["Hegel/0.3"]. Used by tests that need the client's
-    {!Hegel.Connection.send_handshake} to succeed without the removed
+    {!Connection.send_handshake} to succeed without the removed
     [receive_handshake]. *)
 let raw_handshake_responder fd =
-  let pkt = Hegel.Protocol.read_packet fd in
-  Hegel.Protocol.write_packet fd
+  let pkt = Protocol.read_packet fd in
+  Protocol.write_packet fd
     {
       channel_id = pkt.channel_id;
       message_id = pkt.message_id;

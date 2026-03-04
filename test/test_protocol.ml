@@ -1,4 +1,5 @@
-open Hegel.Protocol
+open Hegel
+open Protocol
 
 let contains_substring = Test_helpers.contains_substring
 

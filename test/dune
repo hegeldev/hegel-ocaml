@@ -7,7 +7,10 @@
   test_cbor_helpers
   test_connection
   test_client
-  test_generators
+  test_generators_core
+  test_generators_primitives
+  test_generators_collections
+  test_generators_combinators
   test_showcase
   test_conformance_helpers
   test_derive)
