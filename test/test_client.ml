@@ -1,5 +1,6 @@
-open Hegel.Connection
-open Hegel.Client
+open Hegel
+open Connection
+open Client
 
 let contains_substring = Test_helpers.contains_substring
 let find_cmd = Test_helpers.find_cmd
@@ -10,7 +11,7 @@ let test_assume_true () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
   let data =
-    Hegel.Client.
+    Client.
       { channel = control_channel conn; is_final = false; test_aborted = false }
   in
   Domain.DLS.set current_data (Some data);
@@ -23,7 +24,7 @@ let test_assume_false_raises () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
   let data =
-    Hegel.Client.
+    Client.
       { channel = control_channel conn; is_final = false; test_aborted = false }
   in
   Domain.DLS.set current_data (Some data);
@@ -68,7 +69,7 @@ let test_note_when_not_final () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
   let data =
-    Hegel.Client.
+    Client.
       { channel = control_channel conn; is_final = false; test_aborted = false }
   in
   Domain.DLS.set current_data (Some data);
@@ -81,7 +82,7 @@ let test_note_when_final () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
   let data =
-    Hegel.Client.
+    Client.
       { channel = control_channel conn; is_final = true; test_aborted = false }
   in
   Domain.DLS.set current_data (Some data);
@@ -109,7 +110,7 @@ let test_start_span_when_aborted () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
   let data =
-    Hegel.Client.
+    Client.
       { channel = control_channel conn; is_final = false; test_aborted = true }
   in
   start_span data;
@@ -130,12 +131,12 @@ let test_nested_test_raises () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
   let data =
-    Hegel.Client.
+    Client.
       { channel = control_channel conn; is_final = false; test_aborted = false }
   in
   Domain.DLS.set current_data (Some data);
   let raised = ref false in
-  (try Hegel.Session.run_hegel_test ~name:"nested" ~test_cases:1 (fun () -> ())
+  (try Session.run_hegel_test ~name:"nested" ~test_cases:1 (fun () -> ())
    with Failure msg ->
      raised := true;
      Alcotest.(check bool)
@@ -151,26 +152,26 @@ let test_nested_test_raises () =
 (** Helper: run a test with a specific HEGEL_PROTOCOL_TEST_MODE. Restarts the
     session so the new env var takes effect on the subprocess. *)
 let with_test_mode mode f =
-  Hegel.Session.restart_session ();
+  Session.restart_session ();
   Unix.putenv "HEGEL_PROTOCOL_TEST_MODE" mode;
   Fun.protect
     ~finally:(fun () ->
       Unix.putenv "HEGEL_PROTOCOL_TEST_MODE" "";
-      Hegel.Session.restart_session ())
+      Session.restart_session ())
     f
 
 let test_simple_passing_test () =
-  Hegel.Session.run_hegel_test ~name:"simple_pass" ~test_cases:5 (fun () ->
+  Session.run_hegel_test ~name:"simple_pass" ~test_cases:5 (fun () ->
       let data = get_data () in
       let v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
       in
-      ignore (Hegel.Cbor_helpers.extract_bool v))
+      ignore (Cbor_helpers.extract_bool v))
 
 let test_simple_failing_test () =
   let raised = ref false in
   (try
-     Hegel.Session.run_hegel_test ~name:"simple_fail" ~test_cases:100 (fun () ->
+     Session.run_hegel_test ~name:"simple_fail" ~test_cases:100 (fun () ->
          let data = get_data () in
          let v =
            generate_from_schema
@@ -182,29 +183,29 @@ let test_simple_failing_test () =
                 ])
              data
          in
-         let x = Hegel.Cbor_helpers.extract_int v in
+         let x = Cbor_helpers.extract_int v in
          if x >= 50 then failwith "too big")
    with _ -> raised := true);
   Alcotest.(check bool) "test failed" true !raised
 
 let test_single_test_case () =
-  Hegel.Session.run_hegel_test ~name:"single_case" ~test_cases:1 (fun () ->
+  Session.run_hegel_test ~name:"single_case" ~test_cases:1 (fun () ->
       let data = get_data () in
       let v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
       in
-      ignore (Hegel.Cbor_helpers.extract_bool v))
+      ignore (Cbor_helpers.extract_bool v))
 
 let test_assume_true_e2e () =
-  Hegel.Session.run_hegel_test ~name:"assume_true" ~test_cases:5 (fun () ->
+  Session.run_hegel_test ~name:"assume_true" ~test_cases:5 (fun () ->
       assume true)
 
 let test_assume_false_e2e () =
-  Hegel.Session.run_hegel_test ~name:"assume_false" ~test_cases:5 (fun () ->
+  Session.run_hegel_test ~name:"assume_false" ~test_cases:5 (fun () ->
       assume false)
 
 let test_note_not_final_e2e () =
-  Hegel.Session.run_hegel_test ~name:"note_nonfinal" ~test_cases:5 (fun () ->
+  Session.run_hegel_test ~name:"note_nonfinal" ~test_cases:5 (fun () ->
       note "should not appear";
       let data = get_data () in
       let v =
@@ -217,10 +218,10 @@ let test_note_not_final_e2e () =
              ])
           data
       in
-      ignore (Hegel.Cbor_helpers.extract_int v))
+      ignore (Cbor_helpers.extract_int v))
 
 let test_target_e2e () =
-  Hegel.Session.run_hegel_test ~name:"target_test" ~test_cases:5 (fun () ->
+  Session.run_hegel_test ~name:"target_test" ~test_cases:5 (fun () ->
       let data = get_data () in
       let v =
         generate_from_schema
@@ -232,14 +233,14 @@ let test_target_e2e () =
              ])
           data
       in
-      let x = Hegel.Cbor_helpers.extract_int v in
+      let x = Cbor_helpers.extract_int v in
       target (float_of_int x) "maximize_x")
 
 (* ---- HEGEL_PROTOCOL_TEST_MODE error injection tests ---- *)
 
 let test_stop_test_on_generate () =
   with_test_mode "stop_test_on_generate" (fun () ->
-      Hegel.Session.run_hegel_test ~name:"stop_on_gen" ~test_cases:5 (fun () ->
+      Session.run_hegel_test ~name:"stop_on_gen" ~test_cases:5 (fun () ->
           let data = get_data () in
           ignore
             (generate_from_schema
@@ -248,7 +249,7 @@ let test_stop_test_on_generate () =
 
 let test_stop_test_on_mark_complete () =
   with_test_mode "stop_test_on_mark_complete" (fun () ->
-      Hegel.Session.run_hegel_test ~name:"stop_on_mc" ~test_cases:5 (fun () ->
+      Session.run_hegel_test ~name:"stop_on_mc" ~test_cases:5 (fun () ->
           let data = get_data () in
           ignore
             (generate_from_schema
@@ -257,7 +258,7 @@ let test_stop_test_on_mark_complete () =
 
 let test_error_response () =
   with_test_mode "error_response" (fun () ->
-      Hegel.Session.run_hegel_test ~name:"error_resp" ~test_cases:5 (fun () ->
+      Session.run_hegel_test ~name:"error_resp" ~test_cases:5 (fun () ->
           let data = get_data () in
           ignore
             (generate_from_schema
@@ -266,7 +267,7 @@ let test_error_response () =
 
 let test_empty_test () =
   with_test_mode "empty_test" (fun () ->
-      Hegel.Session.run_hegel_test ~name:"empty" ~test_cases:5 (fun () ->
+      Session.run_hegel_test ~name:"empty" ~test_cases:5 (fun () ->
           let data = get_data () in
           ignore
             (generate_from_schema
@@ -276,15 +277,15 @@ let test_empty_test () =
 (* ---- Mark complete status values ---- *)
 
 let test_mark_complete_valid () =
-  Hegel.Session.run_hegel_test ~name:"mc_valid" ~test_cases:3 (fun () ->
+  Session.run_hegel_test ~name:"mc_valid" ~test_cases:3 (fun () ->
       let data = get_data () in
       let v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
       in
-      ignore (Hegel.Cbor_helpers.extract_bool v))
+      ignore (Cbor_helpers.extract_bool v))
 
 let test_mark_complete_invalid () =
-  Hegel.Session.run_hegel_test ~name:"mc_invalid" ~test_cases:5 (fun () ->
+  Session.run_hegel_test ~name:"mc_invalid" ~test_cases:5 (fun () ->
       let data = get_data () in
       let _v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
@@ -294,8 +295,7 @@ let test_mark_complete_invalid () =
 let test_mark_complete_interesting () =
   let raised = ref false in
   (try
-     Hegel.Session.run_hegel_test ~name:"mc_interesting" ~test_cases:100
-       (fun () ->
+     Session.run_hegel_test ~name:"mc_interesting" ~test_cases:100 (fun () ->
          let data = get_data () in
          let v =
            generate_from_schema
@@ -307,14 +307,14 @@ let test_mark_complete_interesting () =
                 ])
              data
          in
-         let x = Hegel.Cbor_helpers.extract_int v in
+         let x = Cbor_helpers.extract_int v in
          assert (x < 50))
    with _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised
 
 (** Test: start_span and stop_span when NOT aborted (live connection). *)
 let test_start_stop_span_live () =
-  Hegel.Session.run_hegel_test ~name:"span_live" ~test_cases:1 (fun () ->
+  Session.run_hegel_test ~name:"span_live" ~test_cases:1 (fun () ->
       let data = get_data () in
       start_span data;
       stop_span data;
@@ -370,8 +370,7 @@ let test_version_mismatch_low () =
 
 (** Test: run_test with explicit seed. *)
 let test_run_test_with_seed () =
-  Hegel.Session.run_hegel_test ~name:"seed_test" ~test_cases:5 ~seed:42
-    (fun () ->
+  Session.run_hegel_test ~name:"seed_test" ~test_cases:5 ~seed:42 (fun () ->
       let data = get_data () in
       ignore
         (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data))
@@ -382,8 +381,7 @@ let test_run_test_with_seed () =
 let test_multiple_interesting () =
   let raised_msg = ref "" in
   (try
-     Hegel.Session.run_hegel_test ~name:"multi_interesting" ~test_cases:200
-       (fun () ->
+     Session.run_hegel_test ~name:"multi_interesting" ~test_cases:200 (fun () ->
          let v = Hegel.draw (Hegel.Generators.booleans ()) in
          if v then failwith "error from Failure branch" else raise Exit)
    with e -> raised_msg := Printexc.to_string e);
@@ -411,11 +409,10 @@ let test_unrecognised_event () =
         let ctrl = control_channel peer_conn in
         (* Accept run_test command *)
         let msg_id, msg = receive_request ctrl () in
-        let pairs = Hegel.Cbor_helpers.extract_dict msg in
+        let pairs = Cbor_helpers.extract_dict msg in
         let test_ch_id =
           Int32.of_int
-            (Hegel.Cbor_helpers.extract_int
-               (List.assoc (`Text "channel_id") pairs))
+            (Cbor_helpers.extract_int (List.assoc (`Text "channel_id") pairs))
         in
         send_response_value ctrl msg_id `Null;
         let test_ch = connect_channel peer_conn test_ch_id ~role:"Test" () in
@@ -452,7 +449,7 @@ let test_find_hegeld_not_found () =
   Unix.putenv "HEGEL_BINARY" "";
   Unix.putenv "PATH" "/nonexistent";
   let raised = ref false in
-  (try ignore (Hegel.Session.find_hegeld ()) with Failure _ -> raised := true);
+  (try ignore (Session.find_hegeld ()) with Failure _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised;
   (match orig_binary with
   | Some v -> Unix.putenv "HEGEL_BINARY" v
@@ -471,7 +468,7 @@ let test_find_hegeld_no_path () =
   (* We can't truly unset PATH in OCaml, but set to empty *)
   Unix.putenv "PATH" "";
   let raised = ref false in
-  (try ignore (Hegel.Session.find_hegeld ()) with Failure _ -> raised := true);
+  (try ignore (Session.find_hegeld ()) with Failure _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised;
   (match orig_binary with
   | Some v -> Unix.putenv "HEGEL_BINARY" v
@@ -484,7 +481,7 @@ let test_find_hegeld_no_path () =
     Unix.Unix_error retry path by creating a non-socket file at the socket path.
 *)
 let test_session_start_timeout () =
-  let session : Hegel.Session.hegel_session =
+  let session : Session.hegel_session =
     {
       process = None;
       connection = None;
@@ -509,14 +506,14 @@ let test_session_start_timeout () =
   Unix.chmod script_path 0o755;
   Unix.putenv "HEGEL_BINARY" script_path;
   let raised = ref false in
-  (try Hegel.Session.start session
+  (try Session.start session
    with Failure msg ->
      raised := true;
      Alcotest.(check bool)
        "has 'Timeout'" true
        (contains_substring msg "Timeout"));
   Alcotest.(check bool) "raised timeout" true !raised;
-  Hegel.Session.cleanup session;
+  Session.cleanup session;
   (try Sys.remove script_path with _ -> ());
   match orig_binary with
   | Some v -> Unix.putenv "HEGEL_BINARY" v
@@ -525,7 +522,7 @@ let test_session_start_timeout () =
 (** Test: run_hegel_test when session is None (unreachable in normal usage, but
     covers the branch). *)
 let test_session_not_started () =
-  let session : Hegel.Session.hegel_session =
+  let session : Session.hegel_session =
     {
       process = None;
       connection = None;
@@ -538,7 +535,7 @@ let test_session_not_started () =
   (* Test has_working_client returns false *)
   Alcotest.(check bool)
     "no working client" false
-    (Hegel.Session.has_working_client session)
+    (Session.has_working_client session)
 
 (** Test: cleanup a session with actual resources. *)
 let test_session_cleanup_with_resources () =
@@ -550,7 +547,7 @@ let test_session_cleanup_with_resources () =
   close_out oc;
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
-  let session : Hegel.Session.hegel_session =
+  let session : Session.hegel_session =
     {
       process = None;
       connection = Some conn;
@@ -560,7 +557,7 @@ let test_session_cleanup_with_resources () =
       lock = Mutex.create ();
     }
   in
-  Hegel.Session.cleanup session;
+  Session.cleanup session;
   Alcotest.(check bool) "conn cleaned" true (session.connection = None);
   Alcotest.(check bool) "socket cleaned" true (session.socket_path = None);
   Alcotest.(check bool) "temp cleaned" true (session.temp_dir = None);
@@ -574,7 +571,7 @@ let test_session_cleanup_closed_conn () =
   (* Close the raw socket fd underneath, so conn.close will error *)
   Unix.close s1;
   Unix.close s2;
-  let session : Hegel.Session.hegel_session =
+  let session : Session.hegel_session =
     {
       process = None;
       connection = Some conn;
@@ -584,12 +581,12 @@ let test_session_cleanup_closed_conn () =
       lock = Mutex.create ();
     }
   in
-  Hegel.Session.cleanup session;
+  Session.cleanup session;
   Alcotest.(check bool) "cleaned" true (session.connection = None)
 
 (** Test: cleanup with nonexistent socket/dir paths (covers error catches). *)
 let test_session_cleanup_bad_paths () =
-  let session : Hegel.Session.hegel_session =
+  let session : Session.hegel_session =
     {
       process = None;
       connection = None;
@@ -599,7 +596,7 @@ let test_session_cleanup_bad_paths () =
       lock = Mutex.create ();
     }
   in
-  Hegel.Session.cleanup session;
+  Session.cleanup session;
   Alcotest.(check bool) "socket cleaned" true (session.socket_path = None);
   Alcotest.(check bool) "temp cleaned" true (session.temp_dir = None)
 
@@ -610,7 +607,7 @@ let test_session_cleanup_with_process () =
     Unix.create_process sleep_cmd [| sleep_cmd; "60" |] Unix.stdin Unix.stderr
       Unix.stderr
   in
-  let session : Hegel.Session.hegel_session =
+  let session : Session.hegel_session =
     {
       process = Some pid;
       connection = None;
@@ -620,7 +617,7 @@ let test_session_cleanup_with_process () =
       lock = Mutex.create ();
     }
   in
-  Hegel.Session.cleanup session;
+  Session.cleanup session;
   Alcotest.(check bool) "process cleaned" true (session.process = None)
 
 (** Test: cleanup with already-dead process (covers kill error catch). *)
@@ -633,7 +630,7 @@ let test_session_cleanup_dead_process () =
   in
   (* Wait for it to finish *)
   ignore (Unix.waitpid [] pid);
-  let session : Hegel.Session.hegel_session =
+  let session : Session.hegel_session =
     {
       process = Some pid;
       connection = None;
@@ -643,14 +640,14 @@ let test_session_cleanup_dead_process () =
       lock = Mutex.create ();
     }
   in
-  Hegel.Session.cleanup session;
+  Session.cleanup session;
   Alcotest.(check bool) "cleaned" true (session.process = None)
 
 (** Test: has_working_client with a live connection. *)
 let test_has_working_client_live () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
-  let session : Hegel.Session.hegel_session =
+  let session : Session.hegel_session =
     {
       process = None;
       connection = Some conn;
@@ -668,25 +665,25 @@ let test_has_working_client_live () =
   in
   Alcotest.(check bool)
     "has working client" true
-    (Hegel.Session.has_working_client session);
+    (Session.has_working_client session);
   close conn;
   Unix.close s2
 
 (** Test: run_hegel_test with default parameters. *)
 let test_run_hegel_test_defaults () =
-  Hegel.Session.run_hegel_test (fun () ->
+  Session.run_hegel_test (fun () ->
       let data = get_data () in
       let v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
       in
-      ignore (Hegel.Cbor_helpers.extract_bool v))
+      ignore (Cbor_helpers.extract_bool v))
 
 (** Test: nest test_case raises (when current_data is already set). *)
 let test_run_test_case_nest () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = create_connection s1 ~name:"Test" () in
   let data =
-    Hegel.Client.
+    Client.
       { channel = control_channel conn; is_final = false; test_aborted = false }
   in
   Domain.DLS.set current_data (Some data);
@@ -711,14 +708,14 @@ let test_run_test_case_nest () =
 
 let test_find_hegeld_via_env () =
   Unix.putenv "HEGEL_BINARY" "/tmp/fake-hegel";
-  let path = Hegel.Session.find_hegeld () in
+  let path = Session.find_hegeld () in
   Alcotest.(check string) "path" "/tmp/fake-hegel" path;
   Unix.putenv "HEGEL_BINARY" ""
 
 let test_find_hegeld_on_path () =
   let orig = try Some (Sys.getenv "HEGEL_BINARY") with Not_found -> None in
   Unix.putenv "HEGEL_BINARY" "";
-  let path = Hegel.Session.find_hegeld () in
+  let path = Session.find_hegeld () in
   Alcotest.(check bool) "found hegel" true (String.length path > 0);
   match orig with
   | Some v -> Unix.putenv "HEGEL_BINARY" v
@@ -727,7 +724,7 @@ let test_find_hegeld_on_path () =
 (* ---- Session lifecycle ---- *)
 
 let test_session_cleanup () =
-  let session : Hegel.Session.hegel_session =
+  let session : Session.hegel_session =
     {
       process = None;
       connection = None;
@@ -737,15 +734,15 @@ let test_session_cleanup () =
       lock = Mutex.create ();
     }
   in
-  Hegel.Session.cleanup session
+  Session.cleanup session
 
 let test_session_start_and_run () =
-  Hegel.Session.run_hegel_test ~name:"session_test" ~test_cases:3 (fun () ->
+  Session.run_hegel_test ~name:"session_test" ~test_cases:3 (fun () ->
       let data = get_data () in
       let v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
       in
-      ignore (Hegel.Cbor_helpers.extract_bool v))
+      ignore (Cbor_helpers.extract_bool v))
 
 let tests =
   [

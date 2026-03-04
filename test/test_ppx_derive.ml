@@ -8,6 +8,8 @@
     - Nested derived types
     - Variants with tuple arguments *)
 
+open Hegel
+
 (* ==== Type declarations with derived generators ==== *)
 
 type point = { x : int; y : int } [@@deriving generator]
@@ -54,13 +56,13 @@ type int_list_wrapper = { items : int list } [@@deriving generator]
 
 (** Test: derived point generator produces valid points. *)
 let test_point_e2e () =
-  Hegel.Session.run_hegel_test ~name:"derived_point" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~name:"derived_point" ~test_cases:20 (fun () ->
       let p = point_generator () in
       ignore (p.x, p.y))
 
 (** Test: derived person generator produces valid persons. *)
 let test_person_e2e () =
-  Hegel.Session.run_hegel_test ~name:"derived_person" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~name:"derived_person" ~test_cases:20 (fun () ->
       let p = person_generator () in
       ignore (p.name, p.age, p.active))
 
@@ -69,7 +71,7 @@ let test_color_e2e () =
   let saw_red = ref false in
   let saw_green = ref false in
   let saw_blue = ref false in
-  Hegel.Session.run_hegel_test ~name:"derived_color" ~test_cases:50 (fun () ->
+  Session.run_hegel_test ~name:"derived_color" ~test_cases:50 (fun () ->
       let v = color_generator () in
       match v with
       | Red -> saw_red := true
@@ -84,7 +86,7 @@ let test_shape_e2e () =
   let saw_circle = ref false in
   let saw_rectangle = ref false in
   let saw_point = ref false in
-  Hegel.Session.run_hegel_test ~name:"derived_shape" ~test_cases:50 (fun () ->
+  Session.run_hegel_test ~name:"derived_shape" ~test_cases:50 (fun () ->
       let v = shape_generator () in
       match v with
       | Circle f ->
@@ -100,13 +102,13 @@ let test_shape_e2e () =
 
 (** Test: derived score (type alias to int) generates integers. *)
 let test_score_e2e () =
-  Hegel.Session.run_hegel_test ~name:"derived_score" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~name:"derived_score" ~test_cases:20 (fun () ->
       let _v : score = score_generator () in
       ())
 
 (** Test: derived wrapper (single-field record) generates values. *)
 let test_wrapper_e2e () =
-  Hegel.Session.run_hegel_test ~name:"derived_wrapper" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~name:"derived_wrapper" ~test_cases:20 (fun () ->
       let w = wrapper_generator () in
       ignore w.value)
 
@@ -114,8 +116,7 @@ let test_wrapper_e2e () =
 let test_maybe_int_e2e () =
   let saw_some = ref false in
   let saw_none = ref false in
-  Hegel.Session.run_hegel_test ~name:"derived_maybe_int" ~test_cases:50
-    (fun () ->
+  Session.run_hegel_test ~name:"derived_maybe_int" ~test_cases:50 (fun () ->
       let m = maybe_int_generator () in
       match m.data with Some _ -> saw_some := true | None -> saw_none := true);
   assert !saw_some;
@@ -123,8 +124,7 @@ let test_maybe_int_e2e () =
 
 (** Test: derived line_segment (nested record) generates values. *)
 let test_line_segment_e2e () =
-  Hegel.Session.run_hegel_test ~name:"derived_line_seg" ~test_cases:20
-    (fun () ->
+  Session.run_hegel_test ~name:"derived_line_seg" ~test_cases:20 (fun () ->
       let ls = line_segment_generator () in
       ignore (ls.start_pt.x, ls.start_pt.y, ls.end_pt.x, ls.end_pt.y))
 
@@ -132,8 +132,7 @@ let test_line_segment_e2e () =
 let test_pair_or_single_e2e () =
   let saw_pair = ref false in
   let saw_single = ref false in
-  Hegel.Session.run_hegel_test ~name:"derived_pair_single" ~test_cases:50
-    (fun () ->
+  Session.run_hegel_test ~name:"derived_pair_single" ~test_cases:50 (fun () ->
       let v = pair_or_single_generator () in
       match v with
       | Pair (a, b) ->
@@ -149,7 +148,7 @@ let test_pair_or_single_e2e () =
 let test_flag_e2e () =
   let saw_true = ref false in
   let saw_false = ref false in
-  Hegel.Session.run_hegel_test ~name:"derived_flag" ~test_cases:50 (fun () ->
+  Session.run_hegel_test ~name:"derived_flag" ~test_cases:50 (fun () ->
       let b : flag = flag_generator () in
       if b then saw_true := true else saw_false := true);
   assert !saw_true;
@@ -157,20 +156,19 @@ let test_flag_e2e () =
 
 (** Test: derived temperature (type alias to float) generates floats. *)
 let test_temperature_e2e () =
-  Hegel.Session.run_hegel_test ~name:"derived_temp" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~name:"derived_temp" ~test_cases:20 (fun () ->
       let f : temperature = temperature_generator () in
       assert (Float.is_finite f))
 
 (** Test: derived label (type alias to string) generates strings. *)
 let test_label_e2e () =
-  Hegel.Session.run_hegel_test ~name:"derived_label" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~name:"derived_label" ~test_cases:20 (fun () ->
       let s : label = label_generator () in
       ignore (String.length s))
 
 (** Test: derived int_list_wrapper (list field) generates values. *)
 let test_int_list_wrapper_e2e () =
-  Hegel.Session.run_hegel_test ~name:"derived_list_wrap" ~test_cases:20
-    (fun () ->
+  Session.run_hegel_test ~name:"derived_list_wrap" ~test_cases:20 (fun () ->
       let w = int_list_wrapper_generator () in
       ignore (List.length w.items))
 
