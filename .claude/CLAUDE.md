@@ -33,7 +33,7 @@ lib/                         # Library source (the SDK itself)
   cbor_helpers.ml            # CBOR encoding/decoding with type-safe extractors
   connection.ml              # Multiplexed connection and channel abstractions
   client.ml                  # Test runner and lifecycle management
-  session.ml                 # Global hegeld subprocess management
+  session.ml                 # Global server subprocess management
   generators.ml              # Generator combinators (booleans, integers, lists, …)
   conformance.ml             # Conformance test helpers (get_test_cases, write_metrics)
   derive.ml                  # Runtime support for [@@deriving generator]

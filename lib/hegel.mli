@@ -1,9 +1,3 @@
-(** Hegel property-based testing SDK for OCaml.
-
-    This module provides the client SDK for communicating with the Hegel server
-    (hegeld, powered by Hypothesis) via Unix sockets using a binary protocol,
-    enabling property-based testing from OCaml. *)
-
 val version : string
 (** The current version of the Hegel OCaml SDK. *)
 
@@ -51,5 +45,4 @@ val draw : 'a Generators.generator -> 'a
 
 val run_hegel_test :
   ?test_cases:int -> ?name:string -> ?seed:int -> (unit -> unit) -> unit
-(** [run_hegel_test ?test_cases ?name ?seed test_fn] runs a property test using
-    the shared hegeld process. *)
+(** [run_hegel_test ?test_cases ?name ?seed test_fn] runs a property test using. *)

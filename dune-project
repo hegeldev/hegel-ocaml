@@ -15,7 +15,7 @@
  (name hegel)
  (synopsis "Hegel property-based testing SDK for OCaml")
  (description
-  "A property-based testing SDK that communicates with the Hegel server (hegeld) to enable universal property-based testing from OCaml.")
+  "A property-based testing SDK that communicates with the Hegel server to enable universal property-based testing from OCaml.")
  (depends
   (ocaml
    (>= 5.2))
