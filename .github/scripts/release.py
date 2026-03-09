@@ -95,16 +95,16 @@ def set_version_hegel_ml(new_version: str) -> None:
 
 
 def pin_hegel_version(session_ml: Path) -> None:
-    """Pin hegel_version to the current HEAD of hegel-core main."""
-    sha = subprocess.check_output(
-        ["gh", "api", "repos/antithesishq/hegel-core/commits/main", "--jq", ".sha"],
+    """Pin hegel_version to the latest hegel-core release tag."""
+    tag = subprocess.check_output(
+        ["gh", "api", "repos/antithesishq/hegel-core/releases/latest", "--jq", ".tag_name"],
         text=True,
     ).strip()
 
     text = session_ml.read_text()
     new_text = re.sub(
         r'^let hegel_version = ".*"',
-        f'let hegel_version = "{sha}"',
+        f'let hegel_version = "{tag}"',
         text,
         count=1,
         flags=re.MULTILINE,

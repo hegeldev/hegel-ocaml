@@ -140,7 +140,6 @@ jobs:
     if: github.event_name == 'push' && github.repository == 'hegeldev/hegel-ocaml'
     needs: [lint, test, docs, conformance]
     runs-on: ubuntu-latest
-    environment: release
     permissions:
       contents: write
     steps:

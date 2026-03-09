@@ -9,7 +9,7 @@
 open Connection
 
 (** The hegel-core commit this SDK is designed to work with. *)
-let hegel_version = "6e327df2dd42553de12ace94cfbddfbbd9e4bf50"
+let hegel_version = "v0.3.3"
 
 (** Environment variable name for overriding the hegel binary path. *)
 let hegel_cmd_env = "HEGEL_CMD"
@@ -73,7 +73,7 @@ let ensure_hegel_installed () =
       (try Unix.mkdir hegel_dir 0o755
        with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
       Printf.eprintf "Installing hegel (%s) into %s...\n%!"
-        (String.sub hegel_version 0 12)
+        hegel_version
         venv_dir;
       if not (run_command [ "uv"; "venv"; "--clear"; venv_dir ]) then
         failwith "Failed to create venv. Is uv installed?";
