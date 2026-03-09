@@ -60,7 +60,6 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
-    environment: ci
     permissions:
       contents: read
     steps:
@@ -68,7 +67,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/base
+      - uses: ./.github/actions/base  # zizmor: ignore[secrets-outside-env]
         with:
           ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
 
@@ -111,7 +110,6 @@ jobs:
   conformance:
     name: conformance
     runs-on: ubuntu-latest
-    environment: ci
     permissions:
       contents: read
     steps:
@@ -119,7 +117,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/base
+      - uses: ./.github/actions/base  # zizmor: ignore[secrets-outside-env]
         with:
           ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
 
