@@ -3,7 +3,7 @@
 ## Build Commands
 
 ```bash
-just setup       # Install dependencies and hegel binary into .venv/
+just setup       # Install opam dependencies (odoc)
 just test        # Run tests with 100% coverage enforcement
 just format      # Auto-format code with ocamlformat
 just lint        # Check formatting (fails if unformatted)

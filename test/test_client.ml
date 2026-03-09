@@ -438,42 +438,105 @@ let test_unrecognised_event () =
   close client_conn;
   close peer_conn
 
-(** Test: find_hegeld fails when binary not on PATH. *)
-let test_find_hegeld_not_found () =
-  let orig_binary =
-    try Some (Sys.getenv "HEGEL_BINARY") with Not_found -> None
-  in
+(** Helper: run a function in a temporary directory, restoring cwd and env
+    after. *)
+let with_temp_install_dir f =
+  let orig_cmd = try Some (Sys.getenv "HEGEL_CMD") with Not_found -> None in
   let orig_path = try Some (Sys.getenv "PATH") with Not_found -> None in
-  Unix.putenv "HEGEL_BINARY" "";
-  Unix.putenv "PATH" "/nonexistent";
-  let raised = ref false in
-  (try ignore (Session.find_hegeld ()) with Failure _ -> raised := true);
-  Alcotest.(check bool) "raised" true !raised;
-  (match orig_binary with
-  | Some v -> Unix.putenv "HEGEL_BINARY" v
-  | None -> Unix.putenv "HEGEL_BINARY" "");
-  match orig_path with
-  | Some v -> Unix.putenv "PATH" v
-  | None -> Unix.putenv "PATH" ""
+  let temp_dir = Filename.temp_dir "hegel-test-install-" "" in
+  let orig_cwd = Sys.getcwd () in
+  Sys.chdir temp_dir;
+  Fun.protect
+    ~finally:(fun () ->
+      Sys.chdir orig_cwd;
+      (* Clean up .hegel dir recursively *)
+      let hegel_dir = Filename.concat temp_dir ".hegel" in
+      let rec rm path =
+        if Sys.is_directory path then begin
+          Array.iter (fun f -> rm (Filename.concat path f)) (Sys.readdir path);
+          Unix.rmdir path
+        end
+        else Sys.remove path
+      in
+      (try rm hegel_dir with _ -> ());
+      (try Unix.rmdir temp_dir with _ -> ());
+      (match orig_cmd with
+      | Some v -> Unix.putenv "HEGEL_CMD" v
+      | None -> Unix.putenv "HEGEL_CMD" "");
+      match orig_path with
+      | Some v -> Unix.putenv "PATH" v
+      | None -> Unix.putenv "PATH" "")
+    (fun () -> f temp_dir)
 
-(** Test: find_hegeld when PATH is not set at all. *)
-let test_find_hegeld_no_path () =
-  let orig_binary =
-    try Some (Sys.getenv "HEGEL_BINARY") with Not_found -> None
-  in
-  let orig_path = try Some (Sys.getenv "PATH") with Not_found -> None in
-  Unix.putenv "HEGEL_BINARY" "";
-  (* We can't truly unset PATH in OCaml, but set to empty *)
-  Unix.putenv "PATH" "";
-  let raised = ref false in
-  (try ignore (Session.find_hegeld ()) with Failure _ -> raised := true);
-  Alcotest.(check bool) "raised" true !raised;
-  (match orig_binary with
-  | Some v -> Unix.putenv "HEGEL_BINARY" v
-  | None -> Unix.putenv "HEGEL_BINARY" "");
-  match orig_path with
-  | Some v -> Unix.putenv "PATH" v
-  | None -> Unix.putenv "PATH" ""
+(** Test: find_hegeld fails when uv is not on PATH (install fails at venv
+    creation). *)
+let test_find_hegeld_install_fails () =
+  with_temp_install_dir (fun _temp_dir ->
+      Unix.putenv "HEGEL_CMD" "";
+      Unix.putenv "PATH" "/nonexistent";
+      let raised = ref false in
+      (try ignore (Session.find_hegeld ()) with Failure _ -> raised := true);
+      Alcotest.(check bool) "raised" true !raised)
+
+(** Test: find_hegeld fails when uv pip install fails. Uses a fake uv that
+    succeeds for venv but fails for pip. Also covers the mkdir EEXIST path. *)
+let test_find_hegeld_pip_install_fails () =
+  with_temp_install_dir (fun temp_dir ->
+      Unix.putenv "HEGEL_CMD" "";
+      (* Create .hegel dir so mkdir hits EEXIST *)
+      let hegel_dir = Filename.concat temp_dir ".hegel" in
+      (try Unix.mkdir hegel_dir 0o755 with _ -> ());
+      (* Create a fake uv script that succeeds for venv but fails for pip *)
+      let bin_dir = Filename.concat temp_dir "bin" in
+      Unix.mkdir bin_dir 0o755;
+      let uv_script = Filename.concat bin_dir "uv" in
+      let oc = open_out uv_script in
+      output_string oc
+        "#!/bin/sh\n\
+         if [ \"$1\" = \"venv\" ]; then mkdir -p \"$3/bin\"; exit 0; fi\n\
+         exit 1\n";
+      close_out oc;
+      Unix.chmod uv_script 0o755;
+      Unix.putenv "PATH" bin_dir;
+      let raised = ref false in
+      let msg = ref "" in
+      (try ignore (Session.find_hegeld ())
+       with Failure m ->
+         raised := true;
+         msg := m);
+      Alcotest.(check bool) "raised" true !raised;
+      Alcotest.(check bool)
+        "has 'Failed to install'" true
+        (contains_substring !msg "Failed to install"))
+
+(** Test: find_hegeld fails when hegel binary not found after install. Uses a
+    fake uv that creates the venv but not the hegel binary. *)
+let test_find_hegeld_binary_not_found () =
+  with_temp_install_dir (fun temp_dir ->
+      Unix.putenv "HEGEL_CMD" "";
+      (* Create a fake uv script that succeeds for both venv and pip *)
+      let bin_dir = Filename.concat temp_dir "bin" in
+      Unix.mkdir bin_dir 0o755;
+      let uv_script = Filename.concat bin_dir "uv" in
+      let oc = open_out uv_script in
+      output_string oc
+        "#!/bin/sh\n\
+         if [ \"$1\" = \"venv\" ]; then mkdir -p \"$3/bin\"; touch \
+         \"$3/bin/python\"; exit 0; fi\n\
+         exit 0\n";
+      close_out oc;
+      Unix.chmod uv_script 0o755;
+      Unix.putenv "PATH" bin_dir;
+      let raised = ref false in
+      let msg = ref "" in
+      (try ignore (Session.find_hegeld ())
+       with Failure m ->
+         raised := true;
+         msg := m);
+      Alcotest.(check bool) "raised" true !raised;
+      Alcotest.(check bool)
+        "has 'not found at'" true
+        (contains_substring !msg "not found at"))
 
 (** Test: session start timeout (unreachable hegeld). Also covers the
     Unix.Unix_error retry path by creating a non-socket file at the socket path.
@@ -489,10 +552,10 @@ let test_session_start_timeout () =
       lock = Mutex.create ();
     }
   in
-  (* Set HEGEL_BINARY to a script that creates a regular file (not socket)
+  (* Set HEGEL_CMD to a script that creates a regular file (not socket)
      at the socket path, which will cause Unix.Unix_error on connect. *)
   let orig_binary =
-    try Some (Sys.getenv "HEGEL_BINARY") with Not_found -> None
+    try Some (Sys.getenv "HEGEL_CMD") with Not_found -> None
   in
   let script_path = Filename.temp_file "hegel-test-" ".sh" in
   let oc = open_out script_path in
@@ -502,7 +565,7 @@ let test_session_start_timeout () =
   output_string oc "#!/bin/sh\ntouch \"$1\"\n";
   close_out oc;
   Unix.chmod script_path 0o755;
-  Unix.putenv "HEGEL_BINARY" script_path;
+  Unix.putenv "HEGEL_CMD" script_path;
   let raised = ref false in
   (try Session.start session
    with Failure msg ->
@@ -514,8 +577,8 @@ let test_session_start_timeout () =
   Session.cleanup session;
   (try Sys.remove script_path with _ -> ());
   match orig_binary with
-  | Some v -> Unix.putenv "HEGEL_BINARY" v
-  | None -> Unix.putenv "HEGEL_BINARY" ""
+  | Some v -> Unix.putenv "HEGEL_CMD" v
+  | None -> Unix.putenv "HEGEL_CMD" ""
 
 (** Test: run_hegel_test when session is None (unreachable in normal usage, but
     covers the branch). *)
@@ -705,19 +768,22 @@ let test_run_test_case_nest () =
 (* ---- find_hegeld ---- *)
 
 let test_find_hegeld_via_env () =
-  Unix.putenv "HEGEL_BINARY" "/tmp/fake-hegel";
+  Unix.putenv "HEGEL_CMD" "/tmp/fake-hegel";
   let path = Session.find_hegeld () in
   Alcotest.(check string) "path" "/tmp/fake-hegel" path;
-  Unix.putenv "HEGEL_BINARY" ""
+  Unix.putenv "HEGEL_CMD" ""
 
-let test_find_hegeld_on_path () =
-  let orig = try Some (Sys.getenv "HEGEL_BINARY") with Not_found -> None in
-  Unix.putenv "HEGEL_BINARY" "";
+let test_find_hegeld_auto_install () =
+  let orig = try Some (Sys.getenv "HEGEL_CMD") with Not_found -> None in
+  Unix.putenv "HEGEL_CMD" "";
   let path = Session.find_hegeld () in
   Alcotest.(check bool) "found hegel" true (String.length path > 0);
+  Alcotest.(check bool)
+    "path contains .hegel/venv" true
+    (contains_substring path ".hegel/venv");
   match orig with
-  | Some v -> Unix.putenv "HEGEL_BINARY" v
-  | None -> Unix.putenv "HEGEL_BINARY" ""
+  | Some v -> Unix.putenv "HEGEL_CMD" v
+  | None -> Unix.putenv "HEGEL_CMD" ""
 
 (* ---- Session lifecycle ---- *)
 
@@ -772,9 +838,14 @@ let tests =
     Alcotest.test_case "unrecognised event" `Quick test_unrecognised_event;
     (* find_hegeld *)
     Alcotest.test_case "find_hegeld via env" `Quick test_find_hegeld_via_env;
-    Alcotest.test_case "find_hegeld on path" `Quick test_find_hegeld_on_path;
-    Alcotest.test_case "find_hegeld not found" `Quick test_find_hegeld_not_found;
-    Alcotest.test_case "find_hegeld no path" `Quick test_find_hegeld_no_path;
+    Alcotest.test_case "find_hegeld auto install" `Quick
+      test_find_hegeld_auto_install;
+    Alcotest.test_case "find_hegeld install fails" `Quick
+      test_find_hegeld_install_fails;
+    Alcotest.test_case "find_hegeld pip install fails" `Quick
+      test_find_hegeld_pip_install_fails;
+    Alcotest.test_case "find_hegeld binary not found" `Quick
+      test_find_hegeld_binary_not_found;
     (* Session *)
     Alcotest.test_case "session cleanup" `Quick test_session_cleanup;
     Alcotest.test_case "session cleanup with resources" `Quick

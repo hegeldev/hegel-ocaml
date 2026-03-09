@@ -8,28 +8,104 @@
 
 open Connection
 
-(** [find_hegeld ()] locates the hegeld binary. Checks, in order:
-    - [HEGEL_BINARY] environment variable
-    - [hegel] on [PATH] Returns the path or raises [Failure]. *)
-let find_hegeld () =
-  match Sys.getenv_opt "HEGEL_BINARY" with
-  | Some path when path <> "" -> path
-  | _ -> (
-      (* Search PATH for hegel binary *)
-      let path_str = Option.value ~default:"" (Sys.getenv_opt "PATH") in
-      let path_dirs = String.split_on_char ':' path_str in
-      let found =
-        List.find_map
-          (fun dir ->
-            let candidate = Filename.concat dir "hegel" in
-            if Sys.file_exists candidate then Some candidate else None)
-          path_dirs
+(** The hegel-core commit this SDK is designed to work with. *)
+let hegel_version = "6e327df2dd42553de12ace94cfbddfbbd9e4bf50"
+
+(** Environment variable name for overriding the hegel binary path. *)
+let hegel_cmd_env = "HEGEL_CMD"
+
+(** Directory for managed hegel installation. *)
+let hegel_dir = ".hegel"
+
+(** Path to the managed virtualenv. *)
+let venv_dir = Filename.concat hegel_dir "venv"
+
+(** Path to the version tracking file. *)
+let version_file = Filename.concat venv_dir "hegel-version"
+
+(** [hegel_pip_spec ()] returns the pip install spec for the current
+    [hegel_version]. *)
+let hegel_pip_spec () =
+  Printf.sprintf
+    "hegel @ git+ssh://git@github.com/antithesishq/hegel-core.git@%s"
+    hegel_version
+
+(** [run_command args] runs a command, returning [true] on success (exit code 0)
+    and [false] on any failure (non-zero exit, signal, or missing command). *)
+let run_command args =
+  try
+    let argv = Array.of_list args in
+    let pid =
+      Unix.create_process (List.hd args) argv Unix.stdin Unix.stderr Unix.stderr
+    in
+    let _, status = Unix.waitpid [] pid in
+    status = Unix.WEXITED 0
+  with Unix.Unix_error _ -> false
+
+(** [read_file_contents path] reads a file's contents, returning [None] if the
+    file does not exist. *)
+let read_file_contents path =
+  try
+    let ic = open_in path in
+    Fun.protect
+      ~finally:(fun () -> close_in ic)
+      (fun () -> Some (String.trim (In_channel.input_all ic)))
+  with Sys_error _ -> None
+
+(** [write_file_contents path contents] writes [contents] to [path]. *)
+let write_file_contents path contents =
+  let oc = open_out path in
+  Fun.protect
+    ~finally:(fun () -> close_out oc)
+    (fun () -> output_string oc contents)
+
+(** [ensure_hegel_installed ()] ensures hegel is installed in [.hegel/venv] and
+    returns the path to the binary. Creates the venv and installs hegel if it
+    doesn't exist, or reinstalls if the version file doesn't match
+    [hegel_version]. *)
+let ensure_hegel_installed () =
+  let hegel_bin = Filename.concat (Filename.concat venv_dir "bin") "hegel" in
+  (* Check if already installed at the right version *)
+  (match read_file_contents version_file with
+  | Some v when v = hegel_version && Sys.file_exists hegel_bin -> ()
+  | _ ->
+      (* Need to install *)
+      (try Unix.mkdir hegel_dir 0o755
+       with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+      Printf.eprintf "Installing hegel (%s) into %s...\n%!"
+        (String.sub hegel_version 0 12)
+        venv_dir;
+      if not (run_command [ "uv"; "venv"; "--clear"; venv_dir ]) then
+        failwith "Failed to create venv. Is uv installed?";
+      let python_bin =
+        Filename.concat (Filename.concat venv_dir "bin") "python"
       in
-      match found with
-      | Some p -> p
-      | None ->
-          failwith
-            "Cannot find hegel binary. Set HEGEL_BINARY or add hegel to PATH.")
+      if
+        not
+          (run_command
+             [
+               "uv"; "pip"; "install"; "--python"; python_bin; hegel_pip_spec ();
+             ])
+      then
+        failwith
+          (Printf.sprintf
+             "Failed to install hegel (version: %s). Set %s to a hegel binary \
+              path to skip installation."
+             hegel_version hegel_cmd_env);
+      if not (Sys.file_exists hegel_bin) then
+        failwith
+          (Printf.sprintf "hegel not found at %s after installation" hegel_bin);
+      write_file_contents version_file hegel_version);
+  hegel_bin
+
+(** [find_hegeld ()] locates the hegeld binary. If [HEGEL_CMD] is set, uses that
+    path directly (the user is responsible for providing the right binary).
+    Otherwise, ensures hegel is installed in [.hegel/venv] at the version
+    specified by [hegel_version] and returns the path to that binary. *)
+let find_hegeld () =
+  match Sys.getenv_opt hegel_cmd_env with
+  | Some path when path <> "" -> path
+  | _ -> ensure_hegel_installed ()
 
 type hegel_session = {
   mutable process : int option;

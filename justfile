@@ -1,26 +1,17 @@
 # Hegel SDK for OCaml
 # This justfile provides the standard build recipes.
 
-# Install dependencies and the hegel binary.
-# If HEGEL_BINARY is set, symlinks it into .venv/bin instead of installing from git.
+# Install dependencies.
 setup:
     #!/usr/bin/env bash
     set -euo pipefail
     eval $(opam env)
     opam install --yes odoc
-    uv venv .venv
-    if [ -n "${HEGEL_BINARY:-}" ]; then
-        mkdir -p .venv/bin
-        ln -sf "$HEGEL_BINARY" .venv/bin/hegel
-    else
-        uv pip install --python .venv/bin/python hegel@git+https://github.com/hegeldev/hegel-core
-    fi
 
 # Run tests with 100% code coverage enforcement.
 test:
     #!/usr/bin/env bash
     set -euo pipefail
-    export PATH="$(pwd)/.venv/bin:$PATH"
     eval $(opam env)
     # Clean previous coverage data
     find _build -name '*.coverage' -delete 2>/dev/null || true
@@ -54,16 +45,23 @@ docs:
 conformance:
     #!/usr/bin/env bash
     set -euo pipefail
-    export PATH="$(pwd)/.venv/bin:$PATH"
     eval $(opam env 2>/dev/null || true)
-    # Install pytest if not already available
-    if ! .venv/bin/python -c "import pytest" 2>/dev/null; then
-        uv pip install --python .venv/bin/python pytest
+    # Ensure .hegel/venv exists with hegel installed (same venv the SDK uses)
+    if [ ! -f .hegel/venv/bin/hegel ]; then
+        mkdir -p .hegel
+        uv venv --clear .hegel/venv
+        uv pip install --python .hegel/venv/bin/python \
+            "hegel @ git+ssh://git@github.com/antithesishq/hegel-core.git"
     fi
+    # Install pytest if not already available
+    if ! .hegel/venv/bin/python -c "import pytest" 2>/dev/null; then
+        uv pip install --python .hegel/venv/bin/python pytest
+    fi
+    export PATH="$(pwd)/.hegel/venv/bin:$PATH"
     # Build conformance binaries
     dune build conformance/
     # Run Python conformance tests
-    .venv/bin/python -m pytest test/conformance/ -v
+    .hegel/venv/bin/python -m pytest test/conformance/ -v
 
 # Run lint + docs + test (the full CI check).
 check: lint docs test
