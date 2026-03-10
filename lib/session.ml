@@ -72,8 +72,7 @@ let ensure_hegel_installed () =
       (* Need to install *)
       (try Unix.mkdir hegel_dir 0o755
        with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
-      Printf.eprintf "Installing hegel (%s) into %s...\n%!"
-        hegel_version
+      Printf.eprintf "Installing hegel (%s) into %s...\n%!" hegel_version
         venv_dir;
       if not (run_command [ "uv"; "venv"; "--clear"; venv_dir ]) then
         failwith "Failed to create venv. Is uv installed?";
