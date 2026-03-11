@@ -9,7 +9,8 @@ open Generators_primitives
 let sampled_from options =
   let arr = Array.of_list options in
   let n = Array.length arr in
-  if n = 0 then invalid_arg "sampled_from requires at least one element";
+  if n = 0 then
+    raise (Invalid_argument "sampled_from requires at least one element");
   map (fun i -> arr.(i)) (integers ~min_value:0 ~max_value:(n - 1) ())
 
 (** [one_of generators] creates a generator that picks from one of the given

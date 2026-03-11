@@ -185,6 +185,12 @@ let test_text_negative_min_size () =
   | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
+(** Test: text raises when max_size is negative. *)
+let test_text_negative_max_size () =
+  match text ~max_size:(-1) () with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+
 (** Test: text raises when min_size > max_size. *)
 let test_text_min_greater_than_max () =
   match text ~min_size:5 ~max_size:3 () with
@@ -194,6 +200,12 @@ let test_text_min_greater_than_max () =
 (** Test: binary raises when min_size is negative. *)
 let test_binary_negative_min_size () =
   match binary ~min_size:(-1) () with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+
+(** Test: binary raises when max_size is negative. *)
+let test_binary_negative_max_size () =
+  match binary ~max_size:(-1) () with
   | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
@@ -293,9 +305,13 @@ let tests =
       test_floats_infinity_with_both_bounds;
     Alcotest.test_case "text negative min_size" `Quick
       test_text_negative_min_size;
+    Alcotest.test_case "text negative max_size" `Quick
+      test_text_negative_max_size;
     Alcotest.test_case "text min > max" `Quick test_text_min_greater_than_max;
     Alcotest.test_case "binary negative min_size" `Quick
       test_binary_negative_min_size;
+    Alcotest.test_case "binary negative max_size" `Quick
+      test_binary_negative_max_size;
     Alcotest.test_case "binary min > max" `Quick
       test_binary_min_greater_than_max;
     Alcotest.test_case "domains max_length too small" `Quick

@@ -5,8 +5,9 @@ open Generators_core
 let integers ?min_value ?max_value () =
   (match (min_value, max_value) with
   | Some min, Some max when min > max ->
-      invalid_arg
-        (Printf.sprintf "Cannot have max_value=%d < min_value=%d" max min)
+      raise
+        (Invalid_argument
+           (Printf.sprintf "Cannot have max_value=%d < min_value=%d" max min))
   | _ -> ());
   let pairs =
     List.filter_map Fun.id
@@ -47,16 +48,20 @@ let floats ?min_value ?max_value ?(exclude_min = false) ?(exclude_max = false)
     | None -> (not has_min) || not has_max
   in
   if eff_allow_nan && (has_min || has_max) then
-    invalid_arg "Cannot have allow_nan=true with min_value or max_value";
+    raise
+      (Invalid_argument "Cannot have allow_nan=true with min_value or max_value");
   (match (min_value, max_value) with
   | Some min, Some max when min > max ->
-      invalid_arg
-        (Printf.sprintf
-           "There are no floats between min_value=%g and max_value=%g" min max)
+      raise
+        (Invalid_argument
+           (Printf.sprintf
+              "There are no floats between min_value=%g and max_value=%g" min
+              max))
   | _ -> ());
   if eff_allow_infinity && has_min && has_max then
-    invalid_arg
-      "Cannot have allow_infinity=true with both min_value and max_value";
+    raise
+      (Invalid_argument
+         "Cannot have allow_infinity=true with both min_value and max_value");
   let pairs =
     [
       (`Text "type", `Text "float");
@@ -82,13 +87,17 @@ let floats ?min_value ?max_value ?(exclude_min = false) ?(exclude_max = false)
     Uses schema type ["string"] as required by the Hegel server. *)
 let text ?(min_size = 0) ?max_size () =
   if min_size < 0 then
-    invalid_arg (Printf.sprintf "min_size=%d must be non-negative" min_size);
+    raise
+      (Invalid_argument
+         (Printf.sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
   | Some ms when ms < 0 ->
-      invalid_arg (Printf.sprintf "max_size=%d must be non-negative" ms)
+      raise
+        (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
   | Some ms when min_size > ms ->
-      invalid_arg
-        (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size)
+      raise
+        (Invalid_argument
+           (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
   | _ -> ());
   let pairs =
     List.filter_map Fun.id
@@ -104,13 +113,17 @@ let text ?(min_size = 0) ?max_size () =
 *)
 let binary ?(min_size = 0) ?max_size () =
   if min_size < 0 then
-    invalid_arg (Printf.sprintf "min_size=%d must be non-negative" min_size);
+    raise
+      (Invalid_argument
+         (Printf.sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
   | Some ms when ms < 0 ->
-      invalid_arg (Printf.sprintf "max_size=%d must be non-negative" ms)
+      raise
+        (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
   | Some ms when min_size > ms ->
-      invalid_arg
-        (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size)
+      raise
+        (Invalid_argument
+           (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
   | _ -> ());
   let pairs =
     List.filter_map Fun.id
@@ -171,7 +184,9 @@ let urls () =
 let domains ?max_length () =
   (match max_length with
   | Some ml when ml < 4 || ml > 255 ->
-      invalid_arg (Printf.sprintf "max_length=%d must be between 4 and 255" ml)
+      raise
+        (Invalid_argument
+           (Printf.sprintf "max_length=%d must be between 4 and 255" ml))
   | _ -> ());
   let pairs =
     List.filter_map Fun.id

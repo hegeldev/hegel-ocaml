@@ -71,9 +71,33 @@ let test_lists_basic_non_array_raises () =
 
 (* ==== Validation tests ==== *)
 
+(** Test: lists raises when min_size is negative. *)
+let test_lists_negative_min_size () =
+  match lists (integers ()) ~min_size:(-1) () with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+
+(** Test: lists raises when max_size is negative. *)
+let test_lists_negative_max_size () =
+  match lists (integers ()) ~max_size:(-1) () with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+
 (** Test: lists raises when min_size > max_size. *)
 let test_lists_min_greater_than_max () =
   match lists (integers ()) ~min_size:5 ~max_size:3 () with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+
+(** Test: hashmaps raises when min_size is negative. *)
+let test_hashmaps_negative_min_size () =
+  match hashmaps (integers ()) (booleans ()) ~min_size:(-1) () with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+
+(** Test: hashmaps raises when max_size is negative. *)
+let test_hashmaps_negative_max_size () =
+  match hashmaps (integers ()) (booleans ()) ~max_size:(-1) () with
   | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
@@ -151,7 +175,15 @@ let tests =
       test_lists_non_basic_is_not_basic;
     Alcotest.test_case "lists basic non-array raises" `Quick
       test_lists_basic_non_array_raises;
+    Alcotest.test_case "lists negative min_size" `Quick
+      test_lists_negative_min_size;
+    Alcotest.test_case "lists negative max_size" `Quick
+      test_lists_negative_max_size;
     Alcotest.test_case "lists min > max" `Quick test_lists_min_greater_than_max;
+    Alcotest.test_case "hashmaps negative min_size" `Quick
+      test_hashmaps_negative_min_size;
+    Alcotest.test_case "hashmaps negative max_size" `Quick
+      test_hashmaps_negative_max_size;
     Alcotest.test_case "hashmaps min > max" `Quick
       test_hashmaps_min_greater_than_max;
     Alcotest.test_case "lists of integers e2e" `Quick test_lists_of_integers_e2e;

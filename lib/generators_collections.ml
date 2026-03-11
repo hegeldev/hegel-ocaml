@@ -8,13 +8,17 @@ open Generators_core
     [(key, value)] tuples. *)
 let hashmaps keys values ?(min_size = 0) ?max_size () =
   if min_size < 0 then
-    invalid_arg (Printf.sprintf "min_size=%d must be non-negative" min_size);
+    raise
+      (Invalid_argument
+         (Printf.sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
   | Some ms when ms < 0 ->
-      invalid_arg (Printf.sprintf "max_size=%d must be non-negative" ms)
+      raise
+        (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
   | Some ms when min_size > ms ->
-      invalid_arg
-        (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size)
+      raise
+        (Invalid_argument
+           (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
   | _ -> ());
   let key_schema, key_transform =
     match keys with
@@ -61,13 +65,17 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
     a time. A fresh collection is created on each call to [generate]. *)
 let lists elements ?(min_size = 0) ?max_size () =
   if min_size < 0 then
-    invalid_arg (Printf.sprintf "min_size=%d must be non-negative" min_size);
+    raise
+      (Invalid_argument
+         (Printf.sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
   | Some ms when ms < 0 ->
-      invalid_arg (Printf.sprintf "max_size=%d must be non-negative" ms)
+      raise
+        (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
   | Some ms when min_size > ms ->
-      invalid_arg
-        (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size)
+      raise
+        (Invalid_argument
+           (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
   | _ -> ());
   match as_basic elements with
   | Some (elem_schema, elem_transform) ->
