@@ -68,6 +68,19 @@ def set_version_dune_project(new_version: str) -> None:
     path.write_text(new_text)
 
 
+def set_version_opam(new_version: str) -> None:
+    path = ROOT / "hegel.opam"
+    text = path.read_text()
+    new_text = re.sub(
+        r'^version: "[^"]+"',
+        f'version: "{new_version}"',
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    path.write_text(new_text)
+
+
 def set_version_hegel_ml(new_version: str) -> None:
     path = ROOT / "lib" / "hegel.ml"
     text = path.read_text()
@@ -144,6 +157,7 @@ def release() -> None:
     new_version = bump_version(current_version, release_type)
 
     set_version_dune_project(new_version)
+    set_version_opam(new_version)
     set_version_hegel_ml(new_version)
 
     add_changelog(ROOT / "CHANGELOG.md", version=new_version, content=content)
@@ -153,6 +167,7 @@ def release() -> None:
     git(
         "add",
         "dune-project",
+        "hegel.opam",
         "lib/hegel.ml",
         "CHANGELOG.md",
         cwd=ROOT,
