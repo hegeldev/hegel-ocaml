@@ -68,6 +68,19 @@ def set_version_dune_project(new_version: str) -> None:
     path.write_text(new_text)
 
 
+def set_version_opam(new_version: str) -> None:
+    path = ROOT / "hegel.opam"
+    text = path.read_text()
+    new_text = re.sub(
+        r'^version: "[^"]+"',
+        f'version: "{new_version}"',
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    path.write_text(new_text)
+
+
 def set_version_hegel_ml(new_version: str) -> None:
     path = ROOT / "lib" / "hegel.ml"
     text = path.read_text()
@@ -103,10 +116,22 @@ def check(base_ref: str) -> None:
         return
 
     release_file = ROOT / "RELEASE.md"
+
+    process = subprocess.run(
+        ["git", "cat-file", "-e", f"origin/{base_ref}:RELEASE.md"],
+        capture_output=True,
+        cwd=ROOT,
+    )
+    if process.returncode == 0:
+        raise ValueError(
+            f"RELEASE.md already exists on {base_ref}. It's possible the CI job "
+            "responsible for cutting a new release is in progress, or has failed."
+        )
+
     if not release_file.exists():
         lines = [
-            "Changes to source files require a RELEASE.md file.",
-            "You can find an example in RELEASE-sample.md.",
+            "Every pull request to hegel-ocaml requires a RELEASE.md file.",
+            "You can find an example and instructions in RELEASE-sample.md.",
         ]
         width = max(len(l) for l in lines) + 6
         border = " ".join("*" * ((width + 1) // 2))
@@ -132,6 +157,7 @@ def release() -> None:
     new_version = bump_version(current_version, release_type)
 
     set_version_dune_project(new_version)
+    set_version_opam(new_version)
     set_version_hegel_ml(new_version)
 
     add_changelog(ROOT / "CHANGELOG.md", version=new_version, content=content)
@@ -141,6 +167,7 @@ def release() -> None:
     git(
         "add",
         "dune-project",
+        "hegel.opam",
         "lib/hegel.ml",
         "CHANGELOG.md",
         cwd=ROOT,

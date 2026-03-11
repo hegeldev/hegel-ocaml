@@ -1,9 +1,3 @@
-(** Hegel property-based testing SDK for OCaml.
-
-    This module provides the client SDK for communicating with the Hegel server
-    (hegeld, powered by Hypothesis) via Unix sockets using a binary protocol,
-    enabling property-based testing from OCaml. *)
-
 (** The current version of the Hegel OCaml SDK. *)
 let version = "0.1.2"
 
@@ -49,6 +43,5 @@ let target = Client.target
     within a Hegel test body. *)
 let draw = Generators.draw
 
-(** [run_hegel_test ?test_cases ?name test_fn] runs a property test using the
-    shared hegeld process. *)
+(** [run_hegel_test ?test_cases ?seed test_fn] runs a property test. *)
 let run_hegel_test = Session.run_hegel_test

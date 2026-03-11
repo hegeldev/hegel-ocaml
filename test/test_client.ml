@@ -136,7 +136,7 @@ let test_nested_test_raises () =
   in
   Domain.DLS.set current_data (Some data);
   let raised = ref false in
-  (try Session.run_hegel_test ~name:"nested" ~test_cases:1 (fun () -> ())
+  (try Session.run_hegel_test ~test_cases:1 (fun () -> ())
    with Failure msg ->
      raised := true;
      Alcotest.(check bool)
@@ -161,7 +161,7 @@ let with_test_mode mode f =
     f
 
 let test_simple_passing_test () =
-  Session.run_hegel_test ~name:"simple_pass" ~test_cases:5 (fun () ->
+  Session.run_hegel_test ~test_cases:5 (fun () ->
       let data = get_data () in
       let v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
@@ -171,7 +171,7 @@ let test_simple_passing_test () =
 let test_simple_failing_test () =
   let raised = ref false in
   (try
-     Session.run_hegel_test ~name:"simple_fail" ~test_cases:100 (fun () ->
+     Session.run_hegel_test ~test_cases:100 (fun () ->
          let data = get_data () in
          let v =
            generate_from_schema
@@ -189,7 +189,7 @@ let test_simple_failing_test () =
   Alcotest.(check bool) "test failed" true !raised
 
 let test_single_test_case () =
-  Session.run_hegel_test ~name:"single_case" ~test_cases:1 (fun () ->
+  Session.run_hegel_test ~test_cases:1 (fun () ->
       let data = get_data () in
       let v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
@@ -197,15 +197,13 @@ let test_single_test_case () =
       ignore (Cbor_helpers.extract_bool v))
 
 let test_assume_true_e2e () =
-  Session.run_hegel_test ~name:"assume_true" ~test_cases:5 (fun () ->
-      assume true)
+  Session.run_hegel_test ~test_cases:5 (fun () -> assume true)
 
 let test_assume_false_e2e () =
-  Session.run_hegel_test ~name:"assume_false" ~test_cases:5 (fun () ->
-      assume false)
+  Session.run_hegel_test ~test_cases:5 (fun () -> assume false)
 
 let test_note_not_final_e2e () =
-  Session.run_hegel_test ~name:"note_nonfinal" ~test_cases:5 (fun () ->
+  Session.run_hegel_test ~test_cases:5 (fun () ->
       note "should not appear";
       let data = get_data () in
       let v =
@@ -221,7 +219,7 @@ let test_note_not_final_e2e () =
       ignore (Cbor_helpers.extract_int v))
 
 let test_target_e2e () =
-  Session.run_hegel_test ~name:"target_test" ~test_cases:5 (fun () ->
+  Session.run_hegel_test ~test_cases:5 (fun () ->
       let data = get_data () in
       let v =
         generate_from_schema
@@ -240,7 +238,7 @@ let test_target_e2e () =
 
 let test_stop_test_on_generate () =
   with_test_mode "stop_test_on_generate" (fun () ->
-      Session.run_hegel_test ~name:"stop_on_gen" ~test_cases:5 (fun () ->
+      Session.run_hegel_test ~test_cases:5 (fun () ->
           let data = get_data () in
           ignore
             (generate_from_schema
@@ -249,7 +247,7 @@ let test_stop_test_on_generate () =
 
 let test_stop_test_on_mark_complete () =
   with_test_mode "stop_test_on_mark_complete" (fun () ->
-      Session.run_hegel_test ~name:"stop_on_mc" ~test_cases:5 (fun () ->
+      Session.run_hegel_test ~test_cases:5 (fun () ->
           let data = get_data () in
           ignore
             (generate_from_schema
@@ -258,7 +256,7 @@ let test_stop_test_on_mark_complete () =
 
 let test_error_response () =
   with_test_mode "error_response" (fun () ->
-      Session.run_hegel_test ~name:"error_resp" ~test_cases:5 (fun () ->
+      Session.run_hegel_test ~test_cases:5 (fun () ->
           let data = get_data () in
           ignore
             (generate_from_schema
@@ -267,7 +265,7 @@ let test_error_response () =
 
 let test_empty_test () =
   with_test_mode "empty_test" (fun () ->
-      Session.run_hegel_test ~name:"empty" ~test_cases:5 (fun () ->
+      Session.run_hegel_test ~test_cases:5 (fun () ->
           let data = get_data () in
           ignore
             (generate_from_schema
@@ -277,7 +275,7 @@ let test_empty_test () =
 (* ---- Mark complete status values ---- *)
 
 let test_mark_complete_valid () =
-  Session.run_hegel_test ~name:"mc_valid" ~test_cases:3 (fun () ->
+  Session.run_hegel_test ~test_cases:3 (fun () ->
       let data = get_data () in
       let v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
@@ -285,7 +283,7 @@ let test_mark_complete_valid () =
       ignore (Cbor_helpers.extract_bool v))
 
 let test_mark_complete_invalid () =
-  Session.run_hegel_test ~name:"mc_invalid" ~test_cases:5 (fun () ->
+  Session.run_hegel_test ~test_cases:5 (fun () ->
       let data = get_data () in
       let _v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
@@ -295,7 +293,7 @@ let test_mark_complete_invalid () =
 let test_mark_complete_interesting () =
   let raised = ref false in
   (try
-     Session.run_hegel_test ~name:"mc_interesting" ~test_cases:100 (fun () ->
+     Session.run_hegel_test ~test_cases:100 (fun () ->
          let data = get_data () in
          let v =
            generate_from_schema
@@ -314,7 +312,7 @@ let test_mark_complete_interesting () =
 
 (** Test: start_span and stop_span when NOT aborted (live connection). *)
 let test_start_stop_span_live () =
-  Session.run_hegel_test ~name:"span_live" ~test_cases:1 (fun () ->
+  Session.run_hegel_test ~test_cases:1 (fun () ->
       let data = get_data () in
       start_span data;
       stop_span data;
@@ -370,7 +368,7 @@ let test_version_mismatch_low () =
 
 (** Test: run_test with explicit seed. *)
 let test_run_test_with_seed () =
-  Session.run_hegel_test ~name:"seed_test" ~test_cases:5 ~seed:42 (fun () ->
+  Session.run_hegel_test ~test_cases:5 ~seed:42 (fun () ->
       let data = get_data () in
       ignore
         (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data))
@@ -381,7 +379,7 @@ let test_run_test_with_seed () =
 let test_multiple_interesting () =
   let raised_msg = ref "" in
   (try
-     Session.run_hegel_test ~name:"multi_interesting" ~test_cases:200 (fun () ->
+     Session.run_hegel_test ~test_cases:200 (fun () ->
          let v = Hegel.draw (Hegel.Generators.booleans ()) in
          if v then failwith "error from Failure branch" else raise Exit)
    with e -> raised_msg := Printexc.to_string e);
@@ -435,7 +433,7 @@ let test_unrecognised_event () =
                    ]))))
       ()
   in
-  run_test client ~name:"unrec_event" ~test_cases:0 (fun () -> ());
+  run_test client ~test_cases:0 (fun () -> ());
   Thread.join t_peer;
   close client_conn;
   close peer_conn
@@ -737,7 +735,7 @@ let test_session_cleanup () =
   Session.cleanup session
 
 let test_session_start_and_run () =
-  Session.run_hegel_test ~name:"session_test" ~test_cases:3 (fun () ->
+  Session.run_hegel_test ~test_cases:3 (fun () ->
       let data = get_data () in
       let v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data

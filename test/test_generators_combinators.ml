@@ -1,11 +1,20 @@
 open Hegel
 open Generators
 
-(** Test: one_of with < 2 generators raises. *)
-let test_one_of_too_few () =
-  let raised = ref false in
-  (try ignore (one_of [ integers () ]) with Failure _ -> raised := true);
-  Alcotest.(check bool) "raised" true !raised
+(** Test: one_of with empty list raises. *)
+let test_one_of_empty () =
+  match one_of [] with
+  | exception Failure _ -> ()
+  | _ -> Alcotest.fail "expected Failure"
+
+(** Test: one_of with a single generator is accepted. *)
+let test_one_of_single_accepted () = ignore (one_of [ booleans () ])
+
+(** Test: sampled_from raises when given an empty list. *)
+let test_sampled_from_empty () =
+  match sampled_from [] with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: one_of all basic uses tagged-tuple schema. *)
 let test_one_of_basic_schema () =
@@ -233,14 +242,14 @@ let test_tuples4_non_basic () =
 
 (** Test: one_of with basic generators works e2e. *)
 let test_one_of_e2e () =
-  Session.run_hegel_test ~name:"one_of_e2e" ~test_cases:50 (fun () ->
+  Session.run_hegel_test ~test_cases:50 (fun () ->
       let gen = one_of [ integers ~min_value:0 ~max_value:10 (); just 99 ] in
       let v = Hegel.draw gen in
       assert ((v >= 0 && v <= 10) || v = 99))
 
 (** Test: one_of with non-basic generators works e2e. *)
 let test_one_of_non_basic_e2e () =
-  Session.run_hegel_test ~name:"one_of_nb_e2e" ~test_cases:50 (fun () ->
+  Session.run_hegel_test ~test_cases:50 (fun () ->
       let filtered =
         filter (fun x -> x > 5) (integers ~min_value:0 ~max_value:10 ())
       in
@@ -254,7 +263,7 @@ let test_one_of_non_basic_e2e () =
 let test_optional_e2e () =
   let saw_some = ref false in
   let saw_none = ref false in
-  Session.run_hegel_test ~name:"optional_e2e" ~test_cases:50 (fun () ->
+  Session.run_hegel_test ~test_cases:50 (fun () ->
       let gen = optional (integers ~min_value:1 ~max_value:100 ()) in
       match Hegel.draw gen with
       | Some v ->
@@ -267,7 +276,7 @@ let test_optional_e2e () =
 
 (** Test: ip_addresses generates valid IPs e2e. *)
 let test_ip_addresses_e2e () =
-  Session.run_hegel_test ~name:"ip_e2e" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~test_cases:20 (fun () ->
       let v4 = Hegel.draw (ip_addresses ~version:4 ()) in
       assert (String.contains v4 '.');
       let v6 = Hegel.draw (ip_addresses ~version:6 ()) in
@@ -275,13 +284,13 @@ let test_ip_addresses_e2e () =
 
 (** Test: ip_addresses default generates either v4 or v6 e2e. *)
 let test_ip_both_e2e () =
-  Session.run_hegel_test ~name:"ip_both_e2e" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~test_cases:20 (fun () ->
       let v = Hegel.draw (ip_addresses ()) in
       assert (String.contains v '.' || String.contains v ':'))
 
 (** Test: tuples2 basic e2e. *)
 let test_tuples2_e2e () =
-  Session.run_hegel_test ~name:"tuples2_e2e" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~test_cases:20 (fun () ->
       let gen =
         tuples2 (integers ~min_value:0 ~max_value:10 ()) (booleans ())
       in
@@ -290,7 +299,7 @@ let test_tuples2_e2e () =
 
 (** Test: tuples2 composite e2e. *)
 let test_tuples2_composite_e2e () =
-  Session.run_hegel_test ~name:"tuples2_comp_e2e" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~test_cases:20 (fun () ->
       let filtered =
         filter (fun x -> x > 5) (integers ~min_value:0 ~max_value:10 ())
       in
@@ -300,7 +309,7 @@ let test_tuples2_composite_e2e () =
 
 (** Test: tuples3 basic e2e. *)
 let test_tuples3_e2e () =
-  Session.run_hegel_test ~name:"tuples3_e2e" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~test_cases:20 (fun () ->
       let gen =
         tuples3
           (integers ~min_value:0 ~max_value:10 ())
@@ -313,7 +322,7 @@ let test_tuples3_e2e () =
 
 (** Test: tuples3 composite e2e. *)
 let test_tuples3_composite_e2e () =
-  Session.run_hegel_test ~name:"tuples3_comp_e2e" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~test_cases:20 (fun () ->
       let filtered =
         filter (fun x -> x > 5) (integers ~min_value:0 ~max_value:10 ())
       in
@@ -327,7 +336,7 @@ let test_tuples3_composite_e2e () =
 
 (** Test: tuples4 basic e2e. *)
 let test_tuples4_e2e () =
-  Session.run_hegel_test ~name:"tuples4_e2e" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~test_cases:20 (fun () ->
       let gen =
         tuples4
           (integers ~min_value:0 ~max_value:10 ())
@@ -342,7 +351,7 @@ let test_tuples4_e2e () =
 
 (** Test: tuples4 composite e2e. *)
 let test_tuples4_composite_e2e () =
-  Session.run_hegel_test ~name:"tuples4_comp_e2e" ~test_cases:20 (fun () ->
+  Session.run_hegel_test ~test_cases:20 (fun () ->
       let filtered =
         filter (fun x -> x > 5) (integers ~min_value:0 ~max_value:10 ())
       in
@@ -358,7 +367,10 @@ let test_tuples4_composite_e2e () =
 
 let tests =
   [
-    Alcotest.test_case "one_of too few" `Quick test_one_of_too_few;
+    Alcotest.test_case "sampled_from empty" `Quick test_sampled_from_empty;
+    Alcotest.test_case "one_of empty" `Quick test_one_of_empty;
+    Alcotest.test_case "one_of single accepted" `Quick
+      test_one_of_single_accepted;
     Alcotest.test_case "one_of basic schema" `Quick test_one_of_basic_schema;
     Alcotest.test_case "one_of non-basic" `Quick test_one_of_non_basic;
     Alcotest.test_case "one_of dispatch" `Quick test_one_of_dispatch;

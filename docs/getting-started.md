@@ -24,7 +24,7 @@ open Hegel
 open Hegel.Generators
 
 let test_integers () =
-  run_hegel_test ~name:"test_integers" ~test_cases:100
+  run_hegel_test ~test_cases:100
     (fun () ->
       let n = generate (integers ()) in
       Printf.printf "called with %d\n%!" n;
@@ -51,7 +51,7 @@ open Hegel
 open Hegel.Generators
 
 let test_integers_bounded () =
-  run_hegel_test ~name:"integers_bounded" ~test_cases:100
+  run_hegel_test ~test_cases:100
     (fun () ->
       let n = generate (integers ~min_value:0 ~max_value:200 ()) in
       assert (n < 50))  (* this will fail! *)
@@ -73,7 +73,7 @@ open Hegel
 open Hegel.Generators
 
 let test_multiple_values () =
-  run_hegel_test ~name:"multiple_values" ~test_cases:50
+  run_hegel_test ~test_cases:50
     (fun () ->
       let n = generate (integers ()) in
       let s = generate (text ()) in
@@ -93,7 +93,7 @@ open Hegel
 open Hegel.Generators
 
 let test_even_integers () =
-  run_hegel_test ~name:"even_integers" ~test_cases:50
+  run_hegel_test ~test_cases:50
     (fun () ->
       let n = generate (filter (fun v -> v mod 2 = 0) (integers ())) in
       assert (n mod 2 = 0))
@@ -107,7 +107,7 @@ open Hegel
 open Hegel.Generators
 
 let test_division () =
-  run_hegel_test ~name:"division" ~test_cases:100
+  run_hegel_test ~test_cases:100
     (fun () ->
       let n1 = generate (integers ()) in
       let n2 = generate (integers ()) in
@@ -128,7 +128,7 @@ open Hegel
 open Hegel.Generators
 
 let test_string_integers () =
-  run_hegel_test ~name:"string_integers" ~test_cases:50
+  run_hegel_test ~test_cases:50
     (fun () ->
       let s =
         generate
@@ -149,7 +149,7 @@ open Hegel
 open Hegel.Generators
 
 let test_list_with_valid_index () =
-  run_hegel_test ~name:"list_index" ~test_cases:50
+  run_hegel_test ~test_cases:50
     (fun () ->
       let n = generate (integers ~min_value:1 ~max_value:10 ()) in
       let lst = generate (lists (integers ()) ~min_size:n ~max_size:n ()) in
@@ -165,7 +165,7 @@ open Hegel
 open Hegel.Generators
 
 let test_list_with_valid_index_flatmap () =
-  run_hegel_test ~name:"list_index_flatmap" ~test_cases:50
+  run_hegel_test ~test_cases:50
     (fun () ->
       let n, lst =
         generate
@@ -265,7 +265,7 @@ open Hegel
 open Hegel.Generators
 
 let test_something () =
-  run_hegel_test ~name:"note_example" ~test_cases:100
+  run_hegel_test ~test_cases:100
     (fun () ->
       let x = generate (integers ()) in
       let y = generate (integers ()) in
@@ -283,7 +283,7 @@ open Hegel
 open Hegel.Generators
 
 let test_optimization () =
-  run_hegel_test ~name:"optimization" ~test_cases:1000
+  run_hegel_test ~test_cases:1000
     (fun () ->
       let x =
         generate
@@ -318,7 +318,7 @@ type point = { x : int; y : int } [@@deriving generator]
 type color = Red | Green | Blue [@@deriving generator]
 
 let () =
-  run_hegel_test ~name:"derived_test" ~test_cases:100 (fun () ->
+  run_hegel_test ~test_cases:100 (fun () ->
     let p = point_generator () in
     let c = color_generator () in
     assert (p.x = p.x);

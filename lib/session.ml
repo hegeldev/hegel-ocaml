@@ -140,15 +140,12 @@ let start session =
     environment variables (like [HEGEL_PROTOCOL_TEST_MODE]) have changed. *)
 let restart_session () = cleanup global_session
 
-(** [run_hegel_test ?test_cases ?name ?seed test_fn] runs a property test using
-    the shared hegeld process. This is the main public API.
+(** [run_hegel_test ?test_cases ?seed test_fn] runs a property test using the
+    shared hegeld process. This is the main public API.
 
     @param test_cases number of test cases (default 100)
-    @param name test name (default ["test"])
     @param seed optional seed for deterministic replay
     @param test_fn the test body function *)
-let run_hegel_test ?(test_cases = 100) ?(name = "test") ?seed test_fn =
+let run_hegel_test ?(test_cases = 100) ?seed test_fn =
   start global_session;
-  Client.run_test
-    (Option.get global_session.client)
-    ~name ~test_cases ?seed test_fn
+  Client.run_test (Option.get global_session.client) ~test_cases ?seed test_fn

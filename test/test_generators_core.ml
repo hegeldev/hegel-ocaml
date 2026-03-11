@@ -262,7 +262,7 @@ let test_collection_reject_live () =
 
 (** Test: map doubles values correctly. *)
 let test_map_doubles_e2e () =
-  Session.run_hegel_test ~name:"map_double" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let gen = integers ~min_value:1 ~max_value:5 () |> map (fun v -> v * 2) in
       Alcotest.(check bool) "still basic" true (is_basic gen);
       let v = Hegel.draw gen in
@@ -271,7 +271,7 @@ let test_map_doubles_e2e () =
 
 (** Test: double map composes correctly. *)
 let test_double_map_e2e () =
-  Session.run_hegel_test ~name:"double_map_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let gen =
         integers ~min_value:1 ~max_value:5 ()
         |> map (fun v -> v * 2)
@@ -292,7 +292,7 @@ let test_double_map_e2e () =
 
 (** Test: map on non-basic (Mapped branch of do_draw). *)
 let test_map_on_filtered_e2e () =
-  Session.run_hegel_test ~name:"map_on_filter" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let gen =
         filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ())
         |> map (fun v -> v * 2)
@@ -302,7 +302,7 @@ let test_map_on_filtered_e2e () =
 
 (** Test: flat_map through server. *)
 let test_flat_map_e2e () =
-  Session.run_hegel_test ~name:"flatmap_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let gen =
         flat_map
           (fun n -> integers ~min_value:0 ~max_value:(max 1 n) ())
@@ -314,7 +314,7 @@ let test_flat_map_e2e () =
 
 (** Test: filter through server. *)
 let test_filter_e2e () =
-  Session.run_hegel_test ~name:"filter_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let gen =
         filter (fun v -> v mod 2 = 0) (integers ~min_value:0 ~max_value:100 ())
       in
@@ -324,7 +324,7 @@ let test_filter_e2e () =
 
 (** Test: filter exhaustion through server (always false → assume false). *)
 let test_filter_exhaustion_e2e () =
-  Session.run_hegel_test ~name:"filter_exhaust_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let gen =
         filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ())
       in
@@ -332,7 +332,7 @@ let test_filter_exhaustion_e2e () =
 
 (** Test: group helper through server. *)
 let test_group_e2e () =
-  Session.run_hegel_test ~name:"group_e2e" ~test_cases:5 (fun () ->
+  Session.run_hegel_test ~test_cases:5 (fun () ->
       let data = Client.get_data () in
       let v =
         group Labels.list data (fun () ->
@@ -350,7 +350,7 @@ let test_group_e2e () =
 
 (** Test: discardable_group through server — success path. *)
 let test_discardable_group_e2e () =
-  Session.run_hegel_test ~name:"disc_group_e2e" ~test_cases:5 (fun () ->
+  Session.run_hegel_test ~test_cases:5 (fun () ->
       let data = Client.get_data () in
       let v =
         discardable_group Labels.tuple data (fun () ->
