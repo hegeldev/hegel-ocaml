@@ -4,17 +4,16 @@ open Generators
 (** Test: one_of with empty list raises. *)
 let test_one_of_empty () =
   match one_of [] with
-  | exception (Failure _) -> ()
+  | exception Failure _ -> ()
   | _ -> Alcotest.fail "expected Failure"
 
 (** Test: one_of with a single generator is accepted. *)
-let test_one_of_single_accepted () =
-  ignore (one_of [ booleans () ])
+let test_one_of_single_accepted () = ignore (one_of [ booleans () ])
 
 (** Test: sampled_from raises when given an empty list. *)
 let test_sampled_from_empty () =
   match sampled_from [] with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: one_of all basic uses tagged-tuple schema. *)
@@ -370,7 +369,8 @@ let tests =
   [
     Alcotest.test_case "sampled_from empty" `Quick test_sampled_from_empty;
     Alcotest.test_case "one_of empty" `Quick test_one_of_empty;
-    Alcotest.test_case "one_of single accepted" `Quick test_one_of_single_accepted;
+    Alcotest.test_case "one_of single accepted" `Quick
+      test_one_of_single_accepted;
     Alcotest.test_case "one_of basic schema" `Quick test_one_of_basic_schema;
     Alcotest.test_case "one_of non-basic" `Quick test_one_of_non_basic;
     Alcotest.test_case "one_of dispatch" `Quick test_one_of_dispatch;

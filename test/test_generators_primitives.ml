@@ -152,67 +152,67 @@ let test_datetimes_schema () =
 (** Test: integers raises when min_value > max_value. *)
 let test_integers_min_greater_than_max () =
   match integers ~min_value:10 ~max_value:5 () with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: floats raises when allow_nan=true with min_value set. *)
 let test_floats_nan_with_min () =
   match floats ~allow_nan:true ~min_value:0.0 () with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: floats raises when allow_nan=true with max_value set. *)
 let test_floats_nan_with_max () =
   match floats ~allow_nan:true ~max_value:1.0 () with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: floats raises when min_value > max_value. *)
 let test_floats_min_greater_than_max () =
   match floats ~min_value:10.0 ~max_value:5.0 () with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: floats raises when allow_infinity=true with both bounds set. *)
 let test_floats_infinity_with_both_bounds () =
   match floats ~allow_infinity:true ~min_value:0.0 ~max_value:1.0 () with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: text raises when min_size is negative. *)
 let test_text_negative_min_size () =
   match text ~min_size:(-1) () with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: text raises when min_size > max_size. *)
 let test_text_min_greater_than_max () =
   match text ~min_size:5 ~max_size:3 () with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: binary raises when min_size is negative. *)
 let test_binary_negative_min_size () =
   match binary ~min_size:(-1) () with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: binary raises when min_size > max_size. *)
 let test_binary_min_greater_than_max () =
   match binary ~min_size:5 ~max_size:3 () with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: domains raises when max_length is below 4. *)
 let test_domains_max_length_too_small () =
   match domains ~max_length:2 () with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: domains raises when max_length is above 255. *)
 let test_domains_max_length_too_large () =
   match domains ~max_length:256 () with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (* ==== E2E tests ==== *)
@@ -287,7 +287,8 @@ let tests =
       test_integers_min_greater_than_max;
     Alcotest.test_case "floats nan with min" `Quick test_floats_nan_with_min;
     Alcotest.test_case "floats nan with max" `Quick test_floats_nan_with_max;
-    Alcotest.test_case "floats min > max" `Quick test_floats_min_greater_than_max;
+    Alcotest.test_case "floats min > max" `Quick
+      test_floats_min_greater_than_max;
     Alcotest.test_case "floats infinity with both bounds" `Quick
       test_floats_infinity_with_both_bounds;
     Alcotest.test_case "text negative min_size" `Quick
@@ -295,7 +296,8 @@ let tests =
     Alcotest.test_case "text min > max" `Quick test_text_min_greater_than_max;
     Alcotest.test_case "binary negative min_size" `Quick
       test_binary_negative_min_size;
-    Alcotest.test_case "binary min > max" `Quick test_binary_min_greater_than_max;
+    Alcotest.test_case "binary min > max" `Quick
+      test_binary_min_greater_than_max;
     Alcotest.test_case "domains max_length too small" `Quick
       test_domains_max_length_too_small;
     Alcotest.test_case "domains max_length too large" `Quick

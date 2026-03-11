@@ -41,8 +41,7 @@ let test_merge_sorted_is_sorted () =
 (** Property: merging two sorted lists preserves all elements (multiset equality
     between [a @ b] and the merged result). *)
 let test_merge_preserves_elements () =
-  Hegel.run_hegel_test ~test_cases:200
-    (fun () ->
+  Hegel.run_hegel_test ~test_cases:200 (fun () ->
       let int_gen = integers ~min_value:(-100) ~max_value:100 () in
       let list_gen = lists int_gen ~min_size:0 ~max_size:15 () in
       let a = sorted (Hegel.draw list_gen) in

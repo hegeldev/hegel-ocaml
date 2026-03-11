@@ -74,13 +74,13 @@ let test_lists_basic_non_array_raises () =
 (** Test: lists raises when min_size > max_size. *)
 let test_lists_min_greater_than_max () =
   match lists (integers ()) ~min_size:5 ~max_size:3 () with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: hashmaps raises when min_size > max_size. *)
 let test_hashmaps_min_greater_than_max () =
   match hashmaps (integers ()) (booleans ()) ~min_size:5 ~max_size:3 () with
-  | exception (Invalid_argument _) -> ()
+  | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
 (* ==== E2E tests ==== *)
@@ -98,8 +98,7 @@ let test_lists_of_integers_e2e () =
 
 (** Test: lists(booleans, min_size=3, max_size=5) → length in [3,5]. *)
 let test_lists_booleans_bounds_e2e () =
-  Session.run_hegel_test ~test_cases:50
-    (fun () ->
+  Session.run_hegel_test ~test_cases:50 (fun () ->
       let gen = lists (booleans ()) ~min_size:3 ~max_size:5 () in
       Alcotest.(check bool) "is_basic" true (is_basic gen);
       let items = Hegel.draw gen in

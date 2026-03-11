@@ -197,12 +197,10 @@ let test_single_test_case () =
       ignore (Cbor_helpers.extract_bool v))
 
 let test_assume_true_e2e () =
-  Session.run_hegel_test ~test_cases:5 (fun () ->
-      assume true)
+  Session.run_hegel_test ~test_cases:5 (fun () -> assume true)
 
 let test_assume_false_e2e () =
-  Session.run_hegel_test ~test_cases:5 (fun () ->
-      assume false)
+  Session.run_hegel_test ~test_cases:5 (fun () -> assume false)
 
 let test_note_not_final_e2e () =
   Session.run_hegel_test ~test_cases:5 (fun () ->

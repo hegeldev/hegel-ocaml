@@ -32,8 +32,7 @@ val cleanup : hegel_session -> unit
 val start : hegel_session -> unit
 (** [start session] starts hegeld if not already running. *)
 
-val run_hegel_test :
-  ?test_cases:int -> ?seed:int -> (unit -> unit) -> unit
+val run_hegel_test : ?test_cases:int -> ?seed:int -> (unit -> unit) -> unit
 (** [run_hegel_test ?test_cases ?seed test_fn] runs a property test using the
     shared hegeld process. This is the main public API.
 

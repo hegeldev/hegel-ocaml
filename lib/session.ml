@@ -148,6 +148,4 @@ let restart_session () = cleanup global_session
     @param test_fn the test body function *)
 let run_hegel_test ?(test_cases = 100) ?seed test_fn =
   start global_session;
-  Client.run_test
-    (Option.get global_session.client)
-    ~test_cases ?seed test_fn
+  Client.run_test (Option.get global_session.client) ~test_cases ?seed test_fn
