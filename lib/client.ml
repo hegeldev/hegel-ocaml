@@ -216,7 +216,6 @@ let run_test client ~test_cases ?seed test_fn =
               (`Map
                  [
                    (`Text "command", `Text "run_test");
-                   (`Text "database_key", `Null);
                    (`Text "test_cases", `Int test_cases);
                    (`Text "seed", seed_value);
                    ( `Text "channel_id",
