@@ -9,7 +9,7 @@ let () =
   let min_size = Json_params.get_int params "min_size" 0 in
   let max_size = Json_params.get_int_opt params "max_size" in
   let test_cases = get_test_cases () in
-  Hegel.run_hegel_test ~name:"test_binary" ~test_cases (fun () ->
+  Hegel.run_hegel_test ~test_cases (fun () ->
       let b = Hegel.draw (binary ~min_size ?max_size ()) in
       let length = String.length b in
       write_metrics [ ("length", string_of_int length) ])

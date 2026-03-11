@@ -43,5 +43,5 @@ let target = Client.target
     within a Hegel test body. *)
 let draw = Generators.draw
 
-(** [run_hegel_test ?test_cases ?name test_fn] runs a property test. *)
+(** [run_hegel_test ?test_cases ?seed test_fn] runs a property test. *)
 let run_hegel_test = Session.run_hegel_test

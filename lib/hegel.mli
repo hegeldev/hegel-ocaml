@@ -44,5 +44,5 @@ val draw : 'a Generators.generator -> 'a
     within a Hegel test body. *)
 
 val run_hegel_test :
-  ?test_cases:int -> ?name:string -> ?seed:int -> (unit -> unit) -> unit
-(** [run_hegel_test ?test_cases ?name ?seed test_fn] runs a property test using. *)
+  ?test_cases:int -> ?seed:int -> (unit -> unit) -> unit
+(** [run_hegel_test ?test_cases ?seed test_fn] runs a property test. *)

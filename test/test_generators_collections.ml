@@ -87,7 +87,7 @@ let test_hashmaps_min_greater_than_max () =
 
 (** Test: lists(integers) generates a list where all elements are in range. *)
 let test_lists_of_integers_e2e () =
-  Session.run_hegel_test ~name:"lists_ints_e2e" ~test_cases:50 (fun () ->
+  Session.run_hegel_test ~test_cases:50 (fun () ->
       let gen =
         lists (integers ~min_value:0 ~max_value:100 ()) ~max_size:3 ()
       in
@@ -98,7 +98,7 @@ let test_lists_of_integers_e2e () =
 
 (** Test: lists(booleans, min_size=3, max_size=5) → length in [3,5]. *)
 let test_lists_booleans_bounds_e2e () =
-  Session.run_hegel_test ~name:"lists_bools_bounds_e2e" ~test_cases:50
+  Session.run_hegel_test ~test_cases:50
     (fun () ->
       let gen = lists (booleans ()) ~min_size:3 ~max_size:5 () in
       Alcotest.(check bool) "is_basic" true (is_basic gen);
@@ -108,7 +108,7 @@ let test_lists_booleans_bounds_e2e () =
 
 (** Test: lists(filtered integers) → all elements satisfy predicate. *)
 let test_lists_non_basic_e2e () =
-  Session.run_hegel_test ~name:"lists_nonbasic_e2e" ~test_cases:50 (fun () ->
+  Session.run_hegel_test ~test_cases:50 (fun () ->
       let elem =
         filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ())
       in
@@ -121,7 +121,7 @@ let test_lists_non_basic_e2e () =
 
 (** Test: lists(non-basic) without max_size (max_size=None in collection). *)
 let test_lists_non_basic_no_max_e2e () =
-  Session.run_hegel_test ~name:"lists_nb_nomax" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let elem =
         filter (fun _ -> true) (integers ~min_value:0 ~max_value:10 ())
       in
@@ -131,7 +131,7 @@ let test_lists_non_basic_no_max_e2e () =
 
 (** Test: lists(lists(booleans)) → nested lists work. *)
 let test_lists_nested_e2e () =
-  Session.run_hegel_test ~name:"lists_nested_e2e" ~test_cases:50 (fun () ->
+  Session.run_hegel_test ~test_cases:50 (fun () ->
       let inner = lists (booleans ()) ~max_size:3 () in
       let gen = lists inner ~max_size:3 () in
       Alcotest.(check bool) "outer is_basic" true (is_basic gen);

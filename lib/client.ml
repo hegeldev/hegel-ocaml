@@ -134,10 +134,10 @@ type client = { connection : connection; control : channel; lock : Mutex.t }
     connection must not yet have had its handshake performed. *)
 let create_client connection =
   let server_version = float_of_string (send_handshake connection) in
-  if server_version < 0.1 || server_version > 0.3 then
+  if server_version < 0.1 || server_version > 0.4 then
     failwith
       (Printf.sprintf
-         "hegel-ocaml supports protocol versions 0.1 through 0.3, but got \
+         "hegel-ocaml supports protocol versions 0.1 through 0.4, but got \
           server version %g. Upgrading hegel-ocaml or downgrading your hegel \
           cli might help."
          server_version);
@@ -196,12 +196,12 @@ let run_test_case _client channel test_fn ~is_final =
   close_channel channel;
   match outcome with Interesting { exn = Some e; _ } -> raise e | _ -> ()
 
-(** [run_test client ~name ~test_cases ?seed test_fn] runs a property test.
+(** [run_test client ~test_cases ?seed test_fn] runs a property test.
 
     @param seed
       optional seed for deterministic replay. If [None], the server generates
       its own seed. *)
-let run_test client ~name ~test_cases ?seed test_fn =
+let run_test client ~test_cases ?seed test_fn =
   if Domain.DLS.get current_data <> None then
     failwith "Cannot nest test cases - already inside a test case";
   let test_channel = new_channel client.connection ~role:"Test" () in
@@ -216,7 +216,7 @@ let run_test client ~name ~test_cases ?seed test_fn =
               (`Map
                  [
                    (`Text "command", `Text "run_test");
-                   (`Text "database_key", `Text name);
+                   (`Text "database_key", `Null);
                    (`Text "test_cases", `Int test_cases);
                    (`Text "seed", seed_value);
                    ( `Text "channel_id",

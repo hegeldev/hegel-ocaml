@@ -15,7 +15,7 @@ let () =
   let min_value = Json_params.get_int_opt params "min_value" in
   let max_value = Json_params.get_int_opt params "max_value" in
   let test_cases = get_test_cases () in
-  Hegel.run_hegel_test ~name:"test_lists" ~test_cases (fun () ->
+  Hegel.run_hegel_test ~test_cases (fun () ->
       (* Use filter(always_true) to force the CompositeList path, which sends
          new_collection and collection_more commands. This is required so that
          the error-mode conformance tests (stop_test_on_collection_more,

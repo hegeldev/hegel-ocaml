@@ -70,8 +70,8 @@ val run_test_case :
     mark_complete. *)
 
 val run_test :
-  client -> name:string -> test_cases:int -> ?seed:int -> (unit -> unit) -> unit
-(** [run_test client ~name ~test_cases ?seed test_fn] runs a property test.
+  client -> test_cases:int -> ?seed:int -> (unit -> unit) -> unit
+(** [run_test client ~test_cases ?seed test_fn] runs a property test.
 
     @param seed
       optional seed for deterministic replay. If [None], the server generates

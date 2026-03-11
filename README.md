@@ -36,7 +36,7 @@ open Hegel
 open Hegel.Generators
 
 let () =
-  run_hegel_test ~name:"add_commutative" ~test_cases:100
+  run_hegel_test ~test_cases:100
     (fun () ->
       let a = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in
       let b = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in

@@ -19,7 +19,7 @@ let () =
   let allow_nan = Json_params.get_bool_opt params "allow_nan" in
   let allow_infinity = Json_params.get_bool_opt params "allow_infinity" in
   let test_cases = get_test_cases () in
-  Hegel.run_hegel_test ~name:"test_floats" ~test_cases (fun () ->
+  Hegel.run_hegel_test ~test_cases (fun () ->
       let f =
         Hegel.draw
           (floats ?min_value ?max_value ~exclude_min ~exclude_max ?allow_nan

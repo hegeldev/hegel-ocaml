@@ -33,12 +33,11 @@ val start : hegel_session -> unit
 (** [start session] starts hegeld if not already running. *)
 
 val run_hegel_test :
-  ?test_cases:int -> ?name:string -> ?seed:int -> (unit -> unit) -> unit
-(** [run_hegel_test ?test_cases ?name ?seed test_fn] runs a property test using
-    the shared hegeld process. This is the main public API.
+  ?test_cases:int -> ?seed:int -> (unit -> unit) -> unit
+(** [run_hegel_test ?test_cases ?seed test_fn] runs a property test using the
+    shared hegeld process. This is the main public API.
 
     @param test_cases number of test cases (default 100)
-    @param name test name (default ["test"])
     @param seed optional seed for deterministic replay
     @param test_fn the test body function *)
 

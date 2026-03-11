@@ -14,7 +14,7 @@ let test_booleans_schema () =
 
 (** Test: integers(0, 100) generates values in range. *)
 let test_integers_in_range () =
-  Session.run_hegel_test ~name:"int_range" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let gen = integers ~min_value:0 ~max_value:100 () in
       let v = Hegel.draw gen in
       assert (v >= 0 && v <= 100))
@@ -219,25 +219,25 @@ let test_domains_max_length_too_large () =
 
 (** Test: just always returns the constant. *)
 let test_just_e2e () =
-  Session.run_hegel_test ~name:"just_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let v = Hegel.draw (just 42) in
       Alcotest.(check int) "always 42" 42 v)
 
 (** Test: from_regex generates matching strings. *)
 let test_from_regex_e2e () =
-  Session.run_hegel_test ~name:"from_regex_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let v = Hegel.draw (from_regex "[0-9]+" ()) in
       assert (String.length v > 0))
 
 (** Test: emails generates strings containing at-sign. *)
 let test_emails_e2e () =
-  Session.run_hegel_test ~name:"emails_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let v = Hegel.draw (emails ()) in
       assert (String.contains v '@'))
 
 (** Test: urls generates strings starting with http. *)
 let test_urls_e2e () =
-  Session.run_hegel_test ~name:"urls_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let v = Hegel.draw (urls ()) in
       assert (
         String.length v >= 7
@@ -245,25 +245,25 @@ let test_urls_e2e () =
 
 (** Test: domains generates non-empty strings. *)
 let test_domains_e2e () =
-  Session.run_hegel_test ~name:"domains_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let v = Hegel.draw (domains ()) in
       assert (String.length v > 0))
 
 (** Test: dates generates YYYY-MM-DD strings. *)
 let test_dates_e2e () =
-  Session.run_hegel_test ~name:"dates_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let v = Hegel.draw (dates ()) in
       assert (String.contains v '-'))
 
 (** Test: times generates strings with colons. *)
 let test_times_e2e () =
-  Session.run_hegel_test ~name:"times_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let v = Hegel.draw (times ()) in
       assert (String.contains v ':'))
 
 (** Test: datetimes generates strings with T. *)
 let test_datetimes_e2e () =
-  Session.run_hegel_test ~name:"datetimes_e2e" ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun () ->
       let v = Hegel.draw (datetimes ()) in
       assert (String.contains v 'T'))
 
