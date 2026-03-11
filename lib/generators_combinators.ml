@@ -9,6 +9,7 @@ open Generators_primitives
 let sampled_from options =
   let arr = Array.of_list options in
   let n = Array.length arr in
+  if n = 0 then invalid_arg "sampled_from requires at least one element";
   map (fun i -> arr.(i)) (integers ~min_value:0 ~max_value:(n - 1) ())
 
 (** [one_of generators] creates a generator that picks from one of the given
@@ -19,10 +20,10 @@ let sampled_from options =
     - All basic with some transforms: tagged-tuple schema with dispatch.
     - Any non-basic: compositional via [ONE_OF] span.
 
-    Requires at least 2 generators. *)
+    Requires at least one generator. *)
 let one_of (generators : 'a generator list) =
-  if List.length generators < 2 then
-    failwith "one_of requires at least 2 generators";
+  if List.length generators = 0 then
+    failwith "one_of requires at least one generator";
   let basics = List.filter_map as_basic generators in
   if List.length basics <> List.length generators then begin
     (* Path 3: composite — generate index in ONE_OF span, then delegate *)

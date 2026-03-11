@@ -1,11 +1,21 @@
 open Hegel
 open Generators
 
-(** Test: one_of with < 2 generators raises. *)
-let test_one_of_too_few () =
-  let raised = ref false in
-  (try ignore (one_of [ integers () ]) with Failure _ -> raised := true);
-  Alcotest.(check bool) "raised" true !raised
+(** Test: one_of with empty list raises. *)
+let test_one_of_empty () =
+  match one_of [] with
+  | exception (Failure _) -> ()
+  | _ -> Alcotest.fail "expected Failure"
+
+(** Test: one_of with a single generator is accepted. *)
+let test_one_of_single_accepted () =
+  ignore (one_of [ booleans () ])
+
+(** Test: sampled_from raises when given an empty list. *)
+let test_sampled_from_empty () =
+  match sampled_from [] with
+  | exception (Invalid_argument _) -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
 
 (** Test: one_of all basic uses tagged-tuple schema. *)
 let test_one_of_basic_schema () =
@@ -358,7 +368,9 @@ let test_tuples4_composite_e2e () =
 
 let tests =
   [
-    Alcotest.test_case "one_of too few" `Quick test_one_of_too_few;
+    Alcotest.test_case "sampled_from empty" `Quick test_sampled_from_empty;
+    Alcotest.test_case "one_of empty" `Quick test_one_of_empty;
+    Alcotest.test_case "one_of single accepted" `Quick test_one_of_single_accepted;
     Alcotest.test_case "one_of basic schema" `Quick test_one_of_basic_schema;
     Alcotest.test_case "one_of non-basic" `Quick test_one_of_non_basic;
     Alcotest.test_case "one_of dispatch" `Quick test_one_of_dispatch;

@@ -69,6 +69,20 @@ let test_lists_basic_non_array_raises () =
       Alcotest.(check bool) "raised" true !raised
   | _ -> Alcotest.fail "expected Basic"
 
+(* ==== Validation tests ==== *)
+
+(** Test: lists raises when min_size > max_size. *)
+let test_lists_min_greater_than_max () =
+  match lists (integers ()) ~min_size:5 ~max_size:3 () with
+  | exception (Invalid_argument _) -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+
+(** Test: hashmaps raises when min_size > max_size. *)
+let test_hashmaps_min_greater_than_max () =
+  match hashmaps (integers ()) (booleans ()) ~min_size:5 ~max_size:3 () with
+  | exception (Invalid_argument _) -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+
 (* ==== E2E tests ==== *)
 
 (** Test: lists(integers) generates a list where all elements are in range. *)
@@ -138,6 +152,9 @@ let tests =
       test_lists_non_basic_is_not_basic;
     Alcotest.test_case "lists basic non-array raises" `Quick
       test_lists_basic_non_array_raises;
+    Alcotest.test_case "lists min > max" `Quick test_lists_min_greater_than_max;
+    Alcotest.test_case "hashmaps min > max" `Quick
+      test_hashmaps_min_greater_than_max;
     Alcotest.test_case "lists of integers e2e" `Quick test_lists_of_integers_e2e;
     Alcotest.test_case "lists booleans bounds e2e" `Quick
       test_lists_booleans_bounds_e2e;
