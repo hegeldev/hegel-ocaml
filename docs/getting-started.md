@@ -3,13 +3,13 @@
 ## Install Hegel
 
 ```bash
-opam pin add hegel "git+ssh://git@github.com/antithesishq/hegel-ocaml.git"
+opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
 ```
 
 The SDK requires the `hegel` CLI on your PATH:
 
 ```bash
-pip install "git+ssh://git@github.com/antithesishq/hegel-core.git"
+pip install "git+https://github.com/hegeldev/hegel-core"
 ```
 
 If you are working inside this repository, `just setup` handles the CLI

@@ -7,7 +7,7 @@
 (generate_opam_files true)
 
 (source
- (github antithesishq/hegel-ocaml))
+ (github hegeldev/hegel-ocaml))
 
 (license MIT)
 
