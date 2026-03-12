@@ -94,24 +94,6 @@ def set_version_hegel_ml(new_version: str) -> None:
     path.write_text(new_text)
 
 
-def pin_hegel_version(session_ml: Path) -> None:
-    """Pin hegel_version to the latest hegel-core release tag."""
-    tag = subprocess.check_output(
-        ["gh", "api", "repos/antithesishq/hegel-core/releases/latest", "--jq", ".tag_name"],
-        text=True,
-    ).strip()
-
-    text = session_ml.read_text()
-    new_text = re.sub(
-        r'^let hegel_version = ".*"',
-        f'let hegel_version = "{tag}"',
-        text,
-        count=1,
-        flags=re.MULTILINE,
-    )
-    session_ml.write_text(new_text)
-
-
 def add_changelog(path: Path, *, version: str, content: str) -> None:
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     entry = f"## {version} - {date}\n\n{content}"
@@ -180,9 +162,6 @@ def release() -> None:
 
     add_changelog(ROOT / "CHANGELOG.md", version=new_version, content=content)
 
-    session_ml = ROOT / "lib" / "session.ml"
-    pin_hegel_version(session_ml)
-
     git("config", "user.name", "hegel-release[bot]", cwd=ROOT)
     git("config", "user.email", "noreply@github.com", cwd=ROOT)
     git(
@@ -190,7 +169,6 @@ def release() -> None:
         "dune-project",
         "hegel.opam",
         "lib/hegel.ml",
-        "lib/session.ml",
         "CHANGELOG.md",
         cwd=ROOT,
     )

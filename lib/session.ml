@@ -176,12 +176,21 @@ let start session =
           session.temp_dir <- Some temp_dir;
           let socket_path = Filename.concat temp_dir "hegel.sock" in
           session.socket_path <- Some socket_path;
-          (* Start hegeld subprocess *)
+          (* Start hegeld subprocess, logging output to .hegel/server.log *)
+          (try Unix.mkdir hegel_dir 0o755
+           with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+          let log_fd =
+            Unix.openfile
+              (Filename.concat hegel_dir "server.log")
+              [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_APPEND ] 0o644
+          in
+          Unix.putenv "PYTHONUNBUFFERED" "1";
           let pid =
             Unix.create_process hegel_cmd
               [| hegel_cmd; socket_path |]
-              Unix.stdin Unix.stderr Unix.stderr
+              Unix.stdin log_fd log_fd
           in
+          Unix.close log_fd;
           session.process <- Some pid;
           (* Wait for socket to appear and connect *)
           let rec try_connect attempts =

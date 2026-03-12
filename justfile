@@ -63,5 +63,15 @@ conformance:
     # Run Python conformance tests
     .hegel/venv/bin/python -m pytest test/conformance/ -v
 
+# Update the pinned hegel-core version to the latest release.
+update-hegel-core-version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tag=$(gh api repos/antithesishq/hegel-core/releases/latest --jq '.tag_name')
+    sed -i '' "s/^let hegel_version = \".*\"/let hegel_version = \"${tag}\"/" lib/session.ml
+    echo "Updated hegel_version to ${tag}"
+    # Clear cached install so the next test run picks up the new version
+    rm -rf .hegel/venv
+
 # Run lint + docs + test (the full CI check).
 check: lint docs test
