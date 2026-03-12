@@ -12,7 +12,7 @@ open Connection
 let hegel_version = "v0.3.3"
 
 (** Environment variable name for overriding the hegel binary path. *)
-let hegel_cmd_env = "HEGEL_CMD"
+let hegel_server_command_env = "HEGEL_SERVER_COMMAND"
 
 (** Directory for managed hegel installation. *)
 let hegel_dir = ".hegel"
@@ -90,19 +90,19 @@ let ensure_hegel_installed () =
           (Printf.sprintf
              "Failed to install hegel (version: %s). Set %s to a hegel binary \
               path to skip installation."
-             hegel_version hegel_cmd_env);
+             hegel_version hegel_server_command_env);
       if not (Sys.file_exists hegel_bin) then
         failwith
           (Printf.sprintf "hegel not found at %s after installation" hegel_bin);
       write_file_contents version_file hegel_version);
   hegel_bin
 
-(** [find_hegeld ()] locates the hegeld binary. If [HEGEL_CMD] is set, uses that
-    path directly (the user is responsible for providing the right binary).
-    Otherwise, ensures hegel is installed in [.hegel/venv] at the version
-    specified by [hegel_version] and returns the path to that binary. *)
+(** [find_hegeld ()] locates the hegeld binary. If [HEGEL_SERVER_COMMAND] is set,
+    uses that path directly (the user is responsible for providing the right
+    binary). Otherwise, ensures hegel is installed in [.hegel/venv] at the
+    version specified by [hegel_version] and returns the path to that binary. *)
 let find_hegeld () =
-  match Sys.getenv_opt hegel_cmd_env with
+  match Sys.getenv_opt hegel_server_command_env with
   | Some path when path <> "" -> path
   | _ -> ensure_hegel_installed ()
 

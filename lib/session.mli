@@ -20,9 +20,10 @@ val hegel_version : string
 (** The hegel-core commit this SDK is designed to work with. *)
 
 val find_hegeld : unit -> string
-(** [find_hegeld ()] locates the hegeld binary. If [HEGEL_CMD] is set, uses that
-    path directly. Otherwise, ensures hegel is installed in [.hegel/venv] at the
-    version specified by [hegel_version] and returns the path to that binary. *)
+(** [find_hegeld ()] locates the hegeld binary. If [HEGEL_SERVER_COMMAND] is
+    set, uses that path directly. Otherwise, ensures hegel is installed in
+    [.hegel/venv] at the version specified by [hegel_version] and returns the
+    path to that binary. *)
 
 val has_working_client : hegel_session -> bool
 (** [has_working_client session] returns [true] if the session has a live
