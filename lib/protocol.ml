@@ -1,8 +1,8 @@
-(** Wire protocol for the Hegel SDK.
+(** Wire protocol for Hegel.
 
     This module defines the binary packet format used for communication between
-    the Hegel SDK and the Hegel server. Messages are serialized as packets with
-    a 20-byte header, a CBOR-encoded payload, and a terminator byte.
+    the Hegel client and the Hegel server. Messages are serialized as packets
+    with a 20-byte header, a CBOR-encoded payload, and a terminator byte.
 
     The header consists of 5 big-endian unsigned 32-bit integers:
     - Magic number (0x4845474C, "HEGL")

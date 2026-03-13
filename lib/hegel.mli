@@ -1,5 +1,5 @@
 val version : string
-(** The current version of the Hegel OCaml SDK. *)
+(** The current version of Hegel for OCaml. *)
 
 module Protocol = Protocol
 (** Binary wire protocol for packet serialization and deserialization. *)

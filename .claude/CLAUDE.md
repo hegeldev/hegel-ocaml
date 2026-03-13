@@ -1,4 +1,4 @@
-# Hegel SDK for OCaml
+# Hegel for OCaml
 
 ## Build Commands
 
@@ -26,7 +26,7 @@ just check       # Run lint + docs + test (the full CI check)
 ## Project Structure
 
 ```
-lib/                         # Library source (the SDK itself)
+lib/                         # Library source
   dune                       # Library build config (bisect_ppx instrumented)
   hegel.ml                   # Main module — re-exports all sub-modules
   protocol.ml                # Binary wire protocol: packet format, CRC32, constants
@@ -73,7 +73,7 @@ test/conformance/            # Python conformance test harness
 docs/                        # Tutorial and guide documents
   getting-started.md         # Getting Started tutorial (OCaml translation)
 
-examples/                    # Example programs demonstrating the SDK
+examples/                    # Example programs demonstrating the library
   dune                       # Example executables build config
   basic_properties.ml        # Primitive generators: integers, booleans, floats
   collections.ml             # Collections and combinators: lists, filter, map
@@ -272,7 +272,7 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
    in `just docs` output.
 
 10. **Getting Started tutorial in `docs/getting-started.md`**: Plain Markdown, not an odoc page.
-    Reference it from README.md. Translate all Python SDK examples to idiomatic OCaml, adding
+    Reference it from README.md. Translate all Python library examples to idiomatic OCaml, adding
     short notes where the OCaml API differs (no decorator, no `.generate()` method, etc.).
 
 11. **Four example programs covers the full surface area**: `basic_properties.ml` (primitives,

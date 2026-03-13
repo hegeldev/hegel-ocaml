@@ -1,4 +1,4 @@
-(** Conformance test helper library for the Hegel SDK.
+(** Conformance test helper library for Hegel.
 
     This module provides utilities for conformance test binaries:
     - {!get_test_cases}: reads [CONFORMANCE_TEST_CASES] env var

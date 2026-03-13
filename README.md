@@ -1,6 +1,6 @@
 # hegel-ocaml
 
-An OCaml SDK for [Hegel](https://github.com/hegeldev/hegel-core) —
+An OCaml library for [Hegel](https://github.com/hegeldev/hegel-core) —
 universal property-based testing powered by
 [Hypothesis](https://hypothesis.works/).
 
@@ -13,10 +13,10 @@ shrinks them to minimal counterexamples.
 opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
 ```
 
-The SDK requires the `hegel` CLI on your PATH:
+The library requires the `hegel` CLI on your PATH:
 
 ```bash
-pip install "hegel @ git+ssh://git@github.com/hegeldev/hegel-core.git"
+pip install "hegel @ git+https://github.com/hegeldev/hegel-core"
 ```
 
 ## Quick Start

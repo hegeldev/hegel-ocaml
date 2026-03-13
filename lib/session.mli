@@ -1,4 +1,4 @@
-(** Global session management for the Hegel SDK.
+(** Global session management for Hegel.
 
     This module manages a shared hegeld subprocess. It starts lazily on first
     use and cleans up when the process exits.

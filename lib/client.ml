@@ -1,4 +1,4 @@
-(** Test runner and lifecycle management for the Hegel SDK.
+(** Test runner and lifecycle management for Hegel.
 
     This module implements the client-side logic for running property-based
     tests against a Hegel server. It manages:

@@ -6,7 +6,7 @@
 opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
 ```
 
-The SDK requires the `hegel` CLI on your PATH:
+The library requires the `hegel` CLI on your PATH:
 
 ```bash
 pip install "git+https://github.com/hegeldev/hegel-core"

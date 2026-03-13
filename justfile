@@ -1,4 +1,4 @@
-# Hegel SDK for OCaml
+# Hegel for OCaml
 # This justfile provides the standard build recipes.
 
 # Install dependencies and the hegel binary.
