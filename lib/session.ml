@@ -97,9 +97,9 @@ let ensure_hegel_installed () =
       write_file_contents version_file hegel_version);
   hegel_bin
 
-(** [find_hegeld ()] locates the hegeld binary. If [HEGEL_SERVER_COMMAND] is set,
-    uses that path directly (the user is responsible for providing the right
-    binary). Otherwise, ensures hegel is installed in [.hegel/venv] at the
+(** [find_hegeld ()] locates the hegeld binary. If [HEGEL_SERVER_COMMAND] is
+    set, uses that path directly (the user is responsible for providing the
+    right binary). Otherwise, ensures hegel is installed in [.hegel/venv] at the
     version specified by [hegel_version] and returns the path to that binary. *)
 let find_hegeld () =
   match Sys.getenv_opt hegel_server_command_env with
@@ -182,7 +182,8 @@ let start session =
           let log_fd =
             Unix.openfile
               (Filename.concat hegel_dir "server.log")
-              [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_APPEND ] 0o644
+              [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_APPEND ]
+              0o644
           in
           Unix.putenv "PYTHONUNBUFFERED" "1";
           let pid =

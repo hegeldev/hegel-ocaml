@@ -441,7 +441,9 @@ let test_unrecognised_event () =
 (** Helper: run a function in a temporary directory, restoring cwd and env
     after. *)
 let with_temp_install_dir f =
-  let orig_cmd = try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None in
+  let orig_cmd =
+    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
+  in
   let orig_path = try Some (Sys.getenv "PATH") with Not_found -> None in
   let temp_dir = Filename.temp_dir "hegel-test-install-" "" in
   let orig_cwd = Sys.getcwd () in
@@ -566,6 +568,11 @@ let test_session_start_timeout () =
   close_out oc;
   Unix.chmod script_path 0o755;
   Unix.putenv "HEGEL_SERVER_COMMAND" script_path;
+  (* Run from a temp directory where .hegel doesn't exist yet, so the mkdir in
+     start() creates the directory fresh (covering the non-EEXIST path). *)
+  let orig_cwd = Sys.getcwd () in
+  let test_dir = Filename.temp_dir "hegel-start-test-" "" in
+  Sys.chdir test_dir;
   let raised = ref false in
   (try Session.start session
    with Failure msg ->
@@ -575,10 +582,22 @@ let test_session_start_timeout () =
        (contains_substring msg "Timeout"));
   Alcotest.(check bool) "raised timeout" true !raised;
   Session.cleanup session;
+  Sys.chdir orig_cwd;
+  (* Clean up the .hegel dir and temp dir *)
+  let hegel_dir = Filename.concat test_dir ".hegel" in
+  let rec rm path =
+    if Sys.is_directory path then begin
+      Array.iter (fun f -> rm (Filename.concat path f)) (Sys.readdir path);
+      Unix.rmdir path
+    end
+    else Sys.remove path
+  in
+  (try rm hegel_dir with _ -> ());
+  (try Unix.rmdir test_dir with _ -> ());
   (try Sys.remove script_path with _ -> ());
-  match orig_binary with
+  (match orig_binary with
   | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
-  | None -> Unix.putenv "HEGEL_SERVER_COMMAND" ""
+  | None -> Unix.putenv "HEGEL_SERVER_COMMAND" "")
 
 (** Test: run_hegel_test when session is None (unreachable in normal usage, but
     covers the branch). *)
@@ -774,7 +793,9 @@ let test_find_hegeld_via_env () =
   Unix.putenv "HEGEL_SERVER_COMMAND" ""
 
 let test_find_hegeld_auto_install () =
-  let orig = try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None in
+  let orig =
+    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
+  in
   Unix.putenv "HEGEL_SERVER_COMMAND" "";
   let path = Session.find_hegeld () in
   Alcotest.(check bool) "found hegel" true (String.length path > 0);
