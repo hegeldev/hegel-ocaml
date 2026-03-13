@@ -1,4 +1,4 @@
-(** CBOR encoding/decoding helpers for the Hegel SDK.
+(** CBOR encoding/decoding helpers for Hegel.
 
     This module provides convenience functions for encoding and decoding CBOR
     values, plus type-safe extractor functions that produce clear error messages

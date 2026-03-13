@@ -1,4 +1,4 @@
-(** The current version of the Hegel OCaml SDK. *)
+(** The current version of Hegel for OCaml. *)
 let version = "0.1.2"
 
 module Protocol = Protocol

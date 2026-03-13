@@ -1,4 +1,4 @@
-(** Multiplexed connection and channel abstractions for the Hegel SDK.
+(** Multiplexed connection and channel abstractions for Hegel.
 
     This module implements the demand-driven reader model: when a channel needs
     a message, it calls {!run_reader} which reads packets from the socket and

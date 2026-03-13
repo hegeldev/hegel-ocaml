@@ -1,6 +1,6 @@
-"""Conformance tests for the Hegel OCaml SDK.
+"""Conformance tests for Hegel for OCaml.
 
-These tests verify that the OCaml SDK generates values matching the
+These tests verify that Hegel for OCaml generates values matching the
 statistical properties expected by the Hypothesis-based conformance framework.
 """
 
@@ -36,7 +36,7 @@ def binary(name: str) -> Path:
 
 
 def test_conformance(subtests: pytest.Subtests) -> None:
-    """Run all conformance tests for the OCaml SDK."""
+    """Run all conformance tests for Hegel for OCaml."""
     tests = [
         BooleanConformance(binary("test_booleans")),
         IntegerConformance(binary("test_integers"), min_value=-(2**62), max_value=2**62-1),

@@ -1,4 +1,4 @@
-(** Global session management for the Hegel SDK.
+(** Global session management for Hegel.
 
     This module manages a shared hegeld subprocess. It starts lazily on first
     use and cleans up when the process exits.
@@ -128,7 +128,7 @@ let start session =
             end
           in
           let sock = try_connect 0 in
-          let conn = create_connection sock ~name:"SDK" () in
+          let conn = create_connection sock ~name:"Client" () in
           session.connection <- Some conn;
           let c = Client.create_client conn in
           session.client <- Some c;

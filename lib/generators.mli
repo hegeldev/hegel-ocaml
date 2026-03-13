@@ -1,4 +1,4 @@
-(** Generator combinators for the Hegel SDK.
+(** Generator combinators for Hegel.
 
     This module provides a composable generator API for property-based testing.
     Generators produce typed OCaml values and can be combined using {!map},

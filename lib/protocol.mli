@@ -1,7 +1,7 @@
-(** Wire protocol for the Hegel SDK.
+(** Wire protocol for Hegel.
 
     This module defines the binary packet format used for communication between
-    the Hegel SDK and the Hegel server. *)
+    the Hegel client and the Hegel server. *)
 
 val magic : int32
 (** Magic number identifying Hegel packets ("HEGL" in hex). *)

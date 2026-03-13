@@ -1,7 +1,7 @@
 (** Showcase tests demonstrating idiomatic Hegel usage.
 
     These tests serve as examples of how a user would write property-based tests
-    using the Hegel OCaml SDK. Each test generates values and verifies a real
+    using Hegel for OCaml. Each test generates values and verifies a real
     mathematical or logical property. *)
 
 open Hegel
