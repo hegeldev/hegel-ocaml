@@ -1,4 +1,5 @@
 import argparse
+import os
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -163,7 +164,8 @@ def release() -> None:
     add_changelog(ROOT / "CHANGELOG.md", version=new_version, content=content)
 
     git("config", "user.name", "hegel-release[bot]", cwd=ROOT)
-    git("config", "user.email", "noreply@github.com", cwd=ROOT)
+    app_id = os.environ["HEGEL_RELEASE_APP_ID"]
+    git("config", "user.email", f"{app_id}+hegel-release[bot]@users.noreply.github.com", cwd=ROOT)
     git(
         "add",
         "dune-project",
