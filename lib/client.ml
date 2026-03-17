@@ -137,9 +137,9 @@ let create_client connection =
   if server_version < 0.1 || server_version > 0.4 then
     failwith
       (Printf.sprintf
-         "hegel-ocaml supports protocol versions 0.1 through 0.4, but got \
-          server version %g. Upgrading hegel-ocaml or downgrading your hegel \
-          cli might help."
+         "hegel-ocaml supports protocol versions 0.1 through 0.4, but the \
+          connected server is using protocol version %g. Upgrading hegel-ocaml \
+          or downgrading hegel-core might help."
          server_version);
   { connection; control = control_channel connection; lock = Mutex.create () }
 
