@@ -117,28 +117,13 @@ let ensure_hegel_installed () =
         output_string oc hegel_server_version);
     hegel_bin
 
-(** [find_on_path cmd] searches [PATH] for [cmd] and returns [Some path] if
-    found, or [None]. *)
-let find_on_path cmd =
-  let path_str = Option.value ~default:"" (Sys.getenv_opt "PATH") in
-  let path_dirs = String.split_on_char ':' path_str in
-  List.find_map
-    (fun dir ->
-      let candidate = Filename.concat dir cmd in
-      if Sys.file_exists candidate then Some candidate else None)
-    path_dirs
-
 (** [find_hegel ()] locates the hegel binary. Checks, in order:
     - [HEGEL_SERVER_COMMAND] environment variable
-    - [hegel] on [PATH]
     - Auto-install via uv to [.hegel/venv/] *)
 let find_hegel () =
   match Sys.getenv_opt hegel_server_command_env with
   | Some path when path <> "" -> path
-  | _ -> (
-      match find_on_path "hegel" with
-      | Some path -> path
-      | None -> ensure_hegel_installed ())
+  | _ -> ensure_hegel_installed ()
 
 (** [server_log_fd ()] returns a file descriptor for the server log file. *)
 let server_log_fd () =

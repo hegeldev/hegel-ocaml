@@ -874,14 +874,6 @@ let test_run_test_with_database_key () =
 
 (* ---- find_hegel ---- *)
 
-(** Test: find_on_path returns Some for an existing command and None for a
-    nonexistent command. *)
-let test_find_on_path () =
-  let result = Session.find_on_path "sh" in
-  Alcotest.(check bool) "sh found" true (Option.is_some result);
-  let result = Session.find_on_path "nonexistent_command_xyz_42" in
-  Alcotest.(check bool) "nonexistent not found" true (Option.is_none result)
-
 (** Test: ensure_hegel_installed cached path. Creates a fake cached venv with a
     matching version file and binary, verifying the cache hit path (lines 62-67
     in session.ml). *)
@@ -892,7 +884,8 @@ let test_ensure_hegel_installed_cached () =
     ~finally:(fun () ->
       Sys.chdir orig_cwd;
       let rec rm_rf path =
-        if Sys.is_directory path then begin
+        let stat = Unix.lstat path in
+        if stat.st_kind = Unix.S_DIR then begin
           Array.iter
             (fun entry -> rm_rf (Filename.concat path entry))
             (Sys.readdir path);
@@ -993,10 +986,10 @@ let test_server_crash_in_event_loop () =
                    ])));
         (* Handle mark_complete request from the data channel *)
         let msg_id, _msg = receive_request data_ch () in
-        send_response_value data_ch msg_id `Null;
-        (* After the test case completes, set server_exited so the event
-           loop detects it on the next iteration. *)
+        (* Set server_exited BEFORE sending the response so it's visible
+           when the client checks immediately after run_test_case. *)
         client_conn.server_exited <- true;
+        send_response_value data_ch msg_id `Null;
         (* Don't send test_done — let the client detect the crash. *)
         Unix.sleepf 0.3)
       ()
@@ -1091,7 +1084,8 @@ let test_ensure_hegel_installed_version_mismatch () =
     ~finally:(fun () ->
       Sys.chdir orig_cwd;
       let rec rm_rf path =
-        if Sys.is_directory path then begin
+        let stat = Unix.lstat path in
+        if stat.st_kind = Unix.S_DIR then begin
           Array.iter
             (fun entry -> rm_rf (Filename.concat path entry))
             (Sys.readdir path);
@@ -1139,7 +1133,8 @@ let test_ensure_hegel_installed_uv_not_found () =
       | Some p -> Unix.putenv "PATH" p
       | None -> Unix.putenv "PATH" "");
       let rec rm_rf path =
-        if Sys.is_directory path then begin
+        let stat = Unix.lstat path in
+        if stat.st_kind = Unix.S_DIR then begin
           Array.iter
             (fun entry -> rm_rf (Filename.concat path entry))
             (Sys.readdir path);
@@ -1208,7 +1203,8 @@ let with_fake_uv_env ~venv_exit ~pip_exit ?(delete_log = false) f =
       | Some p -> Unix.putenv "PATH" p
       | None -> Unix.putenv "PATH" "");
       let rec rm_rf path =
-        if Sys.is_directory path then begin
+        let stat = Unix.lstat path in
+        if stat.st_kind = Unix.S_DIR then begin
           Array.iter
             (fun entry -> rm_rf (Filename.concat path entry))
             (Sys.readdir path);
@@ -1228,9 +1224,19 @@ let test_ensure_installed_success () =
       let path = Session.ensure_hegel_installed () in
       Alcotest.(check bool) "returns path" true (String.length path > 0))
 
-(** Test: ensure_hegel_installed when uv venv fails. *)
+(** Test: ensure_hegel_installed when uv venv fails with log deleted. *)
 let test_ensure_installed_venv_fails () =
   with_fake_uv_env ~venv_exit:1 ~pip_exit:0 ~delete_log:true (fun () ->
+      let raised_msg = ref "" in
+      (try ignore (Session.ensure_hegel_installed ())
+       with Failure msg -> raised_msg := msg);
+      Alcotest.(check bool)
+        "uv venv failed" true
+        (contains_substring !raised_msg "uv venv failed"))
+
+(** Test: ensure_hegel_installed when uv venv fails with log readable. *)
+let test_ensure_installed_venv_fails_with_log () =
+  with_fake_uv_env ~venv_exit:1 ~pip_exit:0 (fun () ->
       let raised_msg = ref "" in
       (try ignore (Session.ensure_hegel_installed ())
        with Failure msg -> raised_msg := msg);
@@ -1287,7 +1293,8 @@ let test_ensure_installed_binary_missing () =
       | Some p -> Unix.putenv "PATH" p
       | None -> Unix.putenv "PATH" "");
       let rec rm_rf path =
-        if Sys.is_directory path then begin
+        let stat = Unix.lstat path in
+        if stat.st_kind = Unix.S_DIR then begin
           Array.iter
             (fun entry -> rm_rf (Filename.concat path entry))
             (Sys.readdir path);
@@ -1334,6 +1341,48 @@ let test_find_hegel_auto_install () =
   match orig_cmd with
   | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
   | None -> Unix.putenv "HEGEL_SERVER_COMMAND" ""
+
+(** Test: session start creates .hegel dir for server log when it doesn't exist.
+    Covers the mkdir success path in server_log_fd (session.ml). *)
+let test_session_start_creates_hegel_dir () =
+  let orig_cwd = Sys.getcwd () in
+  let orig_cmd =
+    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
+  in
+  let tmp_dir = Filename.temp_dir "hegel_test_logdir" "" in
+  Fun.protect
+    ~finally:(fun () ->
+      Sys.chdir orig_cwd;
+      (match orig_cmd with
+      | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
+      | None -> Unix.putenv "HEGEL_SERVER_COMMAND" "");
+      let rec rm_rf path =
+        let stat = Unix.lstat path in
+        if stat.st_kind = Unix.S_DIR then begin
+          Array.iter
+            (fun entry -> rm_rf (Filename.concat path entry))
+            (Sys.readdir path);
+          Unix.rmdir path
+        end
+        else Sys.remove path
+      in
+      try rm_rf tmp_dir with _ -> ())
+    (fun () ->
+      Sys.chdir tmp_dir;
+      Unix.putenv "HEGEL_SERVER_COMMAND" "/bin/false";
+      let session : Session.hegel_session =
+        {
+          process = None;
+          connection = None;
+          client = None;
+          lock = Mutex.create ();
+        }
+      in
+      (try Session.start session with _ -> ());
+      Session.cleanup session;
+      Alcotest.(check bool)
+        ".hegel dir created" true
+        (Sys.file_exists ".hegel" && Sys.is_directory ".hegel"))
 
 (* ---- Session lifecycle ---- *)
 
@@ -1406,7 +1455,6 @@ let tests =
       test_send_error_reply_fails_silently;
     (* find_hegel *)
     Alcotest.test_case "find_hegel via env" `Quick test_find_hegel_via_env;
-    Alcotest.test_case "find_on_path" `Quick test_find_on_path;
     Alcotest.test_case "ensure_hegel_installed cached" `Quick
       test_ensure_hegel_installed_cached;
     Alcotest.test_case "ensure_hegel_installed version mismatch" `Quick
@@ -1417,6 +1465,8 @@ let tests =
       test_ensure_installed_success;
     Alcotest.test_case "ensure_installed venv fails" `Quick
       test_ensure_installed_venv_fails;
+    Alcotest.test_case "ensure_installed venv fails with log" `Quick
+      test_ensure_installed_venv_fails_with_log;
     Alcotest.test_case "ensure_installed pip fails" `Quick
       test_ensure_installed_pip_fails;
     Alcotest.test_case "ensure_installed pip fails no log" `Quick
@@ -1432,6 +1482,8 @@ let tests =
       test_server_crash_detection;
     Alcotest.test_case "find_hegel auto install" `Quick
       test_find_hegel_auto_install;
+    Alcotest.test_case "start creates .hegel dir" `Quick
+      test_session_start_creates_hegel_dir;
     (* Session *)
     Alcotest.test_case "session cleanup" `Quick test_session_cleanup;
     Alcotest.test_case "session cleanup with resources" `Quick

@@ -26,14 +26,9 @@ val ensure_hegel_installed : unit -> string
 (** [ensure_hegel_installed ()] checks for a cached hegel installation and
     installs via uv if needed. Returns the path to the hegel binary. *)
 
-val find_on_path : string -> string option
-(** [find_on_path cmd] searches [PATH] for [cmd] and returns [Some path] if
-    found, or [None]. *)
-
 val find_hegel : unit -> string
 (** [find_hegel ()] locates the hegel binary. Checks, in order:
     - [HEGEL_SERVER_COMMAND] environment variable
-    - [hegel] on [PATH]
     - Auto-install via uv to [.hegel/venv/] *)
 
 type hegel_session = {
