@@ -1,13 +1,12 @@
 (** Multiplexed connection and channel abstractions for Hegel.
 
-    This module implements the demand-driven reader model: when a channel needs
-    a message, it calls {!run_reader} which reads packets from the socket and
-    dispatches them to the correct channel's inbox until the caller's condition
-    is satisfied.
+    This module implements a background-reader model: a dedicated thread reads
+    packets from the input stream and dispatches them to per-channel inboxes.
+    Channels wait on condition variables for new messages.
 
-    {b Connection} manages a Unix socket with multiplexed logical channels.
-    {b Channel} provides request/response messaging over a single logical
-    channel. *)
+    {b Connection} manages a pair of file descriptors (one for reading, one for
+    writing) with multiplexed logical channels. {b Channel} provides
+    request/response messaging over a single logical channel. *)
 
 open Protocol
 
@@ -16,6 +15,11 @@ let handshake_string = "hegel_handshake_start"
 
 (** Default timeout in seconds for channel operations. *)
 let channel_timeout = 30.0
+
+(** Message used when the server has crashed. *)
+let server_crashed_message =
+  "The hegel server process has exited unexpectedly. Check .hegel/server.log \
+   for details."
 
 (** Sentinel value placed in a channel's inbox when the connection shuts down.
 *)
@@ -54,6 +58,13 @@ let result_or_error body =
 (** Connection state after handshake. *)
 type connection_state = Unresolved | Client
 
+type channel_inbox = {
+  queue : inbox_item Queue.t;
+  lock : Mutex.t;
+  cond : Condition.t;
+}
+(** Thread-safe inbox for a channel, with condition-variable signaling. *)
+
 (** A channel entry in the connection's channel table. *)
 type channel_entry =
   | Live of channel
@@ -61,21 +72,23 @@ type channel_entry =
 
 and connection = {
   name : string option;
-  socket : Unix.file_descr;
+  read_fd : Unix.file_descr;
+  write_fd : Unix.file_descr;
   mutable next_channel_id : int;
   channels : (int32, channel_entry) Hashtbl.t;
+  channels_lock : Mutex.t;
   mutable running : bool;
   debug : bool;
   writer_lock : Mutex.t;
-  reader_lock : Mutex.t;
   mutable connection_state : connection_state;
+  mutable server_exited : bool;
 }
-(** Multiplexed socket connection to a Hegel peer. *)
+(** Multiplexed connection to a Hegel peer. *)
 
 and channel = {
   channel_id : int32;
   conn : connection;
-  inbox : inbox_item Queue.t;
+  inbox : channel_inbox;
   requests : packet Queue.t;
   responses : (int32, string) Hashtbl.t;
   role : string option;
@@ -116,7 +129,12 @@ let make_channel conn channel_id ~role =
   {
     channel_id;
     conn;
-    inbox = Queue.create ();
+    inbox =
+      {
+        queue = Queue.create ();
+        lock = Mutex.create ();
+        cond = Condition.create ();
+      };
     requests = Queue.create ();
     responses = Hashtbl.create 8;
     role;
@@ -124,138 +142,142 @@ let make_channel conn channel_id ~role =
     closed = false;
   }
 
+(** [push_inbox ch item] pushes an item to a channel's inbox and signals the
+    condition variable. Must be called without holding [ch.inbox.lock]. *)
+let push_inbox ch item =
+  Mutex.lock ch.inbox.lock;
+  Queue.push item ch.inbox.queue;
+  Condition.signal ch.inbox.cond;
+  Mutex.unlock ch.inbox.lock
+
+(** [signal_all_channels conn] pushes {!Shutdown} into all live channels'
+    inboxes. Must be called while holding [conn.channels_lock]. *)
+let signal_all_channels conn =
+  Hashtbl.iter
+    (fun _id entry ->
+      match entry with Live ch -> push_inbox ch Shutdown | Dead _ -> ())
+    conn.channels
+
 (** [send_packet conn packet] sends a packet on the connection, thread-safe. *)
 let send_packet conn packet =
   Mutex.lock conn.writer_lock;
   Fun.protect
     ~finally:(fun () -> Mutex.unlock conn.writer_lock)
-    (fun () -> write_packet conn.socket packet)
+    (fun () -> write_packet conn.write_fd packet)
 
-(** [read_packet_with_timeout sock timeout] reads a packet with a socket
-    timeout. Returns [Some packet] on success, [None] on timeout. *)
-let read_packet_with_timeout sock timeout =
-  Unix.setsockopt_float sock Unix.SO_RCVTIMEO timeout;
-  match read_packet sock with
-  | pkt ->
-      Unix.setsockopt_float sock Unix.SO_RCVTIMEO 0.0;
-      Some pkt
-  | exception Unix.Unix_error (Unix.EAGAIN, _, _) ->
-      Unix.setsockopt_float sock Unix.SO_RCVTIMEO 0.0;
-      None
-
-(** [run_reader conn ~until] reads packets from the socket and dispatches them
-    to channel inboxes until [until ()] returns [true].
-
-    Uses a reader lock so only one caller reads at a time. If the lock is held
-    by another caller, polls until it becomes available or [until] is satisfied.
-*)
-let run_reader conn ~until =
-  if until () then ()
-  else begin
-    let acquired = ref false in
-    Fun.protect
-      ~finally:(fun () -> if !acquired then Mutex.unlock conn.reader_lock)
-      (fun () ->
-        (* Try to acquire the reader lock, polling if busy *)
-        let got_lock = ref false in
-        while not !got_lock do
-          if Mutex.try_lock conn.reader_lock then begin
-            acquired := true;
-            got_lock := true
+(** Background reader thread function. Reads packets from [conn.read_fd] and
+    dispatches them to the appropriate channel's inbox. Exits when the stream
+    closes or an error occurs. *)
+let reader_loop conn =
+  let dispatch_packet (pkt : packet) =
+    (* Handle close_channel_payload for ANY channel (even unregistered) *)
+    if pkt.payload = close_channel_payload then begin
+      assert (pkt.message_id = close_channel_message_id);
+      if conn.debug then begin
+        Mutex.lock conn.channels_lock;
+        let prev_name =
+          match Hashtbl.find_opt conn.channels pkt.channel_id with
+          | Some (Live ch) -> channel_name ch
+          | Some (Dead d) -> d.name
+          | None -> "Never opened!"
+        in
+        Hashtbl.replace conn.channels pkt.channel_id
+          (Dead { channel_id = pkt.channel_id; name = prev_name });
+        Mutex.unlock conn.channels_lock
+      end
+    end
+    else begin
+      Mutex.lock conn.channels_lock;
+      let entry = Hashtbl.find_opt conn.channels pkt.channel_id in
+      match entry with
+      | Some (Live ch) ->
+          Mutex.unlock conn.channels_lock;
+          push_inbox ch (Pkt pkt)
+      | (Some (Dead _) | None) as entry ->
+          Mutex.unlock conn.channels_lock;
+          if not pkt.is_reply then begin
+            let disposition =
+              match entry with Some (Dead _) -> "closed" | _ -> "non-existent"
+            in
+            let error_msg =
+              Printf.sprintf "Message %ld sent to %s %s" pkt.message_id
+                disposition
+                (entry_name conn pkt.channel_id)
+            in
+            try
+              send_packet conn
+                {
+                  channel_id = pkt.channel_id;
+                  message_id = pkt.message_id;
+                  is_reply = true;
+                  payload =
+                    CBOR.Simple.encode
+                      (`Map [ (`Text "error", `Text error_msg) ]);
+                }
+            with _ -> ()
           end
-          else if until () then got_lock := true (* exit without lock *)
-          else Unix.sleepf 0.001
-        done;
-        if !acquired then begin
-          while conn.running && not (until ()) do
-            match read_packet_with_timeout conn.socket 0.1 with
-            | None -> ()
-            | Some pkt ->
-                if pkt.payload = close_channel_payload then begin
-                  (* Handle channel close *)
-                  assert (pkt.message_id = close_channel_message_id);
-                  if conn.debug then begin
-                    let prev_name =
-                      match Hashtbl.find_opt conn.channels pkt.channel_id with
-                      | Some (Live ch) -> channel_name ch
-                      | Some (Dead d) -> d.name
-                      | None -> "Never opened!"
-                    in
-                    Hashtbl.replace conn.channels pkt.channel_id
-                      (Dead { channel_id = pkt.channel_id; name = prev_name })
-                  end
-                end
-                else begin
-                  match Hashtbl.find_opt conn.channels pkt.channel_id with
-                  | Some (Live ch) -> Queue.push (Pkt pkt) ch.inbox
-                  | (Some (Dead _) | None) as entry ->
-                      if not pkt.is_reply then begin
-                        let disposition =
-                          match entry with
-                          | Some (Dead _) -> "closed"
-                          | _ -> "non-existent"
-                        in
-                        let error_msg =
-                          Printf.sprintf "Message %ld sent to %s %s"
-                            pkt.message_id disposition
-                            (entry_name conn pkt.channel_id)
-                        in
-                        send_packet conn
-                          {
-                            channel_id = pkt.channel_id;
-                            message_id = pkt.message_id;
-                            is_reply = true;
-                            payload =
-                              CBOR.Simple.encode
-                                (`Map [ (`Text "error", `Text error_msg) ]);
-                          }
-                      end
-                end
-          done
-        end)
-  end
+    end
+  in
+  (try
+     while conn.running do
+       let pkt = read_packet conn.read_fd in
+       dispatch_packet pkt
+     done
+   with _ ->
+     (* Stream closed or error — mark server as exited *)
+     conn.server_exited <- true);
+  (* Signal shutdown to all channels *)
+  Mutex.lock conn.channels_lock;
+  signal_all_channels conn;
+  Mutex.unlock conn.channels_lock
 
 (** [close conn] closes the connection and signals all live channels. *)
 let close conn =
   if not conn.running then ()
   else begin
     conn.running <- false;
-    (try Unix.shutdown conn.socket Unix.SHUTDOWN_ALL
-     with Unix.Unix_error _ -> ());
-    Unix.close conn.socket;
-    Hashtbl.iter
-      (fun _id entry ->
-        match entry with
-        | Live ch -> Queue.push Shutdown ch.inbox
-        | Dead _ -> ())
-      conn.channels
+    (try Unix.close conn.read_fd with Unix.Unix_error _ -> ());
+    (* Only close write_fd if it's different from read_fd *)
+    (if conn.write_fd <> conn.read_fd then
+       try Unix.close conn.write_fd with Unix.Unix_error _ -> ());
+    Mutex.lock conn.channels_lock;
+    signal_all_channels conn;
+    Mutex.unlock conn.channels_lock
   end
 
-(** [create_connection sock ?name ?debug ()] creates a new connection wrapping
-    the Unix file descriptor [sock]. A control channel (channel 0) is
-    automatically created. *)
-let create_connection sock ?name ?(debug = false) () =
+(** [create_connection ~read_fd ~write_fd ?name ?debug ()] creates a new
+    connection using separate file descriptors for reading and writing. A
+    control channel (channel 0) is automatically created and a background reader
+    thread is spawned. *)
+let create_connection ~read_fd ~write_fd ?name ?(debug = false) () =
   let conn =
     {
       name;
-      socket = sock;
+      read_fd;
+      write_fd;
       next_channel_id = 1;
       channels = Hashtbl.create 16;
+      channels_lock = Mutex.create ();
       running = true;
       debug;
       writer_lock = Mutex.create ();
-      reader_lock = Mutex.create ();
       connection_state = Unresolved;
+      server_exited = false;
     }
   in
   let control = make_channel conn 0l ~role:(Some "Control") in
-  Mutex.lock conn.writer_lock;
+  Mutex.lock conn.channels_lock;
   Hashtbl.replace conn.channels 0l (Live control);
-  Mutex.unlock conn.writer_lock;
+  Mutex.unlock conn.channels_lock;
+  (* Spawn background reader thread *)
+  ignore (Thread.create reader_loop conn);
   conn
 
 (** [is_live conn] returns [true] if the connection is still active. *)
 let is_live conn = conn.running
+
+(** [server_has_exited conn] returns [true] if the server process has exited. *)
+let server_has_exited conn = conn.server_exited
 
 (** [control_channel conn] returns the control channel (channel 0). *)
 let control_channel conn =
@@ -265,9 +287,8 @@ let control_channel conn =
 
 (** [new_channel conn ?role ()] creates a new logical channel on the connection.
 
-    The first call returns channel 0 (control). After handshake, client channels
-    use odd IDs [(counter << 1) | 1], server channels use even IDs
-    [(counter << 1)]. *)
+    Client channels use odd IDs [(counter << 1) | 1], server channels use even
+    IDs [(counter << 1)]. *)
 let new_channel conn ?role () =
   if conn.connection_state = Unresolved then
     failwith "Cannot create a new channel before handshake has been performed."
@@ -275,9 +296,9 @@ let new_channel conn ?role () =
     let channel_id = Int32.of_int ((conn.next_channel_id lsl 1) lor 1) in
     conn.next_channel_id <- conn.next_channel_id + 1;
     let ch = make_channel conn channel_id ~role in
-    Mutex.lock conn.writer_lock;
+    Mutex.lock conn.channels_lock;
     Hashtbl.replace conn.channels channel_id (Live ch);
-    Mutex.unlock conn.writer_lock;
+    Mutex.unlock conn.channels_lock;
     ch
   end
 
@@ -289,30 +310,56 @@ let connect_channel conn channel_id ?role () =
   if Hashtbl.mem conn.channels channel_id then
     failwith (Printf.sprintf "Channel already connected as %ld." channel_id);
   let ch = make_channel conn channel_id ~role in
-  Mutex.lock conn.writer_lock;
+  Mutex.lock conn.channels_lock;
   Hashtbl.replace conn.channels channel_id (Live ch);
-  Mutex.unlock conn.writer_lock;
+  Mutex.unlock conn.channels_lock;
   ch
 
 (* --- Channel operations --- *)
+
+(** [pop_inbox_item ch timeout] waits for an item to appear in the channel's
+    inbox, with a timeout. Returns the item or raises [Failure] on timeout or
+    connection close. *)
+let pop_inbox_item ch timeout =
+  Mutex.lock ch.inbox.lock;
+  let deadline = Unix.gettimeofday () +. timeout in
+  let rec wait () =
+    if not (Queue.is_empty ch.inbox.queue) then begin
+      let item = Queue.pop ch.inbox.queue in
+      Mutex.unlock ch.inbox.lock;
+      item
+    end
+    else if ch.closed then begin
+      Mutex.unlock ch.inbox.lock;
+      raise (Failure (Printf.sprintf "%s is closed" (channel_name ch)))
+    end
+    else if ch.conn.server_exited then begin
+      Mutex.unlock ch.inbox.lock;
+      raise (Failure server_crashed_message)
+    end
+    else begin
+      let remaining = deadline -. Unix.gettimeofday () in
+      if remaining <= 0.0 then begin
+        Mutex.unlock ch.inbox.lock;
+        raise
+          (Failure
+             (Printf.sprintf "Timed out after %.1fs waiting for a message on %s"
+                timeout (channel_name ch)))
+      end;
+      (* Release lock, sleep briefly, re-acquire *)
+      Mutex.unlock ch.inbox.lock;
+      Unix.sleepf (min 0.01 remaining);
+      Mutex.lock ch.inbox.lock;
+      wait ()
+    end
+  in
+  wait ()
 
 (** [process_one_message ch ?timeout ()] reads and routes one incoming message
     for channel [ch]. Dispatches replies to [ch.responses] and requests to
     [ch.requests]. *)
 let process_one_message ch ?(timeout = channel_timeout) () =
-  let start = Unix.gettimeofday () in
-  run_reader ch.conn ~until:(fun () ->
-      ch.closed
-      || Unix.gettimeofday () -. start > timeout
-      || not (Queue.is_empty ch.inbox));
-  if ch.closed then
-    raise (Failure (Printf.sprintf "%s is closed" (channel_name ch)));
-  if Queue.is_empty ch.inbox then
-    raise
-      (Failure
-         (Printf.sprintf "Timed out after %.1fs waiting for a message on %s"
-            timeout (channel_name ch)));
-  let item = Queue.pop ch.inbox in
+  let item = pop_inbox_item ch timeout in
   match item with
   | Shutdown -> raise (Failure "Connection closed")
   | Pkt pkt ->

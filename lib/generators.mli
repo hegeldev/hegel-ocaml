@@ -44,7 +44,7 @@ type 'a generator =
       -> 'a list generator
   | Composite : {
       label : int;
-      generate_fn : Client.test_case_data -> 'a;
+      generate_fn : Client.test_case -> 'a;
     }
       -> 'a generator
       (** The type of generators. Generators produce typed OCaml values and can
@@ -68,11 +68,11 @@ type 'a generator =
 val max_filter_attempts : int
 (** Maximum number of filter attempts before calling [assume false]. *)
 
-val group : int -> Client.test_case_data -> (unit -> 'a) -> 'a
+val group : int -> Client.test_case -> (unit -> 'a) -> 'a
 (** [group label data f] runs [f ()] inside a span with the given [label]. The
     span is stopped with [discard:false] regardless of whether [f] raises. *)
 
-val discardable_group : int -> Client.test_case_data -> (unit -> 'a) -> 'a
+val discardable_group : int -> Client.test_case -> (unit -> 'a) -> 'a
 (** [discardable_group label data f] runs [f ()] inside a span with [label]. If
     [f] raises, the span is stopped with [discard:true]; otherwise
     [discard:false]. *)
@@ -86,24 +86,24 @@ type collection = {
 (** A collection handle for generating variable-length sequences. *)
 
 val new_collection :
-  min_size:int -> ?max_size:int -> Client.test_case_data -> unit -> collection
+  min_size:int -> ?max_size:int -> Client.test_case -> unit -> collection
 (** [new_collection ~min_size ?max_size data ()] creates a new collection
     handle. *)
 
-val collection_more : collection -> Client.test_case_data -> bool
+val collection_more : collection -> Client.test_case -> bool
 (** [collection_more coll data] returns [true] if more elements should be
     generated, [false] when the collection is complete. *)
 
-val collection_reject : collection -> Client.test_case_data -> unit
+val collection_reject : collection -> Client.test_case -> unit
 (** [collection_reject coll data] rejects the last element of the collection. *)
 
-val do_draw : 'a generator -> Client.test_case_data -> 'a
-(** [do_draw gen data] produces a typed value from generator [gen] using the
-    given test case [data]. *)
+val do_draw : 'a generator -> Client.test_case -> 'a
+(** [do_draw gen tc] produces a typed value from generator [gen] using the given
+    test case [tc]. *)
 
-val draw : 'a generator -> 'a
-(** [draw gen] produces a typed value from generator [gen]. Must be called from
-    within a Hegel test body. *)
+val draw : Client.test_case -> 'a generator -> 'a
+(** [draw tc gen] produces a typed value from generator [gen] using test case
+    [tc]. *)
 
 val map : ('a -> 'b) -> 'a generator -> 'b generator
 (** [map f gen] transforms values from [gen] using [f].

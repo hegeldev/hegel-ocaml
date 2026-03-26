@@ -1,25 +1,18 @@
-# hegel-ocaml
+# Hegel for OCaml
 
-An OCaml library for [Hegel](https://github.com/hegeldev/hegel-core) —
-universal property-based testing powered by
-[Hypothesis](https://hypothesis.works/).
+Hegel is a property-based testing library for OCaml. Hegel is based on
+[Hypothesis](https://github.com/hypothesisworks/hypothesis), using the
+[Hegel](https://hegel.dev/) protocol.
 
-Hegel generates random inputs for your tests, finds failures, and automatically
-shrinks them to minimal counterexamples.
-
-## Installation
+## Install Hegel
 
 ```bash
 opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
 ```
 
-The library requires the `hegel` CLI on your PATH:
+You will need [`uv`](https://docs.astral.sh/uv/) installed and on your PATH.
 
-```bash
-pip install "hegel @ git+https://github.com/hegeldev/hegel-core"
-```
-
-## Quick Start
+## Quick start
 
 Add `hegel` to your dune library dependencies:
 
@@ -36,11 +29,10 @@ open Hegel
 open Hegel.Generators
 
 let () =
-  run_hegel_test ~test_cases:100
-    (fun () ->
-      let a = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in
-      let b = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in
-      assert (a + b = b + a))
+  run_hegel_test (fun tc ->
+    let a = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
+    let b = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
+    assert (a + b = b + a))
 ```
 
 Run with `dune exec` as normal. Hegel generates 100 random input pairs and
@@ -51,7 +43,7 @@ For a full walkthrough, see [docs/getting-started.md](docs/getting-started.md).
 ## Development
 
 ```bash
-just setup       # Install dependencies (hegel binary + opam packages)
+just setup       # Install dependencies
 just check       # Full CI: lint + docs + tests with 100% coverage
 just test        # Run tests only
 just conformance # Run cross-language conformance tests

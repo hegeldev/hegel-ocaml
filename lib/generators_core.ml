@@ -54,7 +54,7 @@ type 'a generator =
       -> 'a list generator
   | Composite : {
       label : int;
-      generate_fn : Client.test_case_data -> 'a;
+      generate_fn : Client.test_case -> 'a;
     }
       -> 'a generator
 
@@ -169,7 +169,7 @@ let collection_reject coll data =
 
 (** [do_draw gen data] produces a typed value from generator [gen] using the
     given test case [data]. *)
-let rec do_draw : type a. a generator -> Client.test_case_data -> a =
+let rec do_draw : type a. a generator -> Client.test_case -> a =
  fun gen data ->
   match gen with
   | Basic { schema; transform } ->
@@ -212,12 +212,9 @@ let rec do_draw : type a. a generator -> Client.test_case_data -> a =
   | Composite { label; generate_fn } ->
       group label data (fun () -> generate_fn data)
 
-(** [draw gen] produces a typed value from generator [gen]. Must be called from
-    within a Hegel test body. *)
-let draw gen =
-  match Domain.DLS.get Client.current_data with
-  | None -> failwith "draw() cannot be called outside of a Hegel test"
-  | Some data -> do_draw gen data
+(** [draw tc gen] produces a typed value from generator [gen] using test case
+    [tc]. *)
+let draw tc gen = do_draw gen tc
 
 (** [map f gen] transforms values from [gen] using [f].
 

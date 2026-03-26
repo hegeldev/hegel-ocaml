@@ -1,25 +1,43 @@
 (** Global session management for Hegel.
 
-    This module manages a shared hegeld subprocess. It starts lazily on first
-    use and cleans up when the process exits.
+    This module manages a shared hegel subprocess communicating over stdio
+    pipes. It starts lazily on first use and cleans up when the process exits.
 
     The main entry point is {!run_hegel_test}, which the user calls without
     needing to manage connections or sessions directly. *)
+
+val hegel_server_version : string
+(** Version of hegel-core to install. *)
+
+val hegel_server_command_env : string
+(** Environment variable to override the hegel server command. *)
+
+val hegel_server_dir : string
+(** Directory for hegel server installation and logs. *)
+
+val uv_not_found_message : string
+(** Message shown when uv is not found. *)
+
+val run_command_to_log : string -> string list -> string -> Unix.process_status
+(** [run_command_to_log cmd args log_path] runs [cmd] with [args], redirecting
+    stdout and stderr to [log_path]. Returns the process exit status. *)
+
+val ensure_hegel_installed : unit -> string
+(** [ensure_hegel_installed ()] checks for a cached hegel installation and
+    installs via uv if needed. Returns the path to the hegel binary. *)
+
+val find_hegel : unit -> string
+(** [find_hegel ()] locates the hegel binary. Checks, in order:
+    - [HEGEL_SERVER_COMMAND] environment variable
+    - Auto-install via uv to [.hegel/venv/] *)
 
 type hegel_session = {
   mutable process : int option;
   mutable connection : Connection.connection option;
   mutable client : Client.client option;
-  mutable socket_path : string option;
-  mutable temp_dir : string option;
   lock : Mutex.t;
 }
 (** Internal mutable session state. *)
-
-val find_hegeld : unit -> string
-(** [find_hegeld ()] locates the hegeld binary. Checks, in order:
-    - [HEGEL_BINARY] environment variable
-    - [hegel] on [PATH] Returns the path or raises [Failure]. *)
 
 val has_working_client : hegel_session -> bool
 (** [has_working_client session] returns [true] if the session has a live
@@ -30,15 +48,14 @@ val cleanup : hegel_session -> unit
     the connection. *)
 
 val start : hegel_session -> unit
-(** [start session] starts hegeld if not already running. *)
+(** [start session] starts the hegel server if not already running. Spawns the
+    server with [--stdio] for pipe-based communication. *)
 
-val run_hegel_test : ?test_cases:int -> ?seed:int -> (unit -> unit) -> unit
-(** [run_hegel_test ?test_cases ?seed test_fn] runs a property test using the
-    shared hegeld process. This is the main public API.
-
-    @param test_cases number of test cases (default 100)
-    @param seed optional seed for deterministic replay
-    @param test_fn the test body function *)
+val run_hegel_test :
+  ?settings:Client.settings -> (Client.test_case -> unit) -> unit
+(** [run_hegel_test ?settings test_fn] runs a property test using the shared
+    hegel process. Uses {!Client.default_settings} when [settings] is not
+    provided. *)
 
 val restart_session : unit -> unit
 (** [restart_session ()] forces a restart of the global session. Useful when
