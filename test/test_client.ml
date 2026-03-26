@@ -405,6 +405,19 @@ let test_run_test_database_path_and_suppress () =
       in
       run_test client ~settings (fun _tc -> ()))
 
+(** Test: run_test with database=Unset omits the database field. *)
+let test_run_test_database_unset () =
+  with_fake_server
+    (fun peer_conn ->
+      let _ctrl, test_ch = accept_run_test peer_conn in
+      send_test_done test_ch [ (`Text "interesting_test_cases", `Int 0) ])
+    (fun client ->
+      let settings =
+        Client.default_settings () |> Client.with_test_cases 0
+        |> Client.with_database Client.Unset
+      in
+      run_test client ~settings (fun _tc -> ()))
+
 (** Test: server error in results raises Failure. *)
 let test_run_test_server_error_in_results () =
   with_fake_server
@@ -842,6 +855,13 @@ let test_default_settings_in_ci () =
         "database disabled in CI" true
         (s.database = Client.Disabled))
 
+(** Test: default_settings outside CI sets database to Unset. *)
+let test_default_settings_not_in_ci () =
+  with_clean_ci_env (fun () ->
+      let s = Client.default_settings () in
+      Alcotest.(check bool) "derandomize not in CI" false s.derandomize;
+      Alcotest.(check bool) "database is Unset" true (s.database = Client.Unset))
+
 (** Test: settings convenience constructor. *)
 let test_settings_convenience () =
   let s0 = Client.settings () in
@@ -958,10 +978,11 @@ let test_is_in_ci_value_mismatch () =
       Alcotest.(check bool)
         "is_in_ci with TF_BUILD=false" false (Client.is_in_ci ()))
 
-(** Test: server crash detected in event loop (client.ml line 376). The peer
-    handles one test_case fully (including mark_complete), then the peer sets
-    server_exited and doesn't send test_done. The client's event loop checks
-    server_has_exited after run_test_case and raises. *)
+(** Test: server crash detected in event loop (client.ml line 367). The test
+    function raises Data_exhausted so run_test_case skips mark_complete,
+    avoiding a race where pop_inbox_item detects server_exited before the
+    mark_complete response arrives. After run_test_case returns normally via the
+    Data_was_exhausted path, the event loop checks server_has_exited. *)
 let test_server_crash_in_event_loop () =
   let raised_msg = ref "" in
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
@@ -975,7 +996,7 @@ let test_server_crash_in_event_loop () =
       (fun () ->
         let _ctrl, test_ch = accept_run_test peer_conn in
         let data_ch_id = 2l in
-        let data_ch = connect_channel peer_conn data_ch_id ~role:"Data" () in
+        let _data_ch = connect_channel peer_conn data_ch_id ~role:"Data" () in
         ignore
           (pending_get
              (request test_ch
@@ -984,20 +1005,22 @@ let test_server_crash_in_event_loop () =
                      (`Text "event", `Text "test_case");
                      (`Text "channel_id", `Int (Int32.to_int data_ch_id));
                    ])));
-        (* Handle mark_complete request from the data channel *)
-        let msg_id, _msg = receive_request data_ch () in
-        (* Set server_exited BEFORE sending the response so it's visible
-           when the client checks immediately after run_test_case. *)
+        (* After the client acknowledges the test_case event, set
+           server_exited. The test_fn raises Data_exhausted so
+           run_test_case skips mark_complete — no request/response race
+           with pop_inbox_item's server_exited check. *)
         client_conn.server_exited <- true;
-        send_response_value data_ch msg_id `Null;
-        (* Don't send test_done — let the client detect the crash. *)
-        Unix.sleepf 0.3)
+        Unix.sleepf 0.5)
       ()
   in
   (try
      run_test client
        ~settings:(Client.default_settings () |> Client.with_test_cases 1)
-       (fun _tc -> ())
+       (fun _tc ->
+         (* Sleep briefly to release the runtime lock, giving the peer
+            thread time to set server_exited before we return. *)
+         Unix.sleepf 0.05;
+         raise Data_exhausted)
    with Failure msg -> raised_msg := msg);
   Thread.join t_peer;
   Alcotest.(check bool)
@@ -1428,6 +1451,8 @@ let tests =
       test_with_suppress_health_check;
     Alcotest.test_case "default_settings in CI" `Quick
       test_default_settings_in_ci;
+    Alcotest.test_case "default_settings not in CI" `Quick
+      test_default_settings_not_in_ci;
     Alcotest.test_case "settings convenience" `Quick test_settings_convenience;
     Alcotest.test_case "with_seed" `Quick test_with_seed;
     Alcotest.test_case "run_test with database_key" `Quick
@@ -1441,6 +1466,8 @@ let tests =
     Alcotest.test_case "unrecognised event" `Quick test_unrecognised_event;
     Alcotest.test_case "run_test database path + suppress" `Quick
       test_run_test_database_path_and_suppress;
+    Alcotest.test_case "run_test database unset" `Quick
+      test_run_test_database_unset;
     Alcotest.test_case "run_test server error in results" `Quick
       test_run_test_server_error_in_results;
     Alcotest.test_case "run_test health check failure" `Quick
