@@ -56,13 +56,15 @@ type int_list_wrapper = { items : int list } [@@deriving generator]
 
 (** Test: derived point generator produces valid points. *)
 let test_point_e2e () =
-  Session.run_hegel_test ~test_cases:20 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:20 ())
+    (fun tc ->
       let p = point_generator tc in
       ignore (p.x, p.y))
 
 (** Test: derived person generator produces valid persons. *)
 let test_person_e2e () =
-  Session.run_hegel_test ~test_cases:20 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:20 ())
+    (fun tc ->
       let p = person_generator tc in
       ignore (p.name, p.age, p.active))
 
@@ -71,7 +73,8 @@ let test_color_e2e () =
   let saw_red = ref false in
   let saw_green = ref false in
   let saw_blue = ref false in
-  Session.run_hegel_test ~test_cases:50 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ())
+    (fun tc ->
       let v = color_generator tc in
       match v with
       | Red -> saw_red := true
@@ -86,7 +89,8 @@ let test_shape_e2e () =
   let saw_circle = ref false in
   let saw_rectangle = ref false in
   let saw_point = ref false in
-  Session.run_hegel_test ~test_cases:50 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ())
+    (fun tc ->
       let v = shape_generator tc in
       match v with
       | Circle f ->
@@ -102,13 +106,15 @@ let test_shape_e2e () =
 
 (** Test: derived score (type alias to int) generates integers. *)
 let test_score_e2e () =
-  Session.run_hegel_test ~test_cases:20 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:20 ())
+    (fun tc ->
       let _v : score = score_generator tc in
       ())
 
 (** Test: derived wrapper (single-field record) generates values. *)
 let test_wrapper_e2e () =
-  Session.run_hegel_test ~test_cases:20 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:20 ())
+    (fun tc ->
       let w = wrapper_generator tc in
       ignore w.value)
 
@@ -116,7 +122,8 @@ let test_wrapper_e2e () =
 let test_maybe_int_e2e () =
   let saw_some = ref false in
   let saw_none = ref false in
-  Session.run_hegel_test ~test_cases:50 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ())
+    (fun tc ->
       let m = maybe_int_generator tc in
       match m.data with Some _ -> saw_some := true | None -> saw_none := true);
   assert !saw_some;
@@ -124,7 +131,8 @@ let test_maybe_int_e2e () =
 
 (** Test: derived line_segment (nested record) generates values. *)
 let test_line_segment_e2e () =
-  Session.run_hegel_test ~test_cases:20 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:20 ())
+    (fun tc ->
       let ls = line_segment_generator tc in
       ignore (ls.start_pt.x, ls.start_pt.y, ls.end_pt.x, ls.end_pt.y))
 
@@ -132,7 +140,8 @@ let test_line_segment_e2e () =
 let test_pair_or_single_e2e () =
   let saw_pair = ref false in
   let saw_single = ref false in
-  Session.run_hegel_test ~test_cases:50 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ())
+    (fun tc ->
       let v = pair_or_single_generator tc in
       match v with
       | Pair (a, b) ->
@@ -148,7 +157,8 @@ let test_pair_or_single_e2e () =
 let test_flag_e2e () =
   let saw_true = ref false in
   let saw_false = ref false in
-  Session.run_hegel_test ~test_cases:50 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ())
+    (fun tc ->
       let b : flag = flag_generator tc in
       if b then saw_true := true else saw_false := true);
   assert !saw_true;
@@ -156,19 +166,22 @@ let test_flag_e2e () =
 
 (** Test: derived temperature (type alias to float) generates floats. *)
 let test_temperature_e2e () =
-  Session.run_hegel_test ~test_cases:20 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:20 ())
+    (fun tc ->
       let f : temperature = temperature_generator tc in
       assert (Float.is_finite f))
 
 (** Test: derived label (type alias to string) generates strings. *)
 let test_label_e2e () =
-  Session.run_hegel_test ~test_cases:20 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:20 ())
+    (fun tc ->
       let s : label = label_generator tc in
       ignore (String.length s))
 
 (** Test: derived int_list_wrapper (list field) generates values. *)
 let test_int_list_wrapper_e2e () =
-  Session.run_hegel_test ~test_cases:20 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:20 ())
+    (fun tc ->
       let w = int_list_wrapper_generator tc in
       ignore (List.length w.items))
 

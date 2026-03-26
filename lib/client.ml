@@ -84,6 +84,13 @@ let default_settings () =
     suppress_health_check = [];
   }
 
+(** [settings ?test_cases ?seed ()] creates settings with the given overrides
+    applied to {!default_settings}. *)
+let settings ?(test_cases = 100) ?seed () =
+  let s = default_settings () in
+  let s = { s with test_cases } in
+  match seed with Some v -> { s with seed = Some v } | None -> s
+
 (** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
 let with_test_cases n s = { s with test_cases = n }
 

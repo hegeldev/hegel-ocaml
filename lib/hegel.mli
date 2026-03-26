@@ -44,13 +44,8 @@ val draw : Client.test_case -> 'a Generators.generator -> 'a
     [tc]. *)
 
 val run_hegel_test :
-  ?settings:Client.settings ->
-  ?test_cases:int ->
-  ?seed:int ->
-  (Client.test_case -> unit) ->
-  unit
-(** [run_hegel_test ?settings ?test_cases ?seed test_fn] runs a property test.
-*)
+  ?settings:Client.settings -> (Client.test_case -> unit) -> unit
+(** [run_hegel_test ?settings test_fn] runs a property test. *)
 
 val default_settings : unit -> Client.settings
 (** [default_settings ()] creates default test settings with CI auto-detection.

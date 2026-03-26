@@ -40,6 +40,10 @@ val default_settings : unit -> settings
     environments automatically: in CI, [derandomize] is [true] and [database] is
     [Disabled]. *)
 
+val settings : ?test_cases:int -> ?seed:int -> unit -> settings
+(** [settings ?test_cases ?seed ()] creates settings with the given overrides
+    applied to {!default_settings}. Convenience constructor for common cases. *)
+
 val is_in_ci : unit -> bool
 (** [is_in_ci ()] returns [true] if a CI environment is detected. *)
 

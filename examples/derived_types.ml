@@ -21,7 +21,8 @@ type entity = { name : string; tag : int option; active : bool }
 
 (** Property: the distance from any point to the origin is non-negative. *)
 let test_point_distance_nonnegative () =
-  Hegel.run_hegel_test ~test_cases:100 (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases:100 ())
+    (fun tc ->
       let p = point_generator tc in
       let dist_sq = (p.x * p.x) + (p.y * p.y) in
       assert (dist_sq >= 0))
@@ -29,7 +30,8 @@ let test_point_distance_nonnegative () =
 (** Property: color_generator covers all three constructors. *)
 let test_color_all_variants () =
   let saw = Hashtbl.create 3 in
-  Hegel.run_hegel_test ~test_cases:50 (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases:50 ())
+    (fun tc ->
       let c = color_generator tc in
       match c with
       | Red -> Hashtbl.replace saw "red" true
@@ -43,7 +45,8 @@ let test_shape_all_variants () =
   let saw_rect = ref false in
   let saw_labeled = ref false in
   let saw_dot = ref false in
-  Hegel.run_hegel_test ~test_cases:100 (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases:100 ())
+    (fun tc ->
       let s = shape_generator tc in
       match s with
       | Circle r ->
@@ -65,7 +68,8 @@ let test_shape_all_variants () =
 let test_entity_valid () =
   let saw_tagged = ref false in
   let saw_untagged = ref false in
-  Hegel.run_hegel_test ~test_cases:50 (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases:50 ())
+    (fun tc ->
       let e = entity_generator tc in
       ignore (String.length e.name);
       ignore e.active;

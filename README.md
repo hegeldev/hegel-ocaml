@@ -36,10 +36,10 @@ open Hegel
 open Hegel.Generators
 
 let () =
-  run_hegel_test ~test_cases:100
-    (fun () ->
-      let a = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in
-      let b = generate (integers ~min_value:(-1000) ~max_value:1000 ()) in
+  run_hegel_test ~settings:(Client.settings ~test_cases:100 ())
+    (fun tc ->
+      let a = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
+      let b = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
       assert (a + b = b + a))
 ```
 

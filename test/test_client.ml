@@ -82,8 +82,11 @@ let test_start_span_when_aborted () =
 
 let test_nested_test_raises () =
   let raised = ref false in
-  Session.run_hegel_test ~test_cases:1 (fun _tc ->
-      try Session.run_hegel_test ~test_cases:1 (fun _tc2 -> ())
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ())
+    (fun _tc ->
+      try
+        Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ())
+          (fun _tc2 -> ())
       with Failure msg ->
         raised := true;
         Alcotest.(check bool)
@@ -105,7 +108,7 @@ let with_test_mode mode f =
     f
 
 let test_simple_passing_test () =
-  Session.run_hegel_test ~test_cases:5 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
       let v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
       in
@@ -114,7 +117,8 @@ let test_simple_passing_test () =
 let test_simple_failing_test () =
   let raised = ref false in
   (try
-     Session.run_hegel_test ~test_cases:100 (fun tc ->
+     Session.run_hegel_test ~settings:(Client.settings ~test_cases:100 ())
+       (fun tc ->
          let v =
            generate_from_schema
              (`Map
@@ -131,20 +135,22 @@ let test_simple_failing_test () =
   Alcotest.(check bool) "test failed" true !raised
 
 let test_single_test_case () =
-  Session.run_hegel_test ~test_cases:1 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ()) (fun tc ->
       let v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
       in
       ignore (Cbor_helpers.extract_bool v))
 
 let test_assume_true_e2e () =
-  Session.run_hegel_test ~test_cases:5 (fun tc -> assume tc true)
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
+      assume tc true)
 
 let test_assume_false_e2e () =
-  Session.run_hegel_test ~test_cases:5 (fun tc -> assume tc false)
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
+      assume tc false)
 
 let test_note_not_final_e2e () =
-  Session.run_hegel_test ~test_cases:5 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
       note tc "should not appear";
       let v =
         generate_from_schema
@@ -159,7 +165,7 @@ let test_note_not_final_e2e () =
       ignore (Cbor_helpers.extract_int v))
 
 let test_target_e2e () =
-  Session.run_hegel_test ~test_cases:5 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
       let v =
         generate_from_schema
           (`Map
@@ -177,39 +183,43 @@ let test_target_e2e () =
 
 let test_stop_test_on_generate () =
   with_test_mode "stop_test_on_generate" (fun () ->
-      Session.run_hegel_test ~test_cases:5 (fun tc ->
+      Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ())
+        (fun tc ->
           ignore
             (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc)))
 
 let test_stop_test_on_mark_complete () =
   with_test_mode "stop_test_on_mark_complete" (fun () ->
-      Session.run_hegel_test ~test_cases:5 (fun tc ->
+      Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ())
+        (fun tc ->
           ignore
             (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc)))
 
 let test_error_response () =
   with_test_mode "error_response" (fun () ->
-      Session.run_hegel_test ~test_cases:5 (fun tc ->
+      Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ())
+        (fun tc ->
           ignore
             (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc)))
 
 let test_empty_test () =
   with_test_mode "empty_test" (fun () ->
-      Session.run_hegel_test ~test_cases:5 (fun tc ->
+      Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ())
+        (fun tc ->
           ignore
             (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc)))
 
 (* ---- Mark complete status values ---- *)
 
 let test_mark_complete_valid () =
-  Session.run_hegel_test ~test_cases:3 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:3 ()) (fun tc ->
       let v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
       in
       ignore (Cbor_helpers.extract_bool v))
 
 let test_mark_complete_invalid () =
-  Session.run_hegel_test ~test_cases:5 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
       let _v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
       in
@@ -218,7 +228,8 @@ let test_mark_complete_invalid () =
 let test_mark_complete_interesting () =
   let raised = ref false in
   (try
-     Session.run_hegel_test ~test_cases:100 (fun tc ->
+     Session.run_hegel_test ~settings:(Client.settings ~test_cases:100 ())
+       (fun tc ->
          let v =
            generate_from_schema
              (`Map
@@ -236,7 +247,7 @@ let test_mark_complete_interesting () =
 
 (** Test: start_span and stop_span when NOT aborted (live connection). *)
 let test_start_stop_span_live () =
-  Session.run_hegel_test ~test_cases:1 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ()) (fun tc ->
       start_span tc;
       stop_span tc;
       ignore
@@ -295,7 +306,8 @@ let test_version_mismatch_low () =
 
 (** Test: run_test with explicit seed. *)
 let test_run_test_with_seed () =
-  Session.run_hegel_test ~test_cases:5 ~seed:42 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ~seed:42 ())
+    (fun tc ->
       ignore
         (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc))
 
@@ -305,7 +317,8 @@ let test_run_test_with_seed () =
 let test_multiple_interesting () =
   let raised_msg = ref "" in
   (try
-     Session.run_hegel_test ~test_cases:200 (fun tc ->
+     Session.run_hegel_test ~settings:(Client.settings ~test_cases:200 ())
+       (fun tc ->
          let v = Hegel.draw tc (Hegel.Generators.booleans ()) in
          if v then failwith "error from Failure branch" else raise Exit)
    with e -> raised_msg := Printexc.to_string e);
@@ -829,6 +842,24 @@ let test_default_settings_in_ci () =
         "database disabled in CI" true
         (s.database = Client.Disabled))
 
+(** Test: settings convenience constructor. *)
+let test_settings_convenience () =
+  let s0 = Client.settings () in
+  Alcotest.(check int) "default test_cases" 100 s0.Client.test_cases;
+  let s = Client.settings ~test_cases:50 () in
+  Alcotest.(check int) "test_cases" 50 s.Client.test_cases;
+  Alcotest.(check bool) "seed is None" true (s.Client.seed = None);
+  let s2 = Client.settings ~test_cases:10 ~seed:42 () in
+  Alcotest.(check int) "test_cases" 10 s2.Client.test_cases;
+  Alcotest.(check int) "seed" 42 (Option.get s2.Client.seed)
+
+(** Test: with_seed builder. *)
+let test_with_seed () =
+  let s = Client.default_settings () |> Client.with_seed (Some 99) in
+  Alcotest.(check int) "seed" 99 (Option.get s.Client.seed);
+  let s2 = Client.with_seed None s in
+  Alcotest.(check bool) "seed cleared" true (s2.Client.seed = None)
+
 (** Test: run_test with database_key. *)
 let test_run_test_with_database_key () =
   with_fake_server
@@ -842,29 +873,6 @@ let test_run_test_with_database_key () =
         (fun _tc -> ()))
 
 (* ---- find_hegel ---- *)
-
-(** Test: find_hegel uses HEGEL_BINARY env var when HEGEL_SERVER_COMMAND is
-    empty. Covers line 141 in session.ml. *)
-let test_find_hegel_via_binary_env () =
-  let orig_cmd =
-    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
-  in
-  let orig_bin =
-    try Some (Sys.getenv "HEGEL_BINARY") with Not_found -> None
-  in
-  Unix.putenv "HEGEL_SERVER_COMMAND" "";
-  Unix.putenv "HEGEL_BINARY" "/tmp/fake-binary";
-  Fun.protect
-    ~finally:(fun () ->
-      (match orig_cmd with
-      | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
-      | None -> Unix.putenv "HEGEL_SERVER_COMMAND" "");
-      match orig_bin with
-      | Some v -> Unix.putenv "HEGEL_BINARY" v
-      | None -> Unix.putenv "HEGEL_BINARY" "")
-    (fun () ->
-      let path = Session.find_hegel () in
-      Alcotest.(check string) "path" "/tmp/fake-binary" path)
 
 (** Test: find_on_path returns Some for an existing command and None for a
     nonexistent command. *)
@@ -1306,19 +1314,12 @@ let test_find_hegel_fallthrough_to_install () =
       let orig_cmd =
         try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
       in
-      let orig_bin =
-        try Some (Sys.getenv "HEGEL_BINARY") with Not_found -> None
-      in
-      Unix.putenv "HEGEL_SERVER_COMMAND" "";
-      Unix.putenv "HEGEL_BINARY" "";
+      Test_helpers.unsetenv "HEGEL_SERVER_COMMAND";
       Fun.protect
         ~finally:(fun () ->
-          (match orig_cmd with
+          match orig_cmd with
           | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
-          | None -> Unix.putenv "HEGEL_SERVER_COMMAND" "");
-          match orig_bin with
-          | Some v -> Unix.putenv "HEGEL_BINARY" v
-          | None -> Unix.putenv "HEGEL_BINARY" "")
+          | None -> Test_helpers.unsetenv "HEGEL_SERVER_COMMAND")
         (fun () ->
           let path = Session.find_hegel () in
           Alcotest.(check bool) "found hegel" true (String.length path > 0)))
@@ -1343,7 +1344,7 @@ let test_session_cleanup () =
   Session.cleanup session
 
 let test_session_start_and_run () =
-  Session.run_hegel_test ~test_cases:3 (fun tc ->
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:3 ()) (fun tc ->
       let v =
         generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
       in
@@ -1378,6 +1379,8 @@ let tests =
       test_with_suppress_health_check;
     Alcotest.test_case "default_settings in CI" `Quick
       test_default_settings_in_ci;
+    Alcotest.test_case "settings convenience" `Quick test_settings_convenience;
+    Alcotest.test_case "with_seed" `Quick test_with_seed;
     Alcotest.test_case "run_test with database_key" `Quick
       test_run_test_with_database_key;
     (* Real-server converted tests *)
@@ -1403,8 +1406,6 @@ let tests =
       test_send_error_reply_fails_silently;
     (* find_hegel *)
     Alcotest.test_case "find_hegel via env" `Quick test_find_hegel_via_env;
-    Alcotest.test_case "find_hegel via HEGEL_BINARY" `Quick
-      test_find_hegel_via_binary_env;
     Alcotest.test_case "find_on_path" `Quick test_find_on_path;
     Alcotest.test_case "ensure_hegel_installed cached" `Quick
       test_ensure_hegel_installed_cached;

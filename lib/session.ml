@@ -130,19 +130,15 @@ let find_on_path cmd =
 
 (** [find_hegel ()] locates the hegel binary. Checks, in order:
     - [HEGEL_SERVER_COMMAND] environment variable
-    - [HEGEL_BINARY] environment variable (for backward compatibility)
     - [hegel] on [PATH]
     - Auto-install via uv to [.hegel/venv/] *)
 let find_hegel () =
   match Sys.getenv_opt hegel_server_command_env with
   | Some path when path <> "" -> path
   | _ -> (
-      match Sys.getenv_opt "HEGEL_BINARY" with
-      | Some path when path <> "" -> path
-      | _ -> (
-          match find_on_path "hegel" with
-          | Some path -> path
-          | None -> ensure_hegel_installed ()))
+      match find_on_path "hegel" with
+      | Some path -> path
+      | None -> ensure_hegel_installed ())
 
 (** [server_log_fd ()] returns a file descriptor for the server log file. *)
 let server_log_fd () =
@@ -239,27 +235,9 @@ let start session =
     environment variables (like [HEGEL_PROTOCOL_TEST_MODE]) have changed. *)
 let restart_session () = cleanup global_session
 
-(** [run_hegel_test ?settings ?test_cases ?seed test_fn] runs a property test
-    using the shared hegel process.
-
-    @param settings
-      optional settings override. If provided, [test_cases] and [seed] are
-      ignored.
-    @param test_cases
-      number of test cases (default 100, ignored if settings provided)
-    @param seed
-      optional seed for deterministic replay (ignored if settings provided)
-    @param test_fn the test body function *)
-let run_hegel_test ?settings ?(test_cases = 100) ?seed test_fn =
+(** [run_hegel_test ?settings test_fn] runs a property test using the shared
+    hegel process. Uses {!Client.default_settings} when [settings] is not
+    provided. *)
+let run_hegel_test ?(settings = Client.default_settings ()) test_fn =
   start global_session;
-  let effective_settings =
-    match settings with
-    | Some s -> s
-    | None -> (
-        let s = Client.default_settings () in
-        let s = Client.with_test_cases test_cases s in
-        match seed with Some v -> Client.with_seed (Some v) s | None -> s)
-  in
-  Client.run_test
-    (Option.get global_session.client)
-    ~settings:effective_settings test_fn
+  Client.run_test (Option.get global_session.client) ~settings test_fn

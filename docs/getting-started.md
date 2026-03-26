@@ -24,23 +24,23 @@ open Hegel
 open Hegel.Generators
 
 let test_integers () =
-  run_hegel_test ~test_cases:100
-    (fun () ->
-      let n = generate (integers ()) in
+  run_hegel_test ~settings:(Client.settings ~test_cases:100 ())
+    (fun tc ->
+      let n = draw tc (integers ()) in
       Printf.printf "called with %d\n%!" n;
       assert (n = n))  (* integers are always equal to themselves *)
 
 let () = test_integers ()
 ```
 
-Inside the test body you call `generate` on generators to produce random values.
-The `generate` function returns a typed OCaml value directly — no extraction
+Inside the test body you call `draw tc` on generators to produce random values.
+The `draw` function returns a typed OCaml value directly — no extraction
 step is needed. When executed, Hegel generates random inputs matching the
 generator's specification. If any assertion fails, Hegel shrinks the inputs to
 a minimal counterexample.
 
 By default, `run_hegel_test` generates **100 test cases**. Override this with
-the `~test_cases` parameter: `run_hegel_test ~test_cases:500 ...`.
+the `~settings` parameter: `run_hegel_test ~settings:(Client.settings ~test_cases:500 ()) ...`.
 
 ## Running in a test suite
 
@@ -51,9 +51,9 @@ open Hegel
 open Hegel.Generators
 
 let test_integers_bounded () =
-  run_hegel_test ~test_cases:100
-    (fun () ->
-      let n = generate (integers ~min_value:0 ~max_value:200 ()) in
+  run_hegel_test ~settings:(Client.settings ~test_cases:100 ())
+    (fun tc ->
+      let n = draw tc (integers ~min_value:0 ~max_value:200 ()) in
       assert (n < 50))  (* this will fail! *)
 
 let () =
@@ -73,10 +73,10 @@ open Hegel
 open Hegel.Generators
 
 let test_multiple_values () =
-  run_hegel_test ~test_cases:50
-    (fun () ->
-      let n = generate (integers ()) in
-      let s = generate (text ()) in
+  run_hegel_test ~settings:(Client.settings ~test_cases:50 ())
+    (fun tc ->
+      let n = draw tc (integers ()) in
+      let s = draw tc (text ()) in
       assert (n = n);
       assert (String.length s >= 0))
 ```
@@ -93,9 +93,9 @@ open Hegel
 open Hegel.Generators
 
 let test_even_integers () =
-  run_hegel_test ~test_cases:50
-    (fun () ->
-      let n = generate (filter (fun v -> v mod 2 = 0) (integers ())) in
+  run_hegel_test ~settings:(Client.settings ~test_cases:50 ())
+    (fun tc ->
+      let n = draw tc (filter (fun v -> v mod 2 = 0) (integers ())) in
       assert (n mod 2 = 0))
 ```
 
@@ -107,11 +107,11 @@ open Hegel
 open Hegel.Generators
 
 let test_division () =
-  run_hegel_test ~test_cases:100
-    (fun () ->
-      let n1 = generate (integers ()) in
-      let n2 = generate (integers ()) in
-      assume (n2 <> 0);
+  run_hegel_test ~settings:(Client.settings ~test_cases:100 ())
+    (fun tc ->
+      let n1 = draw tc (integers ()) in
+      let n2 = draw tc (integers ()) in
+      assume tc (n2 <> 0);
       (* n2 is guaranteed non-zero here *)
       assert (n1 = (n1 / n2) * n2 + (n1 mod n2)))
 ```
@@ -128,10 +128,10 @@ open Hegel
 open Hegel.Generators
 
 let test_string_integers () =
-  run_hegel_test ~test_cases:50
-    (fun () ->
+  run_hegel_test ~settings:(Client.settings ~test_cases:50 ())
+    (fun tc ->
       let s =
-        generate
+        draw tc
           (map
             (fun n -> string_of_int n)
             (integers ~min_value:0 ~max_value:100 ()))
@@ -149,11 +149,11 @@ open Hegel
 open Hegel.Generators
 
 let test_list_with_valid_index () =
-  run_hegel_test ~test_cases:50
-    (fun () ->
-      let n = generate (integers ~min_value:1 ~max_value:10 ()) in
-      let lst = generate (lists (integers ()) ~min_size:n ~max_size:n ()) in
-      let index = generate (integers ~min_value:0 ~max_value:(n - 1) ()) in
+  run_hegel_test ~settings:(Client.settings ~test_cases:50 ())
+    (fun tc ->
+      let n = draw tc (integers ~min_value:1 ~max_value:10 ()) in
+      let lst = draw tc (lists (integers ()) ~min_size:n ~max_size:n ()) in
+      let index = draw tc (integers ~min_value:0 ~max_value:(n - 1) ()) in
       assert (index >= 0 && index < List.length lst))
 ```
 
@@ -165,10 +165,10 @@ open Hegel
 open Hegel.Generators
 
 let test_list_with_valid_index_flatmap () =
-  run_hegel_test ~test_cases:50
-    (fun () ->
+  run_hegel_test ~settings:(Client.settings ~test_cases:50 ())
+    (fun tc ->
       let n, lst =
-        generate
+        draw tc
           (flat_map
             (fun n ->
               map (fun lst -> (n, lst))
@@ -265,11 +265,11 @@ open Hegel
 open Hegel.Generators
 
 let test_something () =
-  run_hegel_test ~test_cases:100
-    (fun () ->
-      let x = generate (integers ()) in
-      let y = generate (integers ()) in
-      note (Printf.sprintf "trying x=%d, y=%d" x y);
+  run_hegel_test ~settings:(Client.settings ~test_cases:100 ())
+    (fun tc ->
+      let x = draw tc (integers ()) in
+      let y = draw tc (integers ()) in
+      note tc (Printf.sprintf "trying x=%d, y=%d" x y);
       assert (x + y = y + x))  (* commutativity — always true *)
 ```
 
@@ -283,14 +283,14 @@ open Hegel
 open Hegel.Generators
 
 let test_optimization () =
-  run_hegel_test ~test_cases:1000
-    (fun () ->
+  run_hegel_test ~settings:(Client.settings ~test_cases:1000 ())
+    (fun tc ->
       let x =
-        generate
+        draw tc
           (floats ~min_value:0.0 ~max_value:10000.0
              ~allow_nan:false ~allow_infinity:false ())
       in
-      target x "maximize_x";
+      target tc x "maximize_x";
       assert (x <= 9999.0))
 ```
 
@@ -318,14 +318,14 @@ type point = { x : int; y : int } [@@deriving generator]
 type color = Red | Green | Blue [@@deriving generator]
 
 let () =
-  run_hegel_test ~test_cases:100 (fun () ->
-    let p = point_generator () in
-    let c = color_generator () in
+  run_hegel_test ~settings:(Client.settings ~test_cases:100 ()) (fun tc ->
+    let p = point_generator tc in
+    let c = color_generator tc in
     assert (p.x = p.x);
     ignore c)
 ```
 
-The PPX synthesises `<type>_generator : unit -> <type>` functions for records,
+The PPX synthesises `<type>_generator : test_data -> <type>` functions for records,
 variants, type aliases, and nested types. Supported field types: `int`, `bool`,
 `float`, `string`, `t list`, `t option`, tuples, and named types.
 

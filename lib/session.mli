@@ -33,7 +33,6 @@ val find_on_path : string -> string option
 val find_hegel : unit -> string
 (** [find_hegel ()] locates the hegel binary. Checks, in order:
     - [HEGEL_SERVER_COMMAND] environment variable
-    - [HEGEL_BINARY] environment variable (for backward compatibility)
     - [hegel] on [PATH]
     - Auto-install via uv to [.hegel/venv/] *)
 
@@ -58,14 +57,10 @@ val start : hegel_session -> unit
     server with [--stdio] for pipe-based communication. *)
 
 val run_hegel_test :
-  ?settings:Client.settings ->
-  ?test_cases:int ->
-  ?seed:int ->
-  (Client.test_case -> unit) ->
-  unit
-(** [run_hegel_test ?settings ?test_cases ?seed test_fn] runs a property test
-    using the shared hegel process. If [settings] is provided, [test_cases] and
-    [seed] are ignored. *)
+  ?settings:Client.settings -> (Client.test_case -> unit) -> unit
+(** [run_hegel_test ?settings test_fn] runs a property test using the shared
+    hegel process. Uses {!Client.default_settings} when [settings] is not
+    provided. *)
 
 val restart_session : unit -> unit
 (** [restart_session ()] forces a restart of the global session. Useful when
