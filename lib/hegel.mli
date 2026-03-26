@@ -27,27 +27,27 @@ module Derive = Derive
 
 (** {2 Convenience re-exports} *)
 
-val assume : bool -> unit
-(** [assume condition] rejects the current test case if [condition] is [false].
-*)
+val assume : Client.test_case -> bool -> unit
+(** [assume tc condition] rejects the current test case if [condition] is
+    [false]. *)
 
-val note : string -> unit
-(** [note message] records a message that will be printed on the final (failing)
-    run. *)
+val note : Client.test_case -> string -> unit
+(** [note tc message] records a message that will be printed on the final
+    (failing) run. *)
 
-val target : float -> string -> unit
-(** [target value label] sends a target command to guide the search engine
+val target : Client.test_case -> float -> string -> unit
+(** [target tc value label] sends a target command to guide the search engine
     toward higher values. *)
 
-val draw : 'a Generators.generator -> 'a
-(** [draw gen] produces a typed value from generator [gen]. Must be called from
-    within a Hegel test body. *)
+val draw : Client.test_case -> 'a Generators.generator -> 'a
+(** [draw tc gen] produces a typed value from generator [gen] using test case
+    [tc]. *)
 
 val run_hegel_test :
   ?settings:Client.settings ->
   ?test_cases:int ->
   ?seed:int ->
-  (unit -> unit) ->
+  (Client.test_case -> unit) ->
   unit
 (** [run_hegel_test ?settings ?test_cases ?seed test_fn] runs a property test.
 *)

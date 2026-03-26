@@ -411,15 +411,17 @@ let test_hashmaps_non_basic_values_raises () =
 
 (** Test: floats() E2E — values are floats. *)
 let test_floats_e2e () =
-  Session.run_hegel_test ~test_cases:10 (fun () ->
-      let f = Hegel.draw (floats ~allow_nan:false ~allow_infinity:false ()) in
+  Session.run_hegel_test ~test_cases:10 (fun tc ->
+      let f =
+        Hegel.draw tc (floats ~allow_nan:false ~allow_infinity:false ())
+      in
       assert (Float.is_finite f))
 
 (** Test: floats() with bounds E2E — values within range. *)
 let test_floats_bounds_e2e () =
-  Session.run_hegel_test ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun tc ->
       let f =
-        Hegel.draw
+        Hegel.draw tc
           (floats ~min_value:0.0 ~max_value:1.0 ~allow_nan:false
              ~allow_infinity:false ())
       in
@@ -427,30 +429,30 @@ let test_floats_bounds_e2e () =
 
 (** Test: text() E2E — values are text strings. *)
 let test_text_e2e () =
-  Session.run_hegel_test ~test_cases:10 (fun () ->
-      let s = Hegel.draw (text ~min_size:1 ~max_size:10 ()) in
+  Session.run_hegel_test ~test_cases:10 (fun tc ->
+      let s = Hegel.draw tc (text ~min_size:1 ~max_size:10 ()) in
       assert (String.length s >= 1))
 
 (** Test: binary() E2E — values are byte strings. *)
 let test_binary_e2e () =
-  Session.run_hegel_test ~test_cases:10 (fun () ->
-      let b = Hegel.draw (binary ~min_size:0 ~max_size:10 ()) in
+  Session.run_hegel_test ~test_cases:10 (fun tc ->
+      let b = Hegel.draw tc (binary ~min_size:0 ~max_size:10 ()) in
       assert (String.length b >= 0))
 
 (** Test: sampled_from() E2E — values come from the options list. *)
 let test_sampled_from_e2e () =
   let options = [ 10; 20; 30 ] in
-  Session.run_hegel_test ~test_cases:10 (fun () ->
-      let n = Hegel.draw (sampled_from options) in
+  Session.run_hegel_test ~test_cases:10 (fun tc ->
+      let n = Hegel.draw tc (sampled_from options) in
       assert (List.mem n [ 10; 20; 30 ]))
 
 (** Test: hashmaps() E2E — values are maps. *)
 let test_hashmaps_e2e () =
-  Session.run_hegel_test ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun tc ->
       let key_gen = integers ~min_value:0 ~max_value:100 () in
       let val_gen = integers ~min_value:0 ~max_value:100 () in
       let gen = hashmaps key_gen val_gen ~min_size:0 ~max_size:5 () in
-      let pairs = Hegel.draw gen in
+      let pairs = Hegel.draw tc gen in
       assert (List.length pairs <= 5))
 
 let tests =

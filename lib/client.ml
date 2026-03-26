@@ -105,23 +105,16 @@ let with_database db s = { s with database = db }
 let with_suppress_health_check checks s =
   { s with suppress_health_check = s.suppress_health_check @ checks }
 
-type test_case_data = {
+type test_case = {
   channel : channel;
   is_final : bool;
   mutable test_aborted : bool;
 }
-(** Per-test-case data, consolidating channel, final-run flag, and abort state.
-    Domain-local so each domain has its own independent test state. *)
+(** Per-test-case state passed explicitly to the test function. Holds the data
+    channel, final-run flag, and abort state. *)
 
-let current_data : test_case_data option Domain.DLS.key =
-  Domain.DLS.new_key (fun () -> None)
-
-(** [get_data ()] returns the current test case data, raising [Failure] if not
-    in a test context. *)
-let get_data () =
-  match Domain.DLS.get current_data with
-  | None -> failwith "Not in a test context"
-  | Some d -> d
+(** Domain-local flag to detect nested test cases. *)
+let in_test_context : bool Domain.DLS.key = Domain.DLS.new_key (fun () -> false)
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available. *)
@@ -145,38 +138,31 @@ let extract_origin exn =
   | Some (file, line) ->
       Printf.sprintf "%s at %s:%d" (Printexc.exn_slot_name exn) file line
 
-(** [generate_from_schema schema data] generates a value from a schema by
-    sending a generate command to the server. Raises {!Data_exhausted} if the
-    server signals StopTest. *)
-let generate_from_schema schema data =
-  let channel = data.channel in
+(** [generate_from_schema schema tc] generates a value from a schema by sending
+    a generate command to the server. Raises {!Data_exhausted} if the server
+    signals StopTest. *)
+let generate_from_schema schema tc =
+  let channel = tc.channel in
   try
     pending_get
       (request channel
          (`Map [ (`Text "command", `Text "generate"); (`Text "schema", schema) ]))
   with Request_error e when e.error_type = "StopTest" ->
-    data.test_aborted <- true;
+    tc.test_aborted <- true;
     raise Data_exhausted
 
-(** [assume condition] rejects the current test case if [condition] is [false].
-*)
-let assume condition =
-  if Domain.DLS.get current_data = None then
-    failwith "assume() cannot be called outside of a Hegel test";
-  if not condition then raise Assume_rejected
+(** [assume tc condition] rejects the current test case if [condition] is
+    [false]. *)
+let assume _tc condition = if not condition then raise Assume_rejected
 
-(** [note message] records a message that will be printed on the final (failing)
-    run. *)
-let note message =
-  match Domain.DLS.get current_data with
-  | None -> failwith "note() cannot be called outside of a Hegel test"
-  | Some data -> if data.is_final then Printf.eprintf "%s\n%!" message
+(** [note tc message] records a message that will be printed on the final
+    (failing) run. *)
+let note tc message = if tc.is_final then Printf.eprintf "%s\n%!" message
 
-(** [target value label] sends a target command to guide the search engine
+(** [target tc value label] sends a target command to guide the search engine
     toward higher values. *)
-let target value label =
-  let data = get_data () in
-  let channel = data.channel in
+let target tc value label =
+  let channel = tc.channel in
   ignore
     (pending_get
        (request channel
@@ -187,11 +173,11 @@ let target value label =
                (`Text "label", `Text label);
              ])))
 
-(** [start_span ?label data] starts a generation span for better shrinking. *)
-let start_span ?(label = 0) data =
-  if data.test_aborted then ()
+(** [start_span ?label tc] starts a generation span for better shrinking. *)
+let start_span ?(label = 0) tc =
+  if tc.test_aborted then ()
   else begin
-    let channel = data.channel in
+    let channel = tc.channel in
     ignore
       (pending_get
          (request channel
@@ -202,11 +188,11 @@ let start_span ?(label = 0) data =
                ])))
   end
 
-(** [stop_span ?discard data] ends the current generation span. *)
-let stop_span ?(discard = false) data =
-  if data.test_aborted then ()
+(** [stop_span ?discard tc] ends the current generation span. *)
+let stop_span ?(discard = false) tc =
+  if tc.test_aborted then ()
   else begin
-    let channel = data.channel in
+    let channel = tc.channel in
     ignore
       (pending_get
          (request channel
@@ -251,13 +237,11 @@ type test_outcome =
   | Interesting of { origin_text : string; exn : exn option }
 
 let run_test_case _client channel test_fn ~is_final =
-  if Domain.DLS.get current_data <> None then
-    failwith "Cannot nest test cases - already inside a test case";
-  let data = { channel; is_final; test_aborted = false } in
-  Domain.DLS.set current_data (Some data);
+  let tc = { channel; is_final; test_aborted = false } in
+  Domain.DLS.set in_test_context true;
   let outcome =
     try
-      test_fn ();
+      test_fn tc;
       Valid
     with
     | Assume_rejected -> Invalid
@@ -269,7 +253,7 @@ let run_test_case _client channel test_fn ~is_final =
             exn = (if is_final then Some exn else None);
           }
   in
-  Domain.DLS.set current_data None;
+  Domain.DLS.set in_test_context false;
   (match outcome with
   | Data_was_exhausted -> ()
   | Valid | Invalid | Interesting _ -> (
@@ -300,7 +284,7 @@ let run_test_case _client channel test_fn ~is_final =
     @param database_key
       optional key for persistent failure storage (internal use). *)
 let run_test client ~settings ?database_key test_fn =
-  if Domain.DLS.get current_data <> None then
+  if Domain.DLS.get in_test_context then
     failwith "Cannot nest test cases - already inside a test case";
   let test_channel = new_channel client.connection ~role:"Test" () in
   Mutex.lock client.lock;

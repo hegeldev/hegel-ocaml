@@ -11,11 +11,11 @@ open Hegel
 let test_generate_option_e2e () =
   let saw_some = ref false in
   let saw_none = ref false in
-  Session.run_hegel_test ~test_cases:50 (fun () ->
-      let gen_fn () =
-        Hegel.draw (Hegel.Generators.integers ~min_value:0 ~max_value:10 ())
+  Session.run_hegel_test ~test_cases:50 (fun tc ->
+      let gen_fn tc =
+        Hegel.draw tc (Hegel.Generators.integers ~min_value:0 ~max_value:10 ())
       in
-      let result = Hegel.Derive.generate_option gen_fn in
+      let result = Hegel.Derive.generate_option tc gen_fn in
       match result with
       | Some n ->
           assert (n >= 0 && n <= 10);
@@ -26,11 +26,11 @@ let test_generate_option_e2e () =
 
 (** Test: generate_list E2E — generates lists with correct elements. *)
 let test_generate_list_e2e () =
-  Session.run_hegel_test ~test_cases:20 (fun () ->
-      let gen_fn () =
-        Hegel.draw (Hegel.Generators.integers ~min_value:0 ~max_value:100 ())
+  Session.run_hegel_test ~test_cases:20 (fun tc ->
+      let gen_fn tc =
+        Hegel.draw tc (Hegel.Generators.integers ~min_value:0 ~max_value:100 ())
       in
-      let result = Hegel.Derive.generate_list gen_fn in
+      let result = Hegel.Derive.generate_list tc gen_fn in
       assert (List.length result >= 0 && List.length result <= 20);
       List.iter (fun n -> assert (n >= 0 && n <= 100)) result)
 

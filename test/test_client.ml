@@ -10,84 +10,46 @@ let find_cmd = Test_helpers.find_cmd
 let test_assume_true () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
-  let data =
+  let tc =
     Client.
       { channel = control_channel conn; is_final = false; test_aborted = false }
   in
-  Domain.DLS.set current_data (Some data);
-  assume true;
-  Domain.DLS.set current_data None;
+  assume tc true;
   close conn;
   Unix.close s2
 
 let test_assume_false_raises () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
-  let data =
+  let tc =
     Client.
       { channel = control_channel conn; is_final = false; test_aborted = false }
   in
-  Domain.DLS.set current_data (Some data);
   let raised = ref false in
-  (try assume false with Assume_rejected -> raised := true);
+  (try assume tc false with Assume_rejected -> raised := true);
   Alcotest.(check bool) "raised Assume_rejected" true !raised;
-  Domain.DLS.set current_data None;
   close conn;
   Unix.close s2
-
-let test_get_data_outside_context () =
-  let raised = ref false in
-  (try ignore (get_data ())
-   with Failure msg ->
-     raised := true;
-     Alcotest.(check bool)
-       "has 'Not in a test context'" true
-       (contains_substring msg "Not in a test"));
-  Alcotest.(check bool) "raised" true !raised
-
-let test_assume_outside_context () =
-  let raised = ref false in
-  (try assume true
-   with Failure msg ->
-     raised := true;
-     Alcotest.(check bool)
-       "has 'outside of a Hegel test'" true
-       (contains_substring msg "outside of a Hegel test"));
-  Alcotest.(check bool) "raised" true !raised
-
-let test_note_outside_context () =
-  let raised = ref false in
-  (try note "should fail"
-   with Failure msg ->
-     raised := true;
-     Alcotest.(check bool)
-       "has 'outside of a Hegel test'" true
-       (contains_substring msg "outside of a Hegel test"));
-  Alcotest.(check bool) "raised" true !raised
 
 let test_note_when_not_final () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
-  let data =
+  let tc =
     Client.
       { channel = control_channel conn; is_final = false; test_aborted = false }
   in
-  Domain.DLS.set current_data (Some data);
-  note "should not print";
-  Domain.DLS.set current_data None;
+  note tc "should not print";
   close conn;
   Unix.close s2
 
 let test_note_when_final () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
-  let data =
+  let tc =
     Client.
       { channel = control_channel conn; is_final = true; test_aborted = false }
   in
-  Domain.DLS.set current_data (Some data);
-  note "test message from note";
-  Domain.DLS.set current_data None;
+  note tc "test message from note";
   close conn;
   Unix.close s2
 
@@ -118,33 +80,15 @@ let test_start_span_when_aborted () =
   close conn;
   Unix.close s2
 
-(** Test: Domain.DLS initializer for current_data returns None when accessed
-    from a fresh domain. This covers the (fun () -> None) initializer that is
-    otherwise never triggered in the main domain. *)
-let test_dls_initializers_in_new_domain () =
-  let result = Domain.spawn (fun () -> Domain.DLS.get current_data = None) in
-  let is_none = Domain.join result in
-  Alcotest.(check bool) "current_data default None" true is_none
-
 let test_nested_test_raises () =
-  (* Set the current_data to simulate being inside a test *)
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
-  let data =
-    Client.
-      { channel = control_channel conn; is_final = false; test_aborted = false }
-  in
-  Domain.DLS.set current_data (Some data);
   let raised = ref false in
-  (try Session.run_hegel_test ~test_cases:1 (fun () -> ())
-   with Failure msg ->
-     raised := true;
-     Alcotest.(check bool)
-       "has 'Cannot nest'" true
-       (contains_substring msg "Cannot nest"));
-  Domain.DLS.set current_data None;
-  close conn;
-  Unix.close s2;
+  Session.run_hegel_test ~test_cases:1 (fun _tc ->
+      try Session.run_hegel_test ~test_cases:1 (fun _tc2 -> ())
+      with Failure msg ->
+        raised := true;
+        Alcotest.(check bool)
+          "has 'Cannot nest'" true
+          (contains_substring msg "Cannot nest"));
   Alcotest.(check bool) "raised" true !raised
 
 (* ---- Tests using real hegel binary ---- *)
@@ -161,18 +105,16 @@ let with_test_mode mode f =
     f
 
 let test_simple_passing_test () =
-  Session.run_hegel_test ~test_cases:5 (fun () ->
-      let data = get_data () in
+  Session.run_hegel_test ~test_cases:5 (fun tc ->
       let v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
+        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
       in
       ignore (Cbor_helpers.extract_bool v))
 
 let test_simple_failing_test () =
   let raised = ref false in
   (try
-     Session.run_hegel_test ~test_cases:100 (fun () ->
-         let data = get_data () in
+     Session.run_hegel_test ~test_cases:100 (fun tc ->
          let v =
            generate_from_schema
              (`Map
@@ -181,7 +123,7 @@ let test_simple_failing_test () =
                   (`Text "min_value", `Int 0);
                   (`Text "max_value", `Int 100);
                 ])
-             data
+             tc
          in
          let x = Cbor_helpers.extract_int v in
          if x >= 50 then failwith "too big")
@@ -189,23 +131,21 @@ let test_simple_failing_test () =
   Alcotest.(check bool) "test failed" true !raised
 
 let test_single_test_case () =
-  Session.run_hegel_test ~test_cases:1 (fun () ->
-      let data = get_data () in
+  Session.run_hegel_test ~test_cases:1 (fun tc ->
       let v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
+        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
       in
       ignore (Cbor_helpers.extract_bool v))
 
 let test_assume_true_e2e () =
-  Session.run_hegel_test ~test_cases:5 (fun () -> assume true)
+  Session.run_hegel_test ~test_cases:5 (fun tc -> assume tc true)
 
 let test_assume_false_e2e () =
-  Session.run_hegel_test ~test_cases:5 (fun () -> assume false)
+  Session.run_hegel_test ~test_cases:5 (fun tc -> assume tc false)
 
 let test_note_not_final_e2e () =
-  Session.run_hegel_test ~test_cases:5 (fun () ->
-      note "should not appear";
-      let data = get_data () in
+  Session.run_hegel_test ~test_cases:5 (fun tc ->
+      note tc "should not appear";
       let v =
         generate_from_schema
           (`Map
@@ -214,13 +154,12 @@ let test_note_not_final_e2e () =
                (`Text "min_value", `Int 0);
                (`Text "max_value", `Int 10);
              ])
-          data
+          tc
       in
       ignore (Cbor_helpers.extract_int v))
 
 let test_target_e2e () =
-  Session.run_hegel_test ~test_cases:5 (fun () ->
-      let data = get_data () in
+  Session.run_hegel_test ~test_cases:5 (fun tc ->
       let v =
         generate_from_schema
           (`Map
@@ -229,72 +168,57 @@ let test_target_e2e () =
                (`Text "min_value", `Int 0);
                (`Text "max_value", `Int 100);
              ])
-          data
+          tc
       in
       let x = Cbor_helpers.extract_int v in
-      target (float_of_int x) "maximize_x")
+      target tc (float_of_int x) "maximize_x")
 
 (* ---- HEGEL_PROTOCOL_TEST_MODE error injection tests ---- *)
 
 let test_stop_test_on_generate () =
   with_test_mode "stop_test_on_generate" (fun () ->
-      Session.run_hegel_test ~test_cases:5 (fun () ->
-          let data = get_data () in
+      Session.run_hegel_test ~test_cases:5 (fun tc ->
           ignore
-            (generate_from_schema
-               (`Map [ (`Text "type", `Text "boolean") ])
-               data)))
+            (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc)))
 
 let test_stop_test_on_mark_complete () =
   with_test_mode "stop_test_on_mark_complete" (fun () ->
-      Session.run_hegel_test ~test_cases:5 (fun () ->
-          let data = get_data () in
+      Session.run_hegel_test ~test_cases:5 (fun tc ->
           ignore
-            (generate_from_schema
-               (`Map [ (`Text "type", `Text "boolean") ])
-               data)))
+            (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc)))
 
 let test_error_response () =
   with_test_mode "error_response" (fun () ->
-      Session.run_hegel_test ~test_cases:5 (fun () ->
-          let data = get_data () in
+      Session.run_hegel_test ~test_cases:5 (fun tc ->
           ignore
-            (generate_from_schema
-               (`Map [ (`Text "type", `Text "boolean") ])
-               data)))
+            (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc)))
 
 let test_empty_test () =
   with_test_mode "empty_test" (fun () ->
-      Session.run_hegel_test ~test_cases:5 (fun () ->
-          let data = get_data () in
+      Session.run_hegel_test ~test_cases:5 (fun tc ->
           ignore
-            (generate_from_schema
-               (`Map [ (`Text "type", `Text "boolean") ])
-               data)))
+            (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc)))
 
 (* ---- Mark complete status values ---- *)
 
 let test_mark_complete_valid () =
-  Session.run_hegel_test ~test_cases:3 (fun () ->
-      let data = get_data () in
+  Session.run_hegel_test ~test_cases:3 (fun tc ->
       let v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
+        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
       in
       ignore (Cbor_helpers.extract_bool v))
 
 let test_mark_complete_invalid () =
-  Session.run_hegel_test ~test_cases:5 (fun () ->
-      let data = get_data () in
+  Session.run_hegel_test ~test_cases:5 (fun tc ->
       let _v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
+        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
       in
-      assume false)
+      assume tc false)
 
 let test_mark_complete_interesting () =
   let raised = ref false in
   (try
-     Session.run_hegel_test ~test_cases:100 (fun () ->
-         let data = get_data () in
+     Session.run_hegel_test ~test_cases:100 (fun tc ->
          let v =
            generate_from_schema
              (`Map
@@ -303,7 +227,7 @@ let test_mark_complete_interesting () =
                   (`Text "min_value", `Int 0);
                   (`Text "max_value", `Int 100);
                 ])
-             data
+             tc
          in
          let x = Cbor_helpers.extract_int v in
          assert (x < 50))
@@ -312,12 +236,11 @@ let test_mark_complete_interesting () =
 
 (** Test: start_span and stop_span when NOT aborted (live connection). *)
 let test_start_stop_span_live () =
-  Session.run_hegel_test ~test_cases:1 (fun () ->
-      let data = get_data () in
-      start_span data;
-      stop_span data;
+  Session.run_hegel_test ~test_cases:1 (fun tc ->
+      start_span tc;
+      stop_span tc;
       ignore
-        (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data))
+        (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc))
 
 (** Test: version mismatch in create_client (version too high). *)
 let test_version_mismatch () =
@@ -372,10 +295,9 @@ let test_version_mismatch_low () =
 
 (** Test: run_test with explicit seed. *)
 let test_run_test_with_seed () =
-  Session.run_hegel_test ~test_cases:5 ~seed:42 (fun () ->
-      let data = get_data () in
+  Session.run_hegel_test ~test_cases:5 ~seed:42 (fun tc ->
       ignore
-        (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data))
+        (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc))
 
 (** Test: multiple interesting test cases (n_interesting > 1). Uses different
     exception types to produce distinct interesting origins, triggering the
@@ -383,8 +305,8 @@ let test_run_test_with_seed () =
 let test_multiple_interesting () =
   let raised_msg = ref "" in
   (try
-     Session.run_hegel_test ~test_cases:200 (fun () ->
-         let v = Hegel.draw (Hegel.Generators.booleans ()) in
+     Session.run_hegel_test ~test_cases:200 (fun tc ->
+         let v = Hegel.draw tc (Hegel.Generators.booleans ()) in
          if v then failwith "error from Failure branch" else raise Exit)
    with e -> raised_msg := Printexc.to_string e);
   Alcotest.(check bool)
@@ -449,7 +371,7 @@ let test_unrecognised_event () =
     (fun client ->
       run_test client
         ~settings:(Client.default_settings () |> Client.with_test_cases 0)
-        (fun () -> ()))
+        (fun _tc -> ()))
 
 (** Test: run_test with database=Path and suppress_health_check sends the
     correct fields over the wire. *)
@@ -468,7 +390,7 @@ let test_run_test_database_path_and_suppress () =
         |> Client.with_suppress_health_check
              [ Client.Too_slow; Client.Filter_too_much ]
       in
-      run_test client ~settings (fun () -> ()))
+      run_test client ~settings (fun _tc -> ()))
 
 (** Test: server error in results raises Failure. *)
 let test_run_test_server_error_in_results () =
@@ -485,7 +407,7 @@ let test_run_test_server_error_in_results () =
       (try
          run_test client
            ~settings:(Client.default_settings () |> Client.with_test_cases 0)
-           (fun () -> ())
+           (fun _tc -> ())
        with Failure msg ->
          raised := true;
          Alcotest.(check bool)
@@ -511,7 +433,7 @@ let test_run_test_health_check_failure () =
       (try
          run_test client
            ~settings:(Client.default_settings () |> Client.with_test_cases 0)
-           (fun () -> ())
+           (fun _tc -> ())
        with Failure msg ->
          raised := true;
          Alcotest.(check bool)
@@ -537,7 +459,7 @@ let test_run_test_flaky () =
       (try
          run_test client
            ~settings:(Client.default_settings () |> Client.with_test_cases 0)
-           (fun () -> ())
+           (fun _tc -> ())
        with Failure msg ->
          raised := true;
          Alcotest.(check bool)
@@ -562,7 +484,7 @@ let test_run_test_passed_false () =
       (try
          run_test client
            ~settings:(Client.default_settings () |> Client.with_test_cases 0)
-           (fun () -> ())
+           (fun _tc -> ())
        with Failure msg ->
          raised := true;
          Alcotest.(check bool)
@@ -596,10 +518,9 @@ let test_run_hegel_test_with_settings () =
     Client.default_settings () |> Client.with_test_cases 3
     |> Client.with_database Client.Disabled
   in
-  Session.run_hegel_test ~settings (fun () ->
-      let data = get_data () in
+  Session.run_hegel_test ~settings (fun tc ->
       let v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
+        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
       in
       ignore (Cbor_helpers.extract_bool v))
 
@@ -791,38 +712,11 @@ let test_has_working_client_live () =
 
 (** Test: run_hegel_test with default parameters. *)
 let test_run_hegel_test_defaults () =
-  Session.run_hegel_test (fun () ->
-      let data = get_data () in
+  Session.run_hegel_test (fun tc ->
       let v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
+        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
       in
       ignore (Cbor_helpers.extract_bool v))
-
-(** Test: nest test_case raises (when current_data is already set). *)
-let test_run_test_case_nest () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
-  let data =
-    Client.
-      { channel = control_channel conn; is_final = false; test_aborted = false }
-  in
-  Domain.DLS.set current_data (Some data);
-  let raised = ref false in
-  (try
-     run_test_case
-       {
-         connection = conn;
-         control = control_channel conn;
-         lock = Mutex.create ();
-       }
-       (control_channel conn)
-       (fun () -> ())
-       ~is_final:false
-   with Failure _ -> raised := true);
-  Alcotest.(check bool) "raised" true !raised;
-  Domain.DLS.set current_data None;
-  close conn;
-  Unix.close s2
 
 (* ---- health_check_to_string ---- *)
 
@@ -945,7 +839,7 @@ let test_run_test_with_database_key () =
       run_test client
         ~settings:(Client.default_settings () |> Client.with_test_cases 0)
         ~database_key:"test-key"
-        (fun () -> ()))
+        (fun _tc -> ()))
 
 (* ---- find_hegel ---- *)
 
@@ -1102,7 +996,7 @@ let test_server_crash_in_event_loop () =
   (try
      run_test client
        ~settings:(Client.default_settings () |> Client.with_test_cases 1)
-       (fun () -> ())
+       (fun _tc -> ())
    with Failure msg -> raised_msg := msg);
   Thread.join t_peer;
   Alcotest.(check bool)
@@ -1449,10 +1343,9 @@ let test_session_cleanup () =
   Session.cleanup session
 
 let test_session_start_and_run () =
-  Session.run_hegel_test ~test_cases:3 (fun () ->
-      let data = get_data () in
+  Session.run_hegel_test ~test_cases:3 (fun tc ->
       let v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
+        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
       in
       ignore (Cbor_helpers.extract_bool v))
 
@@ -1461,11 +1354,6 @@ let tests =
     (* Unit tests *)
     Alcotest.test_case "assume true" `Quick test_assume_true;
     Alcotest.test_case "assume false raises" `Quick test_assume_false_raises;
-    Alcotest.test_case "get_data outside context" `Quick
-      test_get_data_outside_context;
-    Alcotest.test_case "assume outside context" `Quick
-      test_assume_outside_context;
-    Alcotest.test_case "note outside context" `Quick test_note_outside_context;
     Alcotest.test_case "note when not final" `Quick test_note_when_not_final;
     Alcotest.test_case "note when final" `Quick test_note_when_final;
     Alcotest.test_case "extract_origin no backtrace" `Quick
@@ -1474,8 +1362,6 @@ let tests =
       test_extract_origin_with_backtrace;
     Alcotest.test_case "start/stop span when aborted" `Quick
       test_start_span_when_aborted;
-    Alcotest.test_case "DLS initializers in new domain" `Quick
-      test_dls_initializers_in_new_domain;
     Alcotest.test_case "nested test raises" `Quick test_nested_test_raises;
     Alcotest.test_case "health_check_to_string" `Quick
       test_health_check_to_string;
@@ -1563,7 +1449,6 @@ let tests =
       test_monitor_thread_detects_crash;
     Alcotest.test_case "cleanup with close error" `Quick
       test_cleanup_with_close_error;
-    Alcotest.test_case "run_test_case nest" `Quick test_run_test_case_nest;
     (* E2E tests with real hegel *)
     Alcotest.test_case "simple passing test" `Quick test_simple_passing_test;
     Alcotest.test_case "simple failing test" `Quick test_simple_failing_test;

@@ -16,13 +16,13 @@ let () =
   let max_value_p = Json_params.get_int params "max_value" 1000 in
   let test_cases = get_test_cases () in
   if key_type = "string" then
-    Hegel.run_hegel_test ~test_cases (fun () ->
+    Hegel.run_hegel_test ~test_cases (fun tc ->
         let key_gen = text ~min_size:1 ~max_size:10 () in
         let val_gen =
           integers ~min_value:min_value_p ~max_value:max_value_p ()
         in
         let map_gen = hashmaps key_gen val_gen ~min_size ~max_size () in
-        let pairs = Hegel.draw map_gen in
+        let pairs = Hegel.draw tc map_gen in
         let size = List.length pairs in
         let values = List.map snd pairs in
         let min_val_result =
@@ -42,13 +42,13 @@ let () =
             ("max_value", Json_params.int_opt_to_json max_val_result);
           ])
   else
-    Hegel.run_hegel_test ~test_cases (fun () ->
+    Hegel.run_hegel_test ~test_cases (fun tc ->
         let key_gen = integers ~min_value:min_key ~max_value:max_key () in
         let val_gen =
           integers ~min_value:min_value_p ~max_value:max_value_p ()
         in
         let map_gen = hashmaps key_gen val_gen ~min_size ~max_size () in
-        let pairs = Hegel.draw map_gen in
+        let pairs = Hegel.draw tc map_gen in
         let size = List.length pairs in
         let keys = List.map fst pairs in
         let values = List.map snd pairs in

@@ -8,6 +8,6 @@ let () =
   let params = Json_params.parse params_str in
   let options = Json_params.get_int_array params "options" in
   let test_cases = get_test_cases () in
-  Hegel.run_hegel_test ~test_cases (fun () ->
-      let n = Hegel.draw (sampled_from options) in
+  Hegel.run_hegel_test ~test_cases (fun tc ->
+      let n = Hegel.draw tc (sampled_from options) in
       write_metrics [ ("value", string_of_int n) ])

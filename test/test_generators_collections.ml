@@ -111,54 +111,54 @@ let test_hashmaps_min_greater_than_max () =
 
 (** Test: lists(integers) generates a list where all elements are in range. *)
 let test_lists_of_integers_e2e () =
-  Session.run_hegel_test ~test_cases:50 (fun () ->
+  Session.run_hegel_test ~test_cases:50 (fun tc ->
       let gen =
         lists (integers ~min_value:0 ~max_value:100 ()) ~max_size:3 ()
       in
       Alcotest.(check bool) "is_basic" true (is_basic gen);
-      let items = Hegel.draw gen in
+      let items = Hegel.draw tc gen in
       Alcotest.(check bool) "max 3" true (List.length items <= 3);
       List.iter (fun n -> assert (n >= 0 && n <= 100)) items)
 
 (** Test: lists(booleans, min_size=3, max_size=5) → length in [3,5]. *)
 let test_lists_booleans_bounds_e2e () =
-  Session.run_hegel_test ~test_cases:50 (fun () ->
+  Session.run_hegel_test ~test_cases:50 (fun tc ->
       let gen = lists (booleans ()) ~min_size:3 ~max_size:5 () in
       Alcotest.(check bool) "is_basic" true (is_basic gen);
-      let items = Hegel.draw gen in
+      let items = Hegel.draw tc gen in
       let n = List.length items in
       assert (n >= 3 && n <= 5))
 
 (** Test: lists(filtered integers) → all elements satisfy predicate. *)
 let test_lists_non_basic_e2e () =
-  Session.run_hegel_test ~test_cases:50 (fun () ->
+  Session.run_hegel_test ~test_cases:50 (fun tc ->
       let elem =
         filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ())
       in
       let gen = lists elem ~min_size:1 ~max_size:3 () in
       Alcotest.(check bool) "not basic" false (is_basic gen);
-      let items = Hegel.draw gen in
+      let items = Hegel.draw tc gen in
       let n = List.length items in
       assert (n >= 1 && n <= 3);
       List.iter (fun x -> assert (x > 5)) items)
 
 (** Test: lists(non-basic) without max_size (max_size=None in collection). *)
 let test_lists_non_basic_no_max_e2e () =
-  Session.run_hegel_test ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun tc ->
       let elem =
         filter (fun _ -> true) (integers ~min_value:0 ~max_value:10 ())
       in
       let gen = lists elem () in
-      let items = Hegel.draw gen in
+      let items = Hegel.draw tc gen in
       List.iter (fun x -> assert (x >= 0 && x <= 10)) items)
 
 (** Test: lists(lists(booleans)) → nested lists work. *)
 let test_lists_nested_e2e () =
-  Session.run_hegel_test ~test_cases:50 (fun () ->
+  Session.run_hegel_test ~test_cases:50 (fun tc ->
       let inner = lists (booleans ()) ~max_size:3 () in
       let gen = lists inner ~max_size:3 () in
       Alcotest.(check bool) "outer is_basic" true (is_basic gen);
-      let outer_items = Hegel.draw gen in
+      let outer_items = Hegel.draw tc gen in
       assert (List.length outer_items <= 3);
       List.iter
         (fun inner_items -> assert (List.length inner_items <= 3))

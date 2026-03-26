@@ -61,7 +61,7 @@ val run_hegel_test :
   ?settings:Client.settings ->
   ?test_cases:int ->
   ?seed:int ->
-  (unit -> unit) ->
+  (Client.test_case -> unit) ->
   unit
 (** [run_hegel_test ?settings ?test_cases ?seed test_fn] runs a property test
     using the shared hegel process. If [settings] is provided, [test_cases] and

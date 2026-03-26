@@ -63,48 +63,40 @@ val with_suppress_health_check : health_check list -> settings -> settings
 (** [with_suppress_health_check checks s] returns settings [s] with additional
     health checks suppressed. *)
 
-type test_case_data = {
+type test_case = {
   channel : Connection.channel;
   is_final : bool;
   mutable test_aborted : bool;
 }
-(** Per-test-case data, consolidating channel, final-run flag, and abort state.
-    Domain-local so each domain has its own independent test state. *)
-
-val current_data : test_case_data option Domain.DLS.key
-(** Current test case data. Domain-local so each domain has its own independent
-    test state. *)
-
-val get_data : unit -> test_case_data
-(** [get_data ()] returns the current test case data, raising [Failure] if not
-    in a test context. *)
+(** Per-test-case state passed explicitly to the test function. Holds the data
+    channel, final-run flag, and abort state. *)
 
 val extract_origin : exn -> string
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available. *)
 
-val generate_from_schema : CBOR.Simple.t -> test_case_data -> CBOR.Simple.t
-(** [generate_from_schema schema data] generates a value from a schema by
-    sending a generate command to the server. Raises {!Data_exhausted} if the
-    server signals StopTest. *)
+val generate_from_schema : CBOR.Simple.t -> test_case -> CBOR.Simple.t
+(** [generate_from_schema schema tc] generates a value from a schema by sending
+    a generate command to the server. Raises {!Data_exhausted} if the server
+    signals StopTest. *)
 
-val assume : bool -> unit
-(** [assume condition] rejects the current test case if [condition] is [false].
-*)
+val assume : test_case -> bool -> unit
+(** [assume tc condition] rejects the current test case if [condition] is
+    [false]. *)
 
-val note : string -> unit
-(** [note message] records a message that will be printed on the final (failing)
-    run. *)
+val note : test_case -> string -> unit
+(** [note tc message] records a message that will be printed on the final
+    (failing) run. *)
 
-val target : float -> string -> unit
-(** [target value label] sends a target command to guide the search engine
+val target : test_case -> float -> string -> unit
+(** [target tc value label] sends a target command to guide the search engine
     toward higher values. *)
 
-val start_span : ?label:int -> test_case_data -> unit
-(** [start_span ?label data] starts a generation span for better shrinking. *)
+val start_span : ?label:int -> test_case -> unit
+(** [start_span ?label tc] starts a generation span for better shrinking. *)
 
-val stop_span : ?discard:bool -> test_case_data -> unit
-(** [stop_span ?discard data] ends the current generation span. *)
+val stop_span : ?discard:bool -> test_case -> unit
+(** [stop_span ?discard tc] ends the current generation span. *)
 
 val supported_protocol_lo : float
 (** Lowest supported protocol version. *)
@@ -124,12 +116,15 @@ val create_client : Connection.connection -> client
     connection must not yet have had its handshake performed. *)
 
 val run_test_case :
-  client -> Connection.channel -> (unit -> unit) -> is_final:bool -> unit
+  client -> Connection.channel -> (test_case -> unit) -> is_final:bool -> unit
 (** [run_test_case client channel test_fn ~is_final] runs a single test case.
-    Sets up domain-local state and calls [test_fn]. Reports status via
-    mark_complete. *)
+    Passes the test case to [test_fn]. Reports status via mark_complete. *)
 
 val run_test :
-  client -> settings:settings -> ?database_key:string -> (unit -> unit) -> unit
+  client ->
+  settings:settings ->
+  ?database_key:string ->
+  (test_case -> unit) ->
+  unit
 (** [run_test client ~settings ?database_key test_fn] runs a property test using
     the given settings. *)

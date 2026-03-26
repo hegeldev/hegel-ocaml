@@ -27,20 +27,20 @@ module Derive = Derive
 
 (** {2 Convenience re-exports} *)
 
-(** [assume condition] rejects the current test case if [condition] is [false].
-*)
+(** [assume tc condition] rejects the current test case if [condition] is
+    [false]. *)
 let assume = Client.assume
 
-(** [note message] records a message that will be printed on the final (failing)
-    run. *)
+(** [note tc message] records a message that will be printed on the final
+    (failing) run. *)
 let note = Client.note
 
-(** [target value label] sends a target command to guide the search engine
+(** [target tc value label] sends a target command to guide the search engine
     toward higher values. *)
 let target = Client.target
 
-(** [draw gen] produces a typed value from generator [gen]. Must be called from
-    within a Hegel test body. *)
+(** [draw tc gen] produces a typed value from generator [gen] using test case
+    [tc]. *)
 let draw = Generators.draw
 
 (** [run_hegel_test ?settings ?test_cases ?seed test_fn] runs a property test.

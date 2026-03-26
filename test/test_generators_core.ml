@@ -2,20 +2,7 @@ open Hegel
 open Connection
 open Generators
 
-let contains_substring = Test_helpers.contains_substring
-
 (* ==== Unit tests (no server needed) ==== *)
-
-(** Test: draw outside test context raises. *)
-let test_draw_outside_context () =
-  let raised = ref false in
-  (try ignore (draw (integers ()))
-   with Failure msg ->
-     raised := true;
-     Alcotest.(check bool)
-       "has 'outside of a Hegel test'" true
-       (contains_substring msg "outside of a Hegel test"));
-  Alcotest.(check bool) "raised" true !raised
 
 let test_span_label_constants () =
   let open Labels in
@@ -250,16 +237,16 @@ let test_collection_reject_live () =
 
 (** Test: map doubles values correctly. *)
 let test_map_doubles_e2e () =
-  Session.run_hegel_test ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun tc ->
       let gen = integers ~min_value:1 ~max_value:5 () |> map (fun v -> v * 2) in
       Alcotest.(check bool) "still basic" true (is_basic gen);
-      let v = Hegel.draw gen in
+      let v = Hegel.draw tc gen in
       assert (v >= 2 && v <= 10);
       assert (v mod 2 = 0))
 
 (** Test: double map composes correctly. *)
 let test_double_map_e2e () =
-  Session.run_hegel_test ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun tc ->
       let gen =
         integers ~min_value:1 ~max_value:5 ()
         |> map (fun v -> v * 2)
@@ -275,55 +262,54 @@ let test_double_map_e2e () =
           in
           Alcotest.(check string) "schema type" "integer" typ
       | None -> Alcotest.fail "expected schema");
-      let v = Hegel.draw gen in
+      let v = Hegel.draw tc gen in
       assert (List.mem v [ 3; 5; 7; 9; 11 ]))
 
 (** Test: map on non-basic (Mapped branch of do_draw). *)
 let test_map_on_filtered_e2e () =
-  Session.run_hegel_test ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun tc ->
       let gen =
         filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ())
         |> map (fun v -> v * 2)
       in
-      let v = Hegel.draw gen in
+      let v = Hegel.draw tc gen in
       assert (v > 10 && v <= 20))
 
 (** Test: flat_map through server. *)
 let test_flat_map_e2e () =
-  Session.run_hegel_test ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun tc ->
       let gen =
         flat_map
           (fun n -> integers ~min_value:0 ~max_value:(max 1 n) ())
           (integers ~min_value:1 ~max_value:5 ())
       in
       Alcotest.(check bool) "not basic" false (is_basic gen);
-      let v = Hegel.draw gen in
+      let v = Hegel.draw tc gen in
       assert (v >= 0))
 
 (** Test: filter through server. *)
 let test_filter_e2e () =
-  Session.run_hegel_test ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun tc ->
       let gen =
         filter (fun v -> v mod 2 = 0) (integers ~min_value:0 ~max_value:100 ())
       in
       Alcotest.(check bool) "not basic" false (is_basic gen);
-      let v = Hegel.draw gen in
+      let v = Hegel.draw tc gen in
       assert (v mod 2 = 0))
 
 (** Test: filter exhaustion through server (always false → assume false). *)
 let test_filter_exhaustion_e2e () =
-  Session.run_hegel_test ~test_cases:10 (fun () ->
+  Session.run_hegel_test ~test_cases:10 (fun tc ->
       let gen =
         filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ())
       in
-      ignore (Hegel.draw gen))
+      ignore (Hegel.draw tc gen))
 
 (** Test: group helper through server. *)
 let test_group_e2e () =
-  Session.run_hegel_test ~test_cases:5 (fun () ->
-      let data = Client.get_data () in
+  Session.run_hegel_test ~test_cases:5 (fun tc ->
       let v =
-        group Labels.list data (fun () ->
+        group Labels.list tc (fun () ->
             Client.generate_from_schema
               (`Map
                  [
@@ -331,17 +317,16 @@ let test_group_e2e () =
                    (`Text "min_value", `Int 0);
                    (`Text "max_value", `Int 10);
                  ])
-              data)
+              tc)
       in
       let n = Cbor_helpers.extract_int v in
       assert (n >= 0 && n <= 10))
 
 (** Test: discardable_group through server — success path. *)
 let test_discardable_group_e2e () =
-  Session.run_hegel_test ~test_cases:5 (fun () ->
-      let data = Client.get_data () in
+  Session.run_hegel_test ~test_cases:5 (fun tc ->
       let v =
-        discardable_group Labels.tuple data (fun () ->
+        discardable_group Labels.tuple tc (fun () ->
             Client.generate_from_schema
               (`Map
                  [
@@ -349,14 +334,13 @@ let test_discardable_group_e2e () =
                    (`Text "min_value", `Int 0);
                    (`Text "max_value", `Int 10);
                  ])
-              data)
+              tc)
       in
       let n = Cbor_helpers.extract_int v in
       assert (n >= 0 && n <= 10))
 
 let tests =
   [
-    Alcotest.test_case "draw outside context" `Quick test_draw_outside_context;
     Alcotest.test_case "span label constants" `Quick test_span_label_constants;
     Alcotest.test_case "basic generator schema" `Quick
       test_basic_generator_schema;
