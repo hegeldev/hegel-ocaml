@@ -43,5 +43,10 @@ let target = Client.target
     within a Hegel test body. *)
 let draw = Generators.draw
 
-(** [run_hegel_test ?test_cases ?seed test_fn] runs a property test. *)
+(** [run_hegel_test ?settings ?test_cases ?seed test_fn] runs a property test.
+*)
 let run_hegel_test = Session.run_hegel_test
+
+(** [default_settings ()] creates default test settings with CI auto-detection.
+*)
+let default_settings = Client.default_settings

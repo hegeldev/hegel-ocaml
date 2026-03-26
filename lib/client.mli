@@ -9,6 +9,60 @@ exception Assume_rejected
 exception Data_exhausted
 (** Raised when the server runs out of test data (StopTest). *)
 
+(** Health checks that can be suppressed during test execution. *)
+type health_check =
+  | Filter_too_much
+  | Too_slow
+  | Test_cases_too_large
+  | Large_initial_test_case
+
+val health_check_to_string : health_check -> string
+(** [health_check_to_string hc] returns the wire protocol name for [hc]. *)
+
+(** Controls how much output Hegel produces during test runs. *)
+type verbosity = Quiet | Normal | Verbose | Debug
+
+(** The database setting: unset, disabled, or a path. *)
+type database = Unset | Disabled | Path of string
+
+type settings = {
+  test_cases : int;
+  verbosity : verbosity;
+  seed : int option;
+  derandomize : bool;
+  database : database;
+  suppress_health_check : health_check list;
+}
+(** Configuration for a Hegel test run. *)
+
+val default_settings : unit -> settings
+(** [default_settings ()] creates settings with defaults. Detects CI
+    environments automatically: in CI, [derandomize] is [true] and [database] is
+    [Disabled]. *)
+
+val is_in_ci : unit -> bool
+(** [is_in_ci ()] returns [true] if a CI environment is detected. *)
+
+val with_test_cases : int -> settings -> settings
+(** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
+
+val with_verbosity : verbosity -> settings -> settings
+(** [with_verbosity v s] returns settings [s] with [verbosity] set to [v]. *)
+
+val with_seed : int option -> settings -> settings
+(** [with_seed seed s] returns settings [s] with [seed] set. *)
+
+val with_derandomize : bool -> settings -> settings
+(** [with_derandomize b s] returns settings [s] with [derandomize] set to [b].
+*)
+
+val with_database : database -> settings -> settings
+(** [with_database db s] returns settings [s] with [database] set to [db]. *)
+
+val with_suppress_health_check : health_check list -> settings -> settings
+(** [with_suppress_health_check checks s] returns settings [s] with additional
+    health checks suppressed. *)
+
 type test_case_data = {
   channel : Connection.channel;
   is_final : bool;
@@ -52,6 +106,12 @@ val start_span : ?label:int -> test_case_data -> unit
 val stop_span : ?discard:bool -> test_case_data -> unit
 (** [stop_span ?discard data] ends the current generation span. *)
 
+val supported_protocol_lo : float
+(** Lowest supported protocol version. *)
+
+val supported_protocol_hi : float
+(** Highest supported protocol version. *)
+
 type client = {
   connection : Connection.connection;
   control : Connection.channel;
@@ -69,9 +129,7 @@ val run_test_case :
     Sets up domain-local state and calls [test_fn]. Reports status via
     mark_complete. *)
 
-val run_test : client -> test_cases:int -> ?seed:int -> (unit -> unit) -> unit
-(** [run_test client ~test_cases ?seed test_fn] runs a property test.
-
-    @param seed
-      optional seed for deterministic replay. If [None], the server generates
-      its own seed. *)
+val run_test :
+  client -> settings:settings -> ?database_key:string -> (unit -> unit) -> unit
+(** [run_test client ~settings ?database_key test_fn] runs a property test using
+    the given settings. *)

@@ -1,56 +1,168 @@
 (** Global session management for Hegel.
 
-    This module manages a shared hegeld subprocess. It starts lazily on first
-    use and cleans up when the process exits.
+    This module manages a shared hegel subprocess communicating over stdio
+    pipes. It starts lazily on first use and cleans up when the process exits.
 
     The main entry point is {!run_hegel_test}, which the user calls without
     needing to manage connections or sessions directly. *)
 
 open Connection
 
-(** [find_hegeld ()] locates the hegeld binary. Checks, in order:
-    - [HEGEL_BINARY] environment variable
-    - [hegel] on [PATH] Returns the path or raises [Failure]. *)
-let find_hegeld () =
-  match Sys.getenv_opt "HEGEL_BINARY" with
+(** Version of hegel-core to install. *)
+let hegel_server_version = "0.2.3"
+
+(** Environment variable to override the hegel server command. *)
+let hegel_server_command_env = "HEGEL_SERVER_COMMAND"
+
+(** Directory for hegel server installation and logs. *)
+let hegel_server_dir = ".hegel"
+
+(** Message shown when uv is not found. *)
+let uv_not_found_message =
+  "You are seeing this error message because hegel-ocaml tried to use `uv` to \
+   install hegel-core, but could not find uv on the PATH.\n\n\
+   Hegel uses a Python server component called `hegel-core` to share core \
+   property-based testing functionality across languages. There are two ways \
+   for Hegel to get hegel-core:\n\n\
+   * By default, Hegel looks for uv (https://docs.astral.sh/uv/) on the PATH, \
+   and uses uv to install hegel-core to a local `.hegel/venv` directory. We \
+   recommend this option. To continue, install uv: \
+   https://docs.astral.sh/uv/getting-started/installation/.\n\
+   * Alternatively, you can manage the installation of hegel-core yourself. \
+   After installing, setting the HEGEL_SERVER_COMMAND environment variable to \
+   your hegel-core binary path tells hegel-ocaml to use that hegel-core \
+   instead.\n\n\
+   See https://hegel.dev/reference/installation for more details."
+
+(** [run_command cmd args] runs a command and returns its exit status. Output is
+    redirected to the install log file. *)
+let run_command_to_log cmd args log_path =
+  let log_fd =
+    Unix.openfile log_path [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_APPEND ] 0o644
+  in
+  Fun.protect
+    ~finally:(fun () -> Unix.close log_fd)
+    (fun () ->
+      let pid =
+        Unix.create_process cmd
+          (Array.of_list (cmd :: args))
+          Unix.stdin log_fd log_fd
+      in
+      let _, status = Unix.waitpid [] pid in
+      status)
+
+(** [ensure_hegel_installed ()] checks for a cached hegel installation and
+    installs via uv if needed. Returns the path to the hegel binary. *)
+let ensure_hegel_installed () =
+  let venv_dir = Printf.sprintf "%s/venv" hegel_server_dir in
+  let version_file = Printf.sprintf "%s/hegel-version" venv_dir in
+  let hegel_bin = Printf.sprintf "%s/bin/hegel" venv_dir in
+  let install_log = Printf.sprintf "%s/install.log" hegel_server_dir in
+  (* Check cached version *)
+  try
+    let cached =
+      String.trim (In_channel.with_open_text version_file In_channel.input_all)
+    in
+    if cached = hegel_server_version && Sys.file_exists hegel_bin then hegel_bin
+    else raise Exit
+  with _ ->
+    (* Need to install *)
+    (try Unix.mkdir hegel_server_dir 0o755 with Unix.Unix_error _ -> ());
+    (* Create venv *)
+    let status =
+      try run_command_to_log "uv" [ "venv"; "--clear"; venv_dir ] install_log
+      with Unix.Unix_error (Unix.ENOENT, _, _) ->
+        failwith uv_not_found_message
+    in
+    (match status with
+    | Unix.WEXITED 0 -> ()
+    | _ ->
+        let log =
+          try In_channel.with_open_text install_log In_channel.input_all
+          with _ -> ""
+        in
+        failwith (Printf.sprintf "uv venv failed. Install log:\n%s" log));
+    (* Install hegel-core *)
+    let python_path = Printf.sprintf "%s/bin/python" venv_dir in
+    let status =
+      run_command_to_log "uv"
+        [
+          "pip";
+          "install";
+          "--python";
+          python_path;
+          Printf.sprintf "hegel-core==%s" hegel_server_version;
+        ]
+        install_log
+    in
+    (match status with
+    | Unix.WEXITED 0 -> ()
+    | _ ->
+        let log =
+          try In_channel.with_open_text install_log In_channel.input_all
+          with _ -> ""
+        in
+        failwith
+          (Printf.sprintf
+             "Failed to install hegel-core (version: %s). Set %s to a hegel \
+              binary path to skip installation.\n\
+              Install log:\n\
+              %s"
+             hegel_server_version hegel_server_command_env log));
+    if not (Sys.file_exists hegel_bin) then
+      failwith
+        (Printf.sprintf "hegel not found at %s after installation" hegel_bin);
+    (* Write version file *)
+    Out_channel.with_open_text version_file (fun oc ->
+        output_string oc hegel_server_version);
+    hegel_bin
+
+(** [find_on_path cmd] searches [PATH] for [cmd] and returns [Some path] if
+    found, or [None]. *)
+let find_on_path cmd =
+  let path_str = Option.value ~default:"" (Sys.getenv_opt "PATH") in
+  let path_dirs = String.split_on_char ':' path_str in
+  List.find_map
+    (fun dir ->
+      let candidate = Filename.concat dir cmd in
+      if Sys.file_exists candidate then Some candidate else None)
+    path_dirs
+
+(** [find_hegel ()] locates the hegel binary. Checks, in order:
+    - [HEGEL_SERVER_COMMAND] environment variable
+    - [HEGEL_BINARY] environment variable (for backward compatibility)
+    - [hegel] on [PATH]
+    - Auto-install via uv to [.hegel/venv/] *)
+let find_hegel () =
+  match Sys.getenv_opt hegel_server_command_env with
   | Some path when path <> "" -> path
   | _ -> (
-      (* Search PATH for hegel binary *)
-      let path_str = Option.value ~default:"" (Sys.getenv_opt "PATH") in
-      let path_dirs = String.split_on_char ':' path_str in
-      let found =
-        List.find_map
-          (fun dir ->
-            let candidate = Filename.concat dir "hegel" in
-            if Sys.file_exists candidate then Some candidate else None)
-          path_dirs
-      in
-      match found with
-      | Some p -> p
-      | None ->
-          failwith
-            "Cannot find hegel binary. Set HEGEL_BINARY or add hegel to PATH.")
+      match Sys.getenv_opt "HEGEL_BINARY" with
+      | Some path when path <> "" -> path
+      | _ -> (
+          match find_on_path "hegel" with
+          | Some path -> path
+          | None -> ensure_hegel_installed ()))
+
+(** [server_log_fd ()] returns a file descriptor for the server log file. *)
+let server_log_fd () =
+  (try Unix.mkdir hegel_server_dir 0o755 with Unix.Unix_error _ -> ());
+  Unix.openfile
+    (Printf.sprintf "%s/server.log" hegel_server_dir)
+    [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_APPEND ]
+    0o644
 
 type hegel_session = {
   mutable process : int option;
   mutable connection : connection option;
   mutable client : Client.client option;
-  mutable socket_path : string option;
-  mutable temp_dir : string option;
   lock : Mutex.t;
 }
 (** Internal mutable session state. *)
 
 (** The global session singleton. *)
 let global_session =
-  {
-    process = None;
-    connection = None;
-    client = None;
-    socket_path = None;
-    temp_dir = None;
-    lock = Mutex.create ();
-  }
+  { process = None; connection = None; client = None; lock = Mutex.create () }
 
 (** [has_working_client session] returns [true] if the session has a live
     client. *)
@@ -64,28 +176,19 @@ let has_working_client session =
 let cleanup session =
   (match session.connection with
   | Some conn ->
-      (try close conn with _ -> ());
+      close conn;
       session.connection <- None;
       session.client <- None
   | None -> ());
-  (match session.process with
+  match session.process with
   | Some pid ->
       (try Unix.kill pid Sys.sigterm with _ -> ());
       (try ignore (Unix.waitpid [] pid) with _ -> ());
       session.process <- None
-  | None -> ());
-  (match session.socket_path with
-  | Some path ->
-      (try Sys.remove path with _ -> ());
-      session.socket_path <- None
-  | None -> ());
-  match session.temp_dir with
-  | Some dir ->
-      (try Unix.rmdir dir with _ -> ());
-      session.temp_dir <- None
   | None -> ()
 
-(** [start session] starts hegeld if not already running. *)
+(** [start session] starts the hegel server if not already running. Spawns the
+    server with [--stdio] for pipe-based communication. *)
 let start session =
   if has_working_client session then ()
   else begin
@@ -96,42 +199,38 @@ let start session =
         if not (has_working_client session) then begin
           (* Clean up any old session *)
           cleanup session;
-          let hegel_cmd = find_hegeld () in
-          let temp_dir = Filename.temp_dir "hegel-" "" in
-          session.temp_dir <- Some temp_dir;
-          let socket_path = Filename.concat temp_dir "hegel.sock" in
-          session.socket_path <- Some socket_path;
-          (* Start hegeld subprocess *)
+          let hegel_cmd = find_hegel () in
+          (* Create pipes for stdio communication *)
+          let child_stdin_read, child_stdin_write = Unix.pipe () in
+          let child_stdout_read, child_stdout_write = Unix.pipe () in
+          let log_fd = server_log_fd () in
+          (* Start hegel subprocess with --stdio *)
           let pid =
             Unix.create_process hegel_cmd
-              [| hegel_cmd; socket_path |]
-              Unix.stdin Unix.stderr Unix.stderr
+              [| hegel_cmd; "--stdio"; "--verbosity"; "normal" |]
+              child_stdin_read child_stdout_write log_fd
           in
+          (* Close the child's ends of the pipes *)
+          Unix.close child_stdin_read;
+          Unix.close child_stdout_write;
+          Unix.close log_fd;
           session.process <- Some pid;
-          (* Wait for socket to appear and connect *)
-          let rec try_connect attempts =
-            if attempts >= 50 then begin
-              Unix.kill pid Sys.sigkill;
-              failwith "Timeout waiting for hegeld to start"
-            end
-            else if Sys.file_exists socket_path then (
-              try
-                let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-                Unix.connect s (Unix.ADDR_UNIX socket_path);
-                s
-              with Unix.Unix_error _ ->
-                Unix.sleepf 0.1;
-                try_connect (attempts + 1))
-            else begin
-              Unix.sleepf 0.1;
-              try_connect (attempts + 1)
-            end
+          let conn =
+            create_connection ~read_fd:child_stdout_read
+              ~write_fd:child_stdin_write ~name:"Client" ()
           in
-          let sock = try_connect 0 in
-          let conn = create_connection sock ~name:"Client" () in
           session.connection <- Some conn;
           let c = Client.create_client conn in
           session.client <- Some c;
+          (* Monitor thread: detect server crash *)
+          ignore
+            (Thread.create
+               (fun () ->
+                 ignore (Unix.waitpid [] pid);
+                 match session.connection with
+                 | Some conn -> conn.server_exited <- true
+                 | None -> ())
+               ());
           at_exit (fun () -> cleanup session)
         end)
   end
@@ -140,12 +239,27 @@ let start session =
     environment variables (like [HEGEL_PROTOCOL_TEST_MODE]) have changed. *)
 let restart_session () = cleanup global_session
 
-(** [run_hegel_test ?test_cases ?seed test_fn] runs a property test using the
-    shared hegeld process. This is the main public API.
+(** [run_hegel_test ?settings ?test_cases ?seed test_fn] runs a property test
+    using the shared hegel process.
 
-    @param test_cases number of test cases (default 100)
-    @param seed optional seed for deterministic replay
+    @param settings
+      optional settings override. If provided, [test_cases] and [seed] are
+      ignored.
+    @param test_cases
+      number of test cases (default 100, ignored if settings provided)
+    @param seed
+      optional seed for deterministic replay (ignored if settings provided)
     @param test_fn the test body function *)
-let run_hegel_test ?(test_cases = 100) ?seed test_fn =
+let run_hegel_test ?settings ?(test_cases = 100) ?seed test_fn =
   start global_session;
-  Client.run_test (Option.get global_session.client) ~test_cases ?seed test_fn
+  let effective_settings =
+    match settings with
+    | Some s -> s
+    | None -> (
+        let s = Client.default_settings () in
+        let s = Client.with_test_cases test_cases s in
+        match seed with Some v -> Client.with_seed (Some v) s | None -> s)
+  in
+  Client.run_test
+    (Option.get global_session.client)
+    ~settings:effective_settings test_fn

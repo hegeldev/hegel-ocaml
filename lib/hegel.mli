@@ -43,5 +43,15 @@ val draw : 'a Generators.generator -> 'a
 (** [draw gen] produces a typed value from generator [gen]. Must be called from
     within a Hegel test body. *)
 
-val run_hegel_test : ?test_cases:int -> ?seed:int -> (unit -> unit) -> unit
-(** [run_hegel_test ?test_cases ?seed test_fn] runs a property test. *)
+val run_hegel_test :
+  ?settings:Client.settings ->
+  ?test_cases:int ->
+  ?seed:int ->
+  (unit -> unit) ->
+  unit
+(** [run_hegel_test ?settings ?test_cases ?seed test_fn] runs a property test.
+*)
+
+val default_settings : unit -> Client.settings
+(** [default_settings ()] creates default test settings with CI auto-detection.
+*)

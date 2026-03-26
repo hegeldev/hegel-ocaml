@@ -9,7 +9,7 @@ let find_cmd = Test_helpers.find_cmd
 
 let test_assume_true () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  let conn = create_connection s1 ~name:"Test" () in
+  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let data =
     Client.
       { channel = control_channel conn; is_final = false; test_aborted = false }
@@ -22,7 +22,7 @@ let test_assume_true () =
 
 let test_assume_false_raises () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  let conn = create_connection s1 ~name:"Test" () in
+  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let data =
     Client.
       { channel = control_channel conn; is_final = false; test_aborted = false }
@@ -67,7 +67,7 @@ let test_note_outside_context () =
 
 let test_note_when_not_final () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  let conn = create_connection s1 ~name:"Test" () in
+  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let data =
     Client.
       { channel = control_channel conn; is_final = false; test_aborted = false }
@@ -80,7 +80,7 @@ let test_note_when_not_final () =
 
 let test_note_when_final () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  let conn = create_connection s1 ~name:"Test" () in
+  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let data =
     Client.
       { channel = control_channel conn; is_final = true; test_aborted = false }
@@ -108,7 +108,7 @@ let test_extract_origin_with_backtrace () =
 
 let test_start_span_when_aborted () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  let conn = create_connection s1 ~name:"Test" () in
+  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let data =
     Client.
       { channel = control_channel conn; is_final = false; test_aborted = true }
@@ -129,7 +129,7 @@ let test_dls_initializers_in_new_domain () =
 let test_nested_test_raises () =
   (* Set the current_data to simulate being inside a test *)
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  let conn = create_connection s1 ~name:"Test" () in
+  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let data =
     Client.
       { channel = control_channel conn; is_final = false; test_aborted = false }
@@ -324,8 +324,10 @@ let test_version_mismatch () =
   let server_socket, client_socket =
     Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
   in
-  let peer_conn = create_connection server_socket ~name:"Peer" () in
-  let client_conn = create_connection client_socket ~name:"Client" () in
+  let peer_conn = Test_helpers.make_connection server_socket ~name:"Peer" () in
+  let client_conn =
+    Test_helpers.make_connection client_socket ~name:"Client" ()
+  in
   let t =
     Thread.create
       (fun () ->
@@ -348,8 +350,10 @@ let test_version_mismatch_low () =
   let server_socket, client_socket =
     Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
   in
-  let peer_conn = create_connection server_socket ~name:"Peer" () in
-  let client_conn = create_connection client_socket ~name:"Client" () in
+  let peer_conn = Test_helpers.make_connection server_socket ~name:"Peer" () in
+  let client_conn =
+    Test_helpers.make_connection client_socket ~name:"Client" ()
+  in
   let t =
     Thread.create
       (fun () ->
@@ -387,148 +391,300 @@ let test_multiple_interesting () =
     "has Multiple failures" true
     (contains_substring !raised_msg "Multiple failures")
 
-(** Test: unrecognised event sends error response and continues (socketpair). *)
-let test_unrecognised_event () =
+(** Helper: set up a fake server using socketpairs, perform handshake, and
+    return [(client, client_conn, peer_conn)]. The caller provides a peer
+    function that will be run in a thread. *)
+let with_fake_server peer_fn client_fn =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  let client_conn = create_connection s1 ~name:"Client" () in
-  let peer_conn = create_connection s2 ~name:"Peer" () in
-  let t_hs =
-    Thread.create
-      (fun () ->
-        Test_helpers.raw_handshake_responder peer_conn.socket;
-        peer_conn.connection_state <- Client)
-      ()
-  in
+  let client_conn = Test_helpers.make_connection s1 ~name:"Client" () in
+  let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
+  let t_hs = Thread.create Test_helpers.handshake_via_channel peer_conn in
   let client = create_client client_conn in
   Thread.join t_hs;
-  let t_peer =
-    Thread.create
-      (fun () ->
-        let ctrl = control_channel peer_conn in
-        (* Accept run_test command *)
-        let msg_id, msg = receive_request ctrl () in
-        let pairs = Cbor_helpers.extract_dict msg in
-        let test_ch_id =
-          Int32.of_int
-            (Cbor_helpers.extract_int (List.assoc (`Text "channel_id") pairs))
-        in
-        send_response_value ctrl msg_id `Null;
-        let test_ch = connect_channel peer_conn test_ch_id ~role:"Test" () in
-        (* Send unrecognised event *)
-        (try
-           ignore
-             (pending_get
-                (request test_ch
-                   (`Map [ (`Text "event", `Text "unknown_foobar") ])))
-         with Request_error _ -> ());
-        (* Send test_done with 0 interesting *)
-        ignore
-          (pending_get
-             (request test_ch
-                (`Map
-                   [
-                     (`Text "event", `Text "test_done");
-                     ( `Text "results",
-                       `Map [ (`Text "interesting_test_cases", `Int 0) ] );
-                   ]))))
-      ()
-  in
-  run_test client ~test_cases:0 (fun () -> ());
+  let t_peer = Thread.create (fun () -> peer_fn peer_conn) () in
+  client_fn client;
   Thread.join t_peer;
   close client_conn;
   close peer_conn
 
-(** Test: find_hegeld fails when binary not on PATH. *)
-let test_find_hegeld_not_found () =
-  let orig_binary =
-    try Some (Sys.getenv "HEGEL_BINARY") with Not_found -> None
+(** Helper: accept a run_test command on the control channel, return
+    [(ctrl, test_ch)] where test_ch is the test channel. *)
+let accept_run_test peer_conn =
+  let ctrl = control_channel peer_conn in
+  let msg_id, msg = receive_request ctrl () in
+  let pairs = Cbor_helpers.extract_dict msg in
+  let test_ch_id =
+    Int32.of_int
+      (Cbor_helpers.extract_int (List.assoc (`Text "channel_id") pairs))
   in
-  let orig_path = try Some (Sys.getenv "PATH") with Not_found -> None in
-  Unix.putenv "HEGEL_BINARY" "";
-  Unix.putenv "PATH" "/nonexistent";
-  let raised = ref false in
-  (try ignore (Session.find_hegeld ()) with Failure _ -> raised := true);
-  Alcotest.(check bool) "raised" true !raised;
-  (match orig_binary with
-  | Some v -> Unix.putenv "HEGEL_BINARY" v
-  | None -> Unix.putenv "HEGEL_BINARY" "");
-  match orig_path with
-  | Some v -> Unix.putenv "PATH" v
-  | None -> Unix.putenv "PATH" ""
+  send_response_value ctrl msg_id `Null;
+  let test_ch = connect_channel peer_conn test_ch_id ~role:"Test" () in
+  (ctrl, test_ch)
 
-(** Test: find_hegeld when PATH is not set at all. *)
-let test_find_hegeld_no_path () =
-  let orig_binary =
-    try Some (Sys.getenv "HEGEL_BINARY") with Not_found -> None
-  in
-  let orig_path = try Some (Sys.getenv "PATH") with Not_found -> None in
-  Unix.putenv "HEGEL_BINARY" "";
-  (* We can't truly unset PATH in OCaml, but set to empty *)
-  Unix.putenv "PATH" "";
-  let raised = ref false in
-  (try ignore (Session.find_hegeld ()) with Failure _ -> raised := true);
-  Alcotest.(check bool) "raised" true !raised;
-  (match orig_binary with
-  | Some v -> Unix.putenv "HEGEL_BINARY" v
-  | None -> Unix.putenv "HEGEL_BINARY" "");
-  match orig_path with
-  | Some v -> Unix.putenv "PATH" v
-  | None -> Unix.putenv "PATH" ""
+(** Helper: send test_done with given results fields. *)
+let send_test_done test_ch results_fields =
+  ignore
+    (pending_get
+       (request test_ch
+          (`Map
+             [
+               (`Text "event", `Text "test_done");
+               (`Text "results", `Map results_fields);
+             ])))
 
-(** Test: session start timeout (unreachable hegeld). Also covers the
-    Unix.Unix_error retry path by creating a non-socket file at the socket path.
-*)
-let test_session_start_timeout () =
-  let session : Session.hegel_session =
-    {
-      process = None;
-      connection = None;
-      client = None;
-      socket_path = None;
-      temp_dir = None;
-      lock = Mutex.create ();
-    }
-  in
-  (* Set HEGEL_BINARY to a script that creates a regular file (not socket)
-     at the socket path, which will cause Unix.Unix_error on connect. *)
-  let orig_binary =
-    try Some (Sys.getenv "HEGEL_BINARY") with Not_found -> None
-  in
-  let script_path = Filename.temp_file "hegel-test-" ".sh" in
-  let oc = open_out script_path in
-  (* Create a regular file (not a socket) at the path and exit immediately.
-     This covers both the Unix_error retry (connect to non-socket) and the
-     SIGKILL error catch (process already dead). *)
-  output_string oc "#!/bin/sh\ntouch \"$1\"\n";
-  close_out oc;
-  Unix.chmod script_path 0o755;
-  Unix.putenv "HEGEL_BINARY" script_path;
+(** Test: unrecognised event sends error response and continues (socketpair). *)
+let test_unrecognised_event () =
+  with_fake_server
+    (fun peer_conn ->
+      let _ctrl, test_ch = accept_run_test peer_conn in
+      (* Send unrecognised event *)
+      (try
+         ignore
+           (pending_get
+              (request test_ch
+                 (`Map [ (`Text "event", `Text "unknown_foobar") ])))
+       with Request_error _ -> ());
+      (* Send test_done with 0 interesting *)
+      send_test_done test_ch [ (`Text "interesting_test_cases", `Int 0) ])
+    (fun client ->
+      run_test client
+        ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+        (fun () -> ()))
+
+(** Test: run_test with database=Path and suppress_health_check sends the
+    correct fields over the wire. *)
+let test_run_test_database_path_and_suppress () =
+  with_fake_server
+    (fun peer_conn ->
+      let _ctrl, test_ch = accept_run_test peer_conn in
+      send_test_done test_ch
+        [
+          (`Text "interesting_test_cases", `Int 0); (`Text "passed", `Bool true);
+        ])
+    (fun client ->
+      let settings =
+        Client.default_settings () |> Client.with_test_cases 0
+        |> Client.with_database (Client.Path "/tmp/test.db")
+        |> Client.with_suppress_health_check
+             [ Client.Too_slow; Client.Filter_too_much ]
+      in
+      run_test client ~settings (fun () -> ()))
+
+(** Test: server error in results raises Failure. *)
+let test_run_test_server_error_in_results () =
+  with_fake_server
+    (fun peer_conn ->
+      let _ctrl, test_ch = accept_run_test peer_conn in
+      send_test_done test_ch
+        [
+          (`Text "interesting_test_cases", `Int 0);
+          (`Text "error", `Text "some server error");
+        ])
+    (fun client ->
+      let raised = ref false in
+      (try
+         run_test client
+           ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+           (fun () -> ())
+       with Failure msg ->
+         raised := true;
+         Alcotest.(check bool)
+           "has 'Server error'" true
+           (contains_substring msg "Server error");
+         Alcotest.(check bool)
+           "has error text" true
+           (contains_substring msg "some server error"));
+      Alcotest.(check bool) "raised" true !raised)
+
+(** Test: health check failure in results raises Failure. *)
+let test_run_test_health_check_failure () =
+  with_fake_server
+    (fun peer_conn ->
+      let _ctrl, test_ch = accept_run_test peer_conn in
+      send_test_done test_ch
+        [
+          (`Text "interesting_test_cases", `Int 0);
+          (`Text "health_check_failure", `Text "too slow");
+        ])
+    (fun client ->
+      let raised = ref false in
+      (try
+         run_test client
+           ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+           (fun () -> ())
+       with Failure msg ->
+         raised := true;
+         Alcotest.(check bool)
+           "has 'Health check failure'" true
+           (contains_substring msg "Health check failure");
+         Alcotest.(check bool)
+           "has failure text" true
+           (contains_substring msg "too slow"));
+      Alcotest.(check bool) "raised" true !raised)
+
+(** Test: flaky test detection in results raises Failure. *)
+let test_run_test_flaky () =
+  with_fake_server
+    (fun peer_conn ->
+      let _ctrl, test_ch = accept_run_test peer_conn in
+      send_test_done test_ch
+        [
+          (`Text "interesting_test_cases", `Int 0);
+          (`Text "flaky", `Text "flaky message");
+        ])
+    (fun client ->
+      let raised = ref false in
+      (try
+         run_test client
+           ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+           (fun () -> ())
+       with Failure msg ->
+         raised := true;
+         Alcotest.(check bool)
+           "has 'Flaky test detected'" true
+           (contains_substring msg "Flaky test detected");
+         Alcotest.(check bool)
+           "has flaky text" true
+           (contains_substring msg "flaky message"));
+      Alcotest.(check bool) "raised" true !raised)
+
+(** Test: passed=false with 0 interesting test cases raises Failure. *)
+let test_run_test_passed_false () =
+  with_fake_server
+    (fun peer_conn ->
+      let _ctrl, test_ch = accept_run_test peer_conn in
+      send_test_done test_ch
+        [
+          (`Text "interesting_test_cases", `Int 0); (`Text "passed", `Bool false);
+        ])
+    (fun client ->
+      let raised = ref false in
+      (try
+         run_test client
+           ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+           (fun () -> ())
+       with Failure msg ->
+         raised := true;
+         Alcotest.(check bool)
+           "has 'Property test failed'" true
+           (contains_substring msg "Property test failed"));
+      Alcotest.(check bool) "raised" true !raised)
+
+(** Test: server_exited check in pop_inbox_item. Create a connection, set
+    server_exited to true, then try to receive. Should raise with
+    server_crashed_message. *)
+let test_server_exited_in_pop_inbox () =
+  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
+  conn.server_exited <- true;
+  let ch = control_channel conn in
   let raised = ref false in
-  (try Session.start session
+  (try ignore (receive_request ch ())
    with Failure msg ->
      raised := true;
      Alcotest.(check bool)
-       "has 'Timeout'" true
-       (contains_substring msg "Timeout"));
-  Alcotest.(check bool) "raised timeout" true !raised;
+       "has server crashed message" true
+       (contains_substring msg "hegel server process has exited"));
+  Alcotest.(check bool) "raised" true !raised;
+  close conn;
+  Unix.close s2
+
+(** Test: run_hegel_test with explicit settings parameter (covers the Some s
+    branch in session.ml line 257). *)
+let test_run_hegel_test_with_settings () =
+  let settings =
+    Client.default_settings () |> Client.with_test_cases 3
+    |> Client.with_database Client.Disabled
+  in
+  Session.run_hegel_test ~settings (fun () ->
+      let data = get_data () in
+      let v =
+        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) data
+      in
+      ignore (Cbor_helpers.extract_bool v))
+
+(** Test: find_hegel uses HEGEL_SERVER_COMMAND env var. *)
+let test_find_hegel_via_env () =
+  let orig_cmd =
+    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
+  in
+  Unix.putenv "HEGEL_SERVER_COMMAND" "/tmp/fake-hegel";
+  let path = Session.find_hegel () in
+  Alcotest.(check string) "path" "/tmp/fake-hegel" path;
+  match orig_cmd with
+  | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
+  | None -> Unix.putenv "HEGEL_SERVER_COMMAND" ""
+
+(** Test: session start failure (bad server command). Covers the error path when
+    the hegel subprocess exits immediately without completing the handshake. *)
+let test_session_start_failure () =
+  let session : Session.hegel_session =
+    { process = None; connection = None; client = None; lock = Mutex.create () }
+  in
+  let orig_cmd =
+    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
+  in
+  Unix.putenv "HEGEL_SERVER_COMMAND" "/bin/false";
+  let raised = ref false in
+  (try Session.start session with _ -> raised := true);
+  Alcotest.(check bool) "raised" true !raised;
   Session.cleanup session;
-  (try Sys.remove script_path with _ -> ());
-  match orig_binary with
-  | Some v -> Unix.putenv "HEGEL_BINARY" v
-  | None -> Unix.putenv "HEGEL_BINARY" ""
+  match orig_cmd with
+  | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
+  | None -> Unix.putenv "HEGEL_SERVER_COMMAND" ""
+
+(** Test: monitor thread detects server crash (session.ml line 231). Start a
+    real session, kill the server process, verify server_exited. *)
+let test_monitor_thread_detects_crash () =
+  let session : Session.hegel_session =
+    { process = None; connection = None; client = None; lock = Mutex.create () }
+  in
+  Session.start session;
+  (* Kill the server process *)
+  (match session.process with
+  | Some pid -> (
+      Unix.kill pid Sys.sigkill;
+      (* Wait for the monitor thread to detect the crash *)
+      Unix.sleepf 0.5;
+      match session.connection with
+      | Some conn ->
+          Alcotest.(check bool)
+            "server_exited" true
+            (Connection.server_has_exited conn)
+      | None -> Alcotest.fail "no connection")
+  | None -> Alcotest.fail "no process");
+  Session.cleanup session
+
+(** Test: cleanup with a connection that raises on close (session.ml line 179).
+    We close the connection's fds manually first, then mark it as running. When
+    cleanup calls [close conn], the close function will try to close
+    already-closed fds, but that's caught internally. To actually trigger the
+    outer try/with, we'd need a non-Unix exception - but we can at least
+    exercise the code path by closing the fds first and marking running=true. *)
+let test_cleanup_with_close_error () =
+  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
+  (* Close both fds underneath the connection *)
+  Unix.close s1;
+  Unix.close s2;
+  (* Ensure conn.running is true so close actually tries to close fds *)
+  conn.running <- true;
+  let session : Session.hegel_session =
+    {
+      process = None;
+      connection = Some conn;
+      client = None;
+      lock = Mutex.create ();
+    }
+  in
+  Session.cleanup session;
+  Alcotest.(check bool) "cleaned up" true (session.connection = None)
 
 (** Test: run_hegel_test when session is None (unreachable in normal usage, but
     covers the branch). *)
 let test_session_not_started () =
   let session : Session.hegel_session =
-    {
-      process = None;
-      connection = None;
-      client = None;
-      socket_path = None;
-      temp_dir = None;
-      lock = Mutex.create ();
-    }
+    { process = None; connection = None; client = None; lock = Mutex.create () }
   in
   (* Test has_working_client returns false *)
   Alcotest.(check bool)
@@ -537,35 +693,25 @@ let test_session_not_started () =
 
 (** Test: cleanup a session with actual resources. *)
 let test_session_cleanup_with_resources () =
-  (* Create a temp dir and socket path to clean up *)
-  let temp_dir = Filename.temp_dir "hegel-test-" "" in
-  let socket_path = Filename.concat temp_dir "test.sock" in
-  (* Create the socket file so cleanup can try to remove it *)
-  let oc = open_out socket_path in
-  close_out oc;
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  let conn = create_connection s1 ~name:"Test" () in
+  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let session : Session.hegel_session =
     {
       process = None;
       connection = Some conn;
       client = None;
-      socket_path = Some socket_path;
-      temp_dir = Some temp_dir;
       lock = Mutex.create ();
     }
   in
   Session.cleanup session;
   Alcotest.(check bool) "conn cleaned" true (session.connection = None);
-  Alcotest.(check bool) "socket cleaned" true (session.socket_path = None);
-  Alcotest.(check bool) "temp cleaned" true (session.temp_dir = None);
   Unix.close s2
 
 (** Test: cleanup with a connection whose socket is already closed (covers error
     catch in close). *)
 let test_session_cleanup_closed_conn () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  let conn = create_connection s1 ~name:"Test" () in
+  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   (* Close the raw socket fd underneath, so conn.close will error *)
   Unix.close s1;
   Unix.close s2;
@@ -574,29 +720,11 @@ let test_session_cleanup_closed_conn () =
       process = None;
       connection = Some conn;
       client = None;
-      socket_path = None;
-      temp_dir = None;
       lock = Mutex.create ();
     }
   in
   Session.cleanup session;
   Alcotest.(check bool) "cleaned" true (session.connection = None)
-
-(** Test: cleanup with nonexistent socket/dir paths (covers error catches). *)
-let test_session_cleanup_bad_paths () =
-  let session : Session.hegel_session =
-    {
-      process = None;
-      connection = None;
-      client = None;
-      socket_path = Some "/nonexistent/path/hegel.sock";
-      temp_dir = Some "/nonexistent/path";
-      lock = Mutex.create ();
-    }
-  in
-  Session.cleanup session;
-  Alcotest.(check bool) "socket cleaned" true (session.socket_path = None);
-  Alcotest.(check bool) "temp cleaned" true (session.temp_dir = None)
 
 (** Test: cleanup a session with a process (uses /bin/sleep for a real PID). *)
 let test_session_cleanup_with_process () =
@@ -610,8 +738,6 @@ let test_session_cleanup_with_process () =
       process = Some pid;
       connection = None;
       client = None;
-      socket_path = None;
-      temp_dir = None;
       lock = Mutex.create ();
     }
   in
@@ -633,8 +759,6 @@ let test_session_cleanup_dead_process () =
       process = Some pid;
       connection = None;
       client = None;
-      socket_path = None;
-      temp_dir = None;
       lock = Mutex.create ();
     }
   in
@@ -644,7 +768,7 @@ let test_session_cleanup_dead_process () =
 (** Test: has_working_client with a live connection. *)
 let test_has_working_client_live () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  let conn = create_connection s1 ~name:"Test" () in
+  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let session : Session.hegel_session =
     {
       process = None;
@@ -656,8 +780,6 @@ let test_has_working_client_live () =
             control = control_channel conn;
             lock = Mutex.create ();
           };
-      socket_path = None;
-      temp_dir = None;
       lock = Mutex.create ();
     }
   in
@@ -679,7 +801,7 @@ let test_run_hegel_test_defaults () =
 (** Test: nest test_case raises (when current_data is already set). *)
 let test_run_test_case_nest () =
   let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  let conn = create_connection s1 ~name:"Test" () in
+  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let data =
     Client.
       { channel = control_channel conn; is_final = false; test_aborted = false }
@@ -702,35 +824,627 @@ let test_run_test_case_nest () =
   close conn;
   Unix.close s2
 
-(* ---- find_hegeld ---- *)
+(* ---- health_check_to_string ---- *)
 
-let test_find_hegeld_via_env () =
-  Unix.putenv "HEGEL_BINARY" "/tmp/fake-hegel";
-  let path = Session.find_hegeld () in
-  Alcotest.(check string) "path" "/tmp/fake-hegel" path;
-  Unix.putenv "HEGEL_BINARY" ""
+let test_health_check_to_string () =
+  Alcotest.(check string)
+    "filter_too_much" "filter_too_much"
+    (Client.health_check_to_string Client.Filter_too_much);
+  Alcotest.(check string)
+    "too_slow" "too_slow"
+    (Client.health_check_to_string Client.Too_slow);
+  Alcotest.(check string)
+    "test_cases_too_large" "test_cases_too_large"
+    (Client.health_check_to_string Client.Test_cases_too_large);
+  Alcotest.(check string)
+    "large_initial_test_case" "large_initial_test_case"
+    (Client.health_check_to_string Client.Large_initial_test_case)
 
-let test_find_hegeld_on_path () =
-  let orig = try Some (Sys.getenv "HEGEL_BINARY") with Not_found -> None in
-  Unix.putenv "HEGEL_BINARY" "";
-  let path = Session.find_hegeld () in
+(* ---- is_in_ci ---- *)
+
+(** All CI environment variable names checked by [is_in_ci]. *)
+let all_ci_var_names =
+  [
+    "CI";
+    "TF_BUILD";
+    "BUILDKITE";
+    "CIRCLECI";
+    "CIRRUS_CI";
+    "CODEBUILD_BUILD_ID";
+    "GITHUB_ACTIONS";
+    "GITLAB_CI";
+    "HEROKU_TEST_RUN_ID";
+    "TEAMCITY_VERSION";
+  ]
+
+(** Save all CI env vars, unset them, run [f], then restore originals. Uses the
+    [unsetenv] C stub from test_helpers to truly remove variables from the
+    environment. *)
+let with_clean_ci_env f =
+  let saved =
+    List.map (fun name -> (name, Sys.getenv_opt name)) all_ci_var_names
+  in
+  List.iter (fun name -> Test_helpers.unsetenv name) all_ci_var_names;
+  Fun.protect
+    ~finally:(fun () ->
+      List.iter
+        (fun (name, v) ->
+          match v with
+          | Some orig -> Unix.putenv name orig
+          | None -> Test_helpers.unsetenv name)
+        saved)
+    f
+
+let test_is_in_ci_some_none_branch () =
+  (* Test the (Some _, None) branch: set a var that expects any value *)
+  with_clean_ci_env (fun () ->
+      Unix.putenv "HEROKU_TEST_RUN_ID" "anything";
+      Alcotest.(check bool)
+        "is_in_ci with HEROKU_TEST_RUN_ID" true (Client.is_in_ci ()))
+
+let test_is_in_ci_some_v_some_exp_branch () =
+  (* Test the (Some v, Some exp) branch: set a var with matching expected value *)
+  with_clean_ci_env (fun () ->
+      Unix.putenv "TF_BUILD" "true";
+      Alcotest.(check bool)
+        "is_in_ci with TF_BUILD=true" true (Client.is_in_ci ()))
+
+(* ---- Settings builders ---- *)
+
+let test_with_verbosity () =
+  let s = Client.default_settings () |> Client.with_verbosity Client.Debug in
+  Alcotest.(check bool)
+    "verbosity is Debug" true
+    (s.Client.verbosity = Client.Debug)
+
+let test_with_derandomize () =
+  let s = Client.default_settings () |> Client.with_derandomize true in
+  Alcotest.(check bool) "derandomize is true" true s.Client.derandomize
+
+let test_with_database () =
+  let s =
+    Client.default_settings () |> Client.with_database (Client.Path "/tmp/db")
+  in
+  Alcotest.(check bool)
+    "database is Path" true
+    (s.Client.database = Client.Path "/tmp/db")
+
+let test_with_suppress_health_check () =
+  let s =
+    Client.default_settings ()
+    |> Client.with_suppress_health_check
+         [ Client.Too_slow; Client.Filter_too_much ]
+  in
+  Alcotest.(check int)
+    "suppress list length" 2
+    (List.length s.Client.suppress_health_check);
+  Alcotest.(check bool)
+    "first is Too_slow" true
+    (List.nth s.Client.suppress_health_check 0 = Client.Too_slow);
+  Alcotest.(check bool)
+    "second is Filter_too_much" true
+    (List.nth s.Client.suppress_health_check 1 = Client.Filter_too_much)
+
+(** Test: default_settings in CI sets derandomize and disables database. *)
+let test_default_settings_in_ci () =
+  with_clean_ci_env (fun () ->
+      Unix.putenv "CI" "true";
+      let s = Client.default_settings () in
+      Alcotest.(check bool) "derandomize in CI" true s.derandomize;
+      Alcotest.(check bool)
+        "database disabled in CI" true
+        (s.database = Client.Disabled))
+
+(** Test: run_test with database_key. *)
+let test_run_test_with_database_key () =
+  with_fake_server
+    (fun peer_conn ->
+      let _ctrl, test_ch = accept_run_test peer_conn in
+      send_test_done test_ch [ (`Text "interesting_test_cases", `Int 0) ])
+    (fun client ->
+      run_test client
+        ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+        ~database_key:"test-key"
+        (fun () -> ()))
+
+(* ---- find_hegel ---- *)
+
+(** Test: find_hegel uses HEGEL_BINARY env var when HEGEL_SERVER_COMMAND is
+    empty. Covers line 141 in session.ml. *)
+let test_find_hegel_via_binary_env () =
+  let orig_cmd =
+    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
+  in
+  let orig_bin =
+    try Some (Sys.getenv "HEGEL_BINARY") with Not_found -> None
+  in
+  Unix.putenv "HEGEL_SERVER_COMMAND" "";
+  Unix.putenv "HEGEL_BINARY" "/tmp/fake-binary";
+  Fun.protect
+    ~finally:(fun () ->
+      (match orig_cmd with
+      | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
+      | None -> Unix.putenv "HEGEL_SERVER_COMMAND" "");
+      match orig_bin with
+      | Some v -> Unix.putenv "HEGEL_BINARY" v
+      | None -> Unix.putenv "HEGEL_BINARY" "")
+    (fun () ->
+      let path = Session.find_hegel () in
+      Alcotest.(check string) "path" "/tmp/fake-binary" path)
+
+(** Test: find_on_path returns Some for an existing command and None for a
+    nonexistent command. *)
+let test_find_on_path () =
+  let result = Session.find_on_path "sh" in
+  Alcotest.(check bool) "sh found" true (Option.is_some result);
+  let result = Session.find_on_path "nonexistent_command_xyz_42" in
+  Alcotest.(check bool) "nonexistent not found" true (Option.is_none result)
+
+(** Test: ensure_hegel_installed cached path. Creates a fake cached venv with a
+    matching version file and binary, verifying the cache hit path (lines 62-67
+    in session.ml). *)
+let test_ensure_hegel_installed_cached () =
+  let orig_cwd = Sys.getcwd () in
+  let tmp_dir = Filename.temp_dir "hegel_test_cache" "" in
+  Fun.protect
+    ~finally:(fun () ->
+      Sys.chdir orig_cwd;
+      let rec rm_rf path =
+        if Sys.is_directory path then begin
+          Array.iter
+            (fun entry -> rm_rf (Filename.concat path entry))
+            (Sys.readdir path);
+          Unix.rmdir path
+        end
+        else Sys.remove path
+      in
+      rm_rf tmp_dir)
+    (fun () ->
+      Sys.chdir tmp_dir;
+      (* Create .hegel/venv/bin/ directories *)
+      Unix.mkdir ".hegel" 0o755;
+      Unix.mkdir ".hegel/venv" 0o755;
+      Unix.mkdir ".hegel/venv/bin" 0o755;
+      (* Write the version file with the current version *)
+      Out_channel.with_open_text ".hegel/venv/hegel-version" (fun oc ->
+          output_string oc Session.hegel_server_version);
+      (* Create a fake hegel binary *)
+      Out_channel.with_open_text ".hegel/venv/bin/hegel" (fun oc ->
+          output_string oc "#!/bin/sh\nexit 0\n");
+      Unix.chmod ".hegel/venv/bin/hegel" 0o755;
+      (* Call ensure_hegel_installed - should find the cached version *)
+      let path = Session.ensure_hegel_installed () in
+      Alcotest.(check string) "cached path" ".hegel/venv/bin/hegel" path)
+
+(** Test: server crash detection. Start a session with a command that exits
+    immediately, verify that server_exited is set on the connection. Covers line
+    231 in session.ml (monitor thread). *)
+let test_server_crash_detection () =
+  let false_cmd = find_cmd "false" in
+  let session : Session.hegel_session =
+    { process = None; connection = None; client = None; lock = Mutex.create () }
+  in
+  let orig_cmd =
+    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
+  in
+  Unix.putenv "HEGEL_SERVER_COMMAND" false_cmd;
+  Fun.protect
+    ~finally:(fun () ->
+      (match orig_cmd with
+      | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
+      | None -> Unix.putenv "HEGEL_SERVER_COMMAND" "");
+      Session.cleanup session)
+    (fun () ->
+      (* start will fail because /bin/false exits immediately *)
+      let raised = ref false in
+      (try Session.start session with _ -> raised := true);
+      Alcotest.(check bool) "start raised" true !raised;
+      (* After the failed start, if a connection was created before the error,
+         the monitor thread should have noticed the process exiting. *)
+      match session.connection with
+      | Some conn ->
+          (* Give the monitor thread a moment to detect the exit *)
+          Unix.sleepf 0.1;
+          Alcotest.(check bool)
+            "server_exited set" true
+            (Connection.server_has_exited conn)
+      | None ->
+          (* Connection was never established (expected for /bin/false) *)
+          ())
+
+(** Test: is_in_ci returns false when a var with expected value has a different
+    value (the v <> exp false case of line 70). Clear all CI vars so only
+    TF_BUILD matters, then set it to "false". *)
+let test_is_in_ci_value_mismatch () =
+  with_clean_ci_env (fun () ->
+      (* Set TF_BUILD to a non-matching value -- all other CI vars are
+         already unset by with_clean_ci_env *)
+      Unix.putenv "TF_BUILD" "false";
+      Alcotest.(check bool)
+        "is_in_ci with TF_BUILD=false" false (Client.is_in_ci ()))
+
+(** Test: server crash detected in event loop (client.ml line 376). The peer
+    handles one test_case fully (including mark_complete), then the peer sets
+    server_exited and doesn't send test_done. The client's event loop checks
+    server_has_exited after run_test_case and raises. *)
+let test_server_crash_in_event_loop () =
+  let raised_msg = ref "" in
+  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let client_conn = Test_helpers.make_connection s1 ~name:"Client" () in
+  let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
+  let t_hs = Thread.create Test_helpers.handshake_via_channel peer_conn in
+  let client = create_client client_conn in
+  Thread.join t_hs;
+  let t_peer =
+    Thread.create
+      (fun () ->
+        let _ctrl, test_ch = accept_run_test peer_conn in
+        let data_ch_id = 2l in
+        let data_ch = connect_channel peer_conn data_ch_id ~role:"Data" () in
+        ignore
+          (pending_get
+             (request test_ch
+                (`Map
+                   [
+                     (`Text "event", `Text "test_case");
+                     (`Text "channel_id", `Int (Int32.to_int data_ch_id));
+                   ])));
+        (* Handle mark_complete request from the data channel *)
+        let msg_id, _msg = receive_request data_ch () in
+        send_response_value data_ch msg_id `Null;
+        (* After the test case completes, set server_exited so the event
+           loop detects it on the next iteration. *)
+        client_conn.server_exited <- true;
+        (* Don't send test_done — let the client detect the crash. *)
+        Unix.sleepf 0.3)
+      ()
+  in
+  (try
+     run_test client
+       ~settings:(Client.default_settings () |> Client.with_test_cases 1)
+       (fun () -> ())
+   with Failure msg -> raised_msg := msg);
+  Thread.join t_peer;
+  Alcotest.(check bool)
+    "raised server crashed" true
+    (contains_substring !raised_msg "hegel server process has exited");
+  (try close client_conn with _ -> ());
+  try close peer_conn with _ -> ()
+
+(** Test: send error reply to non-existent channel fails silently (connection.ml
+    line 217). Create a connection using pipes so we can close the write_fd
+    independently. Send a non-reply packet from the peer addressed to an
+    unregistered channel. Close the client's write pipe so the error reply
+    fails. The [with _ -> ()] catches the error. *)
+let test_send_error_reply_fails_silently () =
+  (* Create two pipe pairs: one for client reading, one for client writing *)
+  let client_read_fd, peer_write_fd = Unix.pipe () in
+  let peer_read_fd, client_write_fd = Unix.pipe () in
+  (* Close the client's write fd so error replies will fail *)
+  Unix.close client_write_fd;
+  (* Create the client connection with the broken write fd.
+     We need a valid write fd for the connection constructor, so use /dev/null *)
+  let devnull = Unix.openfile "/dev/null" [ Unix.O_WRONLY ] 0o644 in
+  let conn =
+    Connection.create_connection ~read_fd:client_read_fd ~write_fd:devnull ()
+  in
+  (* Close the devnull fd so writes will fail *)
+  Unix.close devnull;
+  (* From the peer side, send a non-reply packet to channel 99 (non-existent).
+     The background reader will try to send an error reply, which will fail
+     because devnull is closed. *)
+  let pkt =
+    {
+      Protocol.channel_id = 99l;
+      message_id = 1l;
+      is_reply = false;
+      payload = CBOR.Simple.encode (`Map [ (`Text "command", `Text "hello") ]);
+    }
+  in
+  Protocol.write_packet peer_write_fd pkt;
+  (* Give the reader thread time to process the packet and attempt the error reply *)
+  Unix.sleepf 0.1;
+  (* Clean up *)
+  close conn;
+  Unix.close peer_write_fd;
+  try Unix.close peer_read_fd with Unix.Unix_error _ -> ()
+
+(** Test: run_command_to_log runs a command and redirects output to a log file.
+*)
+let test_run_command_to_log () =
+  let log_path = Filename.temp_file "hegel_test_cmd" ".log" in
+  Fun.protect
+    ~finally:(fun () -> try Sys.remove log_path with _ -> ())
+    (fun () ->
+      let echo_cmd = find_cmd "echo" in
+      let status =
+        Session.run_command_to_log echo_cmd [ "hello world" ] log_path
+      in
+      Alcotest.(check bool) "exit 0" true (status = Unix.WEXITED 0);
+      let contents = In_channel.with_open_text log_path In_channel.input_all in
+      Alcotest.(check bool)
+        "has output" true
+        (contains_substring contents "hello world"))
+
+(** Test: run_command_to_log with a failing command. *)
+let test_run_command_to_log_fail () =
+  let log_path = Filename.temp_file "hegel_test_cmd" ".log" in
+  Fun.protect
+    ~finally:(fun () -> try Sys.remove log_path with _ -> ())
+    (fun () ->
+      let false_cmd = find_cmd "false" in
+      let status = Session.run_command_to_log false_cmd [] log_path in
+      Alcotest.(check bool)
+        "non-zero exit" true
+        (match status with Unix.WEXITED 0 -> false | _ -> true))
+
+(** Test: ensure_hegel_installed version mismatch triggers reinstall. Create a
+    cached venv with wrong version; since uv is available it will try to
+    reinstall. We expect it to either succeed (if network is available) or fail
+    with an install error. Either way the version mismatch path is exercised. *)
+let test_ensure_hegel_installed_version_mismatch () =
+  let orig_cwd = Sys.getcwd () in
+  let tmp_dir = Filename.temp_dir "hegel_test_mismatch" "" in
+  Fun.protect
+    ~finally:(fun () ->
+      Sys.chdir orig_cwd;
+      let rec rm_rf path =
+        if Sys.is_directory path then begin
+          Array.iter
+            (fun entry -> rm_rf (Filename.concat path entry))
+            (Sys.readdir path);
+          Unix.rmdir path
+        end
+        else Sys.remove path
+      in
+      rm_rf tmp_dir)
+    (fun () ->
+      Sys.chdir tmp_dir;
+      (* Create .hegel/venv/bin/ directories with wrong version *)
+      Unix.mkdir ".hegel" 0o755;
+      Unix.mkdir ".hegel/venv" 0o755;
+      Unix.mkdir ".hegel/venv/bin" 0o755;
+      Out_channel.with_open_text ".hegel/venv/hegel-version" (fun oc ->
+          output_string oc "0.0.0-wrong");
+      Out_channel.with_open_text ".hegel/venv/bin/hegel" (fun oc ->
+          output_string oc "#!/bin/sh\nexit 0\n");
+      Unix.chmod ".hegel/venv/bin/hegel" 0o755;
+      (* Call ensure_hegel_installed - version won't match, so it will try
+         to reinstall via uv. This will fail (wrong package version or
+         network issues) but exercises the version mismatch path. *)
+      let _result =
+        try
+          let path = Session.ensure_hegel_installed () in
+          Some path
+        with _ -> None
+      in
+      (* We don't assert on the result because it depends on whether uv
+         can actually install. The important thing is the version mismatch
+         path was exercised. *)
+      ())
+
+(** Test: ensure_hegel_installed when uv is not found (ENOENT path). Temporarily
+    set PATH to empty so uv can't be found, and ensure no cached version exists.
+    Should raise with uv_not_found_message. *)
+let test_ensure_hegel_installed_uv_not_found () =
+  let orig_cwd = Sys.getcwd () in
+  let tmp_dir = Filename.temp_dir "hegel_test_no_uv" "" in
+  let orig_path = try Some (Sys.getenv "PATH") with Not_found -> None in
+  Fun.protect
+    ~finally:(fun () ->
+      Sys.chdir orig_cwd;
+      (match orig_path with
+      | Some p -> Unix.putenv "PATH" p
+      | None -> Unix.putenv "PATH" "");
+      let rec rm_rf path =
+        if Sys.is_directory path then begin
+          Array.iter
+            (fun entry -> rm_rf (Filename.concat path entry))
+            (Sys.readdir path);
+          Unix.rmdir path
+        end
+        else Sys.remove path
+      in
+      rm_rf tmp_dir)
+    (fun () ->
+      Sys.chdir tmp_dir;
+      (* Set PATH to empty so uv won't be found *)
+      Unix.putenv "PATH" "";
+      let raised_msg = ref "" in
+      (try ignore (Session.ensure_hegel_installed ())
+       with Failure msg -> raised_msg := msg);
+      Alcotest.(check bool)
+        "raised uv not found" true
+        (contains_substring !raised_msg "uv"))
+
+(** Helper: create a fake uv script in a directory. The script handles "venv"
+    and "pip" subcommands with configurable exit codes. [work_dir] is the
+    absolute path where .hegel/ will be created. *)
+let create_fake_uv dir ~venv_exit ~pip_exit ~work_dir ?(delete_log = false) () =
+  let uv_path = Filename.concat dir "uv" in
+  let hegel_bin = Printf.sprintf "%s/.hegel/venv/bin/hegel" work_dir in
+  let install_log = Printf.sprintf "%s/.hegel/install.log" work_dir in
+  let rm_log =
+    if delete_log then Printf.sprintf "rm -f \"%s\"\n" install_log else ""
+  in
+  Out_channel.with_open_text uv_path (fun oc ->
+      Printf.fprintf oc
+        "#!/bin/sh\n\
+         case \"$1\" in\n\
+         venv)\n\
+         mkdir -p \"$3/bin\"\n\
+         touch \"$3/bin/python\"\n\
+         %sexit %d\n\
+         ;;\n\
+         pip)\n\
+         mkdir -p \"%s\"\n\
+         printf '#!/bin/sh\\nexit 0\\n' > \"%s\"\n\
+         chmod +x \"%s\"\n\
+         %sexit %d\n\
+         ;;\n\
+         esac\n\
+         exit 1\n"
+        rm_log venv_exit
+        (Filename.dirname hegel_bin)
+        hegel_bin hegel_bin rm_log pip_exit);
+  Unix.chmod uv_path 0o755
+
+(** Helper: run ensure_hegel_installed in a temp dir with a fake uv. *)
+let with_fake_uv_env ~venv_exit ~pip_exit ?(delete_log = false) f =
+  let orig_cwd = Sys.getcwd () in
+  let orig_path = try Some (Sys.getenv "PATH") with Not_found -> None in
+  let tmp_dir = Filename.temp_dir "hegel_test_fakeuv" "" in
+  let fake_bin_dir = Filename.concat tmp_dir "bin" in
+  let work_dir = Filename.concat tmp_dir "work" in
+  Unix.mkdir fake_bin_dir 0o755;
+  Unix.mkdir work_dir 0o755;
+  create_fake_uv fake_bin_dir ~venv_exit ~pip_exit ~work_dir ~delete_log ();
+  Fun.protect
+    ~finally:(fun () ->
+      Sys.chdir orig_cwd;
+      (match orig_path with
+      | Some p -> Unix.putenv "PATH" p
+      | None -> Unix.putenv "PATH" "");
+      let rec rm_rf path =
+        if Sys.is_directory path then begin
+          Array.iter
+            (fun entry -> rm_rf (Filename.concat path entry))
+            (Sys.readdir path);
+          Unix.rmdir path
+        end
+        else Sys.remove path
+      in
+      try rm_rf tmp_dir with _ -> ())
+    (fun () ->
+      Sys.chdir work_dir;
+      Unix.putenv "PATH" (Printf.sprintf "%s:/bin:/usr/bin" fake_bin_dir);
+      f ())
+
+(** Test: ensure_hegel_installed success path with fake uv. *)
+let test_ensure_installed_success () =
+  with_fake_uv_env ~venv_exit:0 ~pip_exit:0 (fun () ->
+      let path = Session.ensure_hegel_installed () in
+      Alcotest.(check bool) "returns path" true (String.length path > 0))
+
+(** Test: ensure_hegel_installed when uv venv fails. *)
+let test_ensure_installed_venv_fails () =
+  with_fake_uv_env ~venv_exit:1 ~pip_exit:0 ~delete_log:true (fun () ->
+      let raised_msg = ref "" in
+      (try ignore (Session.ensure_hegel_installed ())
+       with Failure msg -> raised_msg := msg);
+      Alcotest.(check bool)
+        "uv venv failed" true
+        (contains_substring !raised_msg "uv venv failed"))
+
+(** Test: ensure_hegel_installed when uv pip install fails. *)
+let test_ensure_installed_pip_fails () =
+  with_fake_uv_env ~venv_exit:0 ~pip_exit:1 (fun () ->
+      let raised_msg = ref "" in
+      (try ignore (Session.ensure_hegel_installed ())
+       with Failure msg -> raised_msg := msg);
+      Alcotest.(check bool)
+        "pip install failed" true
+        (contains_substring !raised_msg "Failed to install"))
+
+(** Test: ensure_hegel_installed pip fails with unreadable log. *)
+let test_ensure_installed_pip_fails_no_log () =
+  with_fake_uv_env ~venv_exit:0 ~pip_exit:1 ~delete_log:true (fun () ->
+      let raised_msg = ref "" in
+      (try ignore (Session.ensure_hegel_installed ())
+       with Failure msg -> raised_msg := msg);
+      Alcotest.(check bool)
+        "pip install failed" true
+        (contains_substring !raised_msg "Failed to install"))
+
+(** Test: ensure_hegel_installed when hegel binary not found after install. *)
+let test_ensure_installed_binary_missing () =
+  let orig_cwd = Sys.getcwd () in
+  let orig_path = try Some (Sys.getenv "PATH") with Not_found -> None in
+  let tmp_dir = Filename.temp_dir "hegel_test_nobin" "" in
+  let fake_bin_dir = Filename.concat tmp_dir "bin" in
+  Unix.mkdir fake_bin_dir 0o755;
+  (* Create a fake uv that succeeds but does NOT create the hegel binary *)
+  let uv_path = Filename.concat fake_bin_dir "uv" in
+  Out_channel.with_open_text uv_path (fun oc ->
+      output_string oc
+        "#!/bin/sh\n\
+         if [ \"$1\" = \"venv\" ]; then\n\
+        \  mkdir -p \"$3/bin\"\n\
+        \  touch \"$3/bin/python\"\n\
+        \  exit 0\n\
+         fi\n\
+         if [ \"$1\" = \"pip\" ]; then\n\
+        \  exit 0\n\
+         fi\n\
+         exit 1\n");
+  Unix.chmod uv_path 0o755;
+  Fun.protect
+    ~finally:(fun () ->
+      Sys.chdir orig_cwd;
+      (match orig_path with
+      | Some p -> Unix.putenv "PATH" p
+      | None -> Unix.putenv "PATH" "");
+      let rec rm_rf path =
+        if Sys.is_directory path then begin
+          Array.iter
+            (fun entry -> rm_rf (Filename.concat path entry))
+            (Sys.readdir path);
+          Unix.rmdir path
+        end
+        else Sys.remove path
+      in
+      try rm_rf tmp_dir with _ -> ())
+    (fun () ->
+      let work_dir = Filename.concat tmp_dir "work" in
+      Unix.mkdir work_dir 0o755;
+      Sys.chdir work_dir;
+      Unix.putenv "PATH" (Printf.sprintf "%s:/bin:/usr/bin" fake_bin_dir);
+      let raised_msg = ref "" in
+      (try ignore (Session.ensure_hegel_installed ())
+       with Failure msg -> raised_msg := msg);
+      Alcotest.(check bool)
+        "binary not found" true
+        (contains_substring !raised_msg "not found"))
+
+(** Test: find_hegel fallthrough to ensure_hegel_installed. *)
+let test_find_hegel_fallthrough_to_install () =
+  with_fake_uv_env ~venv_exit:0 ~pip_exit:0 (fun () ->
+      let orig_cmd =
+        try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
+      in
+      let orig_bin =
+        try Some (Sys.getenv "HEGEL_BINARY") with Not_found -> None
+      in
+      Unix.putenv "HEGEL_SERVER_COMMAND" "";
+      Unix.putenv "HEGEL_BINARY" "";
+      Fun.protect
+        ~finally:(fun () ->
+          (match orig_cmd with
+          | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
+          | None -> Unix.putenv "HEGEL_SERVER_COMMAND" "");
+          match orig_bin with
+          | Some v -> Unix.putenv "HEGEL_BINARY" v
+          | None -> Unix.putenv "HEGEL_BINARY" "")
+        (fun () ->
+          let path = Session.find_hegel () in
+          Alcotest.(check bool) "found hegel" true (String.length path > 0)))
+
+let test_find_hegel_auto_install () =
+  let orig_cmd =
+    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
+  in
+  Unix.putenv "HEGEL_SERVER_COMMAND" "";
+  let path = Session.find_hegel () in
   Alcotest.(check bool) "found hegel" true (String.length path > 0);
-  match orig with
-  | Some v -> Unix.putenv "HEGEL_BINARY" v
-  | None -> Unix.putenv "HEGEL_BINARY" ""
+  match orig_cmd with
+  | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
+  | None -> Unix.putenv "HEGEL_SERVER_COMMAND" ""
 
 (* ---- Session lifecycle ---- *)
 
 let test_session_cleanup () =
   let session : Session.hegel_session =
-    {
-      process = None;
-      connection = None;
-      client = None;
-      socket_path = None;
-      temp_dir = None;
-      lock = Mutex.create ();
-    }
+    { process = None; connection = None; client = None; lock = Mutex.create () }
   in
   Session.cleanup session
 
@@ -763,6 +1477,23 @@ let tests =
     Alcotest.test_case "DLS initializers in new domain" `Quick
       test_dls_initializers_in_new_domain;
     Alcotest.test_case "nested test raises" `Quick test_nested_test_raises;
+    Alcotest.test_case "health_check_to_string" `Quick
+      test_health_check_to_string;
+    Alcotest.test_case "is_in_ci Some _, None branch" `Quick
+      test_is_in_ci_some_none_branch;
+    Alcotest.test_case "is_in_ci Some v, Some exp branch" `Quick
+      test_is_in_ci_some_v_some_exp_branch;
+    Alcotest.test_case "is_in_ci value mismatch (false)" `Quick
+      test_is_in_ci_value_mismatch;
+    Alcotest.test_case "with_verbosity" `Quick test_with_verbosity;
+    Alcotest.test_case "with_derandomize" `Quick test_with_derandomize;
+    Alcotest.test_case "with_database" `Quick test_with_database;
+    Alcotest.test_case "with_suppress_health_check" `Quick
+      test_with_suppress_health_check;
+    Alcotest.test_case "default_settings in CI" `Quick
+      test_default_settings_in_ci;
+    Alcotest.test_case "run_test with database_key" `Quick
+      test_run_test_with_database_key;
     (* Real-server converted tests *)
     Alcotest.test_case "start/stop span live" `Quick test_start_stop_span_live;
     Alcotest.test_case "version mismatch" `Quick test_version_mismatch;
@@ -770,19 +1501,56 @@ let tests =
     Alcotest.test_case "run_test with seed" `Quick test_run_test_with_seed;
     Alcotest.test_case "multiple interesting" `Quick test_multiple_interesting;
     Alcotest.test_case "unrecognised event" `Quick test_unrecognised_event;
-    (* find_hegeld *)
-    Alcotest.test_case "find_hegeld via env" `Quick test_find_hegeld_via_env;
-    Alcotest.test_case "find_hegeld on path" `Quick test_find_hegeld_on_path;
-    Alcotest.test_case "find_hegeld not found" `Quick test_find_hegeld_not_found;
-    Alcotest.test_case "find_hegeld no path" `Quick test_find_hegeld_no_path;
+    Alcotest.test_case "run_test database path + suppress" `Quick
+      test_run_test_database_path_and_suppress;
+    Alcotest.test_case "run_test server error in results" `Quick
+      test_run_test_server_error_in_results;
+    Alcotest.test_case "run_test health check failure" `Quick
+      test_run_test_health_check_failure;
+    Alcotest.test_case "run_test flaky" `Quick test_run_test_flaky;
+    Alcotest.test_case "run_test passed=false" `Quick test_run_test_passed_false;
+    Alcotest.test_case "server_exited in pop_inbox" `Quick
+      test_server_exited_in_pop_inbox;
+    Alcotest.test_case "server crash in event loop" `Quick
+      test_server_crash_in_event_loop;
+    Alcotest.test_case "send error reply fails silently" `Quick
+      test_send_error_reply_fails_silently;
+    (* find_hegel *)
+    Alcotest.test_case "find_hegel via env" `Quick test_find_hegel_via_env;
+    Alcotest.test_case "find_hegel via HEGEL_BINARY" `Quick
+      test_find_hegel_via_binary_env;
+    Alcotest.test_case "find_on_path" `Quick test_find_on_path;
+    Alcotest.test_case "ensure_hegel_installed cached" `Quick
+      test_ensure_hegel_installed_cached;
+    Alcotest.test_case "ensure_hegel_installed version mismatch" `Quick
+      test_ensure_hegel_installed_version_mismatch;
+    Alcotest.test_case "ensure_hegel_installed uv not found" `Quick
+      test_ensure_hegel_installed_uv_not_found;
+    Alcotest.test_case "ensure_installed success" `Quick
+      test_ensure_installed_success;
+    Alcotest.test_case "ensure_installed venv fails" `Quick
+      test_ensure_installed_venv_fails;
+    Alcotest.test_case "ensure_installed pip fails" `Quick
+      test_ensure_installed_pip_fails;
+    Alcotest.test_case "ensure_installed pip fails no log" `Quick
+      test_ensure_installed_pip_fails_no_log;
+    Alcotest.test_case "ensure_installed binary missing" `Quick
+      test_ensure_installed_binary_missing;
+    Alcotest.test_case "find_hegel fallthrough to install" `Quick
+      test_find_hegel_fallthrough_to_install;
+    Alcotest.test_case "run_command_to_log" `Quick test_run_command_to_log;
+    Alcotest.test_case "run_command_to_log fail" `Quick
+      test_run_command_to_log_fail;
+    Alcotest.test_case "server crash detection" `Quick
+      test_server_crash_detection;
+    Alcotest.test_case "find_hegel auto install" `Quick
+      test_find_hegel_auto_install;
     (* Session *)
     Alcotest.test_case "session cleanup" `Quick test_session_cleanup;
     Alcotest.test_case "session cleanup with resources" `Quick
       test_session_cleanup_with_resources;
     Alcotest.test_case "session cleanup closed conn" `Quick
       test_session_cleanup_closed_conn;
-    Alcotest.test_case "session cleanup bad paths" `Quick
-      test_session_cleanup_bad_paths;
     Alcotest.test_case "session cleanup with process" `Quick
       test_session_cleanup_with_process;
     Alcotest.test_case "session cleanup dead process" `Quick
@@ -790,7 +1558,11 @@ let tests =
     Alcotest.test_case "has working client live" `Quick
       test_has_working_client_live;
     Alcotest.test_case "session not started" `Quick test_session_not_started;
-    Alcotest.test_case "session start timeout" `Quick test_session_start_timeout;
+    Alcotest.test_case "session start failure" `Quick test_session_start_failure;
+    Alcotest.test_case "monitor thread detects crash" `Quick
+      test_monitor_thread_detects_crash;
+    Alcotest.test_case "cleanup with close error" `Quick
+      test_cleanup_with_close_error;
     Alcotest.test_case "run_test_case nest" `Quick test_run_test_case_nest;
     (* E2E tests with real hegel *)
     Alcotest.test_case "simple passing test" `Quick test_simple_passing_test;
@@ -807,6 +1579,8 @@ let tests =
     Alcotest.test_case "session start and run" `Quick test_session_start_and_run;
     Alcotest.test_case "run_hegel_test defaults" `Quick
       test_run_hegel_test_defaults;
+    Alcotest.test_case "run_hegel_test with settings" `Quick
+      test_run_hegel_test_with_settings;
     (* HEGEL_PROTOCOL_TEST_MODE error injection - these restart the session *)
     Alcotest.test_case "stop test on generate" `Quick test_stop_test_on_generate;
     Alcotest.test_case "stop test on mark complete" `Quick

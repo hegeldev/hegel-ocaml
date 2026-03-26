@@ -15,6 +15,96 @@ exception Assume_rejected
 exception Data_exhausted
 (** Raised when the server runs out of test data (StopTest). *)
 
+(** Health checks that can be suppressed during test execution. *)
+type health_check =
+  | Filter_too_much
+  | Too_slow
+  | Test_cases_too_large
+  | Large_initial_test_case
+
+(** [health_check_to_string hc] returns the wire protocol name for [hc]. *)
+let health_check_to_string = function
+  | Filter_too_much -> "filter_too_much"
+  | Too_slow -> "too_slow"
+  | Test_cases_too_large -> "test_cases_too_large"
+  | Large_initial_test_case -> "large_initial_test_case"
+
+(** Controls how much output Hegel produces during test runs. *)
+type verbosity = Quiet | Normal | Verbose | Debug
+
+(** The database setting: unset, disabled, or a path. *)
+type database = Unset | Disabled | Path of string
+
+type settings = {
+  test_cases : int;
+  verbosity : verbosity;
+  seed : int option;
+  derandomize : bool;
+  database : database;
+  suppress_health_check : health_check list;
+}
+(** Configuration for a Hegel test run. *)
+
+(** CI environment variables to check for auto-detection. Each entry is
+    [(var_name, expected_value)] where [None] means "any value". *)
+let ci_vars =
+  [
+    ("CI", None);
+    ("TF_BUILD", Some "true");
+    ("BUILDKITE", Some "true");
+    ("CIRCLECI", Some "true");
+    ("CIRRUS_CI", Some "true");
+    ("CODEBUILD_BUILD_ID", None);
+    ("GITHUB_ACTIONS", Some "true");
+    ("GITLAB_CI", None);
+    ("HEROKU_TEST_RUN_ID", None);
+    ("TEAMCITY_VERSION", None);
+  ]
+
+(** [is_in_ci ()] returns [true] if a CI environment is detected. *)
+let is_in_ci () =
+  List.exists
+    (fun (key, expected) ->
+      match (Sys.getenv_opt key, expected) with
+      | Some _, None -> true
+      | Some v, Some exp -> v = exp
+      | None, _ -> false)
+    ci_vars
+
+(** [default_settings ()] creates settings with defaults. Detects CI
+    environments automatically. *)
+let default_settings () =
+  let in_ci = is_in_ci () in
+  {
+    test_cases = 100;
+    verbosity = Normal;
+    seed = None;
+    derandomize = in_ci;
+    database = (if in_ci then Disabled else Unset);
+    suppress_health_check = [];
+  }
+
+(** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
+let with_test_cases n s = { s with test_cases = n }
+
+(** [with_verbosity v s] returns settings [s] with [verbosity] set to [v]. *)
+let with_verbosity v s = { s with verbosity = v }
+
+(** [with_seed seed s] returns settings [s] with [seed] set. *)
+let with_seed seed s = { s with seed }
+
+(** [with_derandomize b s] returns settings [s] with [derandomize] set to [b].
+*)
+let with_derandomize b s = { s with derandomize = b }
+
+(** [with_database db s] returns settings [s] with [database] set to [db]. *)
+let with_database db s = { s with database = db }
+
+(** [with_suppress_health_check checks s] returns settings [s] with additional
+    health checks suppressed. *)
+let with_suppress_health_check checks s =
+  { s with suppress_health_check = s.suppress_health_check @ checks }
+
 type test_case_data = {
   channel : channel;
   is_final : bool;
@@ -127,6 +217,11 @@ let stop_span ?(discard = false) data =
                ])))
   end
 
+(** Supported protocol version range. *)
+let supported_protocol_lo = 0.1
+
+let supported_protocol_hi = 0.7
+
 type client = { connection : connection; control : channel; lock : Mutex.t }
 (** Hegel client for running property-based tests. *)
 
@@ -134,13 +229,16 @@ type client = { connection : connection; control : channel; lock : Mutex.t }
     connection must not yet have had its handshake performed. *)
 let create_client connection =
   let server_version = float_of_string (send_handshake connection) in
-  if server_version < 0.1 || server_version > 0.4 then
+  if
+    server_version < supported_protocol_lo
+    || server_version > supported_protocol_hi
+  then
     failwith
       (Printf.sprintf
-         "hegel-ocaml supports protocol versions 0.1 through 0.4, but got \
+         "hegel-ocaml supports protocol versions %.1f through %.1f, but got \
           server version %g. Upgrading hegel-ocaml or downgrading your hegel \
           cli might help."
-         server_version);
+         supported_protocol_lo supported_protocol_hi server_version);
   { connection; control = control_channel connection; lock = Mutex.create () }
 
 (** [run_test_case client channel test_fn ~is_final] runs a single test case.
@@ -196,12 +294,12 @@ let run_test_case _client channel test_fn ~is_final =
   close_channel channel;
   match outcome with Interesting { exn = Some e; _ } -> raise e | _ -> ()
 
-(** [run_test client ~test_cases ?seed test_fn] runs a property test.
+(** [run_test client ~settings ?database_key test_fn] runs a property test using
+    the given settings.
 
-    @param seed
-      optional seed for deterministic replay. If [None], the server generates
-      its own seed. *)
-let run_test client ~test_cases ?seed test_fn =
+    @param database_key
+      optional key for persistent failure storage (internal use). *)
+let run_test client ~settings ?database_key test_fn =
   if Domain.DLS.get current_data <> None then
     failwith "Cannot nest test cases - already inside a test case";
   let test_channel = new_channel client.connection ~role:"Test" () in
@@ -209,18 +307,42 @@ let run_test client ~test_cases ?seed test_fn =
   Fun.protect
     ~finally:(fun () -> Mutex.unlock client.lock)
     (fun () ->
-      let seed_value = match seed with Some s -> `Int s | None -> `Null in
-      ignore
-        (pending_get
-           (request client.control
-              (`Map
-                 [
-                   (`Text "command", `Text "run_test");
-                   (`Text "test_cases", `Int test_cases);
-                   (`Text "seed", seed_value);
-                   ( `Text "channel_id",
-                     `Int (Int32.to_int (channel_id test_channel)) );
-                 ]))));
+      let seed_value =
+        match settings.seed with Some s -> `Int s | None -> `Null
+      in
+      let database_key_value =
+        match database_key with Some k -> `Bytes k | None -> `Null
+      in
+      let base_fields =
+        [
+          (`Text "command", `Text "run_test");
+          (`Text "test_cases", `Int settings.test_cases);
+          (`Text "seed", seed_value);
+          (`Text "channel_id", `Int (Int32.to_int (channel_id test_channel)));
+          (`Text "database_key", database_key_value);
+          (`Text "derandomize", `Bool settings.derandomize);
+        ]
+      in
+      let database_field =
+        match settings.database with
+        | Unset -> []
+        | Disabled -> [ (`Text "database", `Null) ]
+        | Path p -> [ (`Text "database", `Text p) ]
+      in
+      let suppress_field =
+        match settings.suppress_health_check with
+        | [] -> []
+        | checks ->
+            [
+              ( `Text "suppress_health_check",
+                `Array
+                  (List.map
+                     (fun hc -> `Text (health_check_to_string hc))
+                     checks) );
+            ]
+      in
+      let fields = base_fields @ database_field @ suppress_field in
+      ignore (pending_get (request client.control (`Map fields))));
   let receive_and_run_test_case ~is_final =
     let message_id, message = receive_request test_channel () in
     let pairs = Cbor_helpers.extract_dict message in
@@ -250,6 +372,8 @@ let run_test client ~test_cases ?seed test_fn =
         connect_channel client.connection ch_id ~role:"Test Case" ()
       in
       run_test_case client test_case_channel test_fn ~is_final:false;
+      if server_has_exited client.connection then
+        failwith server_crashed_message;
       receive_events ()
     end
     else if event = "test_done" then begin
@@ -269,12 +393,39 @@ let run_test client ~test_cases ?seed test_fn =
     end
   in
   let results = receive_events () in
+  (* Check for server-side errors *)
+  (match List.assoc_opt (`Text "error") results with
+  | Some error_val ->
+      let error_msg = Cbor_helpers.extract_string error_val in
+      failwith (Printf.sprintf "Server error: %s" error_msg)
+  | None -> ());
+  (* Check for health check failure *)
+  (match List.assoc_opt (`Text "health_check_failure") results with
+  | Some failure_val ->
+      let failure_msg = Cbor_helpers.extract_string failure_val in
+      failwith (Printf.sprintf "Health check failure:\n%s" failure_msg)
+  | None -> ());
+  (* Check for flaky test detection *)
+  (match List.assoc_opt (`Text "flaky") results with
+  | Some flaky_val ->
+      let flaky_msg = Cbor_helpers.extract_string flaky_val in
+      failwith (Printf.sprintf "Flaky test detected: %s" flaky_msg)
+  | None -> ());
+  (* Check passed flag *)
+  let passed =
+    match List.assoc_opt (`Text "passed") results with
+    | Some (`Bool b) -> b
+    | _ -> true
+  in
   let n_interesting =
     Cbor_helpers.extract_int
       (List.assoc (`Text "interesting_test_cases") results)
   in
-  if n_interesting = 0 then ()
-  else if n_interesting = 1 then receive_and_run_test_case ~is_final:true
+  if n_interesting = 0 && passed then ()
+  else if n_interesting <= 1 then begin
+    if n_interesting = 1 then receive_and_run_test_case ~is_final:true;
+    if not passed then failwith "Property test failed"
+  end
   else
     let rec replay_interesting remaining acc =
       if remaining = 0 then List.rev acc
