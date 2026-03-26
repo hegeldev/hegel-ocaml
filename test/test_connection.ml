@@ -275,8 +275,13 @@ let test_request_response () =
   let t =
     Thread.create
       (fun () ->
-        Test_helpers.handshake_via_channel peer_conn;
+        (* Register the handler channel before the handshake response so
+           the background reader can route the client's first request.
+           Without this, there's a race: the client can send on channel 3
+           before new_channel registers it on the peer. *)
+        peer_conn.connection_state <- Client;
         let ch = new_channel peer_conn ~role:"Handler" () in
+        Test_helpers.handshake_via_channel peer_conn;
         (try
            while true do
              let msg_id, message = receive_request ch () in
@@ -296,7 +301,6 @@ let test_request_response () =
       ()
   in
   ignore (send_handshake client_conn);
-  (* Peer creates channel with id=3 (first non-control, (1<<1)|1 = 3) *)
   let send_ch = connect_channel client_conn 3l () in
   let result =
     pending_get
@@ -318,8 +322,11 @@ let test_receive_response () =
   let t =
     Thread.create
       (fun () ->
-        Test_helpers.handshake_via_channel peer_conn;
+        (* Register channel before handshake to avoid race (see
+           test_request_response comment for details). *)
+        peer_conn.connection_state <- Client;
         let ch = new_channel peer_conn ~role:"RR" () in
+        Test_helpers.handshake_via_channel peer_conn;
         try
           while true do
             let msg_id, _message = receive_request ch () in
@@ -346,8 +353,9 @@ let test_pending_request_caching () =
   let t =
     Thread.create
       (fun () ->
-        Test_helpers.handshake_via_channel peer_conn;
+        peer_conn.connection_state <- Client;
         let ch = new_channel peer_conn ~role:"PR" () in
+        Test_helpers.handshake_via_channel peer_conn;
         try
           while true do
             let msg_id, message = receive_request ch () in
