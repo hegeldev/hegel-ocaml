@@ -64,10 +64,7 @@ let result_or_error body =
 (** Connection state after handshake. *)
 type connection_state = Unresolved | Client
 
-let equal_connection_state a b =
-  match (a, b) with
-  | Unresolved, Unresolved | Client, Client -> true
-  | _ -> false
+let equal_connection_state a b = Poly.( = ) a b
 
 type channel_inbox = {
   queue : inbox_item Queue.t;
