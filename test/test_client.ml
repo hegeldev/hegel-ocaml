@@ -1,3 +1,6 @@
+open! Core
+module Mutex = Caml_threads.Mutex
+module Thread = Caml_threads.Thread
 open Hegel
 open Connection
 open Client
@@ -8,7 +11,9 @@ let find_cmd = Test_helpers.find_cmd
 (* ---- Unit tests for helpers that don't need a server ---- *)
 
 let test_assume_true () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
     Client.
@@ -16,10 +21,12 @@ let test_assume_true () =
   in
   assume tc true;
   close conn;
-  Unix.close s2
+  Core_unix.close s2
 
 let test_assume_false_raises () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
     Client.
@@ -29,10 +36,12 @@ let test_assume_false_raises () =
   (try assume tc false with Assume_rejected -> raised := true);
   Alcotest.(check bool) "raised Assume_rejected" true !raised;
   close conn;
-  Unix.close s2
+  Core_unix.close s2
 
 let test_note_when_not_final () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
     Client.
@@ -40,10 +49,12 @@ let test_note_when_not_final () =
   in
   note tc "should not print";
   close conn;
-  Unix.close s2
+  Core_unix.close s2
 
 let test_note_when_final () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
     Client.
@@ -51,25 +62,27 @@ let test_note_when_final () =
   in
   note tc "test message from note";
   close conn;
-  Unix.close s2
+  Core_unix.close s2
 
 let test_extract_origin_no_backtrace () =
   let origin = extract_origin (Failure "test") in
   Alcotest.(check bool) "has Failure" true (contains_substring origin "Failure")
 
 let test_extract_origin_with_backtrace () =
-  Printexc.record_backtrace true;
+  Stdlib.Printexc.record_backtrace true;
   let origin =
     try raise (Failure "test error") with exn -> extract_origin exn
   in
-  Printexc.record_backtrace false;
+  Stdlib.Printexc.record_backtrace false;
   Alcotest.(check bool) "has Failure" true (contains_substring origin "Failure");
   Alcotest.(check bool)
     "has file:line" true
     (contains_substring origin "test_client.ml")
 
 let test_start_span_when_aborted () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let data =
     Client.
@@ -78,7 +91,7 @@ let test_start_span_when_aborted () =
   start_span data;
   stop_span data;
   close conn;
-  Unix.close s2
+  Core_unix.close s2
 
 let test_nested_test_raises () =
   let raised = ref false in
@@ -100,12 +113,12 @@ let test_nested_test_raises () =
     session so the new env var takes effect on the subprocess. *)
 let with_test_mode mode f =
   Session.restart_session ();
-  Unix.putenv "HEGEL_PROTOCOL_TEST_MODE" mode;
-  Fun.protect
+  Core_unix.putenv ~key:"HEGEL_PROTOCOL_TEST_MODE" ~data:mode;
+  Exn.protect
     ~finally:(fun () ->
-      Unix.putenv "HEGEL_PROTOCOL_TEST_MODE" "";
+      Core_unix.putenv ~key:"HEGEL_PROTOCOL_TEST_MODE" ~data:"";
       Session.restart_session ())
-    f
+    ~f
 
 let test_simple_passing_test () =
   Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
@@ -256,7 +269,7 @@ let test_start_stop_span_live () =
 (** Test: version mismatch in create_client (version too high). *)
 let test_version_mismatch () =
   let server_socket, client_socket =
-    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
   in
   let peer_conn = Test_helpers.make_connection server_socket ~name:"Peer" () in
   let client_conn =
@@ -282,7 +295,7 @@ let test_version_mismatch () =
 (** Test: version mismatch in create_client (version too low). *)
 let test_version_mismatch_low () =
   let server_socket, client_socket =
-    Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
   in
   let peer_conn = Test_helpers.make_connection server_socket ~name:"Peer" () in
   let client_conn =
@@ -321,7 +334,7 @@ let test_multiple_interesting () =
        (fun tc ->
          let v = Hegel.draw tc (Hegel.Generators.booleans ()) in
          if v then failwith "error from Failure branch" else raise Exit)
-   with e -> raised_msg := Printexc.to_string e);
+   with e -> raised_msg := Exn.to_string e);
   Alcotest.(check bool)
     "has Multiple failures" true
     (contains_substring !raised_msg "Multiple failures")
@@ -330,7 +343,9 @@ let test_multiple_interesting () =
     return [(client, client_conn, peer_conn)]. The caller provides a peer
     function that will be run in a thread. *)
 let with_fake_server peer_fn client_fn =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let client_conn = Test_helpers.make_connection s1 ~name:"Client" () in
   let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
   let t_hs = Thread.create Test_helpers.handshake_via_channel peer_conn in
@@ -349,8 +364,9 @@ let accept_run_test peer_conn =
   let msg_id, msg = receive_request ctrl () in
   let pairs = Cbor_helpers.extract_dict msg in
   let test_ch_id =
-    Int32.of_int
-      (Cbor_helpers.extract_int (List.assoc (`Text "channel_id") pairs))
+    Int32.of_int_exn
+      (Cbor_helpers.extract_int
+         (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "channel_id")))
   in
   send_response_value ctrl msg_id `Null;
   let test_ch = connect_channel peer_conn test_ch_id ~role:"Test" () in
@@ -522,7 +538,9 @@ let test_run_test_passed_false () =
     server_exited to true, then try to receive. Should raise with
     server_crashed_message. *)
 let test_server_exited_in_pop_inbox () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   conn.server_exited <- true;
   let ch = control_channel conn in
@@ -535,7 +553,7 @@ let test_server_exited_in_pop_inbox () =
        (contains_substring msg "hegel server process has exited"));
   Alcotest.(check bool) "raised" true !raised;
   close conn;
-  Unix.close s2
+  Core_unix.close s2
 
 (** Test: run_hegel_test with explicit settings parameter (covers the Some s
     branch in session.ml line 257). *)
@@ -552,15 +570,13 @@ let test_run_hegel_test_with_settings () =
 
 (** Test: find_hegel uses HEGEL_SERVER_COMMAND env var. *)
 let test_find_hegel_via_env () =
-  let orig_cmd =
-    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
-  in
-  Unix.putenv "HEGEL_SERVER_COMMAND" "/tmp/fake-hegel";
+  let orig_cmd = Sys.getenv "HEGEL_SERVER_COMMAND" in
+  Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:"/tmp/fake-hegel";
   let path = Session.find_hegel () in
   Alcotest.(check string) "path" "/tmp/fake-hegel" path;
   match orig_cmd with
-  | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
-  | None -> Unix.putenv "HEGEL_SERVER_COMMAND" ""
+  | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
+  | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:""
 
 (** Test: session start failure (bad server command). Covers the error path when
     the hegel subprocess exits immediately without completing the handshake. *)
@@ -568,17 +584,15 @@ let test_session_start_failure () =
   let session : Session.hegel_session =
     { process = None; connection = None; client = None; lock = Mutex.create () }
   in
-  let orig_cmd =
-    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
-  in
-  Unix.putenv "HEGEL_SERVER_COMMAND" "/bin/false";
+  let orig_cmd = Sys.getenv "HEGEL_SERVER_COMMAND" in
+  Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:"/bin/false";
   let raised = ref false in
   (try Session.start session with _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised;
   Session.cleanup session;
   match orig_cmd with
-  | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
-  | None -> Unix.putenv "HEGEL_SERVER_COMMAND" ""
+  | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
+  | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:""
 
 (** Test: monitor thread detects server crash (session.ml line 231). Start a
     real session, kill the server process, verify server_exited. *)
@@ -590,9 +604,9 @@ let test_monitor_thread_detects_crash () =
   (* Kill the server process *)
   (match session.process with
   | Some pid -> (
-      Unix.kill pid Sys.sigkill;
+      Caml_unix.kill pid Stdlib.Sys.sigkill;
       (* Wait for the monitor thread to detect the crash *)
-      Unix.sleepf 0.5;
+      Caml_unix.sleepf 0.5;
       match session.connection with
       | Some conn ->
           Alcotest.(check bool)
@@ -609,11 +623,13 @@ let test_monitor_thread_detects_crash () =
     outer try/with, we'd need a non-Unix exception - but we can at least
     exercise the code path by closing the fds first and marking running=true. *)
 let test_cleanup_with_close_error () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   (* Close both fds underneath the connection *)
-  Unix.close s1;
-  Unix.close s2;
+  Core_unix.close s1;
+  Core_unix.close s2;
   (* Ensure conn.running is true so close actually tries to close fds *)
   conn.running <- true;
   let session : Session.hegel_session =
@@ -625,7 +641,7 @@ let test_cleanup_with_close_error () =
     }
   in
   Session.cleanup session;
-  Alcotest.(check bool) "cleaned up" true (session.connection = None)
+  Alcotest.(check bool) "cleaned up" true (Option.is_none session.connection)
 
 (** Test: run_hegel_test when session is None (unreachable in normal usage, but
     covers the branch). *)
@@ -640,7 +656,9 @@ let test_session_not_started () =
 
 (** Test: cleanup a session with actual resources. *)
 let test_session_cleanup_with_resources () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let session : Session.hegel_session =
     {
@@ -651,17 +669,19 @@ let test_session_cleanup_with_resources () =
     }
   in
   Session.cleanup session;
-  Alcotest.(check bool) "conn cleaned" true (session.connection = None);
-  Unix.close s2
+  Alcotest.(check bool) "conn cleaned" true (Option.is_none session.connection);
+  Core_unix.close s2
 
 (** Test: cleanup with a connection whose socket is already closed (covers error
     catch in close). *)
 let test_session_cleanup_closed_conn () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   (* Close the raw socket fd underneath, so conn.close will error *)
-  Unix.close s1;
-  Unix.close s2;
+  Core_unix.close s1;
+  Core_unix.close s2;
   let session : Session.hegel_session =
     {
       process = None;
@@ -671,14 +691,14 @@ let test_session_cleanup_closed_conn () =
     }
   in
   Session.cleanup session;
-  Alcotest.(check bool) "cleaned" true (session.connection = None)
+  Alcotest.(check bool) "cleaned" true (Option.is_none session.connection)
 
 (** Test: cleanup a session with a process (uses /bin/sleep for a real PID). *)
 let test_session_cleanup_with_process () =
   let sleep_cmd = find_cmd "sleep" in
   let pid =
-    Unix.create_process sleep_cmd [| sleep_cmd; "60" |] Unix.stdin Unix.stderr
-      Unix.stderr
+    Caml_unix.create_process sleep_cmd [| sleep_cmd; "60" |] Caml_unix.stdin
+      Caml_unix.stderr Caml_unix.stderr
   in
   let session : Session.hegel_session =
     {
@@ -689,18 +709,18 @@ let test_session_cleanup_with_process () =
     }
   in
   Session.cleanup session;
-  Alcotest.(check bool) "process cleaned" true (session.process = None)
+  Alcotest.(check bool) "process cleaned" true (Option.is_none session.process)
 
 (** Test: cleanup with already-dead process (covers kill error catch). *)
 let test_session_cleanup_dead_process () =
   (* Start a process that exits immediately *)
   let true_cmd = find_cmd "true" in
   let pid =
-    Unix.create_process true_cmd [| true_cmd |] Unix.stdin Unix.stderr
-      Unix.stderr
+    Caml_unix.create_process true_cmd [| true_cmd |] Caml_unix.stdin
+      Caml_unix.stderr Caml_unix.stderr
   in
   (* Wait for it to finish *)
-  ignore (Unix.waitpid [] pid);
+  ignore (Caml_unix.waitpid [] pid);
   let session : Session.hegel_session =
     {
       process = Some pid;
@@ -710,11 +730,13 @@ let test_session_cleanup_dead_process () =
     }
   in
   Session.cleanup session;
-  Alcotest.(check bool) "cleaned" true (session.process = None)
+  Alcotest.(check bool) "cleaned" true (Option.is_none session.process)
 
 (** Test: has_working_client with a live connection. *)
 let test_has_working_client_live () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let session : Session.hegel_session =
     {
@@ -734,7 +756,7 @@ let test_has_working_client_live () =
     "has working client" true
     (Session.has_working_client session);
   close conn;
-  Unix.close s2
+  Core_unix.close s2
 
 (** Test: run_hegel_test with default parameters. *)
 let test_run_hegel_test_defaults () =
@@ -782,30 +804,28 @@ let all_ci_var_names =
     environment. *)
 let with_clean_ci_env f =
   let saved =
-    List.map (fun name -> (name, Sys.getenv_opt name)) all_ci_var_names
+    List.map all_ci_var_names ~f:(fun name -> (name, Sys.getenv name))
   in
-  List.iter (fun name -> Test_helpers.unsetenv name) all_ci_var_names;
-  Fun.protect
+  List.iter all_ci_var_names ~f:(fun name -> Test_helpers.unsetenv name);
+  Exn.protect
     ~finally:(fun () ->
-      List.iter
-        (fun (name, v) ->
+      List.iter saved ~f:(fun (name, v) ->
           match v with
-          | Some orig -> Unix.putenv name orig
-          | None -> Test_helpers.unsetenv name)
-        saved)
-    f
+          | Some orig -> Core_unix.putenv ~key:name ~data:orig
+          | None -> Test_helpers.unsetenv name))
+    ~f
 
 let test_is_in_ci_some_none_branch () =
   (* Test the (Some _, None) branch: set a var that expects any value *)
   with_clean_ci_env (fun () ->
-      Unix.putenv "HEROKU_TEST_RUN_ID" "anything";
+      Core_unix.putenv ~key:"HEROKU_TEST_RUN_ID" ~data:"anything";
       Alcotest.(check bool)
         "is_in_ci with HEROKU_TEST_RUN_ID" true (Client.is_in_ci ()))
 
 let test_is_in_ci_some_v_some_exp_branch () =
   (* Test the (Some v, Some exp) branch: set a var with matching expected value *)
   with_clean_ci_env (fun () ->
-      Unix.putenv "TF_BUILD" "true";
+      Core_unix.putenv ~key:"TF_BUILD" ~data:"true";
       Alcotest.(check bool)
         "is_in_ci with TF_BUILD=true" true (Client.is_in_ci ()))
 
@@ -815,7 +835,7 @@ let test_with_verbosity () =
   let s = Client.default_settings () |> Client.with_verbosity Client.Debug in
   Alcotest.(check bool)
     "verbosity is Debug" true
-    (s.Client.verbosity = Client.Debug)
+    (Poly.( = ) s.Client.verbosity Client.Debug)
 
 let test_with_derandomize () =
   let s = Client.default_settings () |> Client.with_derandomize true in
@@ -827,7 +847,7 @@ let test_with_database () =
   in
   Alcotest.(check bool)
     "database is Path" true
-    (s.Client.database = Client.Path "/tmp/db")
+    (Poly.( = ) s.Client.database (Client.Path "/tmp/db"))
 
 let test_with_suppress_health_check () =
   let s =
@@ -840,27 +860,31 @@ let test_with_suppress_health_check () =
     (List.length s.Client.suppress_health_check);
   Alcotest.(check bool)
     "first is Too_slow" true
-    (List.nth s.Client.suppress_health_check 0 = Client.Too_slow);
+    (Poly.( = ) (List.nth_exn s.Client.suppress_health_check 0) Client.Too_slow);
   Alcotest.(check bool)
     "second is Filter_too_much" true
-    (List.nth s.Client.suppress_health_check 1 = Client.Filter_too_much)
+    (Poly.( = )
+       (List.nth_exn s.Client.suppress_health_check 1)
+       Client.Filter_too_much)
 
 (** Test: default_settings in CI sets derandomize and disables database. *)
 let test_default_settings_in_ci () =
   with_clean_ci_env (fun () ->
-      Unix.putenv "CI" "true";
+      Core_unix.putenv ~key:"CI" ~data:"true";
       let s = Client.default_settings () in
       Alcotest.(check bool) "derandomize in CI" true s.derandomize;
       Alcotest.(check bool)
         "database disabled in CI" true
-        (s.database = Client.Disabled))
+        (Poly.( = ) s.database Client.Disabled))
 
 (** Test: default_settings outside CI sets database to Unset. *)
 let test_default_settings_not_in_ci () =
   with_clean_ci_env (fun () ->
       let s = Client.default_settings () in
       Alcotest.(check bool) "derandomize not in CI" false s.derandomize;
-      Alcotest.(check bool) "database is Unset" true (s.database = Client.Unset))
+      Alcotest.(check bool)
+        "database is Unset" true
+        (Poly.( = ) s.database Client.Unset))
 
 (** Test: settings convenience constructor. *)
 let test_settings_convenience () =
@@ -868,17 +892,17 @@ let test_settings_convenience () =
   Alcotest.(check int) "default test_cases" 100 s0.Client.test_cases;
   let s = Client.settings ~test_cases:50 () in
   Alcotest.(check int) "test_cases" 50 s.Client.test_cases;
-  Alcotest.(check bool) "seed is None" true (s.Client.seed = None);
+  Alcotest.(check bool) "seed is None" true (Option.is_none s.Client.seed);
   let s2 = Client.settings ~test_cases:10 ~seed:42 () in
   Alcotest.(check int) "test_cases" 10 s2.Client.test_cases;
-  Alcotest.(check int) "seed" 42 (Option.get s2.Client.seed)
+  Alcotest.(check int) "seed" 42 (Option.value_exn s2.Client.seed)
 
 (** Test: with_seed builder. *)
 let test_with_seed () =
   let s = Client.default_settings () |> Client.with_seed (Some 99) in
-  Alcotest.(check int) "seed" 99 (Option.get s.Client.seed);
+  Alcotest.(check int) "seed" 99 (Option.value_exn s.Client.seed);
   let s2 = Client.with_seed None s in
-  Alcotest.(check bool) "seed cleared" true (s2.Client.seed = None)
+  Alcotest.(check bool) "seed cleared" true (Option.is_none s2.Client.seed)
 
 (** Test: run_test with database_key. *)
 let test_run_test_with_database_key () =
@@ -898,35 +922,34 @@ let test_run_test_with_database_key () =
     matching version file and binary, verifying the cache hit path (lines 62-67
     in session.ml). *)
 let test_ensure_hegel_installed_cached () =
-  let orig_cwd = Sys.getcwd () in
-  let tmp_dir = Filename.temp_dir "hegel_test_cache" "" in
-  Fun.protect
+  let orig_cwd = Stdlib.Sys.getcwd () in
+  let tmp_dir = Stdlib.Filename.temp_dir "hegel_test_cache" "" in
+  Exn.protect
     ~finally:(fun () ->
-      Sys.chdir orig_cwd;
+      Stdlib.Sys.chdir orig_cwd;
       let rec rm_rf path =
-        let stat = Unix.lstat path in
-        if stat.st_kind = Unix.S_DIR then begin
-          Array.iter
-            (fun entry -> rm_rf (Filename.concat path entry))
-            (Sys.readdir path);
-          Unix.rmdir path
+        let stat = Core_unix.lstat path in
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR then begin
+          Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
+              rm_rf (Filename.concat path entry));
+          Core_unix.rmdir path
         end
-        else Sys.remove path
+        else Stdlib.Sys.remove path
       in
       rm_rf tmp_dir)
-    (fun () ->
-      Sys.chdir tmp_dir;
+    ~f:(fun () ->
+      Stdlib.Sys.chdir tmp_dir;
       (* Create .hegel/venv/bin/ directories *)
-      Unix.mkdir ".hegel" 0o755;
-      Unix.mkdir ".hegel/venv" 0o755;
-      Unix.mkdir ".hegel/venv/bin" 0o755;
+      Core_unix.mkdir_p ".hegel";
+      Core_unix.mkdir ~perm:0o755 ".hegel/venv";
+      Core_unix.mkdir ~perm:0o755 ".hegel/venv/bin";
       (* Write the version file with the current version *)
-      Out_channel.with_open_text ".hegel/venv/hegel-version" (fun oc ->
-          output_string oc Session.hegel_server_version);
+      Out_channel.with_file ".hegel/venv/hegel-version" ~f:(fun oc ->
+          Out_channel.output_string oc Session.hegel_server_version);
       (* Create a fake hegel binary *)
-      Out_channel.with_open_text ".hegel/venv/bin/hegel" (fun oc ->
-          output_string oc "#!/bin/sh\nexit 0\n");
-      Unix.chmod ".hegel/venv/bin/hegel" 0o755;
+      Out_channel.with_file ".hegel/venv/bin/hegel" ~f:(fun oc ->
+          Out_channel.output_string oc "#!/bin/sh\nexit 0\n");
+      Core_unix.chmod ".hegel/venv/bin/hegel" ~perm:0o755;
       (* Call ensure_hegel_installed - should find the cached version *)
       let path = Session.ensure_hegel_installed () in
       Alcotest.(check string) "cached path" ".hegel/venv/bin/hegel" path)
@@ -939,17 +962,15 @@ let test_server_crash_detection () =
   let session : Session.hegel_session =
     { process = None; connection = None; client = None; lock = Mutex.create () }
   in
-  let orig_cmd =
-    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
-  in
-  Unix.putenv "HEGEL_SERVER_COMMAND" false_cmd;
-  Fun.protect
+  let orig_cmd = Sys.getenv "HEGEL_SERVER_COMMAND" in
+  Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:false_cmd;
+  Exn.protect
     ~finally:(fun () ->
       (match orig_cmd with
-      | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
-      | None -> Unix.putenv "HEGEL_SERVER_COMMAND" "");
+      | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
+      | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:"");
       Session.cleanup session)
-    (fun () ->
+    ~f:(fun () ->
       (* start will fail because /bin/false exits immediately *)
       let raised = ref false in
       (try Session.start session with _ -> raised := true);
@@ -959,7 +980,7 @@ let test_server_crash_detection () =
       match session.connection with
       | Some conn ->
           (* Give the monitor thread a moment to detect the exit *)
-          Unix.sleepf 0.1;
+          Caml_unix.sleepf 0.1;
           Alcotest.(check bool)
             "server_exited set" true
             (Connection.server_has_exited conn)
@@ -974,7 +995,7 @@ let test_is_in_ci_value_mismatch () =
   with_clean_ci_env (fun () ->
       (* Set TF_BUILD to a non-matching value -- all other CI vars are
          already unset by with_clean_ci_env *)
-      Unix.putenv "TF_BUILD" "false";
+      Core_unix.putenv ~key:"TF_BUILD" ~data:"false";
       Alcotest.(check bool)
         "is_in_ci with TF_BUILD=false" false (Client.is_in_ci ()))
 
@@ -985,7 +1006,9 @@ let test_is_in_ci_value_mismatch () =
     Data_was_exhausted path, the event loop checks server_has_exited. *)
 let test_server_crash_in_event_loop () =
   let raised_msg = ref "" in
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let client_conn = Test_helpers.make_connection s1 ~name:"Client" () in
   let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
   let t_hs = Thread.create Test_helpers.handshake_via_channel peer_conn in
@@ -1003,14 +1026,14 @@ let test_server_crash_in_event_loop () =
                 (`Map
                    [
                      (`Text "event", `Text "test_case");
-                     (`Text "channel_id", `Int (Int32.to_int data_ch_id));
+                     (`Text "channel_id", `Int (Int32.to_int_exn data_ch_id));
                    ])));
         (* After the client acknowledges the test_case event, set
            server_exited. The test_fn raises Data_exhausted so
            run_test_case skips mark_complete — no request/response race
            with pop_inbox_item's server_exited check. *)
         client_conn.server_exited <- true;
-        Unix.sleepf 0.5)
+        Caml_unix.sleepf 0.5)
       ()
   in
   (try
@@ -1019,7 +1042,7 @@ let test_server_crash_in_event_loop () =
        (fun _tc ->
          (* Sleep briefly to release the runtime lock, giving the peer
             thread time to set server_exited before we return. *)
-         Unix.sleepf 0.05;
+         Caml_unix.sleepf 0.05;
          raise Data_exhausted)
    with Failure msg -> raised_msg := msg);
   Thread.join t_peer;
@@ -1039,15 +1062,17 @@ let test_send_error_reply_fails_silently () =
   let client_read_fd, peer_write_fd = Unix.pipe () in
   let peer_read_fd, client_write_fd = Unix.pipe () in
   (* Close the client's write fd so error replies will fail *)
-  Unix.close client_write_fd;
+  Core_unix.close client_write_fd;
   (* Create the client connection with the broken write fd.
      We need a valid write fd for the connection constructor, so use /dev/null *)
-  let devnull = Unix.openfile "/dev/null" [ Unix.O_WRONLY ] 0o644 in
+  let devnull =
+    Core_unix.openfile "/dev/null" ~mode:[ Core_unix.O_WRONLY ] ~perm:0o644
+  in
   let conn =
     Connection.create_connection ~read_fd:client_read_fd ~write_fd:devnull ()
   in
   (* Close the devnull fd so writes will fail *)
-  Unix.close devnull;
+  Core_unix.close devnull;
   (* From the peer side, send a non-reply packet to channel 99 (non-existent).
      The background reader will try to send an error reply, which will fail
      because devnull is closed. *)
@@ -1061,73 +1086,74 @@ let test_send_error_reply_fails_silently () =
   in
   Protocol.write_packet peer_write_fd pkt;
   (* Give the reader thread time to process the packet and attempt the error reply *)
-  Unix.sleepf 0.1;
+  Caml_unix.sleepf 0.1;
   (* Clean up *)
   close conn;
-  Unix.close peer_write_fd;
-  try Unix.close peer_read_fd with Unix.Unix_error _ -> ()
+  Core_unix.close peer_write_fd;
+  try Core_unix.close peer_read_fd with Core_unix.Unix_error _ -> ()
 
 (** Test: run_command_to_log runs a command and redirects output to a log file.
 *)
 let test_run_command_to_log () =
-  let log_path = Filename.temp_file "hegel_test_cmd" ".log" in
-  Fun.protect
-    ~finally:(fun () -> try Sys.remove log_path with _ -> ())
-    (fun () ->
+  let log_path = Stdlib.Filename.temp_file "hegel_test_cmd" ".log" in
+  Exn.protect
+    ~finally:(fun () -> try Stdlib.Sys.remove log_path with _ -> ())
+    ~f:(fun () ->
       let echo_cmd = find_cmd "echo" in
       let status =
         Session.run_command_to_log echo_cmd [ "hello world" ] log_path
       in
-      Alcotest.(check bool) "exit 0" true (status = Unix.WEXITED 0);
-      let contents = In_channel.with_open_text log_path In_channel.input_all in
+      Alcotest.(check bool)
+        "exit 0" true
+        (Poly.( = ) status (Caml_unix.WEXITED 0));
+      let contents = In_channel.read_all log_path in
       Alcotest.(check bool)
         "has output" true
         (contains_substring contents "hello world"))
 
 (** Test: run_command_to_log with a failing command. *)
 let test_run_command_to_log_fail () =
-  let log_path = Filename.temp_file "hegel_test_cmd" ".log" in
-  Fun.protect
-    ~finally:(fun () -> try Sys.remove log_path with _ -> ())
-    (fun () ->
+  let log_path = Stdlib.Filename.temp_file "hegel_test_cmd" ".log" in
+  Exn.protect
+    ~finally:(fun () -> try Stdlib.Sys.remove log_path with _ -> ())
+    ~f:(fun () ->
       let false_cmd = find_cmd "false" in
       let status = Session.run_command_to_log false_cmd [] log_path in
       Alcotest.(check bool)
         "non-zero exit" true
-        (match status with Unix.WEXITED 0 -> false | _ -> true))
+        (match status with Caml_unix.WEXITED 0 -> false | _ -> true))
 
 (** Test: ensure_hegel_installed version mismatch triggers reinstall. Create a
     cached venv with wrong version; since uv is available it will try to
     reinstall. We expect it to either succeed (if network is available) or fail
     with an install error. Either way the version mismatch path is exercised. *)
 let test_ensure_hegel_installed_version_mismatch () =
-  let orig_cwd = Sys.getcwd () in
-  let tmp_dir = Filename.temp_dir "hegel_test_mismatch" "" in
-  Fun.protect
+  let orig_cwd = Stdlib.Sys.getcwd () in
+  let tmp_dir = Stdlib.Filename.temp_dir "hegel_test_mismatch" "" in
+  Exn.protect
     ~finally:(fun () ->
-      Sys.chdir orig_cwd;
+      Stdlib.Sys.chdir orig_cwd;
       let rec rm_rf path =
-        let stat = Unix.lstat path in
-        if stat.st_kind = Unix.S_DIR then begin
-          Array.iter
-            (fun entry -> rm_rf (Filename.concat path entry))
-            (Sys.readdir path);
-          Unix.rmdir path
+        let stat = Core_unix.lstat path in
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR then begin
+          Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
+              rm_rf (Filename.concat path entry));
+          Core_unix.rmdir path
         end
-        else Sys.remove path
+        else Stdlib.Sys.remove path
       in
       rm_rf tmp_dir)
-    (fun () ->
-      Sys.chdir tmp_dir;
+    ~f:(fun () ->
+      Stdlib.Sys.chdir tmp_dir;
       (* Create .hegel/venv/bin/ directories with wrong version *)
-      Unix.mkdir ".hegel" 0o755;
-      Unix.mkdir ".hegel/venv" 0o755;
-      Unix.mkdir ".hegel/venv/bin" 0o755;
-      Out_channel.with_open_text ".hegel/venv/hegel-version" (fun oc ->
-          output_string oc "0.0.0-wrong");
-      Out_channel.with_open_text ".hegel/venv/bin/hegel" (fun oc ->
-          output_string oc "#!/bin/sh\nexit 0\n");
-      Unix.chmod ".hegel/venv/bin/hegel" 0o755;
+      Core_unix.mkdir_p ".hegel";
+      Core_unix.mkdir ~perm:0o755 ".hegel/venv";
+      Core_unix.mkdir ~perm:0o755 ".hegel/venv/bin";
+      Out_channel.with_file ".hegel/venv/hegel-version" ~f:(fun oc ->
+          Out_channel.output_string oc "0.0.0-wrong");
+      Out_channel.with_file ".hegel/venv/bin/hegel" ~f:(fun oc ->
+          Out_channel.output_string oc "#!/bin/sh\nexit 0\n");
+      Core_unix.chmod ".hegel/venv/bin/hegel" ~perm:0o755;
       (* Call ensure_hegel_installed - version won't match, so it will try
          to reinstall via uv. This will fail (wrong package version or
          network issues) but exercises the version mismatch path. *)
@@ -1146,30 +1172,29 @@ let test_ensure_hegel_installed_version_mismatch () =
     set PATH to empty so uv can't be found, and ensure no cached version exists.
     Should raise with uv_not_found_message. *)
 let test_ensure_hegel_installed_uv_not_found () =
-  let orig_cwd = Sys.getcwd () in
-  let tmp_dir = Filename.temp_dir "hegel_test_no_uv" "" in
-  let orig_path = try Some (Sys.getenv "PATH") with Not_found -> None in
-  Fun.protect
+  let orig_cwd = Stdlib.Sys.getcwd () in
+  let tmp_dir = Stdlib.Filename.temp_dir "hegel_test_no_uv" "" in
+  let orig_path = Sys.getenv "PATH" in
+  Exn.protect
     ~finally:(fun () ->
-      Sys.chdir orig_cwd;
+      Stdlib.Sys.chdir orig_cwd;
       (match orig_path with
-      | Some p -> Unix.putenv "PATH" p
-      | None -> Unix.putenv "PATH" "");
+      | Some p -> Core_unix.putenv ~key:"PATH" ~data:p
+      | None -> Core_unix.putenv ~key:"PATH" ~data:"");
       let rec rm_rf path =
-        let stat = Unix.lstat path in
-        if stat.st_kind = Unix.S_DIR then begin
-          Array.iter
-            (fun entry -> rm_rf (Filename.concat path entry))
-            (Sys.readdir path);
-          Unix.rmdir path
+        let stat = Core_unix.lstat path in
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR then begin
+          Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
+              rm_rf (Filename.concat path entry));
+          Core_unix.rmdir path
         end
-        else Sys.remove path
+        else Stdlib.Sys.remove path
       in
       rm_rf tmp_dir)
-    (fun () ->
-      Sys.chdir tmp_dir;
+    ~f:(fun () ->
+      Stdlib.Sys.chdir tmp_dir;
       (* Set PATH to empty so uv won't be found *)
-      Unix.putenv "PATH" "";
+      Core_unix.putenv ~key:"PATH" ~data:"";
       let raised_msg = ref "" in
       (try ignore (Session.ensure_hegel_installed ())
        with Failure msg -> raised_msg := msg);
@@ -1187,7 +1212,7 @@ let create_fake_uv dir ~venv_exit ~pip_exit ~work_dir ?(delete_log = false) () =
   let rm_log =
     if delete_log then Printf.sprintf "rm -f \"%s\"\n" install_log else ""
   in
-  Out_channel.with_open_text uv_path (fun oc ->
+  Out_channel.with_file uv_path ~f:(fun oc ->
       Printf.fprintf oc
         "#!/bin/sh\n\
          case \"$1\" in\n\
@@ -1207,38 +1232,38 @@ let create_fake_uv dir ~venv_exit ~pip_exit ~work_dir ?(delete_log = false) () =
         rm_log venv_exit
         (Filename.dirname hegel_bin)
         hegel_bin hegel_bin rm_log pip_exit);
-  Unix.chmod uv_path 0o755
+  Core_unix.chmod uv_path ~perm:0o755
 
 (** Helper: run ensure_hegel_installed in a temp dir with a fake uv. *)
 let with_fake_uv_env ~venv_exit ~pip_exit ?(delete_log = false) f =
-  let orig_cwd = Sys.getcwd () in
-  let orig_path = try Some (Sys.getenv "PATH") with Not_found -> None in
-  let tmp_dir = Filename.temp_dir "hegel_test_fakeuv" "" in
+  let orig_cwd = Stdlib.Sys.getcwd () in
+  let orig_path = Sys.getenv "PATH" in
+  let tmp_dir = Stdlib.Filename.temp_dir "hegel_test_fakeuv" "" in
   let fake_bin_dir = Filename.concat tmp_dir "bin" in
   let work_dir = Filename.concat tmp_dir "work" in
-  Unix.mkdir fake_bin_dir 0o755;
-  Unix.mkdir work_dir 0o755;
+  Core_unix.mkdir ~perm:0o755 fake_bin_dir;
+  Core_unix.mkdir ~perm:0o755 work_dir;
   create_fake_uv fake_bin_dir ~venv_exit ~pip_exit ~work_dir ~delete_log ();
-  Fun.protect
+  Exn.protect
     ~finally:(fun () ->
-      Sys.chdir orig_cwd;
+      Stdlib.Sys.chdir orig_cwd;
       (match orig_path with
-      | Some p -> Unix.putenv "PATH" p
-      | None -> Unix.putenv "PATH" "");
+      | Some p -> Core_unix.putenv ~key:"PATH" ~data:p
+      | None -> Core_unix.putenv ~key:"PATH" ~data:"");
       let rec rm_rf path =
-        let stat = Unix.lstat path in
-        if stat.st_kind = Unix.S_DIR then begin
-          Array.iter
-            (fun entry -> rm_rf (Filename.concat path entry))
-            (Sys.readdir path);
-          Unix.rmdir path
+        let stat = Core_unix.lstat path in
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR then begin
+          Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
+              rm_rf (Filename.concat path entry));
+          Core_unix.rmdir path
         end
-        else Sys.remove path
+        else Stdlib.Sys.remove path
       in
       try rm_rf tmp_dir with _ -> ())
-    (fun () ->
-      Sys.chdir work_dir;
-      Unix.putenv "PATH" (Printf.sprintf "%s:/bin:/usr/bin" fake_bin_dir);
+    ~f:(fun () ->
+      Stdlib.Sys.chdir work_dir;
+      Core_unix.putenv ~key:"PATH"
+        ~data:(Printf.sprintf "%s:/bin:/usr/bin" fake_bin_dir);
       f ())
 
 (** Test: ensure_hegel_installed success path with fake uv. *)
@@ -1289,15 +1314,15 @@ let test_ensure_installed_pip_fails_no_log () =
 
 (** Test: ensure_hegel_installed when hegel binary not found after install. *)
 let test_ensure_installed_binary_missing () =
-  let orig_cwd = Sys.getcwd () in
-  let orig_path = try Some (Sys.getenv "PATH") with Not_found -> None in
-  let tmp_dir = Filename.temp_dir "hegel_test_nobin" "" in
+  let orig_cwd = Stdlib.Sys.getcwd () in
+  let orig_path = Sys.getenv "PATH" in
+  let tmp_dir = Stdlib.Filename.temp_dir "hegel_test_nobin" "" in
   let fake_bin_dir = Filename.concat tmp_dir "bin" in
-  Unix.mkdir fake_bin_dir 0o755;
+  Core_unix.mkdir ~perm:0o755 fake_bin_dir;
   (* Create a fake uv that succeeds but does NOT create the hegel binary *)
   let uv_path = Filename.concat fake_bin_dir "uv" in
-  Out_channel.with_open_text uv_path (fun oc ->
-      output_string oc
+  Out_channel.with_file uv_path ~f:(fun oc ->
+      Out_channel.output_string oc
         "#!/bin/sh\n\
          if [ \"$1\" = \"venv\" ]; then\n\
         \  mkdir -p \"$3/bin\"\n\
@@ -1308,29 +1333,29 @@ let test_ensure_installed_binary_missing () =
         \  exit 0\n\
          fi\n\
          exit 1\n");
-  Unix.chmod uv_path 0o755;
-  Fun.protect
+  Core_unix.chmod uv_path ~perm:0o755;
+  Exn.protect
     ~finally:(fun () ->
-      Sys.chdir orig_cwd;
+      Stdlib.Sys.chdir orig_cwd;
       (match orig_path with
-      | Some p -> Unix.putenv "PATH" p
-      | None -> Unix.putenv "PATH" "");
+      | Some p -> Core_unix.putenv ~key:"PATH" ~data:p
+      | None -> Core_unix.putenv ~key:"PATH" ~data:"");
       let rec rm_rf path =
-        let stat = Unix.lstat path in
-        if stat.st_kind = Unix.S_DIR then begin
-          Array.iter
-            (fun entry -> rm_rf (Filename.concat path entry))
-            (Sys.readdir path);
-          Unix.rmdir path
+        let stat = Core_unix.lstat path in
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR then begin
+          Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
+              rm_rf (Filename.concat path entry));
+          Core_unix.rmdir path
         end
-        else Sys.remove path
+        else Stdlib.Sys.remove path
       in
       try rm_rf tmp_dir with _ -> ())
-    (fun () ->
+    ~f:(fun () ->
       let work_dir = Filename.concat tmp_dir "work" in
-      Unix.mkdir work_dir 0o755;
-      Sys.chdir work_dir;
-      Unix.putenv "PATH" (Printf.sprintf "%s:/bin:/usr/bin" fake_bin_dir);
+      Core_unix.mkdir ~perm:0o755 work_dir;
+      Stdlib.Sys.chdir work_dir;
+      Core_unix.putenv ~key:"PATH"
+        ~data:(Printf.sprintf "%s:/bin:/usr/bin" fake_bin_dir);
       let raised_msg = ref "" in
       (try ignore (Session.ensure_hegel_installed ())
        with Failure msg -> raised_msg := msg);
@@ -1341,58 +1366,51 @@ let test_ensure_installed_binary_missing () =
 (** Test: find_hegel fallthrough to ensure_hegel_installed. *)
 let test_find_hegel_fallthrough_to_install () =
   with_fake_uv_env ~venv_exit:0 ~pip_exit:0 (fun () ->
-      let orig_cmd =
-        try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
-      in
+      let orig_cmd = Sys.getenv "HEGEL_SERVER_COMMAND" in
       Test_helpers.unsetenv "HEGEL_SERVER_COMMAND";
-      Fun.protect
+      Exn.protect
         ~finally:(fun () ->
           match orig_cmd with
-          | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
+          | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
           | None -> Test_helpers.unsetenv "HEGEL_SERVER_COMMAND")
-        (fun () ->
+        ~f:(fun () ->
           let path = Session.find_hegel () in
           Alcotest.(check bool) "found hegel" true (String.length path > 0)))
 
 let test_find_hegel_auto_install () =
-  let orig_cmd =
-    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
-  in
-  Unix.putenv "HEGEL_SERVER_COMMAND" "";
+  let orig_cmd = Sys.getenv "HEGEL_SERVER_COMMAND" in
+  Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:"";
   let path = Session.find_hegel () in
   Alcotest.(check bool) "found hegel" true (String.length path > 0);
   match orig_cmd with
-  | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
-  | None -> Unix.putenv "HEGEL_SERVER_COMMAND" ""
+  | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
+  | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:""
 
 (** Test: session start creates .hegel dir for server log when it doesn't exist.
     Covers the mkdir success path in server_log_fd (session.ml). *)
 let test_session_start_creates_hegel_dir () =
-  let orig_cwd = Sys.getcwd () in
-  let orig_cmd =
-    try Some (Sys.getenv "HEGEL_SERVER_COMMAND") with Not_found -> None
-  in
-  let tmp_dir = Filename.temp_dir "hegel_test_logdir" "" in
-  Fun.protect
+  let orig_cwd = Stdlib.Sys.getcwd () in
+  let orig_cmd = Sys.getenv "HEGEL_SERVER_COMMAND" in
+  let tmp_dir = Stdlib.Filename.temp_dir "hegel_test_logdir" "" in
+  Exn.protect
     ~finally:(fun () ->
-      Sys.chdir orig_cwd;
+      Stdlib.Sys.chdir orig_cwd;
       (match orig_cmd with
-      | Some v -> Unix.putenv "HEGEL_SERVER_COMMAND" v
-      | None -> Unix.putenv "HEGEL_SERVER_COMMAND" "");
+      | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
+      | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:"");
       let rec rm_rf path =
-        let stat = Unix.lstat path in
-        if stat.st_kind = Unix.S_DIR then begin
-          Array.iter
-            (fun entry -> rm_rf (Filename.concat path entry))
-            (Sys.readdir path);
-          Unix.rmdir path
+        let stat = Core_unix.lstat path in
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR then begin
+          Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
+              rm_rf (Filename.concat path entry));
+          Core_unix.rmdir path
         end
-        else Sys.remove path
+        else Stdlib.Sys.remove path
       in
       try rm_rf tmp_dir with _ -> ())
-    (fun () ->
-      Sys.chdir tmp_dir;
-      Unix.putenv "HEGEL_SERVER_COMMAND" "/bin/false";
+    ~f:(fun () ->
+      Stdlib.Sys.chdir tmp_dir;
+      Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:"/bin/false";
       let session : Session.hegel_session =
         {
           process = None;
@@ -1405,7 +1423,7 @@ let test_session_start_creates_hegel_dir () =
       Session.cleanup session;
       Alcotest.(check bool)
         ".hegel dir created" true
-        (Sys.file_exists ".hegel" && Sys.is_directory ".hegel"))
+        (Stdlib.Sys.file_exists ".hegel" && Stdlib.Sys.is_directory ".hegel"))
 
 (* ---- Session lifecycle ---- *)
 
