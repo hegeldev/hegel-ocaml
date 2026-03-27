@@ -14,7 +14,7 @@
   test_showcase
   test_conformance_helpers
   test_derive)
- (libraries hegel alcotest unix threads.posix)
+ (libraries hegel alcotest core core_unix threads.posix)
  (foreign_stubs
   (language c)
   (names unsetenv_stubs)))
@@ -22,6 +22,6 @@
 (test
  (name test_ppx_derive)
  (modules test_ppx_derive)
- (libraries hegel alcotest unix threads.posix)
+ (libraries hegel alcotest core core_unix threads.posix)
  (preprocess
   (pps ppx_hegel_generator)))

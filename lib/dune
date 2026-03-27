@@ -1,7 +1,7 @@
 (library
  (name hegel)
  (public_name hegel)
- (libraries cbor checkseum.c unix threads.posix)
+ (libraries core core_unix unix cbor checkseum.c threads.posix)
  (private_modules
   generators_core
   generators_primitives

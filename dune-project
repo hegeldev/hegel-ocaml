@@ -21,6 +21,10 @@
    (>= 5.2))
   (dune
    (>= 3.16))
+  (core
+   (>= 0.17))
+  (core_unix
+   (>= 0.17))
   (alcotest
    (and
     :with-test
