@@ -1,3 +1,4 @@
+open! Core
 open Connection
 
 (** Constants for span labels used in generation tracking. *)
@@ -65,7 +66,7 @@ let max_filter_attempts = 3
     span is stopped with [discard:false] regardless of whether [f] raises. *)
 let group label data f =
   Client.start_span ~label data;
-  Fun.protect ~finally:(fun () -> Client.stop_span data) (fun () -> f ())
+  Exn.protect ~finally:(fun () -> Client.stop_span data) ~f:(fun () -> f ())
 
 (** [discardable_group label data f] runs [f ()] inside a span with [label]. If
     [f] raises, the span is stopped with [discard:true]; otherwise
@@ -118,7 +119,7 @@ let get_server_name coll data =
                     (`Text "min_size", `Int coll.min_size);
                     (`Text "max_size", max_size_val);
                   ]))
-        with Request_error e when e.error_type = "StopTest" ->
+        with Request_error e when String.equal e.error_type "StopTest" ->
           data.test_aborted <- true;
           raise Client.Data_exhausted
       in
@@ -143,7 +144,7 @@ let collection_more coll data =
                   (`Text "command", `Text "collection_more");
                   (`Text "collection", server_name);
                 ]))
-      with Request_error e when e.error_type = "StopTest" ->
+      with Request_error e when String.equal e.error_type "StopTest" ->
         data.test_aborted <- true;
         raise Client.Data_exhausted
     in

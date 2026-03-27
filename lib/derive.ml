@@ -7,6 +7,8 @@
     {!Hegel.Generators.draw} internally and return typed OCaml values. These
     helpers provide the plumbing for option and list types. *)
 
+open! Core
+
 (** [generate_option tc gen_fn] generates an [option] value.
 
     Uses {!Generators.booleans} to decide between [Some] and [None]. When [Some]
@@ -23,4 +25,4 @@ let generate_list tc gen_fn =
   let len =
     Generators.draw tc (Generators.integers ~min_value:0 ~max_value:20 ())
   in
-  List.init len (fun _ -> gen_fn tc)
+  List.init len ~f:(fun _ -> gen_fn tc)

@@ -1,3 +1,4 @@
+open! Core
 open Generators_core
 open Generators_primitives
 
@@ -25,7 +26,7 @@ let sampled_from options =
 let one_of (generators : 'a generator list) =
   if List.length generators = 0 then
     failwith "one_of requires at least one generator";
-  let basics = List.filter_map as_basic generators in
+  let basics = List.filter_map generators ~f:as_basic in
   if List.length basics <> List.length generators then begin
     (* Path 3: composite — generate index in ONE_OF span, then delegate *)
     let gens = Array.of_list generators in
@@ -56,16 +57,14 @@ let one_of (generators : 'a generator list) =
        the tagged-tuple path which is always correct. *)
     (* Path 2: tagged-tuple schema with dispatch transform *)
     let tagged_schemas =
-      List.mapi
-        (fun i (s, _) ->
+      List.mapi basics ~f:(fun i (s, _) ->
           `Map
             [
               (`Text "type", `Text "tuple");
               (`Text "elements", `Array [ `Map [ (`Text "const", `Int i) ]; s ]);
             ])
-        basics
     in
-    let transforms = Array.of_list (List.map snd basics) in
+    let transforms = Array.of_list (List.map basics ~f:snd) in
     let dispatch raw =
       match raw with
       | `Array [ tag; value ] ->
@@ -105,7 +104,7 @@ let rec ip_addresses ?version () =
           transform = Cbor_helpers.extract_string;
         }
   | None -> one_of [ ip_addresses ~version:4 (); ip_addresses ~version:6 () ]
-  | Some v -> failwith (Printf.sprintf "ip_addresses: invalid version %d" v)
+  | Some v -> failwith (sprintf "ip_addresses: invalid version %d" v)
 
 (** [tuples2 g1 g2] creates a generator for 2-element tuples.
 

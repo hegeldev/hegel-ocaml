@@ -4,6 +4,11 @@
     packets from the input stream and dispatches them to per-channel inboxes.
     Channels wait on condition variables for new messages. *)
 
+open! Core
+module Unix = Core_unix
+module Mutex = Caml_threads.Mutex
+module Condition = Caml_threads.Condition
+
 (** Sentinel value placed in a channel's inbox when the connection shuts down.
 *)
 type inbox_item = Pkt of Protocol.packet | Shutdown
@@ -37,8 +42,8 @@ type channel_entry =
 
 and connection = {
   name : string option;
-  read_fd : Unix.file_descr;
-  write_fd : Unix.file_descr;
+  read_fd : Core_unix.File_descr.t;
+  write_fd : Core_unix.File_descr.t;
   mutable next_channel_id : int;
   channels : (int32, channel_entry) Hashtbl.t;
   channels_lock : Mutex.t;
@@ -63,8 +68,8 @@ and channel = {
 (** Logical channel for request/response messaging. *)
 
 val create_connection :
-  read_fd:Unix.file_descr ->
-  write_fd:Unix.file_descr ->
+  read_fd:Core_unix.File_descr.t ->
+  write_fd:Core_unix.File_descr.t ->
   ?name:string ->
   ?debug:bool ->
   unit ->

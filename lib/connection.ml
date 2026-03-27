@@ -8,6 +8,11 @@
     writing) with multiplexed logical channels. {b Channel} provides
     request/response messaging over a single logical channel. *)
 
+open! Core
+module Unix = Core_unix
+module Mutex = Caml_threads.Mutex
+module Condition = Caml_threads.Condition
+module Thread = Caml_threads.Thread
 open Protocol
 
 (** Handshake string sent by the client to initiate the protocol. *)
@@ -38,25 +43,31 @@ exception
 let result_or_error body =
   let pairs = Cbor_helpers.extract_dict body in
   let find_text key =
-    match List.assoc_opt (`Text key) pairs with
+    match List.Assoc.find pairs ~equal:Poly.( = ) (`Text key) with
     | Some v -> Cbor_helpers.extract_string v
     | None -> ""
   in
-  if List.mem_assoc (`Text "error") pairs then begin
+  if List.Assoc.mem pairs ~equal:Poly.( = ) (`Text "error") then begin
     let msg = find_text "error" in
     let error_type = find_text "type" in
     let data =
-      List.filter (fun (k, _) -> k <> `Text "error" && k <> `Text "type") pairs
+      List.filter pairs ~f:(fun (k, _) ->
+          Poly.( <> ) k (`Text "error") && Poly.( <> ) k (`Text "type"))
     in
     raise (Request_error { message = msg; error_type; data })
   end
   else
-    match List.assoc_opt (`Text "result") pairs with
+    match List.Assoc.find pairs ~equal:Poly.( = ) (`Text "result") with
     | Some v -> v
     | None -> failwith "Response has neither 'result' nor 'error'"
 
 (** Connection state after handshake. *)
 type connection_state = Unresolved | Client
+
+let equal_connection_state a b =
+  match (a, b) with
+  | Unresolved, Unresolved | Client, Client -> true
+  | _ -> false
 
 type channel_inbox = {
   queue : inbox_item Queue.t;
@@ -72,10 +83,10 @@ type channel_entry =
 
 and connection = {
   name : string option;
-  read_fd : Unix.file_descr;
-  write_fd : Unix.file_descr;
+  read_fd : Unix.File_descr.t;
+  write_fd : Unix.File_descr.t;
   mutable next_channel_id : int;
-  channels : (int32, channel_entry) Hashtbl.t;
+  channels : (Int32.t, channel_entry) Hashtbl.t;
   channels_lock : Mutex.t;
   mutable running : bool;
   debug : bool;
@@ -90,7 +101,7 @@ and channel = {
   conn : connection;
   inbox : channel_inbox;
   requests : packet Queue.t;
-  responses : (int32, string) Hashtbl.t;
+  responses : (Int32.t, string) Hashtbl.t;
   role : string option;
   mutable next_message_id : int32;
   mutable closed : bool;
@@ -103,29 +114,28 @@ let channel_id ch = ch.channel_id
 (** [channel_name ch] returns a human-readable name for channel [ch]. *)
 let channel_name ch =
   match (ch.role, ch.conn.name) with
-  | None, None -> Printf.sprintf "Channel %ld" ch.channel_id
-  | None, Some n -> Printf.sprintf "%s channel [id=%ld]" n ch.channel_id
-  | Some r, None -> Printf.sprintf "channel [id=%ld] (%s)" ch.channel_id r
-  | Some r, Some n ->
-      Printf.sprintf "%s channel [id=%ld] (%s)" n ch.channel_id r
+  | None, None -> sprintf "Channel %ld" ch.channel_id
+  | None, Some n -> sprintf "%s channel [id=%ld]" n ch.channel_id
+  | Some r, None -> sprintf "channel [id=%ld] (%s)" ch.channel_id r
+  | Some r, Some n -> sprintf "%s channel [id=%ld] (%s)" n ch.channel_id r
 
 (** [channel_repr ch] returns a debug representation of channel [ch]. *)
 let channel_repr ch =
   match ch.role with
-  | None -> Printf.sprintf "Channel(%ld)" ch.channel_id
-  | Some r -> Printf.sprintf "Channel(%ld, role=%s)" ch.channel_id r
+  | None -> sprintf "Channel(%ld)" ch.channel_id
+  | Some r -> sprintf "Channel(%ld, role=%s)" ch.channel_id r
 
 (** [entry_name conn channel_id] returns the name of the channel entry for
     [channel_id] in [conn], or a default. *)
 let entry_name conn channel_id =
-  match Hashtbl.find_opt conn.channels channel_id with
+  match Hashtbl.find conn.channels channel_id with
   | Some (Live ch) -> channel_name ch
   | Some (Dead d) -> d.name
-  | None -> Printf.sprintf "channel %ld" channel_id
+  | None -> sprintf "channel %ld" channel_id
 
 (** [make_channel conn channel_id ~role] creates a new channel. *)
 let make_channel conn channel_id ~role =
-  assert (channel_id <> 0l || role = Some "Control");
+  assert (Int32.( <> ) channel_id 0l || Poly.( = ) role (Some "Control"));
   {
     channel_id;
     conn;
@@ -136,7 +146,7 @@ let make_channel conn channel_id ~role =
         cond = Condition.create ();
       };
     requests = Queue.create ();
-    responses = Hashtbl.create 8;
+    responses = Hashtbl.create (module Int32);
     role;
     next_message_id = 1l;
     closed = false;
@@ -146,24 +156,22 @@ let make_channel conn channel_id ~role =
     condition variable. Must be called without holding [ch.inbox.lock]. *)
 let push_inbox ch item =
   Mutex.lock ch.inbox.lock;
-  Queue.push item ch.inbox.queue;
+  Queue.enqueue ch.inbox.queue item;
   Condition.signal ch.inbox.cond;
   Mutex.unlock ch.inbox.lock
 
 (** [signal_all_channels conn] pushes {!Shutdown} into all live channels'
     inboxes. Must be called while holding [conn.channels_lock]. *)
 let signal_all_channels conn =
-  Hashtbl.iter
-    (fun _id entry ->
+  Hashtbl.iteri conn.channels ~f:(fun ~key:_ ~data:entry ->
       match entry with Live ch -> push_inbox ch Shutdown | Dead _ -> ())
-    conn.channels
 
 (** [send_packet conn packet] sends a packet on the connection, thread-safe. *)
 let send_packet conn packet =
   Mutex.lock conn.writer_lock;
-  Fun.protect
+  Exn.protect
     ~finally:(fun () -> Mutex.unlock conn.writer_lock)
-    (fun () -> write_packet conn.write_fd packet)
+    ~f:(fun () -> write_packet conn.write_fd packet)
 
 (** Background reader thread function. Reads packets from [conn.read_fd] and
     dispatches them to the appropriate channel's inbox. Exits when the stream
@@ -171,24 +179,24 @@ let send_packet conn packet =
 let reader_loop conn =
   let dispatch_packet (pkt : packet) =
     (* Handle close_channel_payload for ANY channel (even unregistered) *)
-    if pkt.payload = close_channel_payload then begin
-      assert (pkt.message_id = close_channel_message_id);
+    if String.equal pkt.payload close_channel_payload then begin
+      assert (Int32.equal pkt.message_id close_channel_message_id);
       if conn.debug then begin
         Mutex.lock conn.channels_lock;
         let prev_name =
-          match Hashtbl.find_opt conn.channels pkt.channel_id with
+          match Hashtbl.find conn.channels pkt.channel_id with
           | Some (Live ch) -> channel_name ch
           | Some (Dead d) -> d.name
           | None -> "Never opened!"
         in
-        Hashtbl.replace conn.channels pkt.channel_id
-          (Dead { channel_id = pkt.channel_id; name = prev_name });
+        Hashtbl.set conn.channels ~key:pkt.channel_id
+          ~data:(Dead { channel_id = pkt.channel_id; name = prev_name });
         Mutex.unlock conn.channels_lock
       end
     end
     else begin
       Mutex.lock conn.channels_lock;
-      let entry = Hashtbl.find_opt conn.channels pkt.channel_id in
+      let entry = Hashtbl.find conn.channels pkt.channel_id in
       match entry with
       | Some (Live ch) ->
           Mutex.unlock conn.channels_lock;
@@ -200,8 +208,7 @@ let reader_loop conn =
               match entry with Some (Dead _) -> "closed" | _ -> "non-existent"
             in
             let error_msg =
-              Printf.sprintf "Message %ld sent to %s %s" pkt.message_id
-                disposition
+              sprintf "Message %ld sent to %s %s" pkt.message_id disposition
                 (entry_name conn pkt.channel_id)
             in
             try
@@ -238,7 +245,7 @@ let close conn =
     conn.running <- false;
     (try Unix.close conn.read_fd with Unix.Unix_error _ -> ());
     (* Only close write_fd if it's different from read_fd *)
-    (if conn.write_fd <> conn.read_fd then
+    (if not (phys_equal conn.write_fd conn.read_fd) then
        try Unix.close conn.write_fd with Unix.Unix_error _ -> ());
     Mutex.lock conn.channels_lock;
     signal_all_channels conn;
@@ -256,7 +263,7 @@ let create_connection ~read_fd ~write_fd ?name ?(debug = false) () =
       read_fd;
       write_fd;
       next_channel_id = 1;
-      channels = Hashtbl.create 16;
+      channels = Hashtbl.create (module Int32);
       channels_lock = Mutex.create ();
       running = true;
       debug;
@@ -267,7 +274,7 @@ let create_connection ~read_fd ~write_fd ?name ?(debug = false) () =
   in
   let control = make_channel conn 0l ~role:(Some "Control") in
   Mutex.lock conn.channels_lock;
-  Hashtbl.replace conn.channels 0l (Live control);
+  Hashtbl.set conn.channels ~key:0l ~data:(Live control);
   Mutex.unlock conn.channels_lock;
   (* Spawn background reader thread *)
   ignore (Thread.create reader_loop conn);
@@ -281,7 +288,7 @@ let server_has_exited conn = conn.server_exited
 
 (** [control_channel conn] returns the control channel (channel 0). *)
 let control_channel conn =
-  match Hashtbl.find_opt conn.channels 0l with
+  match Hashtbl.find conn.channels 0l with
   | Some (Live ch) -> ch
   | _ -> failwith "Internal error: no control channel"
 
@@ -290,14 +297,14 @@ let control_channel conn =
     Client channels use odd IDs [(counter << 1) | 1], server channels use even
     IDs [(counter << 1)]. *)
 let new_channel conn ?role () =
-  if conn.connection_state = Unresolved then
+  if equal_connection_state conn.connection_state Unresolved then
     failwith "Cannot create a new channel before handshake has been performed."
   else begin
-    let channel_id = Int32.of_int ((conn.next_channel_id lsl 1) lor 1) in
+    let channel_id = Int32.of_int_exn ((conn.next_channel_id lsl 1) lor 1) in
     conn.next_channel_id <- conn.next_channel_id + 1;
     let ch = make_channel conn channel_id ~role in
     Mutex.lock conn.channels_lock;
-    Hashtbl.replace conn.channels channel_id (Live ch);
+    Hashtbl.set conn.channels ~key:channel_id ~data:(Live ch);
     Mutex.unlock conn.channels_lock;
     ch
   end
@@ -305,13 +312,13 @@ let new_channel conn ?role () =
 (** [connect_channel conn channel_id ?role ()] connects to a channel created by
     the peer. *)
 let connect_channel conn channel_id ?role () =
-  if conn.connection_state = Unresolved then
+  if equal_connection_state conn.connection_state Unresolved then
     failwith "Cannot create a new channel before handshake has been performed.";
   if Hashtbl.mem conn.channels channel_id then
-    failwith (Printf.sprintf "Channel already connected as %ld." channel_id);
+    failwith (sprintf "Channel already connected as %ld." channel_id);
   let ch = make_channel conn channel_id ~role in
   Mutex.lock conn.channels_lock;
-  Hashtbl.replace conn.channels channel_id (Live ch);
+  Hashtbl.set conn.channels ~key:channel_id ~data:(Live ch);
   Mutex.unlock conn.channels_lock;
   ch
 
@@ -325,13 +332,13 @@ let pop_inbox_item ch timeout =
   let deadline = Unix.gettimeofday () +. timeout in
   let rec wait () =
     if not (Queue.is_empty ch.inbox.queue) then begin
-      let item = Queue.pop ch.inbox.queue in
+      let item = Queue.dequeue_exn ch.inbox.queue in
       Mutex.unlock ch.inbox.lock;
       item
     end
     else if ch.closed then begin
       Mutex.unlock ch.inbox.lock;
-      raise (Failure (Printf.sprintf "%s is closed" (channel_name ch)))
+      raise (Failure (sprintf "%s is closed" (channel_name ch)))
     end
     else if ch.conn.server_exited then begin
       Mutex.unlock ch.inbox.lock;
@@ -339,16 +346,16 @@ let pop_inbox_item ch timeout =
     end
     else begin
       let remaining = deadline -. Unix.gettimeofday () in
-      if remaining <= 0.0 then begin
+      if Float.( <= ) remaining 0.0 then begin
         Mutex.unlock ch.inbox.lock;
         raise
           (Failure
-             (Printf.sprintf "Timed out after %.1fs waiting for a message on %s"
+             (sprintf "Timed out after %.1fs waiting for a message on %s"
                 timeout (channel_name ch)))
       end;
       (* Release lock, sleep briefly, re-acquire *)
       Mutex.unlock ch.inbox.lock;
-      Unix.sleepf (min 0.01 remaining);
+      Caml_unix.sleepf (Float.min 0.01 remaining);
       Mutex.lock ch.inbox.lock;
       wait ()
     end
@@ -366,17 +373,16 @@ let process_one_message ch ?(timeout = channel_timeout) () =
       if pkt.is_reply then begin
         if Hashtbl.mem ch.responses pkt.message_id then
           failwith
-            (Printf.sprintf "Got two responses for message ID %ld"
-               pkt.message_id)
-        else Hashtbl.replace ch.responses pkt.message_id pkt.payload
+            (sprintf "Got two responses for message ID %ld" pkt.message_id)
+        else Hashtbl.set ch.responses ~key:pkt.message_id ~data:pkt.payload
       end
-      else Queue.push pkt ch.requests
+      else Queue.enqueue ch.requests pkt
 
 (** [send_request_raw ch payload] sends raw bytes as a request and returns the
     message ID for matching the response. *)
 let send_request_raw ch payload =
   let message_id = ch.next_message_id in
-  ch.next_message_id <- Int32.add ch.next_message_id 1l;
+  ch.next_message_id <- Int32.( + ) ch.next_message_id 1l;
   send_packet ch.conn
     { payload; channel_id = ch.channel_id; is_reply = false; message_id };
   message_id
@@ -391,7 +397,7 @@ let receive_response_raw ch message_id ?(timeout = channel_timeout) () =
   while not (Hashtbl.mem ch.responses message_id) do
     process_one_message ch ~timeout ()
   done;
-  let result = Hashtbl.find ch.responses message_id in
+  let result = Hashtbl.find_exn ch.responses message_id in
   Hashtbl.remove ch.responses message_id;
   result
 
@@ -407,7 +413,7 @@ let receive_request_raw ch ?(timeout = channel_timeout) () =
   while Queue.is_empty ch.requests do
     process_one_message ch ~timeout ()
   done;
-  let pkt = Queue.pop ch.requests in
+  let pkt = Queue.dequeue_exn ch.requests in
   (pkt.message_id, pkt.payload)
 
 (** [receive_request ch ?timeout ()] receives and CBOR-decodes a request,
@@ -432,16 +438,16 @@ let close_channel ch =
   if ch.closed then ()
   else begin
     let is_registered =
-      match Hashtbl.find_opt ch.conn.channels ch.channel_id with
-      | Some (Live ch2) -> ch2 == ch
+      match Hashtbl.find ch.conn.channels ch.channel_id with
+      | Some (Live ch2) -> phys_equal ch2 ch
       | _ -> false
     in
     if not is_registered then ch.closed <- true
     else begin
       ch.closed <- true;
       if ch.conn.debug then
-        Hashtbl.replace ch.conn.channels ch.channel_id
-          (Dead { name = channel_name ch; channel_id = ch.channel_id });
+        Hashtbl.set ch.conn.channels ~key:ch.channel_id
+          ~data:(Dead { name = channel_name ch; channel_id = ch.channel_id });
       if is_live ch.conn then
         send_packet ch.conn
           {
@@ -486,12 +492,14 @@ let pending_get pr =
 (** [send_handshake conn] initiates the handshake as a client. Returns the
     server protocol version string (e.g. ["0.1"]). *)
 let send_handshake conn =
-  if conn.connection_state <> Unresolved then
+  if not (equal_connection_state conn.connection_state Unresolved) then
     failwith "Handshake already established";
   conn.connection_state <- Client;
   let ch = control_channel conn in
   let message_id = send_request_raw ch handshake_string in
   let response = receive_response_raw ch message_id () in
-  if String.length response < 6 || String.sub response 0 6 <> "Hegel/" then
-    failwith (Printf.sprintf "Bad handshake response: %S" response)
-  else String.sub response 6 (String.length response - 6)
+  if
+    String.length response < 6
+    || not (String.equal (String.sub response ~pos:0 ~len:6) "Hegel/")
+  then failwith (sprintf "Bad handshake response: %S" response)
+  else String.sub response ~pos:6 ~len:(String.length response - 6)

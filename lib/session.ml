@@ -6,6 +6,10 @@
     The main entry point is {!run_hegel_test}, which the user calls without
     needing to manage connections or sessions directly. *)
 
+open! Core
+module Unix = Core_unix
+module Mutex = Caml_threads.Mutex
+module Thread = Caml_threads.Thread
 open Connection
 
 (** Version of hegel-core to install. *)
@@ -34,40 +38,43 @@ let uv_not_found_message =
    instead.\n\n\
    See https://hegel.dev/reference/installation for more details."
 
-(** [run_command cmd args] runs a command and returns its exit status. Output is
-    redirected to the install log file. *)
+(** [run_command_to_log cmd args log_path] runs a command and returns its exit
+    status. Output is redirected to the install log file. *)
 let run_command_to_log cmd args log_path =
   let log_fd =
-    Unix.openfile log_path [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_APPEND ] 0o644
+    Unix.openfile log_path
+      ~mode:[ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_APPEND ]
+      ~perm:0o644
   in
-  Fun.protect
+  Exn.protect
     ~finally:(fun () -> Unix.close log_fd)
-    (fun () ->
+    ~f:(fun () ->
       let pid =
-        Unix.create_process cmd
+        Caml_unix.create_process cmd
           (Array.of_list (cmd :: args))
-          Unix.stdin log_fd log_fd
+          Caml_unix.stdin log_fd log_fd
       in
-      let _, status = Unix.waitpid [] pid in
+      let _, status = Caml_unix.waitpid [] pid in
       status)
 
 (** [ensure_hegel_installed ()] checks for a cached hegel installation and
     installs via uv if needed. Returns the path to the hegel binary. *)
 let ensure_hegel_installed () =
-  let venv_dir = Printf.sprintf "%s/venv" hegel_server_dir in
-  let version_file = Printf.sprintf "%s/hegel-version" venv_dir in
-  let hegel_bin = Printf.sprintf "%s/bin/hegel" venv_dir in
-  let install_log = Printf.sprintf "%s/install.log" hegel_server_dir in
+  let venv_dir = sprintf "%s/venv" hegel_server_dir in
+  let version_file = sprintf "%s/hegel-version" venv_dir in
+  let hegel_bin = sprintf "%s/bin/hegel" venv_dir in
+  let install_log = sprintf "%s/install.log" hegel_server_dir in
   (* Check cached version *)
   try
-    let cached =
-      String.trim (In_channel.with_open_text version_file In_channel.input_all)
-    in
-    if cached = hegel_server_version && Sys.file_exists hegel_bin then hegel_bin
+    let cached = String.strip (In_channel.read_all version_file) in
+    if
+      String.equal cached hegel_server_version
+      && Stdlib.Sys.file_exists hegel_bin
+    then hegel_bin
     else raise Exit
   with _ ->
     (* Need to install *)
-    (try Unix.mkdir hegel_server_dir 0o755 with Unix.Unix_error _ -> ());
+    (try Unix.mkdir hegel_server_dir ~perm:0o755 with Unix.Unix_error _ -> ());
     (* Create venv *)
     let status =
       try run_command_to_log "uv" [ "venv"; "--clear"; venv_dir ] install_log
@@ -75,15 +82,12 @@ let ensure_hegel_installed () =
         failwith uv_not_found_message
     in
     (match status with
-    | Unix.WEXITED 0 -> ()
+    | Caml_unix.WEXITED 0 -> ()
     | _ ->
-        let log =
-          try In_channel.with_open_text install_log In_channel.input_all
-          with _ -> ""
-        in
-        failwith (Printf.sprintf "uv venv failed. Install log:\n%s" log));
+        let log = try In_channel.read_all install_log with _ -> "" in
+        failwith (sprintf "uv venv failed. Install log:\n%s" log));
     (* Install hegel-core *)
-    let python_path = Printf.sprintf "%s/bin/python" venv_dir in
+    let python_path = sprintf "%s/bin/python" venv_dir in
     let status =
       run_command_to_log "uv"
         [
@@ -91,47 +95,42 @@ let ensure_hegel_installed () =
           "install";
           "--python";
           python_path;
-          Printf.sprintf "hegel-core==%s" hegel_server_version;
+          sprintf "hegel-core==%s" hegel_server_version;
         ]
         install_log
     in
     (match status with
-    | Unix.WEXITED 0 -> ()
+    | Caml_unix.WEXITED 0 -> ()
     | _ ->
-        let log =
-          try In_channel.with_open_text install_log In_channel.input_all
-          with _ -> ""
-        in
+        let log = try In_channel.read_all install_log with _ -> "" in
         failwith
-          (Printf.sprintf
+          (sprintf
              "Failed to install hegel-core (version: %s). Set %s to a hegel \
               binary path to skip installation.\n\
               Install log:\n\
               %s"
              hegel_server_version hegel_server_command_env log));
-    if not (Sys.file_exists hegel_bin) then
-      failwith
-        (Printf.sprintf "hegel not found at %s after installation" hegel_bin);
+    if not (Stdlib.Sys.file_exists hegel_bin) then
+      failwith (sprintf "hegel not found at %s after installation" hegel_bin);
     (* Write version file *)
-    Out_channel.with_open_text version_file (fun oc ->
-        output_string oc hegel_server_version);
+    Out_channel.write_all version_file ~data:hegel_server_version;
     hegel_bin
 
 (** [find_hegel ()] locates the hegel binary. Checks, in order:
     - [HEGEL_SERVER_COMMAND] environment variable
     - Auto-install via uv to [.hegel/venv/] *)
 let find_hegel () =
-  match Sys.getenv_opt hegel_server_command_env with
-  | Some path when path <> "" -> path
+  match Sys.getenv hegel_server_command_env with
+  | Some path when not (String.is_empty path) -> path
   | _ -> ensure_hegel_installed ()
 
 (** [server_log_fd ()] returns a file descriptor for the server log file. *)
 let server_log_fd () =
-  (try Unix.mkdir hegel_server_dir 0o755 with Unix.Unix_error _ -> ());
+  (try Unix.mkdir hegel_server_dir ~perm:0o755 with Unix.Unix_error _ -> ());
   Unix.openfile
-    (Printf.sprintf "%s/server.log" hegel_server_dir)
-    [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_APPEND ]
-    0o644
+    (sprintf "%s/server.log" hegel_server_dir)
+    ~mode:[ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_APPEND ]
+    ~perm:0o644
 
 type hegel_session = {
   mutable process : int option;
@@ -163,8 +162,8 @@ let cleanup session =
   | None -> ());
   match session.process with
   | Some pid ->
-      (try Unix.kill pid Sys.sigterm with _ -> ());
-      (try ignore (Unix.waitpid [] pid) with _ -> ());
+      (try Caml_unix.kill pid Stdlib.Sys.sigterm with _ -> ());
+      (try ignore (Caml_unix.waitpid [] pid) with _ -> ());
       session.process <- None
   | None -> ()
 
@@ -174,9 +173,9 @@ let start session =
   if has_working_client session then ()
   else begin
     Mutex.lock session.lock;
-    Fun.protect
+    Exn.protect
       ~finally:(fun () -> Mutex.unlock session.lock)
-      (fun () ->
+      ~f:(fun () ->
         if not (has_working_client session) then begin
           (* Clean up any old session *)
           cleanup session;
@@ -187,7 +186,7 @@ let start session =
           let log_fd = server_log_fd () in
           (* Start hegel subprocess with --stdio *)
           let pid =
-            Unix.create_process hegel_cmd
+            Caml_unix.create_process hegel_cmd
               [| hegel_cmd; "--stdio"; "--verbosity"; "normal" |]
               child_stdin_read child_stdout_write log_fd
           in
@@ -207,12 +206,12 @@ let start session =
           ignore
             (Thread.create
                (fun () ->
-                 ignore (Unix.waitpid [] pid);
+                 ignore (Caml_unix.waitpid [] pid);
                  match session.connection with
                  | Some conn -> conn.server_exited <- true
                  | None -> ())
                ());
-          at_exit (fun () -> cleanup session)
+          Stdlib.at_exit (fun () -> cleanup session)
         end)
   end
 
@@ -225,4 +224,4 @@ let restart_session () = cleanup global_session
     provided. *)
 let run_hegel_test ?(settings = Client.default_settings ()) test_fn =
   start global_session;
-  Client.run_test (Option.get global_session.client) ~settings test_fn
+  Client.run_test (Option.value_exn global_session.client) ~settings test_fn
