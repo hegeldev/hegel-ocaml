@@ -1,3 +1,6 @@
+open! Core
+module Unix = Core_unix
+module Thread = Caml_threads.Thread
 open Hegel
 open Protocol
 
@@ -5,18 +8,20 @@ let contains_substring = Test_helpers.contains_substring
 
 (** Helper: create a socketpair for testing. Returns (reader, writer). *)
 let with_socket_pair f =
-  let reader, writer = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  Fun.protect
+  let reader, writer =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
+  Exn.protect
+    ~f:(fun () -> f reader writer)
     ~finally:(fun () ->
-      Unix.close reader;
-      Unix.close writer)
-    (fun () -> f reader writer)
+      Core_unix.close reader;
+      Core_unix.close writer)
 
 (** Helper: build raw packet bytes for testing read_packet edge cases. Mirrors
     the Python _make_packet helper. *)
 let make_raw_packet ?(pkt_magic = magic) ?checksum ?(channel_id = 0l)
     ?(message_id = 1l) ?(payload = "payload") ?(term = terminator) () =
-  let length = Int32.of_int (String.length payload) in
+  let length = Int32.of_int_exn (String.length payload) in
   (* Build header with zeroed checksum for CRC computation *)
   let header_for_check = Bytes.create header_size in
   pack_uint32_be header_for_check 0 pkt_magic;
@@ -36,14 +41,14 @@ let make_raw_packet ?(pkt_magic = magic) ?checksum ?(channel_id = 0l)
   pack_uint32_be header 8 channel_id;
   pack_uint32_be header 12 message_id;
   pack_uint32_be header 16 length;
-  Bytes.to_string header ^ payload ^ String.make 1 (Char.chr term)
+  Bytes.to_string header ^ payload ^ String.make 1 (Char.of_int_exn term)
 
 let sendall fd data =
   let bytes = Bytes.of_string data in
   let len = Bytes.length bytes in
   let rec write_all pos =
     if pos < len then
-      let written = Unix.write fd bytes pos (len - pos) in
+      let written = Core_unix.write fd ~buf:bytes ~pos ~len:(len - pos) in
       write_all (pos + written)
   in
   write_all 0
@@ -60,7 +65,7 @@ let test_terminator () = Alcotest.(check int) "TERMINATOR" 0x0A terminator
 let test_close_channel_message_id () =
   Alcotest.(check int32)
     "CLOSE_CHANNEL_MESSAGE_ID"
-    (Int32.sub (Int32.shift_left 1l 31) 1l)
+    Int32.(shift_left 1l 31 - 1l)
     close_channel_message_id
 
 let test_close_channel_payload () =
@@ -236,26 +241,30 @@ let test_recv_exact_zero () =
       Alcotest.(check int) "empty bytes" 0 (Bytes.length result))
 
 let test_recv_exact_partial_close () =
-  let reader, writer = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let reader, writer =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   sendall writer "abc";
-  Unix.close writer;
+  Core_unix.close writer;
   let exn_raised = ref false in
   (try
      let _ = recv_exact reader 10 in
      ()
    with Connection_closed _ -> exn_raised := true);
-  Unix.close reader;
+  Core_unix.close reader;
   Alcotest.(check bool) "Connection_closed raised" true !exn_raised
 
 let test_recv_exact_no_data_close () =
-  let reader, writer = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-  Unix.close writer;
+  let reader, writer =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
+  Core_unix.close writer;
   let exn_raised = ref false in
   (try
      let _ = recv_exact reader 10 in
      ()
    with Partial_packet _ -> exn_raised := true);
-  Unix.close reader;
+  Core_unix.close reader;
   Alcotest.(check bool) "Partial_packet raised" true !exn_raised
 
 (* --- pp_packet and equal_packet tests --- *)
@@ -293,13 +302,11 @@ let test_equal_packet_different () =
 
 let test_pack_unpack_uint32 () =
   let values = [ 0l; 1l; 0x7FFFFFFFl; 0x80000000l; 0xFFFFFFFFl ] in
-  List.iter
-    (fun v ->
+  List.iter values ~f:(fun v ->
       let buf = Bytes.create 4 in
       pack_uint32_be buf 0 v;
       let result = unpack_uint32_be buf 0 in
-      Alcotest.(check int32) (Printf.sprintf "pack/unpack 0x%lX" v) v result)
-    values
+      Alcotest.(check int32) (sprintf "pack/unpack 0x%lX" v) v result)
 
 let tests =
   [

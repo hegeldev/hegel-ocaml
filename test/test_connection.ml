@@ -1,3 +1,7 @@
+open! Core
+module Unix = Core_unix
+module Thread = Caml_threads.Thread
+module Mutex = Caml_threads.Mutex
 open Hegel
 open Protocol
 open Connection
@@ -121,9 +125,9 @@ let test_channel_ids_are_odd_for_client () =
   Alcotest.(check int32) "ch2 id" 5l ch2.channel_id;
   Alcotest.(check int32) "ch3 id" 7l ch3.channel_id;
   (* All odd *)
-  Alcotest.(check bool) "ch1 odd" true (Int32.rem ch1.channel_id 2l = 1l);
-  Alcotest.(check bool) "ch2 odd" true (Int32.rem ch2.channel_id 2l = 1l);
-  Alcotest.(check bool) "ch3 odd" true (Int32.rem ch3.channel_id 2l = 1l);
+  Alcotest.(check bool) "ch1 odd" true Int32.(equal (rem ch1.channel_id 2l) 1l);
+  Alcotest.(check bool) "ch2 odd" true Int32.(equal (rem ch2.channel_id 2l) 1l);
+  Alcotest.(check bool) "ch3 odd" true Int32.(equal (rem ch3.channel_id 2l) 1l);
   close client_conn;
   close peer_conn
 
@@ -287,11 +291,15 @@ let test_request_response () =
              let msg_id, message = receive_request ch () in
              let x =
                Cbor_helpers.extract_int
-                 (List.assoc (`Text "x") (Cbor_helpers.extract_dict message))
+                 (List.Assoc.find_exn
+                    (Cbor_helpers.extract_dict message)
+                    ~equal:Poly.( = ) (`Text "x"))
              in
              let y =
                Cbor_helpers.extract_int
-                 (List.assoc (`Text "y") (Cbor_helpers.extract_dict message))
+                 (List.Assoc.find_exn
+                    (Cbor_helpers.extract_dict message)
+                    ~equal:Poly.( = ) (`Text "y"))
              in
              send_response_value ch msg_id
                (`Map [ (`Text "sum", `Int (x + y)) ])
@@ -308,7 +316,9 @@ let test_request_response () =
   in
   let sum =
     Cbor_helpers.extract_int
-      (List.assoc (`Text "sum") (Cbor_helpers.extract_dict result))
+      (List.Assoc.find_exn
+         (Cbor_helpers.extract_dict result)
+         ~equal:Poly.( = ) (`Text "sum"))
   in
   Alcotest.(check int) "sum" 5 sum;
   close client_conn;
@@ -361,7 +371,9 @@ let test_pending_request_caching () =
             let msg_id, message = receive_request ch () in
             let v =
               Cbor_helpers.extract_int
-                (List.assoc (`Text "value") (Cbor_helpers.extract_dict message))
+                (List.Assoc.find_exn
+                   (Cbor_helpers.extract_dict message)
+                   ~equal:Poly.( = ) (`Text "value"))
             in
             send_response_value ch msg_id (`Int (v * 2))
           done
@@ -421,17 +433,16 @@ let test_duplicate_response_error () =
   let conn = make_connection s1 ~name:"Test" () in
   let ch = control_channel conn in
   (* Put a response in the responses dict directly *)
-  Hashtbl.replace ch.responses 42l "first";
+  Hashtbl.set ch.responses ~key:42l ~data:"first";
   (* Now try to process another reply with same ID *)
-  Queue.push
+  Queue.enqueue ch.inbox.queue
     (Pkt
        {
          channel_id = 0l;
          message_id = 42l;
          is_reply = true;
          payload = "second";
-       })
-    ch.inbox.queue;
+       });
   let raised = ref false in
   (try process_one_message ch ~timeout:0.1 ()
    with Failure msg ->
@@ -448,7 +459,7 @@ let test_shutdown_in_inbox () =
   let s1, _s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
   let ch = control_channel conn in
-  Queue.push Shutdown ch.inbox.queue;
+  Queue.enqueue ch.inbox.queue Shutdown;
   let raised = ref false in
   (try ignore (receive_request ch ~timeout:0.1 ())
    with Failure msg ->
@@ -491,10 +502,10 @@ let test_message_to_dead_channel () =
   let ch_peer = connect_channel peer_conn ch_client.channel_id () in
   close_channel ch_client;
   (* Give time for close to be received *)
-  Unix.sleepf 0.1;
+  Caml_unix.sleepf 0.1;
   (* Now send a request to the dead channel from peer *)
   ignore (send_request ch_peer (`Map [ (`Text "test", `Text "data") ]));
-  Unix.sleepf 0.1;
+  Caml_unix.sleepf 0.1;
   close peer_conn;
   close client_conn
 
@@ -522,10 +533,10 @@ let test_close_channel_creates_dead_channel () =
   ignore result;
   Thread.join t;
   (* The channel should be dead on peer side *)
-  let dead = Hashtbl.find peer_conn.channels client_ch.channel_id in
-  (match dead with
-  | Dead _ -> Alcotest.(check bool) "is dead" true true
-  | Live _ -> Alcotest.fail "expected dead channel");
+  (match Hashtbl.find peer_conn.channels client_ch.channel_id with
+  | Some (Dead _) -> Alcotest.(check bool) "is dead" true true
+  | Some (Live _) -> Alcotest.fail "expected dead channel"
+  | None -> Alcotest.fail "expected channel entry");
   close client_conn;
   close peer_conn
 
@@ -541,10 +552,14 @@ let test_close_channel_creates_dead_channel_with_connect () =
         let msg_id, msg = receive_request ch () in
         let channel_id =
           Cbor_helpers.extract_int
-            (List.assoc (`Text "channel") (Cbor_helpers.extract_dict msg))
+            (List.Assoc.find_exn
+               (Cbor_helpers.extract_dict msg)
+               ~equal:Poly.( = ) (`Text "channel"))
         in
         ignore
-          (connect_channel peer_conn (Int32.of_int channel_id) ~role:"Hello" ());
+          (connect_channel peer_conn
+             (Int32.of_int_exn channel_id)
+             ~role:"Hello" ());
         send_response_value ch msg_id (`Text "Ok");
         let msg_id2, _ = receive_request ch () in
         send_response_value ch msg_id2 (`Text "Ok"))
@@ -556,21 +571,22 @@ let test_close_channel_creates_dead_channel_with_connect () =
     pending_get
       (request
          (control_channel client_conn)
-         (`Map [ (`Text "channel", `Int (Int32.to_int client_ch.channel_id)) ]))
+         (`Map
+            [ (`Text "channel", `Int (Int32.to_int_exn client_ch.channel_id)) ]))
   in
   ignore r1;
   close_channel client_ch;
   let r2 = pending_get (request (control_channel client_conn) (`Map [])) in
   ignore r2;
   Thread.join t;
-  let dead = Hashtbl.find peer_conn.channels client_ch.channel_id in
-  (match dead with
-  | Dead d ->
+  (match Hashtbl.find peer_conn.channels client_ch.channel_id with
+  | Some (Dead d) ->
       Alcotest.(check bool) "is dead" true true;
       Alcotest.(check bool)
         "name has Hello" true
         (contains_substring d.name "Hello")
-  | Live _ -> Alcotest.fail "expected dead channel");
+  | Some (Live _) -> Alcotest.fail "expected dead channel"
+  | None -> Alcotest.fail "expected channel entry");
   close client_conn;
   close peer_conn
 
@@ -588,7 +604,7 @@ let test_reader_loop_clean_exit () =
   (* Send a packet from client *)
   ignore (send_request ch_client (`Map [ (`Text "test", `Text "data") ]));
   (* Background reader handles message dispatch automatically *)
-  Unix.sleepf 0.1;
+  Caml_unix.sleepf 0.1;
   close client_conn;
   close peer_conn
 
@@ -598,9 +614,8 @@ let test_process_reply_packet () =
   let s1, _s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
   let ch = control_channel conn in
-  Queue.push
-    (Pkt { channel_id = 0l; message_id = 7l; is_reply = true; payload = "ok" })
-    ch.inbox.queue;
+  Queue.enqueue ch.inbox.queue
+    (Pkt { channel_id = 0l; message_id = 7l; is_reply = true; payload = "ok" });
   process_one_message ch ~timeout:0.1 ();
   let resp = receive_response_raw ch 7l ~timeout:0.1 () in
   Alcotest.(check string) "response" "ok" resp;
@@ -610,9 +625,8 @@ let test_process_request_packet () =
   let s1, _s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
   let ch = control_channel conn in
-  Queue.push
-    (Pkt { channel_id = 0l; message_id = 3l; is_reply = false; payload = "req" })
-    ch.inbox.queue;
+  Queue.enqueue ch.inbox.queue
+    (Pkt { channel_id = 0l; message_id = 3l; is_reply = false; payload = "req" });
   let msg_id, payload = receive_request_raw ch ~timeout:0.1 () in
   Alcotest.(check int32) "msg_id" 3l msg_id;
   Alcotest.(check string) "payload" "req" payload;
@@ -625,7 +639,7 @@ let test_debug_mode_recv () =
   let conn = make_connection s1 ~name:"DebugTest" ~debug:true () in
   write_packet s2
     { channel_id = 0l; message_id = 1l; is_reply = false; payload = "hello" };
-  Unix.sleepf 0.1;
+  Caml_unix.sleepf 0.1;
   close conn
 
 let test_debug_close_channel_recv () =
@@ -640,9 +654,9 @@ let test_debug_close_channel_recv () =
       payload = close_channel_payload;
     };
   (* Background reader processes the packet automatically *)
-  Unix.sleepf 0.1;
+  Caml_unix.sleepf 0.1;
   (* Check it created a dead channel *)
-  (match Hashtbl.find_opt conn.channels 999l with
+  (match Hashtbl.find conn.channels 999l with
   | Some (Dead d) ->
       Alcotest.(check bool) "dead channel" true true;
       Alcotest.(check string) "name" "Never opened!" d.name
@@ -744,8 +758,8 @@ let test_debug_close_already_dead_channel () =
   let s1, s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Server" ~debug:true () in
   (* Manually insert a Dead entry for channel 50 *)
-  Hashtbl.replace conn.channels 50l
-    (Dead { channel_id = 50l; name = "OldDead" });
+  Hashtbl.set conn.channels ~key:50l
+    ~data:(Dead { channel_id = 50l; name = "OldDead" });
   (* Send a close packet for channel 50 from the other end *)
   write_packet s2
     {
@@ -755,8 +769,8 @@ let test_debug_close_already_dead_channel () =
       payload = close_channel_payload;
     };
   (* Background reader processes the packets automatically *)
-  Unix.sleepf 0.1;
-  (match Hashtbl.find_opt conn.channels 50l with
+  Caml_unix.sleepf 0.1;
+  (match Hashtbl.find conn.channels 50l with
   | Some (Dead d) ->
       Alcotest.(check string) "dead name preserved" "OldDead" d.name
   | _ -> Alcotest.fail "expected Dead entry with preserved name");
@@ -778,9 +792,9 @@ let test_debug_close_existing_live_channel () =
   close_channel ch_client;
   (* Background reader processes the close packet in debug mode *)
   let ch_id = ch_client.channel_id in
-  Unix.sleepf 0.1;
+  Caml_unix.sleepf 0.1;
   (* Check the dead entry has the Live channel's name *)
-  (match Hashtbl.find_opt peer_conn.channels ch_id with
+  (match Hashtbl.find peer_conn.channels ch_id with
   | Some (Dead d) ->
       Alcotest.(check bool)
         "dead name has LiveChSrv" true
@@ -799,8 +813,8 @@ let test_message_to_dead_channel_in_reader () =
   let ch_client = new_channel client_conn ~role:"WillDie" () in
   let ch_id = ch_client.channel_id in
   (* Manually insert a Dead entry on peer side *)
-  Hashtbl.replace peer_conn.channels ch_id
-    (Dead { channel_id = ch_id; name = "DeadCh" });
+  Hashtbl.set peer_conn.channels ~key:ch_id
+    ~data:(Dead { channel_id = ch_id; name = "DeadCh" });
   (* Send a non-reply packet to the dead channel from client side *)
   send_packet client_conn
     {
@@ -900,13 +914,12 @@ let test_process_one_message_default_timeout () =
   let s1, _s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
   let ch = control_channel conn in
-  Queue.push
+  Queue.enqueue ch.inbox.queue
     (Pkt
-       { channel_id = 0l; message_id = 1l; is_reply = false; payload = "test" })
-    ch.inbox.queue;
+       { channel_id = 0l; message_id = 1l; is_reply = false; payload = "test" });
   (* Call process_one_message without ~timeout to hit the default *)
   process_one_message ch ();
-  let pkt = Queue.pop ch.requests in
+  let pkt = Queue.dequeue_exn ch.requests in
   Alcotest.(check string) "payload" "test" pkt.payload;
   close conn
 
@@ -914,7 +927,8 @@ let test_process_one_message_default_timeout () =
 let test_control_channel_failure () =
   let s1, s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
-  Hashtbl.replace conn.channels 0l (Dead { channel_id = 0l; name = "Control" });
+  Hashtbl.set conn.channels ~key:0l
+    ~data:(Dead { channel_id = 0l; name = "Control" });
   let raised = ref false in
   (try ignore (control_channel conn) with Failure _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised;

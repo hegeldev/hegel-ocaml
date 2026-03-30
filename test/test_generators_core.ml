@@ -116,7 +116,9 @@ let test_max_filter_attempts () =
   Alcotest.(check int) "max attempts" 3 max_filter_attempts
 
 let dummy_data () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let conn = Test_helpers.make_connection s1 ~name:"Dummy" () in
   let data =
     Client.
@@ -171,7 +173,9 @@ let test_discardable_group_exception () =
 
 (** Test: collection_more raises Data_exhausted on StopTest (socketpair). *)
 let test_collection_more_stoptest () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let conn = Test_helpers.make_connection s1 ~name:"Client" () in
   let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
   let t_hs = Thread.create Test_helpers.handshake_via_channel peer_conn in
@@ -205,7 +209,9 @@ let test_collection_more_stoptest () =
 
 (** Test: collection_reject sends command when not finished (socketpair). *)
 let test_collection_reject_live () =
-  let s1, s2 = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
   let conn = Test_helpers.make_connection s1 ~name:"Client" () in
   let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
   let t_hs = Thread.create Test_helpers.handshake_via_channel peer_conn in

@@ -7,6 +7,8 @@
     - Helper functions (assume, note, target, generate_from_schema)
     - Origin extraction for error reporting *)
 
+open! Core
+module Mutex = Caml_threads.Mutex
 open Connection
 
 exception Assume_rejected
@@ -63,13 +65,11 @@ let ci_vars =
 
 (** [is_in_ci ()] returns [true] if a CI environment is detected. *)
 let is_in_ci () =
-  List.exists
-    (fun (key, expected) ->
-      match (Sys.getenv_opt key, expected) with
+  List.exists ci_vars ~f:(fun (key, expected) ->
+      match (Sys.getenv key, expected) with
       | Some _, None -> true
-      | Some v, Some exp -> v = exp
+      | Some v, Some exp -> String.equal v exp
       | None, _ -> false)
-    ci_vars
 
 (** [default_settings ()] creates settings with defaults. Detects CI
     environments automatically. *)
@@ -121,29 +121,27 @@ type test_case = {
     channel, final-run flag, and abort state. *)
 
 (** Domain-local flag to detect nested test cases. *)
-let in_test_context : bool Domain.DLS.key = Domain.DLS.new_key (fun () -> false)
+let in_test_context : bool Stdlib.Domain.DLS.key =
+  Stdlib.Domain.DLS.new_key (fun () -> false)
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available. *)
 let extract_origin exn =
-  let bt = Printexc.get_raw_backtrace () in
+  let bt = Stdlib.Printexc.get_raw_backtrace () in
   let file_line =
-    match Printexc.backtrace_slots bt with
+    match Stdlib.Printexc.backtrace_slots bt with
     | None -> None
     | Some slots ->
-        Array.fold_left
-          (fun acc slot ->
-            Option.fold ~none:acc
-              ~some:(fun loc -> Some loc)
-              (Printexc.Slot.location slot))
-          None slots
-        |> Option.map (fun (loc : Printexc.location) ->
+        Array.fold slots ~init:None ~f:(fun acc slot ->
+            Option.value_map (Stdlib.Printexc.Slot.location slot) ~default:acc
+              ~f:(fun loc -> Some loc))
+        |> Option.map ~f:(fun (loc : Stdlib.Printexc.location) ->
             (loc.filename, loc.line_number))
   in
   match file_line with
-  | None -> Printf.sprintf "%s at :0" (Printexc.exn_slot_name exn)
+  | None -> sprintf "%s at :0" (Stdlib.Printexc.exn_slot_name exn)
   | Some (file, line) ->
-      Printf.sprintf "%s at %s:%d" (Printexc.exn_slot_name exn) file line
+      sprintf "%s at %s:%d" (Stdlib.Printexc.exn_slot_name exn) file line
 
 (** [generate_from_schema schema tc] generates a value from a schema by sending
     a generate command to the server. Raises {!Data_exhausted} if the server
@@ -154,7 +152,7 @@ let generate_from_schema schema tc =
     pending_get
       (request channel
          (`Map [ (`Text "command", `Text "generate"); (`Text "schema", schema) ]))
-  with Request_error e when e.error_type = "StopTest" ->
+  with Request_error e when String.equal e.error_type "StopTest" ->
     tc.test_aborted <- true;
     raise Data_exhausted
 
@@ -164,7 +162,7 @@ let assume _tc condition = if not condition then raise Assume_rejected
 
 (** [note tc message] records a message that will be printed on the final
     (failing) run. *)
-let note tc message = if tc.is_final then Printf.eprintf "%s\n%!" message
+let note tc message = if tc.is_final then eprintf "%s\n%!" message
 
 (** [target tc value label] sends a target command to guide the search engine
     toward higher values. *)
@@ -221,13 +219,13 @@ type client = { connection : connection; control : channel; lock : Mutex.t }
 (** [create_client connection] creates a new client from a connection. The
     connection must not yet have had its handshake performed. *)
 let create_client connection =
-  let server_version = float_of_string (send_handshake connection) in
+  let server_version = Float.of_string (send_handshake connection) in
   if
-    server_version < supported_protocol_lo
-    || server_version > supported_protocol_hi
+    Float.( < ) server_version supported_protocol_lo
+    || Float.( > ) server_version supported_protocol_hi
   then
     failwith
-      (Printf.sprintf
+      (sprintf
          "hegel-ocaml supports protocol versions %.1f through %.1f, but got \
           server version %g. Upgrading hegel-ocaml or downgrading your hegel \
           cli might help."
@@ -245,7 +243,7 @@ type test_outcome =
 
 let run_test_case _client channel test_fn ~is_final =
   let tc = { channel; is_final; test_aborted = false } in
-  Domain.DLS.set in_test_context true;
+  Stdlib.Domain.DLS.set in_test_context true;
   let outcome =
     try
       test_fn tc;
@@ -260,7 +258,7 @@ let run_test_case _client channel test_fn ~is_final =
             exn = (if is_final then Some exn else None);
           }
   in
-  Domain.DLS.set in_test_context false;
+  Stdlib.Domain.DLS.set in_test_context false;
   (match outcome with
   | Data_was_exhausted -> ()
   | Valid | Invalid | Interesting _ -> (
@@ -281,7 +279,7 @@ let run_test_case _client channel test_fn ~is_final =
                      (`Text "status", `Text status);
                      (`Text "origin", origin);
                    ])))
-      with Request_error e when e.error_type = "StopTest" -> ()));
+      with Request_error e when String.equal e.error_type "StopTest" -> ()));
   close_channel channel;
   match outcome with Interesting { exn = Some e; _ } -> raise e | _ -> ()
 
@@ -291,13 +289,13 @@ let run_test_case _client channel test_fn ~is_final =
     @param database_key
       optional key for persistent failure storage (internal use). *)
 let run_test client ~settings ?database_key test_fn =
-  if Domain.DLS.get in_test_context then
+  if Stdlib.Domain.DLS.get in_test_context then
     failwith "Cannot nest test cases - already inside a test case";
   let test_channel = new_channel client.connection ~role:"Test" () in
   Mutex.lock client.lock;
-  Fun.protect
+  Exn.protect
     ~finally:(fun () -> Mutex.unlock client.lock)
-    (fun () ->
+    ~f:(fun () ->
       let seed_value =
         match settings.seed with Some s -> `Int s | None -> `Null
       in
@@ -309,7 +307,7 @@ let run_test client ~settings ?database_key test_fn =
           (`Text "command", `Text "run_test");
           (`Text "test_cases", `Int settings.test_cases);
           (`Text "seed", seed_value);
-          (`Text "channel_id", `Int (Int32.to_int (channel_id test_channel)));
+          (`Text "channel_id", `Int (Int32.to_int_exn (channel_id test_channel)));
           (`Text "database_key", database_key_value);
           (`Text "derandomize", `Bool settings.derandomize);
         ]
@@ -327,9 +325,8 @@ let run_test client ~settings ?database_key test_fn =
             [
               ( `Text "suppress_health_check",
                 `Array
-                  (List.map
-                     (fun hc -> `Text (health_check_to_string hc))
-                     checks) );
+                  (List.map checks ~f:(fun hc ->
+                       `Text (health_check_to_string hc))) );
             ]
       in
       let fields = base_fields @ database_field @ suppress_field in
@@ -338,8 +335,9 @@ let run_test client ~settings ?database_key test_fn =
     let message_id, message = receive_request test_channel () in
     let pairs = Cbor_helpers.extract_dict message in
     let ch_id =
-      Int32.of_int
-        (Cbor_helpers.extract_int (List.assoc (`Text "channel_id") pairs))
+      Int32.of_int_exn
+        (Cbor_helpers.extract_int
+           (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "channel_id")))
     in
     send_response_value test_channel message_id `Null;
     let test_case_channel =
@@ -351,12 +349,14 @@ let run_test client ~settings ?database_key test_fn =
     let message_id, message = receive_request test_channel () in
     let pairs = Cbor_helpers.extract_dict message in
     let event =
-      Cbor_helpers.extract_string (List.assoc (`Text "event") pairs)
+      Cbor_helpers.extract_string
+        (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "event"))
     in
-    if event = "test_case" then begin
+    if String.equal event "test_case" then begin
       let ch_id =
-        Int32.of_int
-          (Cbor_helpers.extract_int (List.assoc (`Text "channel_id") pairs))
+        Int32.of_int_exn
+          (Cbor_helpers.extract_int
+             (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "channel_id")))
       in
       send_response_value test_channel message_id `Null;
       let test_case_channel =
@@ -367,17 +367,17 @@ let run_test client ~settings ?database_key test_fn =
         failwith server_crashed_message;
       receive_events ()
     end
-    else if event = "test_done" then begin
+    else if String.equal event "test_done" then begin
       send_response_value test_channel message_id (`Bool true);
-      Cbor_helpers.extract_dict (List.assoc (`Text "results") pairs)
+      Cbor_helpers.extract_dict
+        (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "results"))
     end
     else begin
       send_response_raw test_channel message_id
         (CBOR.Simple.encode
            (`Map
               [
-                ( `Text "error",
-                  `Text (Printf.sprintf "Unrecognised event %s" event) );
+                (`Text "error", `Text (sprintf "Unrecognised event %s" event));
                 (`Text "type", `Text "InvalidMessage");
               ]));
       receive_events ()
@@ -385,32 +385,35 @@ let run_test client ~settings ?database_key test_fn =
   in
   let results = receive_events () in
   (* Check for server-side errors *)
-  (match List.assoc_opt (`Text "error") results with
+  (match List.Assoc.find results ~equal:Poly.( = ) (`Text "error") with
   | Some error_val ->
       let error_msg = Cbor_helpers.extract_string error_val in
-      failwith (Printf.sprintf "Server error: %s" error_msg)
+      failwith (sprintf "Server error: %s" error_msg)
   | None -> ());
   (* Check for health check failure *)
-  (match List.assoc_opt (`Text "health_check_failure") results with
+  (match
+     List.Assoc.find results ~equal:Poly.( = ) (`Text "health_check_failure")
+   with
   | Some failure_val ->
       let failure_msg = Cbor_helpers.extract_string failure_val in
-      failwith (Printf.sprintf "Health check failure:\n%s" failure_msg)
+      failwith (sprintf "Health check failure:\n%s" failure_msg)
   | None -> ());
   (* Check for flaky test detection *)
-  (match List.assoc_opt (`Text "flaky") results with
+  (match List.Assoc.find results ~equal:Poly.( = ) (`Text "flaky") with
   | Some flaky_val ->
       let flaky_msg = Cbor_helpers.extract_string flaky_val in
-      failwith (Printf.sprintf "Flaky test detected: %s" flaky_msg)
+      failwith (sprintf "Flaky test detected: %s" flaky_msg)
   | None -> ());
   (* Check passed flag *)
   let passed =
-    match List.assoc_opt (`Text "passed") results with
+    match List.Assoc.find results ~equal:Poly.( = ) (`Text "passed") with
     | Some (`Bool b) -> b
     | _ -> true
   in
   let n_interesting =
     Cbor_helpers.extract_int
-      (List.assoc (`Text "interesting_test_cases") results)
+      (List.Assoc.find_exn results ~equal:Poly.( = )
+         (`Text "interesting_test_cases"))
   in
   if n_interesting = 0 && passed then ()
   else if n_interesting <= 1 then begin
@@ -422,7 +425,7 @@ let run_test client ~settings ?database_key test_fn =
       if remaining = 0 then List.rev acc
       else
         let msg =
-          Printf.sprintf "Expected test case %d to fail but it didn't"
+          sprintf "Expected test case %d to fail but it didn't"
             (List.length acc)
         in
         let exn =
@@ -436,9 +439,7 @@ let run_test client ~settings ?database_key test_fn =
     let exns = replay_interesting n_interesting [] in
     raise
       (Failure
-         (Printf.sprintf "Multiple failures (%d):\n%s" (List.length exns)
-            (String.concat "\n"
-               (List.mapi
-                  (fun i e ->
-                    Printf.sprintf "  %d: %s" i (Printexc.to_string e))
-                  exns))))
+         (sprintf "Multiple failures (%d):\n%s" (List.length exns)
+            (String.concat ~sep:"\n"
+               (List.mapi exns ~f:(fun i e ->
+                    sprintf "  %d: %s" i (Exn.to_string e))))))

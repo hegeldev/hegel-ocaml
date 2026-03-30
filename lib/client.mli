@@ -3,6 +3,8 @@
     This module implements the client-side logic for running property-based
     tests against a Hegel server. *)
 
+module Mutex = Caml_threads.Mutex
+
 exception Assume_rejected
 (** Raised when {!assume} condition is [false]. *)
 

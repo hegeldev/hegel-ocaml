@@ -4,6 +4,10 @@ external unsetenv : string -> unit = "caml_unsetenv"
 (** [unsetenv name] removes the environment variable [name] from the process
     environment. Uses the POSIX [unsetenv(3)] function via a C stub. *)
 
+open! Core
+module Unix = Core_unix
+module Mutex = Caml_threads.Mutex
+module Thread = Caml_threads.Thread
 open Hegel
 
 (** [contains_substring s sub] returns [true] if [sub] appears anywhere in [s].
@@ -14,14 +18,15 @@ let contains_substring s sub =
   else
     let rec check i =
       if i > slen - sublen then false
-      else if String.sub s i sublen = sub then true
+      else if String.equal (String.sub s ~pos:i ~len:sublen) sub then true
       else check (i + 1)
     in
     check 0
 
 (** [make_socket_pair ()] creates a connected socketpair. Returns [(fd1, fd2)].
 *)
-let make_socket_pair () = Unix.socketpair Unix.PF_UNIX Unix.SOCK_STREAM 0
+let make_socket_pair () =
+  Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
 
 (** [make_connection fd ?name ?debug ()] creates a connection using the same fd
     for both reading and writing (for use with socketpairs). *)
@@ -62,16 +67,15 @@ let handshake_pair peer_conn client_conn =
 
 (** Helper: check where a given command is *)
 let find_cmd cmd =
-  let inp_channel = Unix.open_process_in ("which " ^ cmd) in
-  let output = String.trim (In_channel.input_all inp_channel) in
-  let exit_code = Unix.close_process_in inp_channel in
+  let inp_channel = Core_unix.open_process_in ("which " ^ cmd) in
+  let output = String.strip (In_channel.input_all inp_channel) in
+  let exit_code = Core_unix.close_process_in inp_channel in
   match exit_code with
-  | WEXITED 0 -> output
-  | exit_code ->
+  | Ok () -> output
+  | Error err ->
       raise
         (Failure
-           (Printf.sprintf "Command failed with status: %s"
-              (match exit_code with
-              | WEXITED code -> string_of_int code
-              | WSIGNALED sign -> "signaled: " ^ string_of_int sign
-              | WSTOPPED sign -> "stopped: " ^ string_of_int sign)))
+           (sprintf "Command failed with status: %s"
+              (match err with
+              | `Exit_non_zero code -> Int.to_string code
+              | `Signal signal -> "signaled: " ^ Signal.to_string signal)))

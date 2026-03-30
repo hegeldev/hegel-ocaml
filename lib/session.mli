@@ -6,6 +6,8 @@
     The main entry point is {!run_hegel_test}, which the user calls without
     needing to manage connections or sessions directly. *)
 
+module Mutex = Caml_threads.Mutex
+
 val hegel_server_version : string
 (** Version of hegel-core to install. *)
 
@@ -18,7 +20,8 @@ val hegel_server_dir : string
 val uv_not_found_message : string
 (** Message shown when uv is not found. *)
 
-val run_command_to_log : string -> string list -> string -> Unix.process_status
+val run_command_to_log :
+  string -> string list -> string -> Caml_unix.process_status
 (** [run_command_to_log cmd args log_path] runs [cmd] with [args], redirecting
     stdout and stderr to [log_path]. Returns the process exit status. *)
 
