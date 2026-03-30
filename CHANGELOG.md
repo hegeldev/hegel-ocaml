@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0 - 2026-03-30
+
+This release moves the library over to use the Jane Street standard library instead of the Inria one.
+
 ## 0.2.0 - 2026-03-27
 
 This release brings the OCaml library in line with hegel-rust, including a **breaking API change**: test functions now receive an explicit `test_case` parameter.
