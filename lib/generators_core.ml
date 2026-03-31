@@ -1,3 +1,4 @@
+open! Core
 open Connection
 
 (** Constants for span labels used in generation tracking. *)
@@ -54,7 +55,7 @@ type 'a generator =
       -> 'a list generator
   | Composite : {
       label : int;
-      generate_fn : Client.test_case_data -> 'a;
+      generate_fn : Client.test_case -> 'a;
     }
       -> 'a generator
 
@@ -65,7 +66,7 @@ let max_filter_attempts = 3
     span is stopped with [discard:false] regardless of whether [f] raises. *)
 let group label data f =
   Client.start_span ~label data;
-  Fun.protect ~finally:(fun () -> Client.stop_span data) (fun () -> f ())
+  Exn.protect ~finally:(fun () -> Client.stop_span data) ~f:(fun () -> f ())
 
 (** [discardable_group label data f] runs [f ()] inside a span with [label]. If
     [f] raises, the span is stopped with [discard:true]; otherwise
@@ -118,7 +119,7 @@ let get_server_name coll data =
                     (`Text "min_size", `Int coll.min_size);
                     (`Text "max_size", max_size_val);
                   ]))
-        with Request_error e when e.error_type = "StopTest" ->
+        with Request_error e when String.equal e.error_type "StopTest" ->
           data.test_aborted <- true;
           raise Client.Data_exhausted
       in
@@ -143,7 +144,7 @@ let collection_more coll data =
                   (`Text "command", `Text "collection_more");
                   (`Text "collection", server_name);
                 ]))
-      with Request_error e when e.error_type = "StopTest" ->
+      with Request_error e when String.equal e.error_type "StopTest" ->
         data.test_aborted <- true;
         raise Client.Data_exhausted
     in
@@ -169,7 +170,7 @@ let collection_reject coll data =
 
 (** [do_draw gen data] produces a typed value from generator [gen] using the
     given test case [data]. *)
-let rec do_draw : type a. a generator -> Client.test_case_data -> a =
+let rec do_draw : type a. a generator -> Client.test_case -> a =
  fun gen data ->
   match gen with
   | Basic { schema; transform } ->
@@ -212,12 +213,9 @@ let rec do_draw : type a. a generator -> Client.test_case_data -> a =
   | Composite { label; generate_fn } ->
       group label data (fun () -> generate_fn data)
 
-(** [draw gen] produces a typed value from generator [gen]. Must be called from
-    within a Hegel test body. *)
-let draw gen =
-  match Domain.DLS.get Client.current_data with
-  | None -> failwith "draw() cannot be called outside of a Hegel test"
-  | Some data -> do_draw gen data
+(** [draw tc gen] produces a typed value from generator [gen] using test case
+    [tc]. *)
+let draw tc gen = do_draw gen tc
 
 (** [map f gen] transforms values from [gen] using [f].
 

@@ -1,9 +1,13 @@
 (** Multiplexed connection and channel abstractions for Hegel.
 
-    This module implements the demand-driven reader model: when a channel needs
-    a message, it calls the reader which reads packets from the socket and
-    dispatches them to the correct channel's inbox until the caller's condition
-    is satisfied. *)
+    This module implements a background-reader model: a dedicated thread reads
+    packets from the input stream and dispatches them to per-channel inboxes.
+    Channels wait on condition variables for new messages. *)
+
+open! Core
+module Unix = Core_unix
+module Mutex = Caml_threads.Mutex
+module Condition = Caml_threads.Condition
 
 (** Sentinel value placed in a channel's inbox when the connection shuts down.
 *)
@@ -24,6 +28,13 @@ val result_or_error : CBOR.Simple.t -> CBOR.Simple.t
 (** Connection state after handshake. *)
 type connection_state = Unresolved | Client
 
+type channel_inbox = {
+  queue : inbox_item Queue.t;
+  lock : Mutex.t;
+  cond : Condition.t;
+}
+(** Thread-safe inbox for a channel, with condition-variable signaling. *)
+
 (** A channel entry in the connection's channel table. *)
 type channel_entry =
   | Live of channel
@@ -31,21 +42,23 @@ type channel_entry =
 
 and connection = {
   name : string option;
-  socket : Unix.file_descr;
+  read_fd : Core_unix.File_descr.t;
+  write_fd : Core_unix.File_descr.t;
   mutable next_channel_id : int;
   channels : (int32, channel_entry) Hashtbl.t;
+  channels_lock : Mutex.t;
   mutable running : bool;
   debug : bool;
   writer_lock : Mutex.t;
-  reader_lock : Mutex.t;
   mutable connection_state : connection_state;
+  mutable server_exited : bool;
 }
-(** Multiplexed socket connection to a Hegel peer. *)
+(** Multiplexed connection to a Hegel peer. *)
 
 and channel = {
   channel_id : int32;
   conn : connection;
-  inbox : inbox_item Queue.t;
+  inbox : channel_inbox;
   requests : Protocol.packet Queue.t;
   responses : (int32, string) Hashtbl.t;
   role : string option;
@@ -55,13 +68,22 @@ and channel = {
 (** Logical channel for request/response messaging. *)
 
 val create_connection :
-  Unix.file_descr -> ?name:string -> ?debug:bool -> unit -> connection
-(** [create_connection sock ?name ?debug ()] creates a new connection wrapping
-    the Unix file descriptor [sock]. A control channel (channel 0) is
-    automatically created. *)
+  read_fd:Core_unix.File_descr.t ->
+  write_fd:Core_unix.File_descr.t ->
+  ?name:string ->
+  ?debug:bool ->
+  unit ->
+  connection
+(** [create_connection ~read_fd ~write_fd ?name ?debug ()] creates a new
+    connection using separate file descriptors for reading and writing. A
+    control channel (channel 0) is automatically created and a background reader
+    thread is spawned. *)
 
 val is_live : connection -> bool
 (** [is_live conn] returns [true] if the connection is still active. *)
+
+val server_has_exited : connection -> bool
+(** [server_has_exited conn] returns [true] if the server process has exited. *)
 
 val close : connection -> unit
 (** [close conn] closes the connection and signals all live channels. *)
@@ -142,13 +164,12 @@ val pending_get : pending_request -> CBOR.Simple.t
     same error. *)
 
 val process_one_message : channel -> ?timeout:float -> unit -> unit
-(** [process_one_message ch ?timeout ()] reads and routes one incoming message
-    for channel [ch]. Dispatches replies to the channel's responses table and
-    requests to the channel's request queue. *)
+(** [process_one_message ch ?timeout ()] waits for and routes one incoming
+    message for channel [ch]. Dispatches replies to the channel's responses
+    table and requests to the channel's request queue. *)
 
-val run_reader : connection -> until:(unit -> bool) -> unit
-(** [run_reader conn ~until] reads packets from the socket and dispatches them
-    to channel inboxes until [until ()] returns [true]. *)
+val server_crashed_message : string
+(** Error message shown when the server process has exited unexpectedly. *)
 
 val send_handshake : connection -> string
 (** [send_handshake conn] initiates the handshake as a client. Returns the

@@ -1,3 +1,4 @@
+open! Core
 open Generators_core
 
 (** [hashmaps keys values ?min_size ?max_size ()] creates a generator for
@@ -9,16 +10,14 @@ open Generators_core
 let hashmaps keys values ?(min_size = 0) ?max_size () =
   if min_size < 0 then
     raise
-      (Invalid_argument
-         (Printf.sprintf "min_size=%d must be non-negative" min_size));
+      (Invalid_argument (sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
   | Some ms when ms < 0 ->
-      raise
-        (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
+      raise (Invalid_argument (sprintf "max_size=%d must be non-negative" ms))
   | Some ms when min_size > ms ->
       raise
         (Invalid_argument
-           (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
+           (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
   | _ -> ());
   let key_schema, key_transform =
     match keys with
@@ -31,13 +30,13 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
     | _ -> failwith "hashmaps: values generator must be a Basic generator"
   in
   let pairs =
-    List.filter_map Fun.id
+    List.filter_opt
       [
         Some (`Text "type", `Text "dict");
         Some (`Text "keys", key_schema);
         Some (`Text "values", val_schema);
         Some (`Text "min_size", `Int min_size);
-        Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size;
+        Option.map max_size ~f:(fun ms -> (`Text "max_size", `Int ms));
       ]
   in
   (* The server returns dicts as [[k, v], ...] lists. We transform to typed
@@ -45,11 +44,9 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
   let transform raw =
     match raw with
     | `Array kv_pairs ->
-        List.map
-          (function
-            | `Array [ k; v ] -> (key_transform k, val_transform v)
-            | _ -> failwith "hashmaps: expected [k, v] pair from server")
-          kv_pairs
+        List.map kv_pairs ~f:(function
+          | `Array [ k; v ] -> (key_transform k, val_transform v)
+          | _ -> failwith "hashmaps: expected [k, v] pair from server")
     | _ -> failwith "hashmaps: expected array from server"
   in
   Basic { schema = `Map pairs; transform }
@@ -66,32 +63,30 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
 let lists elements ?(min_size = 0) ?max_size () =
   if min_size < 0 then
     raise
-      (Invalid_argument
-         (Printf.sprintf "min_size=%d must be non-negative" min_size));
+      (Invalid_argument (sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
   | Some ms when ms < 0 ->
-      raise
-        (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
+      raise (Invalid_argument (sprintf "max_size=%d must be non-negative" ms))
   | Some ms when min_size > ms ->
       raise
         (Invalid_argument
-           (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
+           (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
   | _ -> ());
   match as_basic elements with
   | Some (elem_schema, elem_transform) ->
       let pairs =
-        List.filter_map Fun.id
+        List.filter_opt
           [
             Some (`Text "type", `Text "list");
             Some (`Text "elements", elem_schema);
             Some (`Text "min_size", `Int min_size);
-            Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size;
+            Option.map max_size ~f:(fun ms -> (`Text "max_size", `Int ms));
           ]
       in
       let raw_schema = `Map pairs in
       let list_transform raw_list =
         match raw_list with
-        | `Array items -> List.map elem_transform items
+        | `Array items -> List.map items ~f:elem_transform
         | _ ->
             failwith "Internal error: server returned non-array for list schema"
       in

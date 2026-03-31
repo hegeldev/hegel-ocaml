@@ -1,3 +1,4 @@
+open! Core
 open Generators_core
 
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
@@ -7,14 +8,14 @@ let integers ?min_value ?max_value () =
   | Some min, Some max when min > max ->
       raise
         (Invalid_argument
-           (Printf.sprintf "Cannot have max_value=%d < min_value=%d" max min))
+           (sprintf "Cannot have max_value=%d < min_value=%d" max min))
   | _ -> ());
   let pairs =
-    List.filter_map Fun.id
+    List.filter_opt
       [
         Some (`Text "type", `Text "integer");
-        Option.map (fun v -> (`Text "min_value", `Int v)) min_value;
-        Option.map (fun v -> (`Text "max_value", `Int v)) max_value;
+        Option.map min_value ~f:(fun v -> (`Text "min_value", `Int v));
+        Option.map max_value ~f:(fun v -> (`Text "max_value", `Int v));
       ]
   in
   Basic { schema = `Map pairs; transform = Cbor_helpers.extract_int }
@@ -51,12 +52,11 @@ let floats ?min_value ?max_value ?(exclude_min = false) ?(exclude_max = false)
     raise
       (Invalid_argument "Cannot have allow_nan=true with min_value or max_value");
   (match (min_value, max_value) with
-  | Some min, Some max when min > max ->
+  | Some min, Some max when Float.( > ) min max ->
       raise
         (Invalid_argument
-           (Printf.sprintf
-              "There are no floats between min_value=%g and max_value=%g" min
-              max))
+           (sprintf "There are no floats between min_value=%g and max_value=%g"
+              min max))
   | _ -> ());
   if eff_allow_infinity && has_min && has_max then
     raise
@@ -74,10 +74,10 @@ let floats ?min_value ?max_value ?(exclude_min = false) ?(exclude_max = false)
   in
   let pairs =
     pairs
-    @ List.filter_map Fun.id
+    @ List.filter_opt
         [
-          Option.map (fun v -> (`Text "min_value", `Float v)) min_value;
-          Option.map (fun v -> (`Text "max_value", `Float v)) max_value;
+          Option.map min_value ~f:(fun v -> (`Text "min_value", `Float v));
+          Option.map max_value ~f:(fun v -> (`Text "max_value", `Float v));
         ]
   in
   Basic { schema = `Map pairs; transform = Cbor_helpers.extract_float }
@@ -88,23 +88,21 @@ let floats ?min_value ?max_value ?(exclude_min = false) ?(exclude_max = false)
 let text ?(min_size = 0) ?max_size () =
   if min_size < 0 then
     raise
-      (Invalid_argument
-         (Printf.sprintf "min_size=%d must be non-negative" min_size));
+      (Invalid_argument (sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
   | Some ms when ms < 0 ->
-      raise
-        (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
+      raise (Invalid_argument (sprintf "max_size=%d must be non-negative" ms))
   | Some ms when min_size > ms ->
       raise
         (Invalid_argument
-           (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
+           (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
   | _ -> ());
   let pairs =
-    List.filter_map Fun.id
+    List.filter_opt
       [
         Some (`Text "type", `Text "string");
         Some (`Text "min_size", `Int min_size);
-        Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size;
+        Option.map max_size ~f:(fun ms -> (`Text "max_size", `Int ms));
       ]
   in
   Basic { schema = `Map pairs; transform = Cbor_helpers.extract_string }
@@ -114,23 +112,21 @@ let text ?(min_size = 0) ?max_size () =
 let binary ?(min_size = 0) ?max_size () =
   if min_size < 0 then
     raise
-      (Invalid_argument
-         (Printf.sprintf "min_size=%d must be non-negative" min_size));
+      (Invalid_argument (sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
   | Some ms when ms < 0 ->
-      raise
-        (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
+      raise (Invalid_argument (sprintf "max_size=%d must be non-negative" ms))
   | Some ms when min_size > ms ->
       raise
         (Invalid_argument
-           (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
+           (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
   | _ -> ());
   let pairs =
-    List.filter_map Fun.id
+    List.filter_opt
       [
         Some (`Text "type", `Text "binary");
         Some (`Text "min_size", `Int min_size);
-        Option.map (fun ms -> (`Text "max_size", `Int ms)) max_size;
+        Option.map max_size ~f:(fun ms -> (`Text "max_size", `Int ms));
       ]
   in
   Basic { schema = `Map pairs; transform = Cbor_helpers.extract_bytes }
@@ -185,14 +181,13 @@ let domains ?max_length () =
   (match max_length with
   | Some ml when ml < 4 || ml > 255 ->
       raise
-        (Invalid_argument
-           (Printf.sprintf "max_length=%d must be between 4 and 255" ml))
+        (Invalid_argument (sprintf "max_length=%d must be between 4 and 255" ml))
   | _ -> ());
   let pairs =
-    List.filter_map Fun.id
+    List.filter_opt
       [
         Some (`Text "type", `Text "domain");
-        Option.map (fun ml -> (`Text "max_length", `Int ml)) max_length;
+        Option.map max_length ~f:(fun ml -> (`Text "max_length", `Int ml));
       ]
   in
   Basic { schema = `Map pairs; transform = Cbor_helpers.extract_string }

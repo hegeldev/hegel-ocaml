@@ -1,7 +1,7 @@
 (** PPX deriver for [@@deriving generator].
 
     Reads OCaml type declarations annotated with [@@deriving generator] and
-    synthesizes generator functions of type [unit -> t].
+    synthesizes generator functions of type [Hegel.Client.test_case -> t].
 
     When called inside a Hegel test body, these functions generate a value of
     the declared type by calling [Hegel.draw] with appropriate generators and
@@ -13,48 +13,54 @@
     - Type aliases: delegates to the generator for the aliased type
 
     Supported field/argument types:
-    - [int] → generates via [integers()]
-    - [bool] → generates via [booleans()]
-    - [float] → generates via [floats ~allow_nan:false ~allow_infinity:false ()]
-    - [string] → generates via [text()]
-    - [t list] → generates a list length, then generates each element
-    - [t option] → generates [Some v] or [None]
-    - Named type [t] → calls [t_generator ()] (assumes it exists in scope) *)
+    - [int] -> generates via [integers()]
+    - [bool] -> generates via [booleans()]
+    - [float] -> generates via
+      [floats ~allow_nan:false ~allow_infinity:false ()]
+    - [string] -> generates via [text()]
+    - [t list] -> generates a list length, then generates each element
+    - [t option] -> generates [Some v] or [None]
+    - Named type [t] -> calls [t_generator _hegel_tc] (assumes it exists in
+      scope) *)
 
 open Ppxlib
 
-(** [generate_expr_of_core_type ct] returns an expression of type [unit -> <t>]
-    that generates a value of core type [ct] when called inside a test body. *)
+(** [generate_expr_of_core_type ct] returns an expression of type
+    [Hegel.Client.test_case -> <t>] that generates a value of core type [ct]. *)
 let rec generate_expr_of_core_type (ct : core_type) : expression =
   let loc = ct.ptyp_loc in
   match ct.ptyp_desc with
   | Ptyp_constr ({ txt = Lident "int"; _ }, []) ->
       [%expr
-        fun () ->
-          Hegel.draw
+        fun _hegel_tc ->
+          Hegel.draw _hegel_tc
             (Hegel.Generators.integers ~min_value:Int.min_int
                ~max_value:Int.max_int ())]
   | Ptyp_constr ({ txt = Lident "bool"; _ }, []) ->
-      [%expr fun () -> Hegel.draw (Hegel.Generators.booleans ())]
+      [%expr
+        fun _hegel_tc -> Hegel.draw _hegel_tc (Hegel.Generators.booleans ())]
   | Ptyp_constr ({ txt = Lident "float"; _ }, []) ->
       [%expr
-        fun () ->
-          Hegel.draw
+        fun _hegel_tc ->
+          Hegel.draw _hegel_tc
             (Hegel.Generators.floats ~allow_nan:false ~allow_infinity:false ())]
   | Ptyp_constr ({ txt = Lident "string"; _ }, []) ->
-      [%expr fun () -> Hegel.draw (Hegel.Generators.text ())]
+      [%expr fun _hegel_tc -> Hegel.draw _hegel_tc (Hegel.Generators.text ())]
   | Ptyp_constr ({ txt = Lident "list"; _ }, [ elem_type ]) ->
       let elem_gen_fn = generate_expr_of_core_type elem_type in
-      [%expr fun () -> Hegel.Derive.generate_list [%e elem_gen_fn]]
+      [%expr
+        fun _hegel_tc -> Hegel.Derive.generate_list _hegel_tc [%e elem_gen_fn]]
   | Ptyp_constr ({ txt = Lident "option"; _ }, [ inner_type ]) ->
       let inner_gen_fn = generate_expr_of_core_type inner_type in
-      [%expr fun () -> Hegel.Derive.generate_option [%e inner_gen_fn]]
+      [%expr
+        fun _hegel_tc ->
+          Hegel.Derive.generate_option _hegel_tc [%e inner_gen_fn]]
   | Ptyp_constr ({ txt = Lident tname; _ }, []) ->
       let gen_fn =
         Ast_builder.Default.pexp_ident ~loc
           { txt = Lident (tname ^ "_generator"); loc }
       in
-      [%expr fun () -> [%e gen_fn] ()]
+      [%expr fun _hegel_tc -> [%e gen_fn] _hegel_tc]
   | Ptyp_constr ({ txt = Ldot (modpath, tname); _ }, []) ->
       let rec longident_to_parts = function
         | Longident.Lident s -> [ s ]
@@ -73,13 +79,13 @@ let rec generate_expr_of_core_type (ct : core_type) : expression =
       let gen_fn =
         Ast_builder.Default.pexp_ident ~loc { txt = full_lid; loc }
       in
-      [%expr fun () -> [%e gen_fn] ()]
+      [%expr fun _hegel_tc -> [%e gen_fn] _hegel_tc]
   | Ptyp_tuple components -> generate_expr_of_tuple ~loc components
   | _ ->
       Location.raise_errorf ~loc
         "ppx_hegel_generator: unsupported type in [@@deriving generator]"
 
-(** Generate a [unit -> (t1 * t2 * ...)] function for a tuple type. *)
+(** Generate a [test_case -> (t1 * t2 * ...)] function for a tuple type. *)
 and generate_expr_of_tuple ~loc components =
   let gen_fns =
     List.mapi
@@ -96,7 +102,7 @@ and generate_expr_of_tuple ~loc components =
            [%expr
              [%e
                Ast_builder.Default.pexp_ident ~loc { txt = Lident vname; loc }]
-               ()])
+               _hegel_tc])
          gen_fns)
   in
   let body =
@@ -107,10 +113,11 @@ and generate_expr_of_tuple ~loc components =
           [%e acc]])
       gen_fns tuple_expr
   in
-  [%expr fun () -> [%e body]]
+  [%expr fun _hegel_tc -> [%e body]]
 
 (** Generate code for a record type. Produces:
-    [fun () -> { field1 = gen1 (); field2 = gen2 (); ... }] *)
+    [fun _hegel_tc -> { field1 = gen1 _hegel_tc; field2 = gen2 _hegel_tc; ... }]
+*)
 let generator_of_record ~loc (labels : label_declaration list) : expression =
   if labels = [] then
     Location.raise_errorf ~loc
@@ -131,7 +138,7 @@ let generator_of_record ~loc (labels : label_declaration list) : expression =
                [%e
                  Ast_builder.Default.pexp_ident ~loc
                    { txt = Lident gen_var; loc }]
-                 ()] ))
+                 _hegel_tc] ))
          field_gen_fns)
       None
   in
@@ -144,10 +151,10 @@ let generator_of_record ~loc (labels : label_declaration list) : expression =
           [%e acc]])
       field_gen_fns record_expr
   in
-  [%expr fun () -> [%e body]]
+  [%expr fun _hegel_tc -> [%e body]]
 
-(** Generate code for a variant type. Produces a [fun () -> ...] that picks a
-    constructor index via sampled_from, then generates the appropriate
+(** Generate code for a variant type. Produces a [fun _hegel_tc -> ...] that
+    picks a constructor index via sampled_from, then generates the appropriate
     arguments. *)
 let generator_of_variant ~loc (constrs : constructor_declaration list) :
     expression =
@@ -171,7 +178,7 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) :
             let gen_fn = generate_expr_of_core_type ct in
             let body =
               Ast_builder.Default.pexp_construct ~loc constr_lid
-                (Some [%expr [%e gen_fn] ()])
+                (Some [%expr [%e gen_fn] _hegel_tc])
             in
             Ast_builder.Default.case
               ~lhs:(Ast_builder.Default.pint ~loc i)
@@ -193,7 +200,7 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) :
                        [%e
                          Ast_builder.Default.pexp_ident ~loc
                            { txt = Lident vname; loc }]
-                         ()])
+                         _hegel_tc])
                    gen_fns)
             in
             let inner_body =
@@ -215,7 +222,7 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) :
             let record_gen = generator_of_record ~loc labels in
             let body =
               Ast_builder.Default.pexp_construct ~loc constr_lid
-                (Some [%expr [%e record_gen] ()])
+                (Some [%expr [%e record_gen] _hegel_tc])
             in
             Ast_builder.Default.case
               ~lhs:(Ast_builder.Default.pint ~loc i)
@@ -233,9 +240,9 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) :
     Ast_builder.Default.pexp_match ~loc [%expr _variant_idx] all_arms
   in
   [%expr
-    fun () ->
+    fun _hegel_tc ->
       let _variant_idx =
-        Hegel.draw
+        Hegel.draw _hegel_tc
           (Hegel.Generators.sampled_from
              [%e Ast_builder.Default.elist ~loc index_options])
       in

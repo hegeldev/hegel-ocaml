@@ -1,5 +1,5 @@
 (** The current version of Hegel for OCaml. *)
-let version = "0.1.3"
+let version = "0.3.0"
 
 module Protocol = Protocol
 (** Binary wire protocol for packet serialization and deserialization. *)
@@ -27,21 +27,25 @@ module Derive = Derive
 
 (** {2 Convenience re-exports} *)
 
-(** [assume condition] rejects the current test case if [condition] is [false].
-*)
+(** [assume tc condition] rejects the current test case if [condition] is
+    [false]. *)
 let assume = Client.assume
 
-(** [note message] records a message that will be printed on the final (failing)
-    run. *)
+(** [note tc message] records a message that will be printed on the final
+    (failing) run. *)
 let note = Client.note
 
-(** [target value label] sends a target command to guide the search engine
+(** [target tc value label] sends a target command to guide the search engine
     toward higher values. *)
 let target = Client.target
 
-(** [draw gen] produces a typed value from generator [gen]. Must be called from
-    within a Hegel test body. *)
+(** [draw tc gen] produces a typed value from generator [gen] using test case
+    [tc]. *)
 let draw = Generators.draw
 
-(** [run_hegel_test ?test_cases ?seed test_fn] runs a property test. *)
+(** [run_hegel_test ?settings test_fn] runs a property test. *)
 let run_hegel_test = Session.run_hegel_test
+
+(** [default_settings ()] creates default test settings with CI auto-detection.
+*)
+let default_settings = Client.default_settings

@@ -2,7 +2,7 @@
 
 (name hegel)
 
-(version 0.1.3)
+(version 0.3.0)
 
 (generate_opam_files true)
 
@@ -21,6 +21,10 @@
    (>= 5.2))
   (dune
    (>= 3.16))
+  (core
+   (>= 0.17))
+  (core_unix
+   (>= 0.17))
   (alcotest
    (and
     :with-test

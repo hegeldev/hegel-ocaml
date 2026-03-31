@@ -1,3 +1,4 @@
+open! Core
 open Hegel
 open Cbor_helpers
 
@@ -56,16 +57,16 @@ let test_roundtrip_list () =
   let decoded = decode (encode v) in
   let lst = extract_list decoded in
   Alcotest.(check int) "list length" 3 (List.length lst);
-  Alcotest.(check int) "list[0]" 1 (extract_int (List.nth lst 0));
-  Alcotest.(check string) "list[1]" "two" (extract_string (List.nth lst 1));
-  Alcotest.(check bool) "list[2]" true (extract_bool (List.nth lst 2))
+  Alcotest.(check int) "list[0]" 1 (extract_int (List.nth_exn lst 0));
+  Alcotest.(check string) "list[1]" "two" (extract_string (List.nth_exn lst 1));
+  Alcotest.(check bool) "list[2]" true (extract_bool (List.nth_exn lst 2))
 
 let test_roundtrip_dict () =
   let v = `Map [ (`Text "key", `Int 99) ] in
   let decoded = decode (encode v) in
   let m = extract_dict decoded in
   Alcotest.(check int) "dict length" 1 (List.length m);
-  let k, value = List.hd m in
+  let k, value = List.hd_exn m in
   Alcotest.(check string) "dict key" "key" (extract_string k);
   Alcotest.(check int) "dict value" 99 (extract_int value)
 
@@ -82,8 +83,8 @@ let test_nested_list_of_dicts () =
   let decoded = decode (encode v) in
   let lst = extract_list decoded in
   Alcotest.(check int) "list length" 2 (List.length lst);
-  let d0 = extract_dict (List.nth lst 0) in
-  let d1 = extract_dict (List.nth lst 1) in
+  let d0 = extract_dict (List.nth_exn lst 0) in
+  let d1 = extract_dict (List.nth_exn lst 1) in
   Alcotest.(check int) "d0 keys" 2 (List.length d0);
   Alcotest.(check int) "d1 keys" 2 (List.length d1)
 
@@ -98,10 +99,12 @@ let test_nested_dict_with_list_values () =
   let decoded = decode (encode v) in
   let m = extract_dict decoded in
   Alcotest.(check int) "map keys" 2 (List.length m);
-  let scores_kv = List.find (fun (k, _) -> extract_string k = "scores") m in
+  let scores_kv =
+    List.find_exn m ~f:(fun (k, _) -> String.equal (extract_string k) "scores")
+  in
   let scores = extract_list (snd scores_kv) in
   Alcotest.(check int) "scores length" 3 (List.length scores);
-  Alcotest.(check int) "score 0" 90 (extract_int (List.nth scores 0))
+  Alcotest.(check int) "score 0" 90 (extract_int (List.nth_exn scores 0))
 
 (* --- Extractor error tests --- *)
 

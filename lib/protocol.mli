@@ -3,6 +3,8 @@
     This module defines the binary packet format used for communication between
     the Hegel client and the Hegel server. *)
 
+module Unix = Core_unix
+
 val magic : int32
 (** Magic number identifying Hegel packets ("HEGL" in hex). *)
 
@@ -60,15 +62,15 @@ val unpack_uint32_be : bytes -> int -> int32
 (** [unpack_uint32_be data offset] reads a big-endian unsigned 32-bit integer
     from [data] at [offset]. *)
 
-val recv_exact : Unix.file_descr -> int -> bytes
+val recv_exact : Core_unix.File_descr.t -> int -> bytes
 (** [recv_exact sock n] reads exactly [n] bytes from Unix file descriptor
     [sock]. Raises {!Partial_packet} if the connection closes with no data read,
     or {!Connection_closed} if it closes after partial data. *)
 
-val read_packet : Unix.file_descr -> packet
+val read_packet : Core_unix.File_descr.t -> packet
 (** [read_packet sock] reads and parses a single packet from Unix file
     descriptor [sock]. *)
 
-val write_packet : Unix.file_descr -> packet -> unit
+val write_packet : Core_unix.File_descr.t -> packet -> unit
 (** [write_packet sock packet] serializes and writes [packet] to Unix file
     descriptor [sock]. *)
