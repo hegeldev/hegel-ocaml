@@ -70,12 +70,12 @@ val with_suppress_health_check : health_check list -> settings -> settings
     health checks suppressed. *)
 
 type test_case = {
-  channel : Connection.channel;
+  stream : Connection.stream;
   is_final : bool;
   mutable test_aborted : bool;
 }
 (** Per-test-case state passed explicitly to the test function. Holds the data
-    channel, final-run flag, and abort state. *)
+    stream, final-run flag, and abort state. *)
 
 val extract_origin : exn -> string
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
@@ -112,7 +112,7 @@ val supported_protocol_hi : float
 
 type client = {
   connection : Connection.connection;
-  control : Connection.channel;
+  control : Connection.stream;
   lock : Mutex.t;
 }
 (** Hegel client for running property-based tests. *)
@@ -122,8 +122,8 @@ val create_client : Connection.connection -> client
     connection must not yet have had its handshake performed. *)
 
 val run_test_case :
-  client -> Connection.channel -> (test_case -> unit) -> is_final:bool -> unit
-(** [run_test_case client channel test_fn ~is_final] runs a single test case.
+  client -> Connection.stream -> (test_case -> unit) -> is_final:bool -> unit
+(** [run_test_case client stream test_fn ~is_final] runs a single test case.
     Passes the test case to [test_fn]. Reports status via mark_complete. *)
 
 val run_test :

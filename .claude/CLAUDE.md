@@ -31,7 +31,7 @@ lib/                         # Library source
   hegel.ml                   # Main module — re-exports all sub-modules
   protocol.ml                # Binary wire protocol: packet format, CRC32, constants
   cbor_helpers.ml            # CBOR encoding/decoding with type-safe extractors
-  connection.ml              # Multiplexed connection and channel abstractions
+  connection.ml              # Multiplexed connection and stream abstractions
   client.ml                  # Test runner and lifecycle management
   session.ml                 # Global server subprocess management
   generators.ml              # Generator combinators (booleans, integers, lists, …)
@@ -47,7 +47,7 @@ test/                        # Alcotest test suite
   test_hegel.ml              # Top-level Alcotest runner
   test_protocol.ml           # Wire protocol tests
   test_cbor_helpers.ml       # CBOR helper tests
-  test_connection.ml         # Connection and channel tests
+  test_connection.ml         # Connection and stream tests
   test_client.ml             # Client lifecycle tests
   test_generators.ml         # Generator combinator tests
   test_showcase.ml           # End-to-end example property tests
@@ -93,7 +93,7 @@ README.md                    # Project overview, install, quick-start
 Packets are fixed-format binary frames:
 - 4-byte magic `HEGL` (0x4845474C)
 - 4-byte CRC32 of the payload
-- 4-byte channel ID (odd = client-allocated, even = server-allocated)
+- 4-byte stream ID (odd = client-allocated, even = server-allocated)
 - 4-byte message ID (high bit set = reply)
 - 4-byte payload length
 - N-byte CBOR payload
@@ -101,7 +101,7 @@ Packets are fixed-format binary frames:
 
 ### Multiplexing (connection.ml)
 
-A single Unix socket carries many logical channels. The reader thread dispatches incoming packets to per-channel inboxes (guarded by a mutex + condition variable). Channels are demand-driven: the reader only runs when a channel is waiting for a packet. Client channels get odd IDs; server channels get even IDs.
+A single Unix socket carries many logical streams. The reader thread dispatches incoming packets to per-stream inboxes (guarded by a mutex + condition variable). Streams are demand-driven: the reader only runs when a stream is waiting for a packet. Client streams get odd IDs; server streams get even IDs.
 
 ### Generator System (generators.ml)
 
@@ -172,7 +172,7 @@ A singleton `_session` lazily starts the `hegel` binary as a subprocess on first
 
 ### Test Runner (client.ml)
 
-`run_test` sends a `run_test` command on the control channel, then processes `test_case` events — each carrying a new data channel ID. For each test case, `run_test_case` runs the user's test function with the data channel as the active channel (stored in thread-local refs). Exceptions are mapped to `mark_complete` statuses: VALID, INVALID (assume), INTERESTING (any other exception). If StopTest is received on any command, `_test_aborted` is set and `mark_complete` is skipped.
+`run_test` sends a `run_test` command on the control stream, then processes `test_case` events — each carrying a new data stream ID. For each test case, `run_test_case` runs the user's test function with the data stream as the active stream (stored in thread-local refs). Exceptions are mapped to `mark_complete` statuses: VALID, INVALID (assume), INTERESTING (any other exception). If StopTest is received on any command, `_test_aborted` is set and `mark_complete` is skipped.
 
 ## Key Patterns and Conventions
 
@@ -207,7 +207,7 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
 - sampled_from: uses `{"type": "integer", "min_value": 0, "max_value": N-1}` with a map transform to index into the values array
 - `{"type": "list", "elements": schema, "min_size": N, "max_size"?: N}` — lists
 - `{"type": "dict", "keys": schema, "values": schema, "min_size": N, "max_size"?: N}` — dicts (server returns `[[k,v],...]`)
-- `{"const": null}` — just (constant value; transform ignores server result)
+- `{"constant": null}` — just (constant value; transform ignores server result)
 - `{"type": "regex", "pattern": str, "fullmatch": bool}` — from_regex
 - `{"type": "email"}`, `{"type": "url"}`, `{"type": "domain", "max_length"?: N}` — format generators
 - `{"type": "date"}`, `{"type": "time"}`, `{"type": "datetime"}` — date/time generators

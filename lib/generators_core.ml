@@ -83,7 +83,7 @@ let discardable_group label data f =
 
 type collection = {
   mutable finished : bool;
-  mutable server_name : CBOR.Simple.t option;
+  mutable collection_id : CBOR.Simple.t option;
   min_size : int;
   max_size : int option;
 }
@@ -97,22 +97,22 @@ type collection = {
     handle. *)
 let new_collection ~min_size ?max_size data () =
   ignore data;
-  { finished = false; server_name = None; min_size; max_size }
+  { finished = false; collection_id = None; min_size; max_size }
 
-(** [get_server_name coll data] lazily initializes the server-side collection
-    and returns its handle. Raises {!Client.Data_exhausted} on StopTest. *)
-let get_server_name coll data =
-  match coll.server_name with
-  | Some name -> name
+(** [get_collection_id coll data] lazily initializes the server-side collection
+    and returns its ID. Raises {!Client.Data_exhausted} on StopTest. *)
+let get_collection_id coll data =
+  match coll.collection_id with
+  | Some id -> id
   | None ->
-      let channel = data.Client.channel in
+      let stream = data.Client.stream in
       let max_size_val =
         match coll.max_size with Some ms -> `Int ms | None -> `Null
       in
       let result =
         try
           pending_get
-            (request channel
+            (request stream
                (`Map
                   [
                     (`Text "command", `Text "new_collection");
@@ -123,7 +123,7 @@ let get_server_name coll data =
           data.test_aborted <- true;
           raise Client.Data_exhausted
       in
-      coll.server_name <- Some result;
+      coll.collection_id <- Some result;
       result
 
 (** [collection_more coll data] returns [true] if more elements should be
@@ -133,16 +133,16 @@ let get_server_name coll data =
 let collection_more coll data =
   if coll.finished then false
   else
-    let server_name = get_server_name coll data in
-    let channel = data.Client.channel in
+    let collection_id = get_collection_id coll data in
+    let stream = data.Client.stream in
     let result =
       try
         pending_get
-          (request channel
+          (request stream
              (`Map
                 [
                   (`Text "command", `Text "collection_more");
-                  (`Text "collection", server_name);
+                  (`Text "collection_id", collection_id);
                 ]))
       with Request_error e when String.equal e.error_type "StopTest" ->
         data.test_aborted <- true;
@@ -156,15 +156,15 @@ let collection_more coll data =
     No-op if the collection is already finished. *)
 let collection_reject coll data =
   if not coll.finished then begin
-    let server_name = get_server_name coll data in
-    let channel = data.Client.channel in
+    let collection_id = get_collection_id coll data in
+    let stream = data.Client.stream in
     ignore
       (pending_get
-         (request channel
+         (request stream
             (`Map
                [
                  (`Text "command", `Text "collection_reject");
-                 (`Text "collection", server_name);
+                 (`Text "collection_id", collection_id);
                ])))
   end
 

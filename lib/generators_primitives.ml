@@ -133,11 +133,14 @@ let binary ?(min_size = 0) ?max_size () =
 
 (** [just value] creates a generator that always produces [value].
 
-    The schema uses [{"const": null}] and the transform ignores the server
+    The schema uses [{"constant": null}] and the transform ignores the server
     result, returning the constant [value]. *)
 let just value =
   Basic
-    { schema = `Map [ (`Text "const", `Null) ]; transform = (fun _ -> value) }
+    {
+      schema = `Map [ (`Text "type", `Text "constant"); (`Text "value", `Null) ];
+      transform = (fun _ -> value);
+    }
 
 (** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
     a regular expression [pattern].

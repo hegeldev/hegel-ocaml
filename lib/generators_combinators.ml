@@ -61,7 +61,15 @@ let one_of (generators : 'a generator list) =
           `Map
             [
               (`Text "type", `Text "tuple");
-              (`Text "elements", `Array [ `Map [ (`Text "const", `Int i) ]; s ]);
+              ( `Text "elements",
+                `Array
+                  [
+                    `Map
+                      [
+                        (`Text "type", `Text "constant"); (`Text "value", `Int i);
+                      ];
+                    s;
+                  ] );
             ])
     in
     let transforms = Array.of_list (List.map basics ~f:snd) in
@@ -74,7 +82,12 @@ let one_of (generators : 'a generator list) =
     in
     Basic
       {
-        schema = `Map [ (`Text "one_of", `Array tagged_schemas) ];
+        schema =
+          `Map
+            [
+              (`Text "type", `Text "one_of");
+              (`Text "generators", `Array tagged_schemas);
+            ];
         transform = dispatch;
       }
 

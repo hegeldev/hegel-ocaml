@@ -17,14 +17,14 @@ val terminator : int
 val reply_bit : int32
 (** Bit flag indicating a reply message. *)
 
-val close_channel_message_id : int32
-(** Special message ID used when closing a channel. *)
+val close_stream_message_id : int32
+(** Special message ID used when closing a stream. *)
 
-val close_channel_payload : string
-(** Special payload byte sent when closing a channel. *)
+val close_stream_payload : string
+(** Special payload byte sent when closing a stream. *)
 
 type packet = {
-  channel_id : int32;  (** The logical channel this packet belongs to. *)
+  stream_id : int32;  (** The logical stream this packet belongs to. *)
   message_id : int32;  (** Identifier for request/response correlation. *)
   is_reply : bool;  (** Whether this is a reply to a previous request. *)
   payload : string;  (** The raw payload bytes (typically CBOR-encoded). *)

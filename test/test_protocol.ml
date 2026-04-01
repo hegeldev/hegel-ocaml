@@ -19,14 +19,14 @@ let with_socket_pair f =
 
 (** Helper: build raw packet bytes for testing read_packet edge cases. Mirrors
     the Python _make_packet helper. *)
-let make_raw_packet ?(pkt_magic = magic) ?checksum ?(channel_id = 0l)
+let make_raw_packet ?(pkt_magic = magic) ?checksum ?(stream_id = 0l)
     ?(message_id = 1l) ?(payload = "payload") ?(term = terminator) () =
   let length = Int32.of_int_exn (String.length payload) in
   (* Build header with zeroed checksum for CRC computation *)
   let header_for_check = Bytes.create header_size in
   pack_uint32_be header_for_check 0 pkt_magic;
   pack_uint32_be header_for_check 4 0l;
-  pack_uint32_be header_for_check 8 channel_id;
+  pack_uint32_be header_for_check 8 stream_id;
   pack_uint32_be header_for_check 12 message_id;
   pack_uint32_be header_for_check 16 length;
   let computed_checksum =
@@ -38,7 +38,7 @@ let make_raw_packet ?(pkt_magic = magic) ?checksum ?(channel_id = 0l)
   let header = Bytes.create header_size in
   pack_uint32_be header 0 pkt_magic;
   pack_uint32_be header 4 computed_checksum;
-  pack_uint32_be header 8 channel_id;
+  pack_uint32_be header 8 stream_id;
   pack_uint32_be header 12 message_id;
   pack_uint32_be header 16 length;
   Bytes.to_string header ^ payload ^ String.make 1 (Char.of_int_exn term)
@@ -62,15 +62,15 @@ let test_reply_bit () =
 
 let test_terminator () = Alcotest.(check int) "TERMINATOR" 0x0A terminator
 
-let test_close_channel_message_id () =
+let test_close_stream_message_id () =
   Alcotest.(check int32)
-    "CLOSE_CHANNEL_MESSAGE_ID"
+    "CLOSE_STREAM_MESSAGE_ID"
     Int32.(shift_left 1l 31 - 1l)
-    close_channel_message_id
+    close_stream_message_id
 
-let test_close_channel_payload () =
+let test_close_stream_payload () =
   Alcotest.(check string)
-    "CLOSE_CHANNEL_PAYLOAD" (String.make 1 '\xFE') close_channel_payload
+    "CLOSE_STREAM_PAYLOAD" (String.make 1 '\xFE') close_stream_payload
 
 (* --- CRC32 tests --- *)
 
@@ -108,12 +108,7 @@ let packet_testable = Alcotest.testable pp_packet equal_packet
 let test_roundtrip_simple () =
   with_socket_pair (fun reader writer ->
       let pkt =
-        {
-          channel_id = 1l;
-          message_id = 2l;
-          is_reply = false;
-          payload = "hello";
-        }
+        { stream_id = 1l; message_id = 2l; is_reply = false; payload = "hello" }
       in
       write_packet writer pkt;
       let pkt2 = read_packet reader in
@@ -122,7 +117,7 @@ let test_roundtrip_simple () =
 let test_roundtrip_empty_payload () =
   with_socket_pair (fun reader writer ->
       let pkt =
-        { channel_id = 0l; message_id = 1l; is_reply = false; payload = "" }
+        { stream_id = 0l; message_id = 1l; is_reply = false; payload = "" }
       in
       write_packet writer pkt;
       let pkt2 = read_packet reader in
@@ -132,7 +127,7 @@ let test_roundtrip_large_payload () =
   with_socket_pair (fun reader writer ->
       let payload = String.make 65536 'X' in
       let pkt =
-        { channel_id = 42l; message_id = 99l; is_reply = false; payload }
+        { stream_id = 42l; message_id = 99l; is_reply = false; payload }
       in
       (* Write in a separate thread to avoid deadlock: the 65KB payload exceeds
          the OS socket buffer, so write_packet blocks until the reader drains
@@ -144,11 +139,11 @@ let test_roundtrip_large_payload () =
       Thread.join writer_thread;
       Alcotest.(check packet_testable) "round-trip large payload" pkt pkt2)
 
-let test_roundtrip_max_channel_id () =
+let test_roundtrip_max_stream_id () =
   with_socket_pair (fun reader writer ->
       let pkt =
         {
-          channel_id = 0xFFFFFFFFl;
+          stream_id = 0xFFFFFFFFl;
           message_id = 1l;
           is_reply = false;
           payload = "test";
@@ -156,17 +151,12 @@ let test_roundtrip_max_channel_id () =
       in
       write_packet writer pkt;
       let pkt2 = read_packet reader in
-      Alcotest.(check packet_testable) "round-trip max channel" pkt pkt2)
+      Alcotest.(check packet_testable) "round-trip max stream" pkt pkt2)
 
 let test_roundtrip_reply_bit () =
   with_socket_pair (fun reader writer ->
       let pkt =
-        {
-          channel_id = 5l;
-          message_id = 10l;
-          is_reply = true;
-          payload = "reply";
-        }
+        { stream_id = 5l; message_id = 10l; is_reply = true; payload = "reply" }
       in
       write_packet writer pkt;
       let pkt2 = read_packet reader in
@@ -176,7 +166,7 @@ let test_roundtrip_reply_bit_unset () =
   with_socket_pair (fun reader writer ->
       let pkt =
         {
-          channel_id = 5l;
+          stream_id = 5l;
           message_id = 10l;
           is_reply = false;
           payload = "request";
@@ -271,30 +261,30 @@ let test_recv_exact_no_data_close () =
 
 let test_pp_packet () =
   let pkt =
-    { channel_id = 1l; message_id = 2l; is_reply = false; payload = "hi" }
+    { stream_id = 1l; message_id = 2l; is_reply = false; payload = "hi" }
   in
   let s = Format.asprintf "%a" pp_packet pkt in
   Alcotest.(check bool) "pp_packet output non-empty" true (String.length s > 0)
 
 let test_equal_packet_different () =
   let pkt1 =
-    { channel_id = 1l; message_id = 2l; is_reply = false; payload = "hi" }
+    { stream_id = 1l; message_id = 2l; is_reply = false; payload = "hi" }
   in
   let pkt2 =
-    { channel_id = 1l; message_id = 2l; is_reply = true; payload = "hi" }
+    { stream_id = 1l; message_id = 2l; is_reply = true; payload = "hi" }
   in
   let pkt3 =
-    { channel_id = 1l; message_id = 3l; is_reply = false; payload = "hi" }
+    { stream_id = 1l; message_id = 3l; is_reply = false; payload = "hi" }
   in
   let pkt4 =
-    { channel_id = 2l; message_id = 2l; is_reply = false; payload = "hi" }
+    { stream_id = 2l; message_id = 2l; is_reply = false; payload = "hi" }
   in
   let pkt5 =
-    { channel_id = 1l; message_id = 2l; is_reply = false; payload = "bye" }
+    { stream_id = 1l; message_id = 2l; is_reply = false; payload = "bye" }
   in
   Alcotest.(check bool) "diff is_reply" false (equal_packet pkt1 pkt2);
   Alcotest.(check bool) "diff message_id" false (equal_packet pkt1 pkt3);
-  Alcotest.(check bool) "diff channel_id" false (equal_packet pkt1 pkt4);
+  Alcotest.(check bool) "diff stream_id" false (equal_packet pkt1 pkt4);
   Alcotest.(check bool) "diff payload" false (equal_packet pkt1 pkt5);
   Alcotest.(check bool) "same" true (equal_packet pkt1 pkt1)
 
@@ -314,9 +304,9 @@ let tests =
     Alcotest.test_case "magic constant" `Quick test_magic;
     Alcotest.test_case "reply_bit constant" `Quick test_reply_bit;
     Alcotest.test_case "terminator constant" `Quick test_terminator;
-    Alcotest.test_case "close_channel_message_id" `Quick
-      test_close_channel_message_id;
-    Alcotest.test_case "close_channel_payload" `Quick test_close_channel_payload;
+    Alcotest.test_case "close_stream_message_id" `Quick
+      test_close_stream_message_id;
+    Alcotest.test_case "close_stream_payload" `Quick test_close_stream_payload;
     (* CRC32 *)
     Alcotest.test_case "CRC32 known vector" `Quick test_crc32_known_vector;
     Alcotest.test_case "CRC32 empty string" `Quick test_crc32_empty;
@@ -331,8 +321,8 @@ let tests =
       test_roundtrip_empty_payload;
     Alcotest.test_case "round-trip large payload" `Quick
       test_roundtrip_large_payload;
-    Alcotest.test_case "round-trip max channel" `Quick
-      test_roundtrip_max_channel_id;
+    Alcotest.test_case "round-trip max stream" `Quick
+      test_roundtrip_max_stream_id;
     Alcotest.test_case "round-trip reply bit set" `Quick
       test_roundtrip_reply_bit;
     Alcotest.test_case "round-trip reply bit unset" `Quick

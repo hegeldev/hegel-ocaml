@@ -17,7 +17,7 @@ let test_assume_true () =
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
     Client.
-      { channel = control_channel conn; is_final = false; test_aborted = false }
+      { stream = control_stream conn; is_final = false; test_aborted = false }
   in
   assume tc true;
   close conn;
@@ -30,7 +30,7 @@ let test_assume_false_raises () =
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
     Client.
-      { channel = control_channel conn; is_final = false; test_aborted = false }
+      { stream = control_stream conn; is_final = false; test_aborted = false }
   in
   let raised = ref false in
   (try assume tc false with Assume_rejected -> raised := true);
@@ -45,7 +45,7 @@ let test_note_when_not_final () =
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
     Client.
-      { channel = control_channel conn; is_final = false; test_aborted = false }
+      { stream = control_stream conn; is_final = false; test_aborted = false }
   in
   note tc "should not print";
   close conn;
@@ -58,7 +58,7 @@ let test_note_when_final () =
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
     Client.
-      { channel = control_channel conn; is_final = true; test_aborted = false }
+      { stream = control_stream conn; is_final = true; test_aborted = false }
   in
   note tc "test message from note";
   close conn;
@@ -86,7 +86,7 @@ let test_start_span_when_aborted () =
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let data =
     Client.
-      { channel = control_channel conn; is_final = false; test_aborted = true }
+      { stream = control_stream conn; is_final = false; test_aborted = true }
   in
   start_span data;
   stop_span data;
@@ -280,7 +280,7 @@ let test_version_mismatch () =
       (fun () ->
         (* Receive the handshake and respond with a bad version *)
         peer_conn.connection_state <- Client;
-        let ch = control_channel peer_conn in
+        let ch = control_stream peer_conn in
         let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "Hegel/9.9")
       ()
@@ -305,7 +305,7 @@ let test_version_mismatch_low () =
     Thread.create
       (fun () ->
         peer_conn.connection_state <- Client;
-        let ch = control_channel peer_conn in
+        let ch = control_stream peer_conn in
         let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "Hegel/0.0")
       ()
@@ -348,7 +348,7 @@ let with_fake_server peer_fn client_fn =
   in
   let client_conn = Test_helpers.make_connection s1 ~name:"Client" () in
   let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
-  let t_hs = Thread.create Test_helpers.handshake_via_channel peer_conn in
+  let t_hs = Thread.create Test_helpers.handshake_via_stream peer_conn in
   let client = create_client client_conn in
   Thread.join t_hs;
   let t_peer = Thread.create (fun () -> peer_fn peer_conn) () in
@@ -357,19 +357,19 @@ let with_fake_server peer_fn client_fn =
   close client_conn;
   close peer_conn
 
-(** Helper: accept a run_test command on the control channel, return
-    [(ctrl, test_ch)] where test_ch is the test channel. *)
+(** Helper: accept a run_test command on the control stream, return
+    [(ctrl, test_ch)] where test_ch is the test stream. *)
 let accept_run_test peer_conn =
-  let ctrl = control_channel peer_conn in
+  let ctrl = control_stream peer_conn in
   let msg_id, msg = receive_request ctrl () in
   let pairs = Cbor_helpers.extract_dict msg in
   let test_ch_id =
     Int32.of_int_exn
       (Cbor_helpers.extract_int
-         (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "channel_id")))
+         (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "stream_id")))
   in
   send_response_value ctrl msg_id `Null;
-  let test_ch = connect_channel peer_conn test_ch_id ~role:"Test" () in
+  let test_ch = connect_stream peer_conn test_ch_id ~role:"Test" () in
   (ctrl, test_ch)
 
 (** Helper: send test_done with given results fields. *)
@@ -543,7 +543,7 @@ let test_server_exited_in_pop_inbox () =
   in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   conn.server_exited <- true;
-  let ch = control_channel conn in
+  let ch = control_stream conn in
   let raised = ref false in
   (try ignore (receive_request ch ())
    with Failure msg ->
@@ -746,7 +746,7 @@ let test_has_working_client_live () =
         Some
           {
             connection = conn;
-            control = control_channel conn;
+            control = control_stream conn;
             lock = Mutex.create ();
           };
       lock = Mutex.create ();
@@ -1011,7 +1011,7 @@ let test_server_crash_in_event_loop () =
   in
   let client_conn = Test_helpers.make_connection s1 ~name:"Client" () in
   let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
-  let t_hs = Thread.create Test_helpers.handshake_via_channel peer_conn in
+  let t_hs = Thread.create Test_helpers.handshake_via_stream peer_conn in
   let client = create_client client_conn in
   Thread.join t_hs;
   let t_peer =
@@ -1019,14 +1019,14 @@ let test_server_crash_in_event_loop () =
       (fun () ->
         let _ctrl, test_ch = accept_run_test peer_conn in
         let data_ch_id = 2l in
-        let _data_ch = connect_channel peer_conn data_ch_id ~role:"Data" () in
+        let _data_ch = connect_stream peer_conn data_ch_id ~role:"Data" () in
         ignore
           (pending_get
              (request test_ch
                 (`Map
                    [
                      (`Text "event", `Text "test_case");
-                     (`Text "channel_id", `Int (Int32.to_int_exn data_ch_id));
+                     (`Text "stream_id", `Int (Int32.to_int_exn data_ch_id));
                    ])));
         (* After the client acknowledges the test_case event, set
            server_exited. The test_fn raises Data_exhausted so
@@ -1052,11 +1052,11 @@ let test_server_crash_in_event_loop () =
   (try close client_conn with _ -> ());
   try close peer_conn with _ -> ()
 
-(** Test: send error reply to non-existent channel fails silently (connection.ml
+(** Test: send error reply to non-existent stream fails silently (connection.ml
     line 217). Create a connection using pipes so we can close the write_fd
     independently. Send a non-reply packet from the peer addressed to an
-    unregistered channel. Close the client's write pipe so the error reply
-    fails. The [with _ -> ()] catches the error. *)
+    unregistered stream. Close the client's write pipe so the error reply fails.
+    The [with _ -> ()] catches the error. *)
 let test_send_error_reply_fails_silently () =
   (* Create two pipe pairs: one for client reading, one for client writing *)
   let client_read_fd, peer_write_fd = Unix.pipe () in
@@ -1073,12 +1073,12 @@ let test_send_error_reply_fails_silently () =
   in
   (* Close the devnull fd so writes will fail *)
   Core_unix.close devnull;
-  (* From the peer side, send a non-reply packet to channel 99 (non-existent).
+  (* From the peer side, send a non-reply packet to stream 99 (non-existent).
      The background reader will try to send an error reply, which will fail
      because devnull is closed. *)
   let pkt =
     {
-      Protocol.channel_id = 99l;
+      Protocol.stream_id = 99l;
       message_id = 1l;
       is_reply = false;
       payload = CBOR.Simple.encode (`Map [ (`Text "command", `Text "hello") ]);

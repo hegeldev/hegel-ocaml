@@ -122,7 +122,7 @@ let dummy_data () =
   let conn = Test_helpers.make_connection s1 ~name:"Dummy" () in
   let data =
     Client.
-      { channel = control_channel conn; is_final = false; test_aborted = false }
+      { stream = control_stream conn; is_final = false; test_aborted = false }
   in
   (data, conn, s2)
 
@@ -178,13 +178,13 @@ let test_collection_more_stoptest () =
   in
   let conn = Test_helpers.make_connection s1 ~name:"Client" () in
   let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
-  let t_hs = Thread.create Test_helpers.handshake_via_channel peer_conn in
+  let t_hs = Thread.create Test_helpers.handshake_via_stream peer_conn in
   ignore (send_handshake conn);
   Thread.join t_hs;
-  let ch = new_channel conn ~role:"Data" () in
-  let data = Client.{ channel = ch; is_final = false; test_aborted = false } in
+  let ch = new_stream conn ~role:"Data" () in
+  let data = Client.{ stream = ch; is_final = false; test_aborted = false } in
   let coll = new_collection ~min_size:0 data () in
-  let peer_ch = connect_channel peer_conn (channel_id ch) ~role:"Peer" () in
+  let peer_ch = connect_stream peer_conn (stream_id ch) ~role:"Peer" () in
   let t_peer =
     Thread.create
       (fun () ->
@@ -214,14 +214,14 @@ let test_collection_reject_live () =
   in
   let conn = Test_helpers.make_connection s1 ~name:"Client" () in
   let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
-  let t_hs = Thread.create Test_helpers.handshake_via_channel peer_conn in
+  let t_hs = Thread.create Test_helpers.handshake_via_stream peer_conn in
   ignore (send_handshake conn);
   Thread.join t_hs;
-  let ch = new_channel conn ~role:"Data" () in
-  let data = Client.{ channel = ch; is_final = false; test_aborted = false } in
+  let ch = new_stream conn ~role:"Data" () in
+  let data = Client.{ stream = ch; is_final = false; test_aborted = false } in
   let coll = new_collection ~min_size:0 data () in
-  coll.server_name <- Some (`Text "test_coll");
-  let peer_ch = connect_channel peer_conn (channel_id ch) ~role:"Peer" () in
+  coll.collection_id <- Some (`Int 0);
+  let peer_ch = connect_stream peer_conn (stream_id ch) ~role:"Peer" () in
   let received_cmd = ref "" in
   let t_peer =
     Thread.create

@@ -3,7 +3,7 @@
     This module implements the client-side logic for running property-based
     tests against a Hegel server. It manages:
     - Test lifecycle (run_test, test_case events, mark_complete)
-    - Module-level state for the current data channel (single-threaded)
+    - Module-level state for the current data stream (single-threaded)
     - Helper functions (assume, note, target, generate_from_schema)
     - Origin extraction for error reporting *)
 
@@ -113,12 +113,12 @@ let with_suppress_health_check checks s =
   { s with suppress_health_check = s.suppress_health_check @ checks }
 
 type test_case = {
-  channel : channel;
+  stream : stream;
   is_final : bool;
   mutable test_aborted : bool;
 }
 (** Per-test-case state passed explicitly to the test function. Holds the data
-    channel, final-run flag, and abort state. *)
+    stream, final-run flag, and abort state. *)
 
 (** Domain-local flag to detect nested test cases. *)
 let in_test_context : bool Stdlib.Domain.DLS.key =
@@ -147,10 +147,10 @@ let extract_origin exn =
     a generate command to the server. Raises {!Data_exhausted} if the server
     signals StopTest. *)
 let generate_from_schema schema tc =
-  let channel = tc.channel in
+  let stream = tc.stream in
   try
     pending_get
-      (request channel
+      (request stream
          (`Map [ (`Text "command", `Text "generate"); (`Text "schema", schema) ]))
   with Request_error e when String.equal e.error_type "StopTest" ->
     tc.test_aborted <- true;
@@ -167,10 +167,10 @@ let note tc message = if tc.is_final then eprintf "%s\n%!" message
 (** [target tc value label] sends a target command to guide the search engine
     toward higher values. *)
 let target tc value label =
-  let channel = tc.channel in
+  let stream = tc.stream in
   ignore
     (pending_get
-       (request channel
+       (request stream
           (`Map
              [
                (`Text "command", `Text "target");
@@ -182,10 +182,10 @@ let target tc value label =
 let start_span ?(label = 0) tc =
   if tc.test_aborted then ()
   else begin
-    let channel = tc.channel in
+    let stream = tc.stream in
     ignore
       (pending_get
-         (request channel
+         (request stream
             (`Map
                [
                  (`Text "command", `Text "start_span");
@@ -197,10 +197,10 @@ let start_span ?(label = 0) tc =
 let stop_span ?(discard = false) tc =
   if tc.test_aborted then ()
   else begin
-    let channel = tc.channel in
+    let stream = tc.stream in
     ignore
       (pending_get
-         (request channel
+         (request stream
             (`Map
                [
                  (`Text "command", `Text "stop_span");
@@ -211,9 +211,9 @@ let stop_span ?(discard = false) tc =
 (** Supported protocol version range. *)
 let supported_protocol_lo = 0.1
 
-let supported_protocol_hi = 0.7
+let supported_protocol_hi = 0.8
 
-type client = { connection : connection; control : channel; lock : Mutex.t }
+type client = { connection : connection; control : stream; lock : Mutex.t }
 (** Hegel client for running property-based tests. *)
 
 (** [create_client connection] creates a new client from a connection. The
@@ -230,9 +230,9 @@ let create_client connection =
           connected server is using protocol version %g. Upgrading hegel-ocaml \
           or downgrading hegel-core might help."
          supported_protocol_lo supported_protocol_hi server_version);
-  { connection; control = control_channel connection; lock = Mutex.create () }
+  { connection; control = control_stream connection; lock = Mutex.create () }
 
-(** [run_test_case client channel test_fn ~is_final] runs a single test case.
+(** [run_test_case client stream test_fn ~is_final] runs a single test case.
     Sets up thread-local state and calls [test_fn]. Reports status via
     mark_complete. *)
 type test_outcome =
@@ -241,8 +241,8 @@ type test_outcome =
   | Data_was_exhausted
   | Interesting of { origin_text : string; exn : exn option }
 
-let run_test_case _client channel test_fn ~is_final =
-  let tc = { channel; is_final; test_aborted = false } in
+let run_test_case _client stream test_fn ~is_final =
+  let tc = { stream; is_final; test_aborted = false } in
   Stdlib.Domain.DLS.set in_test_context true;
   let outcome =
     try
@@ -272,7 +272,7 @@ let run_test_case _client channel test_fn ~is_final =
       try
         ignore
           (pending_get
-             (request channel
+             (request stream
                 (`Map
                    [
                      (`Text "command", `Text "mark_complete");
@@ -280,7 +280,7 @@ let run_test_case _client channel test_fn ~is_final =
                      (`Text "origin", origin);
                    ])))
       with Request_error e when String.equal e.error_type "StopTest" -> ()));
-  close_channel channel;
+  close_stream stream;
   match outcome with Interesting { exn = Some e; _ } -> raise e | _ -> ()
 
 (** [run_test client ~settings ?database_key test_fn] runs a property test using
@@ -291,7 +291,7 @@ let run_test_case _client channel test_fn ~is_final =
 let run_test client ~settings ?database_key test_fn =
   if Stdlib.Domain.DLS.get in_test_context then
     failwith "Cannot nest test cases - already inside a test case";
-  let test_channel = new_channel client.connection ~role:"Test" () in
+  let test_stream = new_stream client.connection ~role:"Test" () in
   Mutex.lock client.lock;
   Exn.protect
     ~finally:(fun () -> Mutex.unlock client.lock)
@@ -307,7 +307,7 @@ let run_test client ~settings ?database_key test_fn =
           (`Text "command", `Text "run_test");
           (`Text "test_cases", `Int settings.test_cases);
           (`Text "seed", seed_value);
-          (`Text "channel_id", `Int (Int32.to_int_exn (channel_id test_channel)));
+          (`Text "stream_id", `Int (Int32.to_int_exn (stream_id test_stream)));
           (`Text "database_key", database_key_value);
           (`Text "derandomize", `Bool settings.derandomize);
         ]
@@ -332,21 +332,21 @@ let run_test client ~settings ?database_key test_fn =
       let fields = base_fields @ database_field @ suppress_field in
       ignore (pending_get (request client.control (`Map fields))));
   let receive_and_run_test_case ~is_final =
-    let message_id, message = receive_request test_channel () in
+    let message_id, message = receive_request test_stream () in
     let pairs = Cbor_helpers.extract_dict message in
     let ch_id =
       Int32.of_int_exn
         (Cbor_helpers.extract_int
-           (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "channel_id")))
+           (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "stream_id")))
     in
-    send_response_value test_channel message_id `Null;
-    let test_case_channel =
-      connect_channel client.connection ch_id ~role:"Test Case" ()
+    send_response_value test_stream message_id `Null;
+    let test_case_stream =
+      connect_stream client.connection ch_id ~role:"Test Case" ()
     in
-    run_test_case client test_case_channel test_fn ~is_final
+    run_test_case client test_case_stream test_fn ~is_final
   in
   let rec receive_events () =
-    let message_id, message = receive_request test_channel () in
+    let message_id, message = receive_request test_stream () in
     let pairs = Cbor_helpers.extract_dict message in
     let event =
       Cbor_helpers.extract_string
@@ -356,24 +356,24 @@ let run_test client ~settings ?database_key test_fn =
       let ch_id =
         Int32.of_int_exn
           (Cbor_helpers.extract_int
-             (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "channel_id")))
+             (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "stream_id")))
       in
-      send_response_value test_channel message_id `Null;
-      let test_case_channel =
-        connect_channel client.connection ch_id ~role:"Test Case" ()
+      send_response_value test_stream message_id `Null;
+      let test_case_stream =
+        connect_stream client.connection ch_id ~role:"Test Case" ()
       in
-      run_test_case client test_case_channel test_fn ~is_final:false;
+      run_test_case client test_case_stream test_fn ~is_final:false;
       if server_has_exited client.connection then
         failwith server_crashed_message;
       receive_events ()
     end
     else if String.equal event "test_done" then begin
-      send_response_value test_channel message_id (`Bool true);
+      send_response_value test_stream message_id (`Bool true);
       Cbor_helpers.extract_dict
         (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "results"))
     end
     else begin
-      send_response_raw test_channel message_id
+      send_response_raw test_stream message_id
         (CBOR.Simple.encode
            (`Map
               [

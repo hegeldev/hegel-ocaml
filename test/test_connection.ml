@@ -32,7 +32,7 @@ let test_send_handshake_returns_version () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" () in
   let client_conn = make_connection s2 ~name:"Client" () in
-  let t = Thread.create Test_helpers.handshake_via_channel peer_conn in
+  let t = Thread.create Test_helpers.handshake_via_stream peer_conn in
   let version = send_handshake client_conn in
   Thread.join t;
   Alcotest.(check string) "version" "0.3" version;
@@ -60,7 +60,7 @@ let test_send_handshake_bad_response () =
   let t =
     Thread.create
       (fun () ->
-        let ch = control_channel peer_conn in
+        let ch = control_stream peer_conn in
         peer_conn.connection_state <- Client;
         let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "NotOk")
@@ -78,31 +78,31 @@ let test_send_handshake_bad_response () =
   close client_conn;
   close peer_conn
 
-(* ---- Channel allocation ---- *)
+(* ---- Stream allocation ---- *)
 
-let test_new_channel_before_handshake_raises () =
+let test_new_stream_before_handshake_raises () =
   let s1, _s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
   let raised = ref false in
-  (try ignore (new_channel conn ()) with Failure _ -> raised := true);
+  (try ignore (new_stream conn ()) with Failure _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised;
   close conn
 
-let test_connect_channel_before_handshake_raises () =
+let test_connect_stream_before_handshake_raises () =
   let s1, _s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
   let raised = ref false in
-  (try ignore (connect_channel conn 1l ()) with Failure _ -> raised := true);
+  (try ignore (connect_stream conn 1l ()) with Failure _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised;
   close conn
 
-let test_connect_channel_already_exists_raises () =
+let test_connect_stream_already_exists_raises () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" () in
   let client_conn = make_connection s2 ~name:"Client" () in
   handshake_pair peer_conn client_conn;
   let raised = ref false in
-  (try ignore (connect_channel client_conn 0l ())
+  (try ignore (connect_stream client_conn 0l ())
    with Failure msg ->
      raised := true;
      Alcotest.(check bool)
@@ -112,56 +112,56 @@ let test_connect_channel_already_exists_raises () =
   close client_conn;
   close peer_conn
 
-let test_channel_ids_are_odd_for_client () =
+let test_stream_ids_are_odd_for_client () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" () in
   let client_conn = make_connection s2 ~name:"Client" () in
   handshake_pair peer_conn client_conn;
-  let ch1 = new_channel client_conn () in
-  let ch2 = new_channel client_conn () in
-  let ch3 = new_channel client_conn () in
-  (* Client channels: (1<<1)|1=3, (2<<1)|1=5, (3<<1)|1=7 *)
-  Alcotest.(check int32) "ch1 id" 3l ch1.channel_id;
-  Alcotest.(check int32) "ch2 id" 5l ch2.channel_id;
-  Alcotest.(check int32) "ch3 id" 7l ch3.channel_id;
+  let ch1 = new_stream client_conn () in
+  let ch2 = new_stream client_conn () in
+  let ch3 = new_stream client_conn () in
+  (* Client streams: (1<<1)|1=3, (2<<1)|1=5, (3<<1)|1=7 *)
+  Alcotest.(check int32) "ch1 id" 3l ch1.stream_id;
+  Alcotest.(check int32) "ch2 id" 5l ch2.stream_id;
+  Alcotest.(check int32) "ch3 id" 7l ch3.stream_id;
   (* All odd *)
-  Alcotest.(check bool) "ch1 odd" true Int32.(equal (rem ch1.channel_id 2l) 1l);
-  Alcotest.(check bool) "ch2 odd" true Int32.(equal (rem ch2.channel_id 2l) 1l);
-  Alcotest.(check bool) "ch3 odd" true Int32.(equal (rem ch3.channel_id 2l) 1l);
+  Alcotest.(check bool) "ch1 odd" true Int32.(equal (rem ch1.stream_id 2l) 1l);
+  Alcotest.(check bool) "ch2 odd" true Int32.(equal (rem ch2.stream_id 2l) 1l);
+  Alcotest.(check bool) "ch3 odd" true Int32.(equal (rem ch3.stream_id 2l) 1l);
   close client_conn;
   close peer_conn
 
-(* ---- Channel operations ---- *)
+(* ---- Stream operations ---- *)
 
-let test_channel_close () =
+let test_stream_close () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" () in
   let client_conn = make_connection s2 ~name:"Client" () in
   handshake_pair peer_conn client_conn;
-  let ch = new_channel client_conn ~role:"TestClose" () in
-  close_channel ch;
+  let ch = new_stream client_conn ~role:"TestClose" () in
+  close_stream ch;
   (* Closing again should be a no-op *)
-  close_channel ch;
+  close_stream ch;
   close peer_conn;
   close client_conn
 
-let test_channel_close_when_connection_not_live () =
+let test_stream_close_when_connection_not_live () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" () in
   let client_conn = make_connection s2 ~name:"Client" () in
   handshake_pair peer_conn client_conn;
-  let ch = new_channel client_conn ~role:"TestClose" () in
+  let ch = new_stream client_conn ~role:"TestClose" () in
   close client_conn;
-  close_channel ch;
+  close_stream ch;
   close peer_conn
 
-let test_channel_process_message_when_closed () =
+let test_stream_process_message_when_closed () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" () in
   let client_conn = make_connection s2 ~name:"Client" () in
   handshake_pair peer_conn client_conn;
-  let ch = new_channel client_conn ~role:"TestClosed" () in
-  close_channel ch;
+  let ch = new_stream client_conn ~role:"TestClosed" () in
+  close_stream ch;
   let raised = ref false in
   (try ignore (receive_request ch ~timeout:0.1 ())
    with Failure msg ->
@@ -171,12 +171,12 @@ let test_channel_process_message_when_closed () =
   close peer_conn;
   close client_conn
 
-let test_channel_timeout () =
+let test_stream_timeout () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" () in
   let client_conn = make_connection s2 ~name:"Client" () in
   handshake_pair peer_conn client_conn;
-  let ch = new_channel client_conn ~role:"TestTimeout" () in
+  let ch = new_stream client_conn ~role:"TestTimeout" () in
   let raised = ref false in
   (try ignore (receive_request ch ~timeout:0.1 ())
    with Failure msg ->
@@ -186,74 +186,72 @@ let test_channel_timeout () =
   close peer_conn;
   close client_conn
 
-(* ---- Channel repr and name ---- *)
+(* ---- Stream repr and name ---- *)
 
-let test_channel_repr () =
+let test_stream_repr () =
   let s1, _s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
-  let ch = control_channel conn in
-  let r = channel_repr ch in
+  let ch = control_stream conn in
+  let r = stream_repr ch in
   Alcotest.(check bool) "Control in repr" true (contains_substring r "Control");
   close conn
 
-let test_channel_repr_no_role () =
+let test_stream_repr_no_role () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Test" () in
   let client_conn = make_connection s2 ~name:"Test2" () in
   handshake_pair peer_conn client_conn;
-  let ch = new_channel client_conn () in
-  let r = channel_repr ch in
-  Alcotest.(check bool)
-    "Channel( in repr" true
-    (contains_substring r "Channel(");
+  let ch = new_stream client_conn () in
+  let r = stream_repr ch in
+  Alcotest.(check bool) "Stream( in repr" true (contains_substring r "Stream(");
   Alcotest.(check bool)
     "no role= in repr" true
     (not (contains_substring r "role="));
   close peer_conn;
   close client_conn
 
-let test_channel_repr_with_role () =
+let test_stream_repr_with_role () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Test" () in
   let client_conn = make_connection s2 ~name:"Test2" () in
   handshake_pair peer_conn client_conn;
-  let ch = new_channel client_conn ~role:"TestRole" () in
-  let r = channel_repr ch in
+  let ch = new_stream client_conn ~role:"TestRole" () in
+  let r = stream_repr ch in
   Alcotest.(check bool)
     "role=TestRole in repr" true
     (contains_substring r "role=TestRole");
   close peer_conn;
   close client_conn
 
-let test_channel_name_no_role_no_conn_name () =
+let test_stream_name_no_role_no_conn_name () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 () in
   let client_conn = make_connection s2 () in
   handshake_pair peer_conn client_conn;
-  let ch = new_channel client_conn () in
-  let expected = Printf.sprintf "Channel %ld" ch.channel_id in
-  Alcotest.(check string) "name" expected (channel_name ch);
+  let ch = new_stream client_conn () in
+  let expected = Printf.sprintf "Stream %ld" ch.stream_id in
+  Alcotest.(check string) "name" expected (stream_name ch);
   close peer_conn;
   close client_conn
 
-let test_channel_name_with_role_no_conn_name () =
+let test_stream_name_with_role_no_conn_name () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 () in
   let client_conn = make_connection s2 () in
   handshake_pair peer_conn client_conn;
-  let ch = new_channel client_conn ~role:"MyRole" () in
-  let n = channel_name ch in
+  let ch = new_stream client_conn ~role:"MyRole" () in
+  let n = stream_name ch in
   Alcotest.(check bool) "has MyRole" true (contains_substring n "MyRole");
   close peer_conn;
   close client_conn
 
-let test_channel_name_no_role_with_conn_name () =
+let test_stream_name_no_role_with_conn_name () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Srv" () in
   let client_conn = make_connection s2 ~name:"Cli" () in
   handshake_pair peer_conn client_conn;
-  let ch = new_channel client_conn () in
-  let n = channel_name ch in
+  let ch = new_stream client_conn () in
+  let n = stream_name ch in
   Alcotest.(check bool) "has Cli" true (contains_substring n "Cli");
   Alcotest.(check bool)
     "no parens (no role)" true
@@ -261,11 +259,11 @@ let test_channel_name_no_role_with_conn_name () =
   close peer_conn;
   close client_conn
 
-let test_channel_name_control () =
+let test_stream_name_control () =
   let s1, _s2 = make_socket_pair () in
   let conn = make_connection s1 () in
-  let ch = control_channel conn in
-  let n = channel_name ch in
+  let ch = control_stream conn in
+  let n = stream_name ch in
   Alcotest.(check bool) "has Control" true (contains_substring n "Control");
   close conn
 
@@ -279,13 +277,13 @@ let test_request_response () =
   let t =
     Thread.create
       (fun () ->
-        (* Register the handler channel before the handshake response so
+        (* Register the handler stream before the handshake response so
            the background reader can route the client's first request.
-           Without this, there's a race: the client can send on channel 3
-           before new_channel registers it on the peer. *)
+           Without this, there's a race: the client can send on stream 3
+           before new_stream registers it on the peer. *)
         peer_conn.connection_state <- Client;
-        let ch = new_channel peer_conn ~role:"Handler" () in
-        Test_helpers.handshake_via_channel peer_conn;
+        let ch = new_stream peer_conn ~role:"Handler" () in
+        Test_helpers.handshake_via_stream peer_conn;
         (try
            while true do
              let msg_id, message = receive_request ch () in
@@ -309,7 +307,7 @@ let test_request_response () =
       ()
   in
   ignore (send_handshake client_conn);
-  let send_ch = connect_channel client_conn 3l () in
+  let send_ch = connect_stream client_conn 3l () in
   let result =
     pending_get
       (request send_ch (`Map [ (`Text "x", `Int 2); (`Text "y", `Int 3) ]))
@@ -332,11 +330,11 @@ let test_receive_response () =
   let t =
     Thread.create
       (fun () ->
-        (* Register channel before handshake to avoid race (see
+        (* Register stream before handshake to avoid race (see
            test_request_response comment for details). *)
         peer_conn.connection_state <- Client;
-        let ch = new_channel peer_conn ~role:"RR" () in
-        Test_helpers.handshake_via_channel peer_conn;
+        let ch = new_stream peer_conn ~role:"RR" () in
+        Test_helpers.handshake_via_stream peer_conn;
         try
           while true do
             let msg_id, _message = receive_request ch () in
@@ -346,7 +344,7 @@ let test_receive_response () =
       ()
   in
   ignore (send_handshake client_conn);
-  let ch = connect_channel client_conn 3l () in
+  let ch = connect_stream client_conn 3l () in
   let msg_id = send_request ch (`Map [ (`Text "test", `Bool true) ]) in
   let result = receive_response ch msg_id () in
   Alcotest.(check int) "result" 42 (Cbor_helpers.extract_int result);
@@ -364,8 +362,8 @@ let test_pending_request_caching () =
     Thread.create
       (fun () ->
         peer_conn.connection_state <- Client;
-        let ch = new_channel peer_conn ~role:"PR" () in
-        Test_helpers.handshake_via_channel peer_conn;
+        let ch = new_stream peer_conn ~role:"PR" () in
+        Test_helpers.handshake_via_stream peer_conn;
         try
           while true do
             let msg_id, message = receive_request ch () in
@@ -381,7 +379,7 @@ let test_pending_request_caching () =
       ()
   in
   ignore (send_handshake client_conn);
-  let ch = connect_channel client_conn 3l () in
+  let ch = connect_stream client_conn 3l () in
   let pending = request ch (`Map [ (`Text "value", `Int 21) ]) in
   let r1 = pending_get pending in
   Alcotest.(check int) "first get" 42 (Cbor_helpers.extract_int r1);
@@ -431,18 +429,13 @@ let test_result_or_error_raises () =
 let test_duplicate_response_error () =
   let s1, _s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
-  let ch = control_channel conn in
+  let ch = control_stream conn in
   (* Put a response in the responses dict directly *)
   Hashtbl.set ch.responses ~key:42l ~data:"first";
   (* Now try to process another reply with same ID *)
   Queue.enqueue ch.inbox.queue
     (Pkt
-       {
-         channel_id = 0l;
-         message_id = 42l;
-         is_reply = true;
-         payload = "second";
-       });
+       { stream_id = 0l; message_id = 42l; is_reply = true; payload = "second" });
   let raised = ref false in
   (try process_one_message ch ~timeout:0.1 ()
    with Failure msg ->
@@ -458,7 +451,7 @@ let test_duplicate_response_error () =
 let test_shutdown_in_inbox () =
   let s1, _s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
-  let ch = control_channel conn in
+  let ch = control_stream conn in
   Queue.enqueue ch.inbox.queue Shutdown;
   let raised = ref false in
   (try ignore (receive_request ch ~timeout:0.1 ())
@@ -470,48 +463,48 @@ let test_shutdown_in_inbox () =
   Alcotest.(check bool) "raised" true !raised;
   close conn
 
-(* ---- Message to nonexistent channel ---- *)
+(* ---- Message to nonexistent stream ---- *)
 
-let test_message_to_nonexistent_channel () =
+let test_message_to_nonexistent_stream () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" () in
   let client_conn = make_connection s2 ~name:"Client" () in
   handshake_pair peer_conn client_conn;
-  (* Send a request to a channel that doesn't exist on the peer *)
+  (* Send a request to a stream that doesn't exist on the peer *)
   send_packet client_conn
     {
-      channel_id = 999l;
+      stream_id = 999l;
       message_id = 1l;
       is_reply = false;
       payload = CBOR.Simple.encode (`Map [ (`Text "command", `Text "test") ]);
     };
-  (* Also send a control channel message so the peer processes packets *)
-  ignore (send_request_raw (control_channel client_conn) "ping");
-  ignore (receive_request_raw (control_channel peer_conn) ());
+  (* Also send a control stream message so the peer processes packets *)
+  ignore (send_request_raw (control_stream client_conn) "ping");
+  ignore (receive_request_raw (control_stream peer_conn) ());
   close peer_conn;
   close client_conn
 
-(* ---- Message to dead channel ---- *)
+(* ---- Message to dead stream ---- *)
 
-let test_message_to_dead_channel () =
+let test_message_to_dead_stream () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" () in
   let client_conn = make_connection s2 ~name:"Client" () in
   handshake_pair peer_conn client_conn;
-  let ch_client = new_channel client_conn () in
-  let ch_peer = connect_channel peer_conn ch_client.channel_id () in
-  close_channel ch_client;
+  let ch_client = new_stream client_conn () in
+  let ch_peer = connect_stream peer_conn ch_client.stream_id () in
+  close_stream ch_client;
   (* Give time for close to be received *)
   Caml_unix.sleepf 0.1;
-  (* Now send a request to the dead channel from peer *)
+  (* Now send a request to the dead stream from peer *)
   ignore (send_request ch_peer (`Map [ (`Text "test", `Text "data") ]));
   Caml_unix.sleepf 0.1;
   close peer_conn;
   close client_conn
 
-(* ---- Close channel creates dead channel in debug mode ---- *)
+(* ---- Close stream creates dead stream in debug mode ---- *)
 
-let test_close_channel_creates_dead_channel () =
+let test_close_stream_creates_dead_stream () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" ~debug:true () in
   let client_conn = make_connection s2 ~name:"Client" ~debug:true () in
@@ -519,46 +512,46 @@ let test_close_channel_creates_dead_channel () =
   let t =
     Thread.create
       (fun () ->
-        Test_helpers.handshake_via_channel peer_conn;
-        let ch = control_channel peer_conn in
+        Test_helpers.handshake_via_stream peer_conn;
+        let ch = control_stream peer_conn in
         let msg_id, _ = receive_request ch () in
         send_response_value ch msg_id (`Text "Ok");
         peer_done := true)
       ()
   in
   ignore (send_handshake client_conn);
-  let client_ch = new_channel client_conn ~role:"ToClose" () in
-  close_channel client_ch;
-  let result = pending_get (request (control_channel client_conn) (`Map [])) in
+  let client_ch = new_stream client_conn ~role:"ToClose" () in
+  close_stream client_ch;
+  let result = pending_get (request (control_stream client_conn) (`Map [])) in
   ignore result;
   Thread.join t;
-  (* The channel should be dead on peer side *)
-  (match Hashtbl.find peer_conn.channels client_ch.channel_id with
+  (* The stream should be dead on peer side *)
+  (match Hashtbl.find peer_conn.streams client_ch.stream_id with
   | Some (Dead _) -> Alcotest.(check bool) "is dead" true true
-  | Some (Live _) -> Alcotest.fail "expected dead channel"
-  | None -> Alcotest.fail "expected channel entry");
+  | Some (Live _) -> Alcotest.fail "expected dead stream"
+  | None -> Alcotest.fail "expected stream entry");
   close client_conn;
   close peer_conn
 
-let test_close_channel_creates_dead_channel_with_connect () =
+let test_close_stream_creates_dead_stream_with_connect () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" ~debug:true () in
   let client_conn = make_connection s2 ~name:"Client" ~debug:true () in
   let t =
     Thread.create
       (fun () ->
-        Test_helpers.handshake_via_channel peer_conn;
-        let ch = control_channel peer_conn in
+        Test_helpers.handshake_via_stream peer_conn;
+        let ch = control_stream peer_conn in
         let msg_id, msg = receive_request ch () in
-        let channel_id =
+        let stream_id =
           Cbor_helpers.extract_int
             (List.Assoc.find_exn
                (Cbor_helpers.extract_dict msg)
-               ~equal:Poly.( = ) (`Text "channel"))
+               ~equal:Poly.( = ) (`Text "stream"))
         in
         ignore
-          (connect_channel peer_conn
-             (Int32.of_int_exn channel_id)
+          (connect_stream peer_conn
+             (Int32.of_int_exn stream_id)
              ~role:"Hello" ());
         send_response_value ch msg_id (`Text "Ok");
         let msg_id2, _ = receive_request ch () in
@@ -566,27 +559,26 @@ let test_close_channel_creates_dead_channel_with_connect () =
       ()
   in
   ignore (send_handshake client_conn);
-  let client_ch = new_channel client_conn ~role:"ToClose" () in
+  let client_ch = new_stream client_conn ~role:"ToClose" () in
   let r1 =
     pending_get
       (request
-         (control_channel client_conn)
-         (`Map
-            [ (`Text "channel", `Int (Int32.to_int_exn client_ch.channel_id)) ]))
+         (control_stream client_conn)
+         (`Map [ (`Text "stream", `Int (Int32.to_int_exn client_ch.stream_id)) ]))
   in
   ignore r1;
-  close_channel client_ch;
-  let r2 = pending_get (request (control_channel client_conn) (`Map [])) in
+  close_stream client_ch;
+  let r2 = pending_get (request (control_stream client_conn) (`Map [])) in
   ignore r2;
   Thread.join t;
-  (match Hashtbl.find peer_conn.channels client_ch.channel_id with
+  (match Hashtbl.find peer_conn.streams client_ch.stream_id with
   | Some (Dead d) ->
       Alcotest.(check bool) "is dead" true true;
       Alcotest.(check bool)
         "name has Hello" true
         (contains_substring d.name "Hello")
-  | Some (Live _) -> Alcotest.fail "expected dead channel"
-  | None -> Alcotest.fail "expected channel entry");
+  | Some (Live _) -> Alcotest.fail "expected dead stream"
+  | None -> Alcotest.fail "expected stream entry");
   close client_conn;
   close peer_conn
 
@@ -597,10 +589,8 @@ let test_reader_loop_clean_exit () =
   let peer_conn = make_connection s1 ~name:"Peer" () in
   let client_conn = make_connection s2 ~name:"Client" () in
   handshake_pair peer_conn client_conn;
-  let ch_client = new_channel client_conn ~role:"Test" () in
-  let _ch_peer =
-    connect_channel peer_conn ch_client.channel_id ~role:"Test" ()
-  in
+  let ch_client = new_stream client_conn ~role:"Test" () in
+  let _ch_peer = connect_stream peer_conn ch_client.stream_id ~role:"Test" () in
   (* Send a packet from client *)
   ignore (send_request ch_client (`Map [ (`Text "test", `Text "data") ]));
   (* Background reader handles message dispatch automatically *)
@@ -613,9 +603,9 @@ let test_reader_loop_clean_exit () =
 let test_process_reply_packet () =
   let s1, _s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
-  let ch = control_channel conn in
+  let ch = control_stream conn in
   Queue.enqueue ch.inbox.queue
-    (Pkt { channel_id = 0l; message_id = 7l; is_reply = true; payload = "ok" });
+    (Pkt { stream_id = 0l; message_id = 7l; is_reply = true; payload = "ok" });
   process_one_message ch ~timeout:0.1 ();
   let resp = receive_response_raw ch 7l ~timeout:0.1 () in
   Alcotest.(check string) "response" "ok" resp;
@@ -624,9 +614,9 @@ let test_process_reply_packet () =
 let test_process_request_packet () =
   let s1, _s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
-  let ch = control_channel conn in
+  let ch = control_stream conn in
   Queue.enqueue ch.inbox.queue
-    (Pkt { channel_id = 0l; message_id = 3l; is_reply = false; payload = "req" });
+    (Pkt { stream_id = 0l; message_id = 3l; is_reply = false; payload = "req" });
   let msg_id, payload = receive_request_raw ch ~timeout:0.1 () in
   Alcotest.(check int32) "msg_id" 3l msg_id;
   Alcotest.(check string) "payload" "req" payload;
@@ -638,49 +628,49 @@ let test_debug_mode_recv () =
   let s1, s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"DebugTest" ~debug:true () in
   write_packet s2
-    { channel_id = 0l; message_id = 1l; is_reply = false; payload = "hello" };
+    { stream_id = 0l; message_id = 1l; is_reply = false; payload = "hello" };
   Caml_unix.sleepf 0.1;
   close conn
 
-let test_debug_close_channel_recv () =
+let test_debug_close_stream_recv () =
   let s1, s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"DebugClose" ~debug:true () in
-  (* Send a close channel packet for an unknown channel *)
+  (* Send a close stream packet for an unknown stream *)
   write_packet s2
     {
-      channel_id = 999l;
-      message_id = close_channel_message_id;
+      stream_id = 999l;
+      message_id = close_stream_message_id;
       is_reply = false;
-      payload = close_channel_payload;
+      payload = close_stream_payload;
     };
   (* Background reader processes the packet automatically *)
   Caml_unix.sleepf 0.1;
-  (* Check it created a dead channel *)
-  (match Hashtbl.find conn.channels 999l with
+  (* Check it created a dead stream *)
+  (match Hashtbl.find conn.streams 999l with
   | Some (Dead d) ->
-      Alcotest.(check bool) "dead channel" true true;
+      Alcotest.(check bool) "dead stream" true true;
       Alcotest.(check string) "name" "Never opened!" d.name
-  | _ -> Alcotest.fail "expected dead channel for unknown close");
+  | _ -> Alcotest.fail "expected dead stream for unknown close");
   close conn
 
-(* ---- Message to reply on nonexistent channel ---- *)
+(* ---- Message to reply on nonexistent stream ---- *)
 
 let test_reply_to_nonexistent_ignored () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" () in
   let client_conn = make_connection s2 ~name:"Client" () in
   handshake_pair peer_conn client_conn;
-  (* Send a reply to a channel that doesn't exist — should not send back error *)
+  (* Send a reply to a stream that doesn't exist — should not send back error *)
   send_packet client_conn
     {
-      channel_id = 999l;
+      stream_id = 999l;
       message_id = 1l;
       is_reply = true;
       payload = "reply_data";
     };
   (* Send another message on control so we can process *)
-  ignore (send_request_raw (control_channel client_conn) "ping");
-  ignore (receive_request_raw (control_channel peer_conn) ());
+  ignore (send_request_raw (control_stream client_conn) "ping");
+  ignore (receive_request_raw (control_stream peer_conn) ());
   close peer_conn;
   close client_conn
 
@@ -691,7 +681,7 @@ let test_message_id_increments () =
   let peer_conn = make_connection s1 ~name:"Peer" () in
   let client_conn = make_connection s2 ~name:"Client" () in
   handshake_pair peer_conn client_conn;
-  let ch = new_channel client_conn ~role:"Test" () in
+  let ch = new_stream client_conn ~role:"Test" () in
   let id1 = send_request_raw ch "a" in
   let id2 = send_request_raw ch "b" in
   let id3 = send_request_raw ch "c" in
@@ -728,73 +718,73 @@ let test_result_or_error_neither () =
 
 (* ---- entry_name ---- *)
 
-let test_entry_name_live_channel () =
+let test_entry_name_live_stream () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" () in
   let client_conn = make_connection s2 ~name:"Client" () in
   handshake_pair peer_conn client_conn;
-  let ch = new_channel client_conn ~role:"LiveRole" () in
-  let name = entry_name client_conn ch.channel_id in
+  let ch = new_stream client_conn ~role:"LiveRole" () in
+  let name = entry_name client_conn ch.stream_id in
   Alcotest.(check bool) "has LiveRole" true (contains_substring name "LiveRole");
   close client_conn;
   close peer_conn
 
-let test_entry_name_dead_channel () =
+let test_entry_name_dead_stream () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" ~debug:true () in
   let client_conn = make_connection s2 ~name:"Client" ~debug:true () in
   handshake_pair peer_conn client_conn;
-  let ch = new_channel client_conn ~role:"ForDead" () in
-  close_channel ch;
-  (* In debug mode, close_channel replaces with Dead entry *)
-  let name = entry_name client_conn ch.channel_id in
+  let ch = new_stream client_conn ~role:"ForDead" () in
+  close_stream ch;
+  (* In debug mode, close_stream replaces with Dead entry *)
+  let name = entry_name client_conn ch.stream_id in
   Alcotest.(check bool) "has ForDead" true (contains_substring name "ForDead");
   close client_conn;
   close peer_conn
 
-(* ---- Debug close for already-dead channel ---- *)
+(* ---- Debug close for already-dead stream ---- *)
 
-let test_debug_close_already_dead_channel () =
+let test_debug_close_already_dead_stream () =
   let s1, s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Server" ~debug:true () in
-  (* Manually insert a Dead entry for channel 50 *)
-  Hashtbl.set conn.channels ~key:50l
-    ~data:(Dead { channel_id = 50l; name = "OldDead" });
-  (* Send a close packet for channel 50 from the other end *)
+  (* Manually insert a Dead entry for stream 50 *)
+  Hashtbl.set conn.streams ~key:50l
+    ~data:(Dead { stream_id = 50l; name = "OldDead" });
+  (* Send a close packet for stream 50 from the other end *)
   write_packet s2
     {
-      channel_id = 50l;
-      message_id = close_channel_message_id;
+      stream_id = 50l;
+      message_id = close_stream_message_id;
       is_reply = false;
-      payload = close_channel_payload;
+      payload = close_stream_payload;
     };
   (* Background reader processes the packets automatically *)
   Caml_unix.sleepf 0.1;
-  (match Hashtbl.find conn.channels 50l with
+  (match Hashtbl.find conn.streams 50l with
   | Some (Dead d) ->
       Alcotest.(check string) "dead name preserved" "OldDead" d.name
   | _ -> Alcotest.fail "expected Dead entry with preserved name");
   close conn;
   Unix.close s2
 
-(* ---- Debug close for existing live channel ---- *)
+(* ---- Debug close for existing live stream ---- *)
 
-let test_debug_close_existing_live_channel () =
+let test_debug_close_existing_live_stream () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" ~debug:true () in
   let client_conn = make_connection s2 ~name:"Client" ~debug:true () in
   handshake_pair peer_conn client_conn;
-  let ch_client = new_channel client_conn ~role:"LiveCh" () in
+  let ch_client = new_stream client_conn ~role:"LiveCh" () in
   let _ch_peer =
-    connect_channel peer_conn ch_client.channel_id ~role:"LiveChSrv" ()
+    connect_stream peer_conn ch_client.stream_id ~role:"LiveChSrv" ()
   in
-  (* Client closes the channel, which sends a close packet *)
-  close_channel ch_client;
+  (* Client closes the stream, which sends a close packet *)
+  close_stream ch_client;
   (* Background reader processes the close packet in debug mode *)
-  let ch_id = ch_client.channel_id in
+  let ch_id = ch_client.stream_id in
   Caml_unix.sleepf 0.1;
-  (* Check the dead entry has the Live channel's name *)
-  (match Hashtbl.find peer_conn.channels ch_id with
+  (* Check the dead entry has the Live stream's name *)
+  (match Hashtbl.find peer_conn.streams ch_id with
   | Some (Dead d) ->
       Alcotest.(check bool)
         "dead name has LiveChSrv" true
@@ -803,29 +793,29 @@ let test_debug_close_existing_live_channel () =
   close client_conn;
   close peer_conn
 
-(* ---- Message to dead channel in reader ---- *)
+(* ---- Message to dead stream in reader ---- *)
 
-let test_message_to_dead_channel_in_reader () =
+let test_message_to_dead_stream_in_reader () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" ~debug:true () in
   let client_conn = make_connection s2 ~name:"Client" ~debug:true () in
   handshake_pair peer_conn client_conn;
-  let ch_client = new_channel client_conn ~role:"WillDie" () in
-  let ch_id = ch_client.channel_id in
+  let ch_client = new_stream client_conn ~role:"WillDie" () in
+  let ch_id = ch_client.stream_id in
   (* Manually insert a Dead entry on peer side *)
-  Hashtbl.set peer_conn.channels ~key:ch_id
-    ~data:(Dead { channel_id = ch_id; name = "DeadCh" });
-  (* Send a non-reply packet to the dead channel from client side *)
+  Hashtbl.set peer_conn.streams ~key:ch_id
+    ~data:(Dead { stream_id = ch_id; name = "DeadCh" });
+  (* Send a non-reply packet to the dead stream from client side *)
   send_packet client_conn
     {
-      channel_id = ch_id;
+      stream_id = ch_id;
       message_id = 1l;
       is_reply = false;
       payload = CBOR.Simple.encode (`Map [ (`Text "test", `Text "data") ]);
     };
   (* Also send something to control so we can synchronize *)
-  ignore (send_request_raw (control_channel client_conn) "sync");
-  ignore (receive_request_raw (control_channel peer_conn) ());
+  ignore (send_request_raw (control_stream client_conn) "sync");
+  ignore (receive_request_raw (control_stream peer_conn) ());
   close peer_conn;
   close client_conn
 
@@ -839,17 +829,17 @@ let test_close_with_shutdown_error () =
   Alcotest.(check bool) "not live" false (is_live conn);
   Unix.close w
 
-(* ---- close_channel when not registered ---- *)
+(* ---- close_stream when not registered ---- *)
 
-let test_close_channel_not_registered () =
+let test_close_stream_not_registered () =
   let s1, s2 = make_socket_pair () in
   let peer_conn = make_connection s1 ~name:"Peer" ~debug:true () in
   let client_conn = make_connection s2 ~name:"Client" ~debug:true () in
   handshake_pair peer_conn client_conn;
-  let ch = new_channel client_conn ~role:"Unreg" () in
-  (* Remove the channel from the hashtable before closing *)
-  Hashtbl.remove client_conn.channels ch.channel_id;
-  close_channel ch;
+  let ch = new_stream client_conn ~role:"Unreg" () in
+  (* Remove the stream from the hashtable before closing *)
+  Hashtbl.remove client_conn.streams ch.stream_id;
+  close_stream ch;
   Alcotest.(check bool) "is closed" true ch.closed;
   close client_conn;
   close peer_conn
@@ -863,7 +853,7 @@ let test_send_handshake_short_response () =
   let t =
     Thread.create
       (fun () ->
-        let ch = control_channel peer_conn in
+        let ch = control_stream peer_conn in
         peer_conn.connection_state <- Client;
         let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "Hi")
@@ -890,7 +880,7 @@ let test_send_handshake_wrong_prefix () =
   let t =
     Thread.create
       (fun () ->
-        let ch = control_channel peer_conn in
+        let ch = control_stream peer_conn in
         peer_conn.connection_state <- Client;
         let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "WrongPrefix/1.0")
@@ -913,24 +903,23 @@ let test_send_handshake_wrong_prefix () =
 let test_process_one_message_default_timeout () =
   let s1, _s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
-  let ch = control_channel conn in
+  let ch = control_stream conn in
   Queue.enqueue ch.inbox.queue
-    (Pkt
-       { channel_id = 0l; message_id = 1l; is_reply = false; payload = "test" });
+    (Pkt { stream_id = 0l; message_id = 1l; is_reply = false; payload = "test" });
   (* Call process_one_message without ~timeout to hit the default *)
   process_one_message ch ();
   let pkt = Queue.dequeue_exn ch.requests in
   Alcotest.(check string) "payload" "test" pkt.payload;
   close conn
 
-(** Test: control_channel raises when channel 0 is not Live. *)
-let test_control_channel_failure () =
+(** Test: control_stream raises when stream 0 is not Live. *)
+let test_control_stream_failure () =
   let s1, s2 = make_socket_pair () in
   let conn = make_connection s1 ~name:"Test" () in
-  Hashtbl.set conn.channels ~key:0l
-    ~data:(Dead { channel_id = 0l; name = "Control" });
+  Hashtbl.set conn.streams ~key:0l
+    ~data:(Dead { stream_id = 0l; name = "Control" });
   let raised = ref false in
-  (try ignore (control_channel conn) with Failure _ -> raised := true);
+  (try ignore (control_stream conn) with Failure _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised;
   close conn;
   Unix.close s2
@@ -948,34 +937,33 @@ let tests =
       test_double_handshake_send_raises;
     Alcotest.test_case "bad handshake response" `Quick
       test_send_handshake_bad_response;
-    (* Channel allocation *)
-    Alcotest.test_case "new_channel before handshake raises" `Quick
-      test_new_channel_before_handshake_raises;
-    Alcotest.test_case "connect_channel before handshake raises" `Quick
-      test_connect_channel_before_handshake_raises;
-    Alcotest.test_case "connect_channel already exists raises" `Quick
-      test_connect_channel_already_exists_raises;
-    Alcotest.test_case "client channel IDs are odd" `Quick
-      test_channel_ids_are_odd_for_client;
-    (* Channel operations *)
-    Alcotest.test_case "channel close" `Quick test_channel_close;
-    Alcotest.test_case "channel close when conn not live" `Quick
-      test_channel_close_when_connection_not_live;
+    (* Stream allocation *)
+    Alcotest.test_case "new_stream before handshake raises" `Quick
+      test_new_stream_before_handshake_raises;
+    Alcotest.test_case "connect_stream before handshake raises" `Quick
+      test_connect_stream_before_handshake_raises;
+    Alcotest.test_case "connect_stream already exists raises" `Quick
+      test_connect_stream_already_exists_raises;
+    Alcotest.test_case "client stream IDs are odd" `Quick
+      test_stream_ids_are_odd_for_client;
+    (* Stream operations *)
+    Alcotest.test_case "stream close" `Quick test_stream_close;
+    Alcotest.test_case "stream close when conn not live" `Quick
+      test_stream_close_when_connection_not_live;
     Alcotest.test_case "process message when closed" `Quick
-      test_channel_process_message_when_closed;
-    Alcotest.test_case "channel timeout" `Quick test_channel_timeout;
-    (* Channel repr/name *)
-    Alcotest.test_case "channel repr" `Quick test_channel_repr;
-    Alcotest.test_case "channel repr no role" `Quick test_channel_repr_no_role;
-    Alcotest.test_case "channel repr with role" `Quick
-      test_channel_repr_with_role;
-    Alcotest.test_case "channel name no role no conn name" `Quick
-      test_channel_name_no_role_no_conn_name;
-    Alcotest.test_case "channel name with role no conn name" `Quick
-      test_channel_name_with_role_no_conn_name;
-    Alcotest.test_case "channel name no role with conn name" `Quick
-      test_channel_name_no_role_with_conn_name;
-    Alcotest.test_case "channel name control" `Quick test_channel_name_control;
+      test_stream_process_message_when_closed;
+    Alcotest.test_case "stream timeout" `Quick test_stream_timeout;
+    (* Stream repr/name *)
+    Alcotest.test_case "stream repr" `Quick test_stream_repr;
+    Alcotest.test_case "stream repr no role" `Quick test_stream_repr_no_role;
+    Alcotest.test_case "stream repr with role" `Quick test_stream_repr_with_role;
+    Alcotest.test_case "stream name no role no conn name" `Quick
+      test_stream_name_no_role_no_conn_name;
+    Alcotest.test_case "stream name with role no conn name" `Quick
+      test_stream_name_with_role_no_conn_name;
+    Alcotest.test_case "stream name no role with conn name" `Quick
+      test_stream_name_no_role_with_conn_name;
+    Alcotest.test_case "stream name control" `Quick test_stream_name_control;
     (* Request/response *)
     Alcotest.test_case "request response" `Quick test_request_response;
     Alcotest.test_case "receive_response" `Quick test_receive_response;
@@ -992,15 +980,15 @@ let tests =
       test_duplicate_response_error;
     (* Shutdown *)
     Alcotest.test_case "shutdown in inbox" `Quick test_shutdown_in_inbox;
-    (* Nonexistent/dead channel *)
-    Alcotest.test_case "message to nonexistent channel" `Quick
-      test_message_to_nonexistent_channel;
-    Alcotest.test_case "message to dead channel" `Quick
-      test_message_to_dead_channel;
-    Alcotest.test_case "close creates dead channel" `Quick
-      test_close_channel_creates_dead_channel;
-    Alcotest.test_case "close creates dead channel with connect" `Quick
-      test_close_channel_creates_dead_channel_with_connect;
+    (* Nonexistent/dead stream *)
+    Alcotest.test_case "message to nonexistent stream" `Quick
+      test_message_to_nonexistent_stream;
+    Alcotest.test_case "message to dead stream" `Quick
+      test_message_to_dead_stream;
+    Alcotest.test_case "close creates dead stream" `Quick
+      test_close_stream_creates_dead_stream;
+    Alcotest.test_case "close creates dead stream with connect" `Quick
+      test_close_stream_creates_dead_stream_with_connect;
     (* Reader loop *)
     Alcotest.test_case "reader loop clean exit" `Quick
       test_reader_loop_clean_exit;
@@ -1010,8 +998,8 @@ let tests =
       test_process_request_packet;
     (* Debug mode *)
     Alcotest.test_case "debug mode recv" `Quick test_debug_mode_recv;
-    Alcotest.test_case "debug close channel recv" `Quick
-      test_debug_close_channel_recv;
+    Alcotest.test_case "debug close stream recv" `Quick
+      test_debug_close_stream_recv;
     (* Reply to nonexistent *)
     Alcotest.test_case "reply to nonexistent ignored" `Quick
       test_reply_to_nonexistent_ignored;
@@ -1023,25 +1011,25 @@ let tests =
     Alcotest.test_case "neither result nor error" `Quick
       test_result_or_error_neither;
     (* entry_name *)
-    Alcotest.test_case "entry_name live channel" `Quick
-      test_entry_name_live_channel;
-    Alcotest.test_case "entry_name dead channel" `Quick
-      test_entry_name_dead_channel;
-    (* Debug close for already-dead channel *)
-    Alcotest.test_case "debug close already dead channel" `Quick
-      test_debug_close_already_dead_channel;
-    (* Debug close existing live channel *)
-    Alcotest.test_case "debug close existing live channel" `Quick
-      test_debug_close_existing_live_channel;
-    (* Message to dead channel in reader *)
-    Alcotest.test_case "message to dead channel in reader" `Quick
-      test_message_to_dead_channel_in_reader;
+    Alcotest.test_case "entry_name live stream" `Quick
+      test_entry_name_live_stream;
+    Alcotest.test_case "entry_name dead stream" `Quick
+      test_entry_name_dead_stream;
+    (* Debug close for already-dead stream *)
+    Alcotest.test_case "debug close already dead stream" `Quick
+      test_debug_close_already_dead_stream;
+    (* Debug close existing live stream *)
+    Alcotest.test_case "debug close existing live stream" `Quick
+      test_debug_close_existing_live_stream;
+    (* Message to dead stream in reader *)
+    Alcotest.test_case "message to dead stream in reader" `Quick
+      test_message_to_dead_stream_in_reader;
     (* Close with shutdown error *)
     Alcotest.test_case "close with shutdown error" `Quick
       test_close_with_shutdown_error;
-    (* close_channel not registered *)
-    Alcotest.test_case "close_channel not registered" `Quick
-      test_close_channel_not_registered;
+    (* close_stream not registered *)
+    Alcotest.test_case "close_stream not registered" `Quick
+      test_close_stream_not_registered;
     (* Short handshake response *)
     Alcotest.test_case "short handshake response" `Quick
       test_send_handshake_short_response;
@@ -1050,7 +1038,7 @@ let tests =
     (* process_one_message default timeout *)
     Alcotest.test_case "process_one_message default timeout" `Quick
       test_process_one_message_default_timeout;
-    (* control_channel failure *)
-    Alcotest.test_case "control_channel failure" `Quick
-      test_control_channel_failure;
+    (* control_stream failure *)
+    Alcotest.test_case "control_stream failure" `Quick
+      test_control_stream_failure;
   ]

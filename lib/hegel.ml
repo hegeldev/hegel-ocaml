@@ -8,7 +8,7 @@ module Cbor_helpers = Cbor_helpers
 (** CBOR encoding/decoding with type-safe extractor helpers. *)
 
 module Connection = Connection
-(** Multiplexed connection and channel abstractions. *)
+(** Multiplexed connection and stream abstractions. *)
 
 module Client = Client
 (** Test runner and lifecycle management. *)
