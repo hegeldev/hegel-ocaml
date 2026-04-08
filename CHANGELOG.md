@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 - 2026-04-08
+
+Add support for new hegel-core protocol versions.
+
 ## 0.3.0 - 2026-03-30
 
 This release moves the library over to use the Jane Street standard library instead of the Inria one.
