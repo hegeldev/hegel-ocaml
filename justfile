@@ -2,13 +2,13 @@
 # This justfile provides the standard build recipes.
 
 # Install dependencies and the hegel binary.
-setup:
+setup version="hegel-core":
     #!/usr/bin/env bash
     set -euo pipefail
     eval $(opam env)
     opam install --yes odoc
     uv venv .venv
-    uv pip install --python .venv/bin/python hegel-core
+    uv pip install --python .venv/bin/python '{{version}}'
 
 # Run tests with 100% code coverage enforcement.
 test:
