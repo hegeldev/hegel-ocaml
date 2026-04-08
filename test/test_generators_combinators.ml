@@ -29,9 +29,12 @@ let test_one_of_basic_schema () =
   match schema gen with
   | Some s ->
       let pairs = Cbor_helpers.extract_dict s in
+      Alcotest.(check string)
+        "type is one_of" "one_of"
+        (Cbor_helpers.extract_string (List.assoc (`Text "type") pairs));
       Alcotest.(check bool)
-        "has one_of key" true
-        (List.mem_assoc (`Text "one_of") pairs)
+        "has generators key" true
+        (List.mem_assoc (`Text "generators") pairs)
   | None -> Alcotest.fail "expected schema"
 
 (** Test: one_of with non-basic generators is not basic. *)

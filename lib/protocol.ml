@@ -7,7 +7,7 @@
     The header consists of 5 big-endian unsigned 32-bit integers:
     - Magic number (0x4845474C, "HEGL")
     - CRC32 checksum
-    - Channel ID
+    - Stream ID
     - Message ID (high bit = reply flag)
     - Payload length *)
 
@@ -27,15 +27,15 @@ let terminator = 0x0A
     message is a response to a previous request. *)
 let reply_bit = Int32.shift_left 1l 31
 
-(** Special message ID used when closing a channel. *)
-let close_channel_message_id = Int32.(shift_left 1l 31 - 1l)
+(** Special message ID used when closing a stream. *)
+let close_stream_message_id = Int32.(shift_left 1l 31 - 1l)
 
-(** Special payload byte sent when closing a channel. Chosen to be invalid CBOR
+(** Special payload byte sent when closing a stream. Chosen to be invalid CBOR
     per RFC 8949 (reserved tag byte 0xFE). *)
-let close_channel_payload = Bytes.make 1 '\xFE' |> Bytes.to_string
+let close_stream_payload = Bytes.make 1 '\xFE' |> Bytes.to_string
 
 type packet = {
-  channel_id : int32;  (** The logical channel this packet belongs to. *)
+  stream_id : int32;  (** The logical stream this packet belongs to. *)
   message_id : int32;  (** Identifier for request/response correlation. *)
   is_reply : bool;  (** Whether this is a reply to a previous request. *)
   payload : string;  (** The raw payload bytes (typically CBOR-encoded). *)
@@ -45,7 +45,7 @@ type packet = {
 (** [equal_packet a b] returns [true] if packets [a] and [b] have identical
     fields. *)
 let equal_packet a b =
-  Int32.equal a.channel_id b.channel_id
+  Int32.equal a.stream_id b.stream_id
   && Int32.equal a.message_id b.message_id
   && Bool.equal a.is_reply b.is_reply
   && String.equal a.payload b.payload
@@ -53,8 +53,8 @@ let equal_packet a b =
 (** [pp_packet fmt p] pretty-prints packet [p] to formatter [fmt]. *)
 let pp_packet fmt p =
   Format.fprintf fmt
-    "{channel_id=%ld; message_id=%ld; is_reply=%b; payload=<%d bytes>}"
-    p.channel_id p.message_id p.is_reply (String.length p.payload)
+    "{stream_id=%ld; message_id=%ld; is_reply=%b; payload=<%d bytes>}"
+    p.stream_id p.message_id p.is_reply (String.length p.payload)
 
 (** [compute_crc32 data] computes the CRC32 checksum of [data] and returns it as
     an [int32]. *)
@@ -137,7 +137,7 @@ let read_packet sock =
   let header_buf = recv_exact sock header_size in
   let pkt_magic = unpack_uint32_be header_buf 0 in
   let checksum = unpack_uint32_be header_buf 4 in
-  let channel_id = unpack_uint32_be header_buf 8 in
+  let stream_id = unpack_uint32_be header_buf 8 in
   let raw_message_id = unpack_uint32_be header_buf 12 in
   let length = unpack_uint32_be header_buf 16 in
   let is_reply = Int32.( <> ) Int32.(raw_message_id land reply_bit) 0l in
@@ -167,7 +167,7 @@ let read_packet sock =
     failwith
       (sprintf "Checksum mismatch: expected 0x%08lX, got 0x%08lX" checksum
          computed_crc);
-  { channel_id; message_id; is_reply; payload = Bytes.to_string payload_buf }
+  { stream_id; message_id; is_reply; payload = Bytes.to_string payload_buf }
 
 (** [write_packet sock packet] serializes and writes [packet] to Unix file
     descriptor [sock]. *)
@@ -181,7 +181,7 @@ let write_packet sock packet =
   let header_buf = Bytes.create header_size in
   pack_uint32_be header_buf 0 magic;
   pack_uint32_be header_buf 4 0l;
-  pack_uint32_be header_buf 8 packet.channel_id;
+  pack_uint32_be header_buf 8 packet.stream_id;
   pack_uint32_be header_buf 12 wire_message_id;
   pack_uint32_be header_buf 16 (Int32.of_int_exn payload_len);
   let checksum =

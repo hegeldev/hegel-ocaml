@@ -43,33 +43,33 @@ let raw_handshake_responder fd =
   let pkt = Protocol.read_packet fd in
   Protocol.write_packet fd
     {
-      channel_id = pkt.channel_id;
+      stream_id = pkt.stream_id;
       message_id = pkt.message_id;
       is_reply = true;
       payload = "Hegel/0.3";
     }
 
-(** [handshake_via_channel peer_conn] handles a handshake on the peer side using
-    the connection's channel API (compatible with the background reader). *)
-let handshake_via_channel peer_conn =
-  let ch = Connection.control_channel peer_conn in
+(** [handshake_via_stream peer_conn] handles a handshake on the peer side using
+    the connection's stream API (compatible with the background reader). *)
+let handshake_via_stream peer_conn =
+  let ch = Connection.control_stream peer_conn in
   let msg_id, _payload = Connection.receive_request_raw ch () in
   Connection.send_response_raw ch msg_id "Hegel/0.3";
   peer_conn.Connection.connection_state <- Connection.Client
 
 (** [handshake_pair peer_conn client_conn] performs a handshake between peer and
-    client connections. Uses the channel API for the peer side (compatible with
+    client connections. Uses the stream API for the peer side (compatible with
     the background reader thread). *)
 let handshake_pair peer_conn client_conn =
-  let t = Thread.create handshake_via_channel peer_conn in
+  let t = Thread.create handshake_via_stream peer_conn in
   let _version = Connection.send_handshake client_conn in
   Thread.join t
 
 (** Helper: check where a given command is *)
 let find_cmd cmd =
-  let inp_channel = Core_unix.open_process_in ("which " ^ cmd) in
-  let output = String.strip (In_channel.input_all inp_channel) in
-  let exit_code = Core_unix.close_process_in inp_channel in
+  let inp_stream = Core_unix.open_process_in ("which " ^ cmd) in
+  let output = String.strip (In_channel.input_all inp_stream) in
+  let exit_code = Core_unix.close_process_in inp_stream in
   match exit_code with
   | Ok () -> output
   | Error err ->

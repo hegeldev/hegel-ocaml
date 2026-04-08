@@ -20,17 +20,20 @@ let test_integers_in_range () =
       let v = Hegel.draw tc gen in
       assert (v >= 0 && v <= 100))
 
-(** Test: just schema is const null. *)
+(** Test: just schema is constant null. *)
 let test_just_schema () =
   let gen = just 42 in
   Alcotest.(check bool) "is_basic" true (is_basic gen);
   match schema gen with
   | Some s ->
       let pairs = Cbor_helpers.extract_dict s in
-      Alcotest.(check int) "one pair" 1 (List.length pairs);
+      Alcotest.(check int) "two pairs" 2 (List.length pairs);
+      Alcotest.(check string)
+        "type is constant" "constant"
+        (Cbor_helpers.extract_string (List.assoc (`Text "type") pairs));
       Alcotest.(check bool)
-        "const is null" true
-        (Cbor_helpers.is_null (List.assoc (`Text "const") pairs))
+        "value is null" true
+        (Cbor_helpers.is_null (List.assoc (`Text "value") pairs))
   | None -> Alcotest.fail "expected schema"
 
 (** Test: just transform ignores server value. *)

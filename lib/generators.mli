@@ -79,7 +79,7 @@ val discardable_group : int -> Client.test_case -> (unit -> 'a) -> 'a
 
 type collection = {
   mutable finished : bool;
-  mutable server_name : CBOR.Simple.t option;
+  mutable collection_id : CBOR.Simple.t option;
   min_size : int;
   max_size : int option;
 }
