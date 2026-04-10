@@ -317,6 +317,31 @@ let test_version_mismatch_low () =
   close peer_conn;
   Thread.join t
 
+(** Test: malformed version string in create_client. *)
+let test_version_mismatch_bad_format () =
+  let server_socket, client_socket =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
+  let peer_conn = Test_helpers.make_connection server_socket ~name:"Peer" () in
+  let client_conn =
+    Test_helpers.make_connection client_socket ~name:"Client" ()
+  in
+  let t =
+    Thread.create
+      (fun () ->
+        peer_conn.connection_state <- Client;
+        let ch = control_stream peer_conn in
+        let msg_id, _payload = receive_request_raw ch () in
+        send_response_raw ch msg_id "Hegel/bad")
+      ()
+  in
+  let raised = ref false in
+  (try ignore (create_client client_conn) with Failure _ -> raised := true);
+  Alcotest.(check bool) "raised bad version format" true !raised;
+  close client_conn;
+  close peer_conn;
+  Thread.join t
+
 (** Test: run_test with explicit seed. *)
 let test_run_test_with_seed () =
   Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ~seed:42 ())
@@ -1479,6 +1504,8 @@ let tests =
     Alcotest.test_case "start/stop span live" `Quick test_start_stop_span_live;
     Alcotest.test_case "version mismatch" `Quick test_version_mismatch;
     Alcotest.test_case "version mismatch low" `Quick test_version_mismatch_low;
+    Alcotest.test_case "version mismatch bad format" `Quick
+      test_version_mismatch_bad_format;
     Alcotest.test_case "run_test with seed" `Quick test_run_test_with_seed;
     Alcotest.test_case "multiple interesting" `Quick test_multiple_interesting;
     Alcotest.test_case "unrecognised event" `Quick test_unrecognised_event;

@@ -10,8 +10,12 @@ type t = CBOR.Simple.t
 val encode : t -> string
 (** [encode v] serializes the CBOR value [v] to a binary string. *)
 
+val hegel_string_tag : int
+(** CBOR tag used by Hegel to encode strings as raw UTF-8 bytes (WTF-8). *)
+
 val decode : string -> t
-(** [decode s] deserializes a CBOR value from the binary string [s]. *)
+(** [decode s] deserializes a CBOR value from the binary string [s], converting
+    Hegel's tag-91 encoded strings to plain text values. *)
 
 val extract_int : t -> int
 (** [extract_int v] extracts an integer from a CBOR value.

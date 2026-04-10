@@ -12,8 +12,23 @@ type t = CBOR.Simple.t
 (** [encode v] serializes the CBOR value [v] to a binary string. *)
 let encode = CBOR.Simple.encode
 
-(** [decode s] deserializes a CBOR value from the binary string [s]. *)
-let decode = CBOR.Simple.decode
+(** CBOR tag used by Hegel to encode strings as raw UTF-8 bytes (WTF-8). *)
+let hegel_string_tag = 91
+
+(** [convert_tagged_strings v] recursively replaces [Tag(91, Bytes b)] with
+    [Text b] so downstream code sees plain text strings. *)
+let rec convert_tagged_strings = function
+  | `Tag (tag, `Bytes s) when tag = hegel_string_tag -> `Text s
+  | `Array items -> `Array (List.map items ~f:convert_tagged_strings)
+  | `Map pairs ->
+      `Map
+        (List.map pairs ~f:(fun (k, v) ->
+             (convert_tagged_strings k, convert_tagged_strings v)))
+  | other -> other
+
+(** [decode s] deserializes a CBOR value from the binary string [s], converting
+    Hegel's tag-91 encoded strings to plain text values. *)
+let decode s = CBOR.Simple.decode s |> convert_tagged_strings
 
 (** [type_name v] returns a human-readable name for the CBOR type of [v]. *)
 let type_name = function

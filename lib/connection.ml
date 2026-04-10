@@ -401,7 +401,7 @@ let receive_response_raw ch message_id ?(timeout = stream_timeout) () =
     response, extracting the result or raising {!Request_error}. *)
 let receive_response ch message_id ?(timeout = stream_timeout) () =
   let raw = receive_response_raw ch message_id ~timeout () in
-  result_or_error (CBOR.Simple.decode raw)
+  result_or_error (Cbor_helpers.decode raw)
 
 (** [receive_request_raw ch ?timeout ()] receives raw request bytes and returns
     [(message_id, payload)]. *)
@@ -416,7 +416,7 @@ let receive_request_raw ch ?(timeout = stream_timeout) () =
     returning [(message_id, decoded_value)]. *)
 let receive_request ch ?(timeout = stream_timeout) () =
   let message_id, body = receive_request_raw ch ~timeout () in
-  (message_id, CBOR.Simple.decode body)
+  (message_id, Cbor_helpers.decode body)
 
 (** [send_response_raw ch message_id payload] sends raw bytes as a reply. *)
 let send_response_raw ch message_id payload =
@@ -479,7 +479,7 @@ let pending_get pr =
         receive_response_raw pr.pr_stream pr.pr_message_id
           ~timeout:stream_timeout ()
       in
-      let v = CBOR.Simple.decode raw in
+      let v = Cbor_helpers.decode raw in
       pr.pr_value <- Some v;
       result_or_error v
 
