@@ -151,9 +151,57 @@ val floats :
 (** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
      ?allow_infinity ()] creates a generator for floating-point values. *)
 
-val text : ?min_size:int -> ?max_size:int -> unit -> string generator
-(** [text ?min_size ?max_size ()] creates a generator for Unicode text strings.
-*)
+val text :
+  ?min_size:int ->
+  ?max_size:int ->
+  ?codec:string ->
+  ?min_codepoint:int ->
+  ?max_codepoint:int ->
+  ?categories:string list ->
+  ?exclude_categories:string list ->
+  ?include_characters:string ->
+  ?exclude_characters:string ->
+  ?alphabet:string ->
+  unit ->
+  string generator
+(** [text ?min_size ?max_size ?codec ?min_codepoint ?max_codepoint ?categories
+     ?exclude_categories ?include_characters ?exclude_characters ?alphabet ()]
+    creates a generator for Unicode text strings.
+
+    Character filtering options restrict which characters may appear:
+    - [codec]: restrict to characters encodable in this codec (e.g. ["ascii"],
+      ["utf-8"], ["latin-1"])
+    - [min_codepoint], [max_codepoint]: restrict Unicode codepoint range
+    - [categories]: whitelist of Unicode general categories (e.g.
+      [["L"; "Nd"]]). Mutually exclusive with [exclude_categories].
+    - [exclude_categories]: blacklist of Unicode general categories. Mutually
+      exclusive with [categories].
+    - [include_characters]: always include these characters even if excluded by
+      other filters
+    - [exclude_characters]: always exclude these characters
+    - [alphabet]: fixed set of allowed characters. Mutually exclusive with all
+      individual character filtering parameters.
+
+    Surrogate codepoints (category Cs) are always excluded since OCaml strings
+    are conventionally UTF-8. *)
+
+val characters :
+  ?codec:string ->
+  ?min_codepoint:int ->
+  ?max_codepoint:int ->
+  ?categories:string list ->
+  ?exclude_categories:string list ->
+  ?include_characters:string ->
+  ?exclude_characters:string ->
+  unit ->
+  string generator
+(** [characters ?codec ?min_codepoint ?max_codepoint ?categories
+     ?exclude_categories ?include_characters ?exclude_characters ()] creates a
+    generator for single Unicode characters (as single-character UTF-8 strings).
+
+    Accepts the same character filtering options as {!text} except [min_size],
+    [max_size], and [alphabet]. Surrogate codepoints (category Cs) are always
+    excluded since OCaml strings are conventionally UTF-8. *)
 
 val binary : ?min_size:int -> ?max_size:int -> unit -> string generator
 (** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.

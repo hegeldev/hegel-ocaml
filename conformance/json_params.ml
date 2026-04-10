@@ -65,6 +65,23 @@ let get_int_array pairs key =
         items
   | _ -> []
 
+(** [get_string_opt pairs key] returns [Some s] if [key] maps to a string in
+    [pairs], or [None] if absent or null. *)
+let get_string_opt pairs key =
+  match List.assoc_opt key pairs with
+  | Some (`String s) -> Some s
+  | Some `Null | None -> None
+  | Some _ -> None
+
+(** [get_string_list pairs key] returns the list of strings for [key] in
+    [pairs]. Non-string items are skipped. Returns [[]] if the key is absent or
+    not a list. *)
+let get_string_list pairs key =
+  match List.assoc_opt key pairs with
+  | Some (`List items) ->
+      List.filter_map (function `String s -> Some s | _ -> None) items
+  | _ -> []
+
 (** [int_opt_to_json v] serializes an optional int to JSON: [Some n] becomes the
     string representation of [n], [None] becomes ["null"]. *)
 let int_opt_to_json = function None -> "null" | Some n -> string_of_int n
