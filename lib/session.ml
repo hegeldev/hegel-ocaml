@@ -13,7 +13,7 @@ module Thread = Caml_threads.Thread
 open Connection
 
 (** Version of hegel-core to install. *)
-let hegel_server_version = "0.2.5"
+let hegel_server_version = "0.3.0"
 
 (** Environment variable to override the hegel server command. *)
 let hegel_server_command_env = "HEGEL_SERVER_COMMAND"

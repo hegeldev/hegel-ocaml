@@ -114,7 +114,7 @@ jobs:
       - name: Install OCaml dependencies
         run: opam install . --deps-only --with-test --yes
 
-      - run: just setup
+      - run: just setup hegel-core==0.3.0
       - run: pip install pytest
       - run: just conformance
 
