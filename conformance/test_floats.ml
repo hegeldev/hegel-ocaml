@@ -18,14 +18,18 @@ let () =
   let exclude_max = Json_params.get_bool params "exclude_max" false in
   let allow_nan = Json_params.get_bool_opt params "allow_nan" in
   let allow_infinity = Json_params.get_bool_opt params "allow_infinity" in
+  let mode = Json_params.get_mode params in
   let test_cases = get_test_cases () in
   Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
     (fun tc ->
-      let f =
-        Hegel.draw tc
-          (floats ?min_value ?max_value ~exclude_min ~exclude_max ?allow_nan
-             ?allow_infinity ())
+      let gen =
+        floats ?min_value ?max_value ~exclude_min ~exclude_max ?allow_nan
+          ?allow_infinity ()
       in
+      let gen =
+        if mode = "non_basic" then Json_params.make_non_basic gen else gen
+      in
+      let f = Hegel.draw tc gen in
       let is_nan = Float.is_nan f in
       let is_infinite = Float.is_infinite f in
       write_metrics
