@@ -26,14 +26,9 @@ let () =
   let params = Json_params.parse params_str in
   let min_size = Json_params.get_int params "min_size" 0 in
   let max_size = Json_params.get_int_opt params "max_size" in
-  let mode = Json_params.get_mode params in
   let test_cases = get_test_cases () in
   Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
     (fun tc ->
-      let gen = text ~min_size ?max_size () in
-      let gen =
-        if mode = "non_basic" then Json_params.make_non_basic gen else gen
-      in
-      let s = Hegel.draw tc gen in
+      let s = Hegel.draw tc (text ~min_size ?max_size ()) in
       let length = utf8_length s in
       write_metrics [ ("length", string_of_int length) ])
