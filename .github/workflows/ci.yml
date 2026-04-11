@@ -27,6 +27,7 @@ jobs:
         uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
         with:
           ocaml-compiler: 5.2.1
+          dune-cache: true
 
       - uses: ./.github/actions/install-tools
         with:
@@ -64,6 +65,15 @@ jobs:
         uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
         with:
           ocaml-compiler: 5.2.1
+          dune-cache: true
+
+      - name: Cache opam dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.opam
+          key: opam-${{ runner.os }}-${{ hashFiles('*.opam') }}
+          restore-keys: |
+            opam-${{ runner.os }}-
 
       - name: Install OCaml dependencies
         run: opam install . --deps-only --with-test --yes
@@ -89,6 +99,15 @@ jobs:
         uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
         with:
           ocaml-compiler: 5.2.1
+          dune-cache: true
+
+      - name: Cache opam dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.opam
+          key: opam-${{ runner.os }}-${{ hashFiles('*.opam') }}
+          restore-keys: |
+            opam-${{ runner.os }}-
 
       - name: Install OCaml dependencies
         run: opam install . --deps-only --with-doc --yes
@@ -114,6 +133,15 @@ jobs:
         uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
         with:
           ocaml-compiler: 5.2.1
+          dune-cache: true
+
+      - name: Cache opam dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.opam
+          key: opam-${{ runner.os }}-${{ hashFiles('*.opam') }}
+          restore-keys: |
+            opam-${{ runner.os }}-
 
       - name: Install OCaml dependencies
         run: opam install . --deps-only --with-test --yes
