@@ -559,8 +559,6 @@ let test_run_test_passed_false () =
            (contains_substring msg "Property test failed"));
       Alcotest.(check bool) "raised" true !raised)
 
-
-
 (** Test: run_hegel_test with explicit settings parameter (covers the Some s
     branch in session.ml line 257). *)
 let test_run_hegel_test_with_settings () =

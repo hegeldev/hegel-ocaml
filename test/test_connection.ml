@@ -171,7 +171,6 @@ let test_stream_process_message_when_closed () =
   close peer_conn;
   close client_conn
 
-
 (* ---- Stream repr and name ---- *)
 
 let test_stream_repr () =
@@ -883,7 +882,6 @@ let test_send_handshake_wrong_prefix () =
   Alcotest.(check bool) "raised" true !raised;
   close client_conn;
   close peer_conn
-
 
 (** Test: control_stream raises when stream 0 is not Live. *)
 let test_control_stream_failure () =

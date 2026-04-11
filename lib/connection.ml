@@ -18,7 +18,6 @@ open Protocol
 (** Handshake string sent by the client to initiate the protocol. *)
 let handshake_string = "hegel_handshake_start"
 
-
 (** Message used when the server has crashed. *)
 let server_crashed_message =
   "The hegel server process has exited unexpectedly. Check .hegel/server.log \
