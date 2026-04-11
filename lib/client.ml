@@ -348,7 +348,7 @@ let run_test client ~settings ?database_key test_fn =
       let fields = base_fields @ database_field @ suppress_field in
       ignore (pending_get (request client.control (`Map fields))));
   let receive_and_run_test_case ~is_final =
-    let message_id, message = receive_request test_stream () in
+    let message_id, message = receive_request test_stream in
     let pairs = Cbor_helpers.extract_dict message in
     let ch_id =
       Int32.of_int_exn
@@ -362,7 +362,7 @@ let run_test client ~settings ?database_key test_fn =
     run_test_case client test_case_stream test_fn ~is_final
   in
   let rec receive_events () =
-    let message_id, message = receive_request test_stream () in
+    let message_id, message = receive_request test_stream in
     let pairs = Cbor_helpers.extract_dict message in
     let event =
       Cbor_helpers.extract_string

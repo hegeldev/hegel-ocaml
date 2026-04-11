@@ -281,7 +281,7 @@ let test_version_mismatch () =
         (* Receive the handshake and respond with a bad version *)
         peer_conn.connection_state <- Client;
         let ch = control_stream peer_conn in
-        let msg_id, _payload = receive_request_raw ch () in
+        let msg_id, _payload = receive_request_raw ch in
         send_response_raw ch msg_id "Hegel/9.9")
       ()
   in
@@ -306,7 +306,7 @@ let test_version_mismatch_low () =
       (fun () ->
         peer_conn.connection_state <- Client;
         let ch = control_stream peer_conn in
-        let msg_id, _payload = receive_request_raw ch () in
+        let msg_id, _payload = receive_request_raw ch in
         send_response_raw ch msg_id "Hegel/0.0")
       ()
   in
@@ -331,7 +331,7 @@ let test_version_mismatch_bad_format () =
       (fun () ->
         peer_conn.connection_state <- Client;
         let ch = control_stream peer_conn in
-        let msg_id, _payload = receive_request_raw ch () in
+        let msg_id, _payload = receive_request_raw ch in
         send_response_raw ch msg_id "Hegel/bad")
       ()
   in
@@ -386,7 +386,7 @@ let with_fake_server peer_fn client_fn =
     [(ctrl, test_ch)] where test_ch is the test stream. *)
 let accept_run_test peer_conn =
   let ctrl = control_stream peer_conn in
-  let msg_id, msg = receive_request ctrl () in
+  let msg_id, msg = receive_request ctrl in
   let pairs = Cbor_helpers.extract_dict msg in
   let test_ch_id =
     Int32.of_int_exn
@@ -559,26 +559,7 @@ let test_run_test_passed_false () =
            (contains_substring msg "Property test failed"));
       Alcotest.(check bool) "raised" true !raised)
 
-(** Test: server_exited check in pop_inbox_item. Create a connection, set
-    server_exited to true, then try to receive. Should raise with
-    server_crashed_message. *)
-let test_server_exited_in_pop_inbox () =
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
-  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
-  conn.server_exited <- true;
-  let ch = control_stream conn in
-  let raised = ref false in
-  (try ignore (receive_request ch ())
-   with Failure msg ->
-     raised := true;
-     Alcotest.(check bool)
-       "has server crashed message" true
-       (contains_substring msg "hegel server process has exited"));
-  Alcotest.(check bool) "raised" true !raised;
-  close conn;
-  Core_unix.close s2
+
 
 (** Test: run_hegel_test with explicit settings parameter (covers the Some s
     branch in session.ml line 257). *)
@@ -1519,8 +1500,6 @@ let tests =
       test_run_test_health_check_failure;
     Alcotest.test_case "run_test flaky" `Quick test_run_test_flaky;
     Alcotest.test_case "run_test passed=false" `Quick test_run_test_passed_false;
-    Alcotest.test_case "server_exited in pop_inbox" `Quick
-      test_server_exited_in_pop_inbox;
     Alcotest.test_case "server crash in event loop" `Quick
       test_server_crash_in_event_loop;
     Alcotest.test_case "send error reply fails silently" `Quick

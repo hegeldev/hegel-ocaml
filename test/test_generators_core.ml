@@ -188,7 +188,7 @@ let test_collection_more_stoptest () =
   let t_peer =
     Thread.create
       (fun () ->
-        let msg_id, _msg = receive_request peer_ch () in
+        let msg_id, _msg = receive_request peer_ch in
         send_response_raw peer_ch msg_id
           (CBOR.Simple.encode
              (`Map
@@ -226,7 +226,7 @@ let test_collection_reject_live () =
   let t_peer =
     Thread.create
       (fun () ->
-        let msg_id, msg = receive_request peer_ch () in
+        let msg_id, msg = receive_request peer_ch in
         let pairs = Cbor_helpers.extract_dict msg in
         received_cmd :=
           Cbor_helpers.extract_string (List.assoc (`Text "command") pairs);
