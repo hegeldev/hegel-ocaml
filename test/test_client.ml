@@ -109,15 +109,13 @@ let test_nested_test_raises () =
 
 (* ---- Tests using real hegel binary ---- *)
 
-(** Helper: run a test with a specific HEGEL_PROTOCOL_TEST_MODE. Restarts the
-    session so the new env var takes effect on the subprocess. *)
+(** Helper: run a test with a specific HEGEL_PROTOCOL_TEST_MODE.
+    [run_hegel_test] detects the env var and creates a disposable session. *)
 let with_test_mode mode f =
-  Session.restart_session ();
   Core_unix.putenv ~key:"HEGEL_PROTOCOL_TEST_MODE" ~data:mode;
   Exn.protect
     ~finally:(fun () ->
-      Core_unix.putenv ~key:"HEGEL_PROTOCOL_TEST_MODE" ~data:"";
-      Session.restart_session ())
+      Core_unix.putenv ~key:"HEGEL_PROTOCOL_TEST_MODE" ~data:"")
     ~f
 
 let test_simple_passing_test () =

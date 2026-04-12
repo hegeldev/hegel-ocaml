@@ -1,7 +1,11 @@
 (** Global session management for Hegel.
 
     This module manages a shared hegel subprocess communicating over stdio
-    pipes. It starts lazily on first use and cleans up when the process exits.
+    pipes. It starts lazily on first use and lives for the process lifetime (the
+    OS cleans up on exit).
+
+    When [HEGEL_PROTOCOL_TEST_MODE] is set, a disposable session is created per
+    test so the test server gets a fresh subprocess with the right env var.
 
     The main entry point is {!run_hegel_test}, which the user calls without
     needing to manage connections or sessions directly. *)
@@ -210,22 +214,33 @@ let start session =
           ignore
             (Thread.create
                (fun () ->
-                 ignore (Caml_unix.waitpid [] pid);
-                 match session.connection with
-                 | Some conn -> conn.server_exited <- true
-                 | None -> ())
+                 (try ignore (Caml_unix.waitpid [] pid) with _ -> ());
+                 conn.server_exited <- true)
                ());
           Stdlib.at_exit (fun () -> cleanup session)
         end)
   end
 
-(** [restart_session ()] forces a restart of the global session. Useful when
-    environment variables (like [HEGEL_PROTOCOL_TEST_MODE]) have changed. *)
-let restart_session () = cleanup global_session
-
 (** [run_hegel_test ?settings test_fn] runs a property test using the shared
-    hegel process. Uses {!Client.default_settings} when [settings] is not
-    provided. *)
+    hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is set, creates a disposable
+    session so the test server gets a fresh subprocess with the right env var.
+    Uses {!Client.default_settings} when [settings] is not provided. *)
 let run_hegel_test ?(settings = Client.default_settings ()) test_fn =
-  start global_session;
-  Client.run_test (Option.value_exn global_session.client) ~settings test_fn
+  match Sys.getenv "HEGEL_PROTOCOL_TEST_MODE" with
+  | Some mode when not (String.is_empty mode) ->
+      let session =
+        {
+          process = None;
+          connection = None;
+          client = None;
+          lock = Mutex.create ();
+        }
+      in
+      start session;
+      Exn.protect
+        ~finally:(fun () -> cleanup session)
+        ~f:(fun () ->
+          Client.run_test (Option.value_exn session.client) ~settings test_fn)
+  | _ ->
+      start global_session;
+      Client.run_test (Option.value_exn global_session.client) ~settings test_fn
