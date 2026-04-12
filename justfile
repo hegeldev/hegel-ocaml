@@ -5,7 +5,13 @@ check-tests:
     set -euo pipefail
     eval $(opam env)
     find _build -name '*.coverage' -delete 2>/dev/null || true
-    dune runtest --instrument-with bisect_ppx --force
+    # Run test binaries directly (not via dune runtest) so output streams
+    # in real-time — dune runtest buffers output until completion, hiding
+    # diagnostic messages when a test hangs.
+    dune build --instrument-with bisect_ppx test/test_hegel.exe test/test_ppx_derive.exe
+    export BISECT_FILE=_build/default/test/bisect
+    ./_build/default/test/test_ppx_derive.exe
+    ./_build/default/test/test_hegel.exe
     python3 scripts/check-coverage.py
 
 format:
