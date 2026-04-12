@@ -86,6 +86,7 @@ and connection = {
   writer_lock : Mutex.t;
   mutable connection_state : connection_state;
   mutable server_exited : bool;
+  mutable reader_thread : Thread.t option;
 }
 (** Multiplexed connection to a Hegel peer. *)
 
@@ -242,7 +243,13 @@ let close conn =
        try Unix.close conn.write_fd with Unix.Unix_error _ -> ());
     Mutex.lock conn.streams_lock;
     signal_all_streams conn;
-    Mutex.unlock conn.streams_lock
+    Mutex.unlock conn.streams_lock;
+    (* Wait for the reader thread to exit so it cannot read from reused fds *)
+    match conn.reader_thread with
+    | Some t ->
+        Thread.join t;
+        conn.reader_thread <- None
+    | None -> ()
   end
 
 (** [create_connection ~read_fd ~write_fd ?name ?debug ()] creates a new
@@ -263,6 +270,7 @@ let create_connection ~read_fd ~write_fd ?name ?(debug = false) () =
       writer_lock = Mutex.create ();
       connection_state = Unresolved;
       server_exited = false;
+      reader_thread = None;
     }
   in
   let control = make_stream conn 0l ~role:(Some "Control") in
@@ -270,7 +278,7 @@ let create_connection ~read_fd ~write_fd ?name ?(debug = false) () =
   Hashtbl.set conn.streams ~key:0l ~data:(Live control);
   Mutex.unlock conn.streams_lock;
   (* Spawn background reader thread *)
-  ignore (Thread.create reader_loop conn);
+  conn.reader_thread <- Some (Thread.create reader_loop conn);
   conn
 
 (** [is_live conn] returns [true] if the connection is still active. *)
