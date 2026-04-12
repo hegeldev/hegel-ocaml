@@ -154,17 +154,21 @@ let has_working_client session =
 (** [cleanup session] cleans up the session, killing the subprocess and closing
     the connection. *)
 let cleanup session =
-  (match session.connection with
-  | Some conn ->
-      close conn;
-      session.connection <- None;
-      session.client <- None
-  | None -> ());
-  match session.process with
+  (* Kill the server process first so the pipe's write end closes, giving the
+     reader thread EOF. This must happen before close() which joins the reader
+     thread — otherwise Thread.join deadlocks on Linux where close() alone does
+     not wake up a blocked read() on a pipe. *)
+  (match session.process with
   | Some pid ->
       (try Caml_unix.kill pid Stdlib.Sys.sigterm with _ -> ());
       (try ignore (Caml_unix.waitpid [] pid) with _ -> ());
       session.process <- None
+  | None -> ());
+  match session.connection with
+  | Some conn ->
+      close conn;
+      session.connection <- None;
+      session.client <- None
   | None -> ()
 
 (** [start session] starts the hegel server if not already running. Spawns the

@@ -237,6 +237,12 @@ let close conn =
   if not conn.running then ()
   else begin
     conn.running <- false;
+    (* Shutdown the read fd to unblock any reader thread blocked in read().
+       On Linux, close() alone does not wake up a blocked read() in another
+       thread. shutdown() ensures the reader gets EOF immediately.
+       Fails harmlessly with ENOTSOCK on pipes. *)
+    (try Unix.shutdown conn.read_fd ~mode:Unix.SHUTDOWN_ALL
+     with Unix.Unix_error _ -> ());
     (try Unix.close conn.read_fd with Unix.Unix_error _ -> ());
     (* Only close write_fd if it's different from read_fd *)
     (if not (phys_equal conn.write_fd conn.read_fd) then
