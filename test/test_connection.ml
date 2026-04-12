@@ -704,15 +704,23 @@ let test_result_or_error_neither () =
 (* ---- entry_name ---- *)
 
 let test_entry_name_live_stream () =
+  Printf.eprintf "[hegel-debug] entry_name_live: creating socketpair\n%!";
   let s1, s2 = make_socket_pair () in
+  Printf.eprintf "[hegel-debug] entry_name_live: creating peer_conn\n%!";
   let peer_conn = make_connection s1 ~name:"Peer" () in
+  Printf.eprintf "[hegel-debug] entry_name_live: creating client_conn\n%!";
   let client_conn = make_connection s2 ~name:"Client" () in
+  Printf.eprintf "[hegel-debug] entry_name_live: handshake_pair\n%!";
   handshake_pair peer_conn client_conn;
+  Printf.eprintf "[hegel-debug] entry_name_live: handshake done\n%!";
   let ch = new_stream client_conn ~role:"LiveRole" () in
   let name = entry_name client_conn ch.stream_id in
   Alcotest.(check bool) "has LiveRole" true (contains_substring name "LiveRole");
+  Printf.eprintf "[hegel-debug] entry_name_live: closing client_conn\n%!";
   close client_conn;
-  close peer_conn
+  Printf.eprintf "[hegel-debug] entry_name_live: closing peer_conn\n%!";
+  close peer_conn;
+  Printf.eprintf "[hegel-debug] entry_name_live: done\n%!"
 
 let test_entry_name_dead_stream () =
   let s1, s2 = make_socket_pair () in

@@ -61,9 +61,13 @@ let handshake_via_stream peer_conn =
     client connections. Uses the stream API for the peer side (compatible with
     the background reader thread). *)
 let handshake_pair peer_conn client_conn =
+  Printf.eprintf "[hegel-debug] handshake_pair: creating peer thread\n%!";
   let t = Thread.create handshake_via_stream peer_conn in
+  Printf.eprintf "[hegel-debug] handshake_pair: send_handshake\n%!";
   let _version = Connection.send_handshake client_conn in
-  Thread.join t
+  Printf.eprintf "[hegel-debug] handshake_pair: joining peer thread\n%!";
+  Thread.join t;
+  Printf.eprintf "[hegel-debug] handshake_pair: done\n%!"
 
 (** Helper: check where a given command is *)
 let find_cmd cmd =
