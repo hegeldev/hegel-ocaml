@@ -596,8 +596,8 @@ let test_session_start_failure () =
   | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
   | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:""
 
-(** Test: monitor thread detects server crash (session.ml line 231). Start a
-    real session, kill the server process, verify server_exited. *)
+(** Test: reader thread detects server crash. Start a real session, kill the
+    server process, verify server_exited is set (reader gets EOF on pipe). *)
 let test_monitor_thread_detects_crash () =
   let session : Session.hegel_session =
     { process = None; connection = None; client = None; lock = Mutex.create () }
@@ -607,7 +607,7 @@ let test_monitor_thread_detects_crash () =
   (match session.process with
   | Some pid -> (
       Caml_unix.kill pid Stdlib.Sys.sigkill;
-      (* Wait for the monitor thread to detect the crash *)
+      (* Wait for the reader thread to detect the crash (EOF on pipe) *)
       Caml_unix.sleepf 0.5;
       match session.connection with
       | Some conn ->

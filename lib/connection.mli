@@ -51,6 +51,7 @@ and connection = {
   writer_lock : Mutex.t;
   mutable connection_state : connection_state;
   mutable server_exited : bool;
+  mutable reader_thread : Caml_threads.Thread.t option;
 }
 (** Multiplexed connection to a Hegel peer. *)
 

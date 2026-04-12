@@ -159,9 +159,9 @@ let has_working_client session =
     the connection. *)
 let cleanup session =
   (* Kill the server process first so the pipe's write end closes, giving the
-     reader thread EOF. This must happen before close() which joins the reader
-     thread — otherwise Thread.join deadlocks on Linux where close() alone does
-     not wake up a blocked read() on a pipe. *)
+     reader thread EOF. On Linux, close() alone does not wake up a blocked
+     read() on a pipe, but killing the server (which closes the write end)
+     does. After this, the reader thread will process EOF and exit. *)
   (match session.process with
   | Some pid ->
       (try Caml_unix.kill pid Stdlib.Sys.sigterm with _ -> ());
@@ -171,6 +171,11 @@ let cleanup session =
   match session.connection with
   | Some conn ->
       close conn;
+      (* Join the reader thread to ensure it has exited before we return.
+         This is safe because the server was killed above, so the pipe's write
+         end is closed and the reader gets EOF. Without this join, the reader
+         could still be running when the next session creates new pipes. *)
+      Option.iter conn.reader_thread ~f:Thread.join;
       session.connection <- None;
       session.client <- None
   | None -> ()
@@ -210,13 +215,6 @@ let start session =
           session.connection <- Some conn;
           let c = Client.create_client conn in
           session.client <- Some c;
-          (* Monitor thread: detect server crash *)
-          ignore
-            (Thread.create
-               (fun () ->
-                 (try ignore (Caml_unix.waitpid [] pid) with _ -> ());
-                 conn.server_exited <- true)
-               ());
           Stdlib.at_exit (fun () -> cleanup session)
         end)
   end
