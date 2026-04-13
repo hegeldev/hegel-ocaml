@@ -903,6 +903,41 @@ let test_control_stream_failure () =
   close conn;
   Unix.close s2
 
+(** Regression test: rapidly creating and closing connections must not hang.
+    Before the fix, close did not join the reader thread, leaving zombie threads
+    that could starve new connections' readers under unlucky scheduling. This
+    test runs 20 create/handshake/close cycles — without the fix it would hang
+    within a few iterations. *)
+let test_rapid_close_does_not_hang () =
+  for _ = 1 to 20 do
+    let s1, s2 = make_socket_pair () in
+    let peer_conn = make_connection s1 ~name:"Peer" () in
+    let client_conn = make_connection s2 ~name:"Client" () in
+    handshake_pair peer_conn client_conn;
+    close peer_conn;
+    close client_conn
+  done
+
+(** Regression test: writing to a socket whose remote end is closed must raise
+    an OCaml exception (EPIPE), not kill the process with SIGPIPE. This relies
+    on SIGPIPE being ignored at module init time. *)
+let test_write_to_broken_socket_raises () =
+  let s1, s2 = make_socket_pair () in
+  (* Close the read end so writes to s2 will get EPIPE *)
+  Unix.close s1;
+  let raised = ref false in
+  (try
+     Protocol.write_packet s2
+       {
+         Protocol.stream_id = 0l;
+         message_id = 1l;
+         is_reply = false;
+         payload = "hello";
+       }
+   with Unix.Unix_error (Unix.EPIPE, _, _) -> raised := true);
+  Alcotest.(check bool) "raised EPIPE" true !raised;
+  Unix.close s2
+
 let tests =
   [
     (* Connection lifecycle *)
@@ -1016,4 +1051,10 @@ let tests =
     (* control_stream failure *)
     Alcotest.test_case "control_stream failure" `Quick
       test_control_stream_failure;
+    (* Regression: rapid create/handshake/close must not hang *)
+    Alcotest.test_case "rapid close does not hang" `Quick
+      test_rapid_close_does_not_hang;
+    (* Regression: write to broken socket raises, not SIGPIPE *)
+    Alcotest.test_case "write to broken socket raises EPIPE" `Quick
+      test_write_to_broken_socket_raises;
   ]
