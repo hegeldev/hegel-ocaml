@@ -15,6 +15,12 @@ module Condition = Caml_threads.Condition
 module Thread = Caml_threads.Thread
 open Protocol
 
+(* Ignore SIGPIPE so that writes to broken sockets raise EPIPE instead of
+   killing the process. This is standard practice for network programs and is
+   required because background reader threads may attempt error-reply writes
+   to sockets whose remote end has already been closed. *)
+let () = Stdlib.Sys.set_signal Stdlib.Sys.sigpipe Stdlib.Sys.Signal_ignore
+
 (** Handshake string sent by the client to initiate the protocol. *)
 let handshake_string = "hegel_handshake_start"
 
