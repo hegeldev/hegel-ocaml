@@ -241,15 +241,27 @@ let close conn =
        On Linux, close() alone does not wake up a blocked read() in another
        thread. shutdown() ensures the reader gets EOF immediately.
        Fails harmlessly with ENOTSOCK on pipes. *)
-    (try Unix.shutdown conn.read_fd ~mode:Unix.SHUTDOWN_ALL
-     with Unix.Unix_error _ -> ());
+    let shutdown_ok =
+      try
+        Unix.shutdown conn.read_fd ~mode:Unix.SHUTDOWN_ALL;
+        true
+      with Unix.Unix_error _ -> false
+    in
     (try Unix.close conn.read_fd with Unix.Unix_error _ -> ());
     (* Only close write_fd if it's different from read_fd *)
     (if not (phys_equal conn.write_fd conn.read_fd) then
        try Unix.close conn.write_fd with Unix.Unix_error _ -> ());
     Mutex.lock conn.streams_lock;
     signal_all_streams conn;
-    Mutex.unlock conn.streams_lock
+    Mutex.unlock conn.streams_lock;
+    (* Join the reader thread to ensure it has fully exited before returning.
+       Only safe when shutdown succeeded (sockets), since shutdown guarantees
+       the blocked read returns immediately. On pipes, shutdown fails with
+       ENOTSOCK and close alone may not unblock the reader thread. *)
+    if shutdown_ok then
+      match conn.reader_thread with
+      | Some t -> Thread.join t
+      | None -> ()
   end
 
 (** [create_connection ~read_fd ~write_fd ?name ?debug ()] creates a new
