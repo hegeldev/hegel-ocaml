@@ -7,9 +7,5 @@
   generators_primitives
   generators_collections
   generators_combinators)
- (foreign_stubs
-  (language c)
-  (names condition_timedwait_stubs))
- (c_library_flags -lpthread)
  (instrumentation
   (backend bisect_ppx)))
