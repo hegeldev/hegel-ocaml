@@ -20,10 +20,6 @@ let () =
     Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
       (fun tc ->
         let key_gen = text ~min_size:1 ~max_size:10 () in
-        let key_gen =
-          if mode = "non_basic" then Json_params.make_non_basic key_gen
-          else key_gen
-        in
         let val_gen =
           integers ~min_value:min_value_p ~max_value:max_value_p ()
         in
@@ -55,10 +51,6 @@ let () =
     Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
       (fun tc ->
         let key_gen = integers ~min_value:min_key ~max_value:max_key () in
-        let key_gen =
-          if mode = "non_basic" then Json_params.make_non_basic key_gen
-          else key_gen
-        in
         let val_gen =
           integers ~min_value:min_value_p ~max_value:max_value_p ()
         in
