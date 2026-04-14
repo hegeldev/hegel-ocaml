@@ -264,10 +264,7 @@ let close conn =
        Only safe when shutdown succeeded (sockets), since shutdown guarantees
        the blocked read returns immediately. On pipes, shutdown fails with
        ENOTSOCK and close alone may not unblock the reader thread. *)
-    if shutdown_ok then
-      match conn.reader_thread with
-      | Some t -> Thread.join t
-      | None -> ()
+    if shutdown_ok then Option.iter conn.reader_thread ~f:Thread.join
   end
 
 (** [create_connection ~read_fd ~write_fd ?name ?debug ()] creates a new
@@ -374,12 +371,12 @@ let process_one_message ch =
   match item with
   | Shutdown -> raise (Failure "Connection closed")
   | Pkt pkt ->
-      if pkt.is_reply then begin
-        if Hashtbl.mem ch.responses pkt.message_id then
+      if pkt.is_reply then
+        begin if Hashtbl.mem ch.responses pkt.message_id then
           failwith
             (sprintf "Got two responses for message ID %ld" pkt.message_id)
         else Hashtbl.set ch.responses ~key:pkt.message_id ~data:pkt.payload
-      end
+        end
       else Queue.enqueue ch.requests pkt
 
 (** [send_request_raw ch payload] sends raw bytes as a request and returns the
