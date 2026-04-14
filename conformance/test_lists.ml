@@ -28,8 +28,11 @@ let () =
         || test_mode = "stop_test_on_new_collection"
       in
       let base_elem = integers ?min_value ?max_value () in
+      (* Don't use non-basic path with unique — client-side uniqueness
+         enforcement via collection_reject is too slow for large min_size. *)
       let elem_gen =
-        if needs_non_basic then Json_params.make_non_basic base_elem
+        if needs_non_basic && not unique then
+          Json_params.make_non_basic base_elem
         else base_elem
       in
       let list_gen = lists elem_gen ~min_size ?max_size ~unique () in
