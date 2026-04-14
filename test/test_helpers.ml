@@ -53,7 +53,7 @@ let raw_handshake_responder fd =
     the connection's stream API (compatible with the background reader). *)
 let handshake_via_stream peer_conn =
   let ch = Connection.control_stream peer_conn in
-  let msg_id, _payload = Connection.receive_request_raw ch in
+  let msg_id, _payload = Connection.receive_request_raw ch () in
   Connection.send_response_raw ch msg_id "Hegel/0.10";
   peer_conn.Connection.connection_state <- Connection.Client
 
