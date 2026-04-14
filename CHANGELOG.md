@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.4 - 2026-04-14
+
+Handle `StopTest` in `collection_reject` so that unique non-basic lists terminate cleanly when the server's rejection limit is reached, instead of raising an unhandled protocol error.
+
 ## 0.3.3 - 2026-04-14
 
 Restore timeouts to stream receive operations, which were dropped when switching from polling to `Condition.wait`.
