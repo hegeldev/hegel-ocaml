@@ -171,6 +171,21 @@ let test_stream_process_message_when_closed () =
   close peer_conn;
   close client_conn
 
+let test_stream_timeout () =
+  let s1, s2 = make_socket_pair () in
+  let peer_conn = make_connection s1 ~name:"Peer" () in
+  let client_conn = make_connection s2 ~name:"Client" () in
+  handshake_pair peer_conn client_conn;
+  let ch = new_stream client_conn ~role:"TestTimeout" () in
+  let raised = ref false in
+  (try ignore (receive_request ch ~timeout:0.1 ())
+   with Failure msg ->
+     raised := true;
+     Alcotest.(check bool) "timed out" true (contains_substring msg "Timed out"));
+  Alcotest.(check bool) "raised" true !raised;
+  close peer_conn;
+  close client_conn
+
 (* ---- Stream repr and name ---- *)
 
 let test_stream_repr () =
@@ -966,6 +981,7 @@ let tests =
       test_stream_close_when_connection_not_live;
     Alcotest.test_case "process message when closed" `Quick
       test_stream_process_message_when_closed;
+    Alcotest.test_case "stream timeout" `Quick test_stream_timeout;
     (* Stream repr/name *)
     Alcotest.test_case "stream repr" `Quick test_stream_repr;
     Alcotest.test_case "stream repr no role" `Quick test_stream_repr_no_role;

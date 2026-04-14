@@ -557,6 +557,27 @@ let test_run_test_passed_false () =
            (contains_substring msg "Property test failed"));
       Alcotest.(check bool) "raised" true !raised)
 
+(** Test: server_exited check in pop_inbox_item. Create a connection, set
+    server_exited to true, then try to receive. Should raise with
+    server_crashed_message. *)
+let test_server_exited_in_pop_inbox () =
+  let s1, s2 =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
+  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
+  conn.server_exited <- true;
+  let ch = control_stream conn in
+  let raised = ref false in
+  (try ignore (receive_request ch ())
+   with Failure msg ->
+     raised := true;
+     Alcotest.(check bool)
+       "has server crashed message" true
+       (contains_substring msg "hegel server process has exited"));
+  Alcotest.(check bool) "raised" true !raised;
+  close conn;
+  Core_unix.close s2
+
 (** Test: run_hegel_test with explicit settings parameter (covers the Some s
     branch in session.ml line 257). *)
 let test_run_hegel_test_with_settings () =
@@ -1496,6 +1517,8 @@ let tests =
       test_run_test_health_check_failure;
     Alcotest.test_case "run_test flaky" `Quick test_run_test_flaky;
     Alcotest.test_case "run_test passed=false" `Quick test_run_test_passed_false;
+    Alcotest.test_case "server_exited in pop_inbox" `Quick
+      test_server_exited_in_pop_inbox;
     Alcotest.test_case "server crash in event loop" `Quick
       test_server_crash_in_event_loop;
     Alcotest.test_case "send error reply fails silently" `Quick
