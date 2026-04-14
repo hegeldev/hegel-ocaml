@@ -1,7 +1,11 @@
 (** Global session management for Hegel.
 
     This module manages a shared hegel subprocess communicating over stdio
-    pipes. It starts lazily on first use and cleans up when the process exits.
+    pipes. It starts lazily on first use and lives for the process lifetime (the
+    OS cleans up on exit).
+
+    When [HEGEL_PROTOCOL_TEST_MODE] is set, a disposable session is created per
+    test so the test server gets a fresh subprocess with the right env var.
 
     The main entry point is {!run_hegel_test}, which the user calls without
     needing to manage connections or sessions directly. *)
@@ -13,7 +17,7 @@ module Thread = Caml_threads.Thread
 open Connection
 
 (** Version of hegel-core to install. *)
-let hegel_server_version = "0.3.0"
+let hegel_server_version = "0.4.1"
 
 (** Environment variable to override the hegel server command. *)
 let hegel_server_command_env = "HEGEL_SERVER_COMMAND"
@@ -154,18 +158,32 @@ let has_working_client session =
 (** [cleanup session] cleans up the session, killing the subprocess and closing
     the connection. *)
 let cleanup session =
-  (match session.connection with
+  Printf.eprintf "[hegel-debug] cleanup: start (process=%s, conn=%s)\n%!"
+    (match session.process with Some _ -> "Some" | None -> "None")
+    (match session.connection with Some _ -> "Some" | None -> "None");
+  (* Kill the server process first so the pipe's write end closes, giving the
+     reader thread EOF. On Linux, close() alone does not wake up a blocked
+     read() on a pipe, but killing the server (which closes the write end)
+     does. After this, the reader thread will process EOF and exit. *)
+  (match session.process with
+  | Some pid ->
+      Printf.eprintf "[hegel-debug] cleanup: killing pid %d\n%!" pid;
+      (try Caml_unix.kill pid Stdlib.Sys.sigterm with _ -> ());
+      Printf.eprintf "[hegel-debug] cleanup: waitpid\n%!";
+      (try ignore (Caml_unix.waitpid [] pid) with _ -> ());
+      Printf.eprintf "[hegel-debug] cleanup: waitpid done\n%!";
+      session.process <- None
+  | None -> ());
+  match session.connection with
   | Some conn ->
+      Printf.eprintf "[hegel-debug] cleanup: closing connection\n%!";
       close conn;
+      Printf.eprintf "[hegel-debug] cleanup: connection closed\n%!";
       session.connection <- None;
       session.client <- None
-  | None -> ());
-  match session.process with
-  | Some pid ->
-      (try Caml_unix.kill pid Stdlib.Sys.sigterm with _ -> ());
-      (try ignore (Caml_unix.waitpid [] pid) with _ -> ());
-      session.process <- None
-  | None -> ()
+  | None ->
+      ();
+      Printf.eprintf "[hegel-debug] cleanup: done\n%!"
 
 (** [start session] starts the hegel server if not already running. Spawns the
     server with [--stdio] for pipe-based communication. *)
@@ -202,26 +220,38 @@ let start session =
           session.connection <- Some conn;
           let c = Client.create_client conn in
           session.client <- Some c;
-          (* Monitor thread: detect server crash *)
-          ignore
-            (Thread.create
-               (fun () ->
-                 ignore (Caml_unix.waitpid [] pid);
-                 match session.connection with
-                 | Some conn -> conn.server_exited <- true
-                 | None -> ())
-               ());
-          Stdlib.at_exit (fun () -> cleanup session)
+          Stdlib.at_exit (fun () ->
+              Printf.eprintf "[hegel-debug] at_exit handler invoked\n%!";
+              cleanup session;
+              Printf.eprintf "[hegel-debug] at_exit handler done\n%!")
         end)
   end
 
-(** [restart_session ()] forces a restart of the global session. Useful when
-    environment variables (like [HEGEL_PROTOCOL_TEST_MODE]) have changed. *)
-let restart_session () = cleanup global_session
-
 (** [run_hegel_test ?settings test_fn] runs a property test using the shared
-    hegel process. Uses {!Client.default_settings} when [settings] is not
-    provided. *)
+    hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is set, creates a disposable
+    session so the test server gets a fresh subprocess with the right env var.
+    Uses {!Client.default_settings} when [settings] is not provided. *)
 let run_hegel_test ?(settings = Client.default_settings ()) test_fn =
-  start global_session;
-  Client.run_test (Option.value_exn global_session.client) ~settings test_fn
+  match Sys.getenv "HEGEL_PROTOCOL_TEST_MODE" with
+  | Some mode when not (String.is_empty mode) ->
+      Printf.eprintf "[hegel-debug] disposable session: creating (mode=%s)\n%!"
+        mode;
+      let session =
+        {
+          process = None;
+          connection = None;
+          client = None;
+          lock = Mutex.create ();
+        }
+      in
+      start session;
+      Exn.protect
+        ~finally:(fun () ->
+          Printf.eprintf "[hegel-debug] disposable session: cleanup\n%!";
+          cleanup session;
+          Printf.eprintf "[hegel-debug] disposable session: cleanup done\n%!")
+        ~f:(fun () ->
+          Client.run_test (Option.value_exn session.client) ~settings test_fn)
+  | _ ->
+      start global_session;
+      Client.run_test (Option.value_exn global_session.client) ~settings test_fn

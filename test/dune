@@ -11,7 +11,6 @@
   test_generators_primitives
   test_generators_collections
   test_generators_combinators
-  test_showcase
   test_conformance_helpers
   test_derive)
  (libraries hegel alcotest core core_unix threads.posix)

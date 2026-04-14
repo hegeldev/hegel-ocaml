@@ -41,7 +41,7 @@ def test_conformance(subtests: pytest.Subtests) -> None:
         BooleanConformance(binary("test_booleans")),
         IntegerConformance(binary("test_integers"), min_value=-(2**62), max_value=2**62-1),
         FloatConformance(binary("test_floats")),
-        TextConformance(binary("test_text")),
+        TextConformance(binary("test_text"), no_surrogates=True),
         BinaryConformance(binary("test_binary")),
         ListConformance(binary("test_lists"), min_value=-1000, max_value=1000),
         SampledFromConformance(binary("test_sampled_from")),

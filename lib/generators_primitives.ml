@@ -82,10 +82,70 @@ let floats ?min_value ?max_value ?(exclude_min = false) ?(exclude_max = false)
   in
   Basic { schema = `Map pairs; transform = Cbor_helpers.extract_float }
 
-(** [text ?min_size ?max_size ()] creates a generator for Unicode text strings.
+(** Unicode general categories that include surrogate codepoints. OCaml strings
+    are conventionally UTF-8, and surrogates in UTF-8 are ill-formed. *)
+let surrogate_categories = [ "Cs"; "C" ]
 
-    Uses schema type ["string"] as required by the Hegel server. *)
-let text ?(min_size = 0) ?max_size () =
+(** [char_filter_schema_pairs ?codec ?min_codepoint ?max_codepoint ?categories
+     ?exclude_categories ?include_characters ?exclude_characters ()] builds the
+    CBOR key-value pairs for character filtering options, including surrogate
+    auto-exclusion. Used by both {!text} and {!characters}. *)
+let char_filter_schema_pairs ?codec ?min_codepoint ?max_codepoint ?categories
+    ?exclude_categories ?include_characters ?exclude_characters () =
+  (match (categories, exclude_categories) with
+  | Some _, Some _ ->
+      raise
+        (Invalid_argument
+           "categories and exclude_categories are mutually exclusive")
+  | _ -> ());
+  (* Surrogate auto-exclusion *)
+  (match categories with
+  | Some cats ->
+      List.iter cats ~f:(fun cat ->
+          if List.mem surrogate_categories cat ~equal:String.equal then
+            raise
+              (Invalid_argument
+                 (sprintf
+                    "Category %S includes surrogate codepoints (Cs), which \
+                     OCaml UTF-8 strings cannot represent"
+                    cat)))
+  | None -> ());
+  let effective_exclude_categories =
+    match categories with
+    | Some _ -> exclude_categories
+    | None ->
+        let excl = Option.value exclude_categories ~default:[] in
+        if List.mem excl "Cs" ~equal:String.equal then Some excl
+        else Some (excl @ [ "Cs" ])
+  in
+  List.filter_opt
+    [
+      Option.map codec ~f:(fun c -> (`Text "codec", `Text c));
+      Option.map min_codepoint ~f:(fun cp -> (`Text "min_codepoint", `Int cp));
+      Option.map max_codepoint ~f:(fun cp -> (`Text "max_codepoint", `Int cp));
+      Option.map categories ~f:(fun cats ->
+          (`Text "categories", `Array (List.map cats ~f:(fun c -> `Text c))));
+      Option.map effective_exclude_categories ~f:(fun cats ->
+          ( `Text "exclude_categories",
+            `Array (List.map cats ~f:(fun c -> `Text c)) ));
+      Option.map include_characters ~f:(fun s ->
+          (`Text "include_characters", `Text s));
+      Option.map exclude_characters ~f:(fun s ->
+          (`Text "exclude_characters", `Text s));
+    ]
+
+(** [text ?min_size ?max_size ?codec ?min_codepoint ?max_codepoint ?categories
+     ?exclude_categories ?include_characters ?exclude_characters ?alphabet ()]
+    creates a generator for Unicode text strings.
+
+    Uses schema type ["string"] as required by the Hegel server. Character
+    filtering options restrict which characters may appear. The [alphabet]
+    parameter is mutually exclusive with all individual character filtering
+    parameters. Surrogate codepoints (category Cs) are always excluded since
+    OCaml strings are conventionally UTF-8. *)
+let text ?(min_size = 0) ?max_size ?codec ?min_codepoint ?max_codepoint
+    ?categories ?exclude_categories ?include_characters ?exclude_characters
+    ?alphabet () =
   if min_size < 0 then
     raise
       (Invalid_argument (sprintf "min_size=%d must be non-negative" min_size));
@@ -97,6 +157,34 @@ let text ?(min_size = 0) ?max_size () =
         (Invalid_argument
            (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
   | _ -> ());
+  let has_char_param =
+    Option.is_some codec
+    || Option.is_some min_codepoint
+    || Option.is_some max_codepoint
+    || Option.is_some categories
+    || Option.is_some exclude_categories
+    || Option.is_some include_characters
+    || Option.is_some exclude_characters
+  in
+  (match alphabet with
+  | Some _ when has_char_param ->
+      raise
+        (Invalid_argument
+           "alphabet is mutually exclusive with individual character filtering \
+            parameters")
+  | _ -> ());
+  let char_pairs =
+    match alphabet with
+    | Some alph ->
+        [
+          (`Text "categories", `Array []);
+          (`Text "include_characters", `Text alph);
+        ]
+    | None ->
+        char_filter_schema_pairs ?codec ?min_codepoint ?max_codepoint
+          ?categories ?exclude_categories ?include_characters
+          ?exclude_characters ()
+  in
   let pairs =
     List.filter_opt
       [
@@ -104,6 +192,31 @@ let text ?(min_size = 0) ?max_size () =
         Some (`Text "min_size", `Int min_size);
         Option.map max_size ~f:(fun ms -> (`Text "max_size", `Int ms));
       ]
+    @ char_pairs
+  in
+  Basic { schema = `Map pairs; transform = Cbor_helpers.extract_string }
+
+(** [characters ?codec ?min_codepoint ?max_codepoint ?categories
+     ?exclude_categories ?include_characters ?exclude_characters ()] creates a
+    generator for single Unicode characters (as single-character UTF-8 strings).
+
+    Uses a string schema with [min_size: 1] and [max_size: 1]. Character
+    filtering options restrict which characters may appear. Surrogate codepoints
+    (category Cs) are always excluded since OCaml strings are conventionally
+    UTF-8. *)
+let characters ?codec ?min_codepoint ?max_codepoint ?categories
+    ?exclude_categories ?include_characters ?exclude_characters () =
+  let char_pairs =
+    char_filter_schema_pairs ?codec ?min_codepoint ?max_codepoint ?categories
+      ?exclude_categories ?include_characters ?exclude_characters ()
+  in
+  let pairs =
+    [
+      (`Text "type", `Text "string");
+      (`Text "min_size", `Int 1);
+      (`Text "max_size", `Int 1);
+    ]
+    @ char_pairs
   in
   Basic { schema = `Map pairs; transform = Cbor_helpers.extract_string }
 

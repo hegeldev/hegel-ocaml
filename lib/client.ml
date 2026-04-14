@@ -209,9 +209,25 @@ let stop_span ?(discard = false) tc =
   end
 
 (** Supported protocol version range. *)
-let supported_protocol_lo = 0.1
+let supported_protocol_lo = "0.10"
 
-let supported_protocol_hi = 0.8
+let supported_protocol_hi = "0.10"
+
+(** Compare two "major.minor" version strings numerically. Returns a negative
+    number if a < b, 0 if a = b, positive if a > b. *)
+let compare_versions a b =
+  let parse s =
+    match String.split s ~on:'.' with
+    | [ major; minor ] -> (int_of_string major, int_of_string minor)
+    | _ ->
+        failwith
+          (Printf.sprintf
+             "invalid version string '%s': expected 'major.minor' format" s)
+  in
+  let a_major, a_minor = parse a in
+  let b_major, b_minor = parse b in
+  let c = Int.compare a_major b_major in
+  if c <> 0 then c else Int.compare a_minor b_minor
 
 type client = { connection : connection; control : stream; lock : Mutex.t }
 (** Hegel client for running property-based tests. *)
@@ -219,15 +235,15 @@ type client = { connection : connection; control : stream; lock : Mutex.t }
 (** [create_client connection] creates a new client from a connection. The
     connection must not yet have had its handshake performed. *)
 let create_client connection =
-  let server_version = Float.of_string (send_handshake connection) in
+  let server_version = send_handshake connection in
   if
-    Float.( < ) server_version supported_protocol_lo
-    || Float.( > ) server_version supported_protocol_hi
+    compare_versions server_version supported_protocol_lo < 0
+    || compare_versions server_version supported_protocol_hi > 0
   then
     failwith
       (sprintf
-         "hegel-ocaml supports protocol versions %.1f through %.1f, but the \
-          connected server is using protocol version %g. Upgrading hegel-ocaml \
+         "hegel-ocaml supports protocol versions %s through %s, but the \
+          connected server is using protocol version %s. Upgrading hegel-ocaml \
           or downgrading hegel-core might help."
          supported_protocol_lo supported_protocol_hi server_version);
   { connection; control = control_stream connection; lock = Mutex.create () }
@@ -332,7 +348,7 @@ let run_test client ~settings ?database_key test_fn =
       let fields = base_fields @ database_field @ suppress_field in
       ignore (pending_get (request client.control (`Map fields))));
   let receive_and_run_test_case ~is_final =
-    let message_id, message = receive_request test_stream () in
+    let message_id, message = receive_request test_stream in
     let pairs = Cbor_helpers.extract_dict message in
     let ch_id =
       Int32.of_int_exn
@@ -346,7 +362,7 @@ let run_test client ~settings ?database_key test_fn =
     run_test_case client test_case_stream test_fn ~is_final
   in
   let rec receive_events () =
-    let message_id, message = receive_request test_stream () in
+    let message_id, message = receive_request test_stream in
     let pairs = Cbor_helpers.extract_dict message in
     let event =
       Cbor_helpers.extract_string

@@ -231,6 +231,204 @@ let test_domains_max_length_too_large () =
   | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
+(* ==== Character filtering tests ==== *)
+
+(** Test: text with codec option produces codec in schema. *)
+let test_text_with_codec () =
+  let gen = text ~codec:"ascii" () in
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let c = Cbor_helpers.extract_string (List.assoc (`Text "codec") pairs) in
+      Alcotest.(check string) "codec" "ascii" c
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: text with min_codepoint and max_codepoint options. *)
+let test_text_with_codepoint_range () =
+  let gen = text ~min_codepoint:65 ~max_codepoint:90 () in
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let min_cp =
+        Cbor_helpers.extract_int (List.assoc (`Text "min_codepoint") pairs)
+      in
+      let max_cp =
+        Cbor_helpers.extract_int (List.assoc (`Text "max_codepoint") pairs)
+      in
+      Alcotest.(check int) "min_codepoint" 65 min_cp;
+      Alcotest.(check int) "max_codepoint" 90 max_cp
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: text with categories produces categories in schema. *)
+let test_text_with_categories () =
+  let gen = text ~categories:[ "L"; "Nd" ] () in
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      (* categories should be present *)
+      let cats = List.assoc (`Text "categories") pairs in
+      (match cats with
+      | `Array items ->
+          let strs = List.map Cbor_helpers.extract_string items in
+          Alcotest.(check (list string)) "categories" [ "L"; "Nd" ] strs
+      | _ -> Alcotest.fail "expected array");
+      (* exclude_categories should NOT be present when categories is set *)
+      Alcotest.(check bool)
+        "no exclude_categories" false
+        (List.mem_assoc (`Text "exclude_categories") pairs)
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: text with exclude_categories produces exclude_categories in schema and
+    auto-appends Cs. *)
+let test_text_with_exclude_categories () =
+  let gen = text ~exclude_categories:[ "Zs" ] () in
+  match schema gen with
+  | Some s -> (
+      let pairs = Cbor_helpers.extract_dict s in
+      let cats = List.assoc (`Text "exclude_categories") pairs in
+      match cats with
+      | `Array items ->
+          let strs = List.map Cbor_helpers.extract_string items in
+          (* Cs should be auto-appended *)
+          Alcotest.(check (list string))
+            "exclude_categories" [ "Zs"; "Cs" ] strs
+      | _ -> Alcotest.fail "expected array")
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: text with exclude_categories already containing Cs does not duplicate
+    it. *)
+let test_text_exclude_categories_cs_already_present () =
+  let gen = text ~exclude_categories:[ "Cs" ] () in
+  match schema gen with
+  | Some s -> (
+      let pairs = Cbor_helpers.extract_dict s in
+      let cats = List.assoc (`Text "exclude_categories") pairs in
+      match cats with
+      | `Array items ->
+          let strs = List.map Cbor_helpers.extract_string items in
+          Alcotest.(check (list string)) "no duplicate Cs" [ "Cs" ] strs
+      | _ -> Alcotest.fail "expected array")
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: text with include_characters option. *)
+let test_text_with_include_characters () =
+  let gen = text ~include_characters:"abc" () in
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let inc =
+        Cbor_helpers.extract_string
+          (List.assoc (`Text "include_characters") pairs)
+      in
+      Alcotest.(check string) "include_characters" "abc" inc
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: text with exclude_characters option. *)
+let test_text_with_exclude_characters () =
+  let gen = text ~exclude_characters:"xyz" () in
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let exc =
+        Cbor_helpers.extract_string
+          (List.assoc (`Text "exclude_characters") pairs)
+      in
+      Alcotest.(check string) "exclude_characters" "xyz" exc
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: text raises when both categories and exclude_categories are set. *)
+let test_text_categories_and_exclude_categories () =
+  match text ~categories:[ "L" ] ~exclude_categories:[ "Zs" ] () with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+
+(** Test: text raises when categories include surrogate category Cs. *)
+let test_text_categories_surrogate_cs () =
+  match text ~categories:[ "Cs" ] () with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+
+(** Test: text raises when categories include surrogate category C. *)
+let test_text_categories_surrogate_c () =
+  match text ~categories:[ "C" ] () with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+
+(** Test: text with alphabet produces include_characters and empty categories in
+    schema. *)
+let test_text_with_alphabet () =
+  let gen = text ~alphabet:"abc" () in
+  match schema gen with
+  | Some s -> (
+      let pairs = Cbor_helpers.extract_dict s in
+      let inc =
+        Cbor_helpers.extract_string
+          (List.assoc (`Text "include_characters") pairs)
+      in
+      Alcotest.(check string) "include_characters from alphabet" "abc" inc;
+      let cats = List.assoc (`Text "categories") pairs in
+      match cats with
+      | `Array items ->
+          Alcotest.(check int) "empty categories" 0 (List.length items)
+      | _ -> Alcotest.fail "expected array")
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: text raises when alphabet is combined with codec. *)
+let test_text_alphabet_with_codec () =
+  match text ~alphabet:"abc" ~codec:"ascii" () with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+
+(** Test: text raises when alphabet is combined with max_codepoint. *)
+let test_text_alphabet_with_max_codepoint () =
+  match text ~alphabet:"abc" ~max_codepoint:90 () with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+
+(** Test: characters produces a Basic generator with min_size=1 and max_size=1.
+*)
+let test_characters_schema () =
+  let gen = characters () in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
+      Alcotest.(check string) "type" "string" typ;
+      let min_s =
+        Cbor_helpers.extract_int (List.assoc (`Text "min_size") pairs)
+      in
+      let max_s =
+        Cbor_helpers.extract_int (List.assoc (`Text "max_size") pairs)
+      in
+      Alcotest.(check int) "min_size" 1 min_s;
+      Alcotest.(check int) "max_size" 1 max_s
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: characters with codec option. *)
+let test_characters_with_codec () =
+  let gen = characters ~codec:"ascii" () in
+  match schema gen with
+  | Some s ->
+      let pairs = Cbor_helpers.extract_dict s in
+      let c = Cbor_helpers.extract_string (List.assoc (`Text "codec") pairs) in
+      Alcotest.(check string) "codec" "ascii" c
+  | None -> Alcotest.fail "expected schema"
+
+(** Test: characters with categories option. *)
+let test_characters_with_categories () =
+  let gen = characters ~categories:[ "L" ] () in
+  match schema gen with
+  | Some s -> (
+      let pairs = Cbor_helpers.extract_dict s in
+      let cats = List.assoc (`Text "categories") pairs in
+      match cats with
+      | `Array items ->
+          let strs = List.map Cbor_helpers.extract_string items in
+          Alcotest.(check (list string)) "categories" [ "L" ] strs
+      | _ -> Alcotest.fail "expected array")
+  | None -> Alcotest.fail "expected schema"
+
 (* ==== E2E tests ==== *)
 
 (** Test: just always returns the constant. *)
@@ -330,6 +528,33 @@ let tests =
       test_domains_max_length_too_small;
     Alcotest.test_case "domains max_length too large" `Quick
       test_domains_max_length_too_large;
+    Alcotest.test_case "text with codec" `Quick test_text_with_codec;
+    Alcotest.test_case "text with codepoint range" `Quick
+      test_text_with_codepoint_range;
+    Alcotest.test_case "text with categories" `Quick test_text_with_categories;
+    Alcotest.test_case "text with exclude_categories" `Quick
+      test_text_with_exclude_categories;
+    Alcotest.test_case "text exclude_categories Cs present" `Quick
+      test_text_exclude_categories_cs_already_present;
+    Alcotest.test_case "text with include_characters" `Quick
+      test_text_with_include_characters;
+    Alcotest.test_case "text with exclude_characters" `Quick
+      test_text_with_exclude_characters;
+    Alcotest.test_case "text categories + exclude_categories" `Quick
+      test_text_categories_and_exclude_categories;
+    Alcotest.test_case "text categories surrogate Cs" `Quick
+      test_text_categories_surrogate_cs;
+    Alcotest.test_case "text categories surrogate C" `Quick
+      test_text_categories_surrogate_c;
+    Alcotest.test_case "text with alphabet" `Quick test_text_with_alphabet;
+    Alcotest.test_case "text alphabet with codec" `Quick
+      test_text_alphabet_with_codec;
+    Alcotest.test_case "text alphabet with max_codepoint" `Quick
+      test_text_alphabet_with_max_codepoint;
+    Alcotest.test_case "characters schema" `Quick test_characters_schema;
+    Alcotest.test_case "characters with codec" `Quick test_characters_with_codec;
+    Alcotest.test_case "characters with categories" `Quick
+      test_characters_with_categories;
     Alcotest.test_case "just e2e" `Quick test_just_e2e;
     Alcotest.test_case "from_regex e2e" `Quick test_from_regex_e2e;
     Alcotest.test_case "emails e2e" `Quick test_emails_e2e;

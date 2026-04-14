@@ -1,7 +1,11 @@
 (** Global session management for Hegel.
 
     This module manages a shared hegel subprocess communicating over stdio
-    pipes. It starts lazily on first use and cleans up when the process exits.
+    pipes. It starts lazily on first use and lives for the process lifetime (the
+    OS cleans up on exit).
+
+    When [HEGEL_PROTOCOL_TEST_MODE] is set, a disposable session is created per
+    test so the test server gets a fresh subprocess with the right env var.
 
     The main entry point is {!run_hegel_test}, which the user calls without
     needing to manage connections or sessions directly. *)
@@ -57,9 +61,6 @@ val start : hegel_session -> unit
 val run_hegel_test :
   ?settings:Client.settings -> (Client.test_case -> unit) -> unit
 (** [run_hegel_test ?settings test_fn] runs a property test using the shared
-    hegel process. Uses {!Client.default_settings} when [settings] is not
-    provided. *)
-
-val restart_session : unit -> unit
-(** [restart_session ()] forces a restart of the global session. Useful when
-    environment variables (like [HEGEL_PROTOCOL_TEST_MODE]) have changed. *)
+    hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is set, creates a disposable
+    session so the test server gets a fresh subprocess with the right env var.
+    Uses {!Client.default_settings} when [settings] is not provided. *)

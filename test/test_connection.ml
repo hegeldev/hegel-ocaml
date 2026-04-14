@@ -35,7 +35,7 @@ let test_send_handshake_returns_version () =
   let t = Thread.create Test_helpers.handshake_via_stream peer_conn in
   let version = send_handshake client_conn in
   Thread.join t;
-  Alcotest.(check string) "version" "0.3" version;
+  Alcotest.(check string) "version" "0.10" version;
   close client_conn;
   close peer_conn
 
@@ -62,7 +62,7 @@ let test_send_handshake_bad_response () =
       (fun () ->
         let ch = control_stream peer_conn in
         peer_conn.connection_state <- Client;
-        let msg_id, _payload = receive_request_raw ch () in
+        let msg_id, _payload = receive_request_raw ch in
         send_response_raw ch msg_id "NotOk")
       ()
   in
@@ -163,25 +163,10 @@ let test_stream_process_message_when_closed () =
   let ch = new_stream client_conn ~role:"TestClosed" () in
   close_stream ch;
   let raised = ref false in
-  (try ignore (receive_request ch ~timeout:0.1 ())
+  (try ignore (receive_request ch)
    with Failure msg ->
      raised := true;
      Alcotest.(check bool) "is closed" true (contains_substring msg "is closed"));
-  Alcotest.(check bool) "raised" true !raised;
-  close peer_conn;
-  close client_conn
-
-let test_stream_timeout () =
-  let s1, s2 = make_socket_pair () in
-  let peer_conn = make_connection s1 ~name:"Peer" () in
-  let client_conn = make_connection s2 ~name:"Client" () in
-  handshake_pair peer_conn client_conn;
-  let ch = new_stream client_conn ~role:"TestTimeout" () in
-  let raised = ref false in
-  (try ignore (receive_request ch ~timeout:0.1 ())
-   with Failure msg ->
-     raised := true;
-     Alcotest.(check bool) "timed out" true (contains_substring msg "Timed out"));
   Alcotest.(check bool) "raised" true !raised;
   close peer_conn;
   close client_conn
@@ -286,7 +271,7 @@ let test_request_response () =
         Test_helpers.handshake_via_stream peer_conn;
         (try
            while true do
-             let msg_id, message = receive_request ch () in
+             let msg_id, message = receive_request ch in
              let x =
                Cbor_helpers.extract_int
                  (List.Assoc.find_exn
@@ -337,7 +322,7 @@ let test_receive_response () =
         Test_helpers.handshake_via_stream peer_conn;
         try
           while true do
-            let msg_id, _message = receive_request ch () in
+            let msg_id, _message = receive_request ch in
             send_response_value ch msg_id (`Int 42)
           done
         with Failure _ -> ())
@@ -346,7 +331,7 @@ let test_receive_response () =
   ignore (send_handshake client_conn);
   let ch = connect_stream client_conn 3l () in
   let msg_id = send_request ch (`Map [ (`Text "test", `Bool true) ]) in
-  let result = receive_response ch msg_id () in
+  let result = receive_response ch msg_id in
   Alcotest.(check int) "result" 42 (Cbor_helpers.extract_int result);
   close client_conn;
   Thread.join t;
@@ -366,7 +351,7 @@ let test_pending_request_caching () =
         Test_helpers.handshake_via_stream peer_conn;
         try
           while true do
-            let msg_id, message = receive_request ch () in
+            let msg_id, message = receive_request ch in
             let v =
               Cbor_helpers.extract_int
                 (List.Assoc.find_exn
@@ -437,7 +422,7 @@ let test_duplicate_response_error () =
     (Pkt
        { stream_id = 0l; message_id = 42l; is_reply = true; payload = "second" });
   let raised = ref false in
-  (try process_one_message ch ~timeout:0.1 ()
+  (try process_one_message ch
    with Failure msg ->
      raised := true;
      Alcotest.(check bool)
@@ -454,7 +439,7 @@ let test_shutdown_in_inbox () =
   let ch = control_stream conn in
   Queue.enqueue ch.inbox.queue Shutdown;
   let raised = ref false in
-  (try ignore (receive_request ch ~timeout:0.1 ())
+  (try ignore (receive_request ch)
    with Failure msg ->
      raised := true;
      Alcotest.(check bool)
@@ -480,7 +465,7 @@ let test_message_to_nonexistent_stream () =
     };
   (* Also send a control stream message so the peer processes packets *)
   ignore (send_request_raw (control_stream client_conn) "ping");
-  ignore (receive_request_raw (control_stream peer_conn) ());
+  ignore (receive_request_raw (control_stream peer_conn));
   close peer_conn;
   close client_conn
 
@@ -514,7 +499,7 @@ let test_close_stream_creates_dead_stream () =
       (fun () ->
         Test_helpers.handshake_via_stream peer_conn;
         let ch = control_stream peer_conn in
-        let msg_id, _ = receive_request ch () in
+        let msg_id, _ = receive_request ch in
         send_response_value ch msg_id (`Text "Ok");
         peer_done := true)
       ()
@@ -542,7 +527,7 @@ let test_close_stream_creates_dead_stream_with_connect () =
       (fun () ->
         Test_helpers.handshake_via_stream peer_conn;
         let ch = control_stream peer_conn in
-        let msg_id, msg = receive_request ch () in
+        let msg_id, msg = receive_request ch in
         let stream_id =
           Cbor_helpers.extract_int
             (List.Assoc.find_exn
@@ -554,7 +539,7 @@ let test_close_stream_creates_dead_stream_with_connect () =
              (Int32.of_int_exn stream_id)
              ~role:"Hello" ());
         send_response_value ch msg_id (`Text "Ok");
-        let msg_id2, _ = receive_request ch () in
+        let msg_id2, _ = receive_request ch in
         send_response_value ch msg_id2 (`Text "Ok"))
       ()
   in
@@ -606,8 +591,8 @@ let test_process_reply_packet () =
   let ch = control_stream conn in
   Queue.enqueue ch.inbox.queue
     (Pkt { stream_id = 0l; message_id = 7l; is_reply = true; payload = "ok" });
-  process_one_message ch ~timeout:0.1 ();
-  let resp = receive_response_raw ch 7l ~timeout:0.1 () in
+  process_one_message ch;
+  let resp = receive_response_raw ch 7l in
   Alcotest.(check string) "response" "ok" resp;
   close conn
 
@@ -617,7 +602,7 @@ let test_process_request_packet () =
   let ch = control_stream conn in
   Queue.enqueue ch.inbox.queue
     (Pkt { stream_id = 0l; message_id = 3l; is_reply = false; payload = "req" });
-  let msg_id, payload = receive_request_raw ch ~timeout:0.1 () in
+  let msg_id, payload = receive_request_raw ch in
   Alcotest.(check int32) "msg_id" 3l msg_id;
   Alcotest.(check string) "payload" "req" payload;
   close conn
@@ -670,7 +655,7 @@ let test_reply_to_nonexistent_ignored () =
     };
   (* Send another message on control so we can process *)
   ignore (send_request_raw (control_stream client_conn) "ping");
-  ignore (receive_request_raw (control_stream peer_conn) ());
+  ignore (receive_request_raw (control_stream peer_conn));
   close peer_conn;
   close client_conn
 
@@ -719,15 +704,23 @@ let test_result_or_error_neither () =
 (* ---- entry_name ---- *)
 
 let test_entry_name_live_stream () =
+  Printf.eprintf "[hegel-debug] entry_name_live: creating socketpair\n%!";
   let s1, s2 = make_socket_pair () in
+  Printf.eprintf "[hegel-debug] entry_name_live: creating peer_conn\n%!";
   let peer_conn = make_connection s1 ~name:"Peer" () in
+  Printf.eprintf "[hegel-debug] entry_name_live: creating client_conn\n%!";
   let client_conn = make_connection s2 ~name:"Client" () in
+  Printf.eprintf "[hegel-debug] entry_name_live: handshake_pair\n%!";
   handshake_pair peer_conn client_conn;
+  Printf.eprintf "[hegel-debug] entry_name_live: handshake done\n%!";
   let ch = new_stream client_conn ~role:"LiveRole" () in
   let name = entry_name client_conn ch.stream_id in
   Alcotest.(check bool) "has LiveRole" true (contains_substring name "LiveRole");
+  Printf.eprintf "[hegel-debug] entry_name_live: closing client_conn\n%!";
   close client_conn;
-  close peer_conn
+  Printf.eprintf "[hegel-debug] entry_name_live: closing peer_conn\n%!";
+  close peer_conn;
+  Printf.eprintf "[hegel-debug] entry_name_live: done\n%!"
 
 let test_entry_name_dead_stream () =
   let s1, s2 = make_socket_pair () in
@@ -815,7 +808,7 @@ let test_message_to_dead_stream_in_reader () =
     };
   (* Also send something to control so we can synchronize *)
   ignore (send_request_raw (control_stream client_conn) "sync");
-  ignore (receive_request_raw (control_stream peer_conn) ());
+  ignore (receive_request_raw (control_stream peer_conn));
   close peer_conn;
   close client_conn
 
@@ -855,7 +848,7 @@ let test_send_handshake_short_response () =
       (fun () ->
         let ch = control_stream peer_conn in
         peer_conn.connection_state <- Client;
-        let msg_id, _payload = receive_request_raw ch () in
+        let msg_id, _payload = receive_request_raw ch in
         send_response_raw ch msg_id "Hi")
       ()
   in
@@ -882,7 +875,7 @@ let test_send_handshake_wrong_prefix () =
       (fun () ->
         let ch = control_stream peer_conn in
         peer_conn.connection_state <- Client;
-        let msg_id, _payload = receive_request_raw ch () in
+        let msg_id, _payload = receive_request_raw ch in
         send_response_raw ch msg_id "WrongPrefix/1.0")
       ()
   in
@@ -898,20 +891,6 @@ let test_send_handshake_wrong_prefix () =
   close client_conn;
   close peer_conn
 
-(* ---- process_one_message with default timeout (no ~timeout arg) ---- *)
-
-let test_process_one_message_default_timeout () =
-  let s1, _s2 = make_socket_pair () in
-  let conn = make_connection s1 ~name:"Test" () in
-  let ch = control_stream conn in
-  Queue.enqueue ch.inbox.queue
-    (Pkt { stream_id = 0l; message_id = 1l; is_reply = false; payload = "test" });
-  (* Call process_one_message without ~timeout to hit the default *)
-  process_one_message ch ();
-  let pkt = Queue.dequeue_exn ch.requests in
-  Alcotest.(check string) "payload" "test" pkt.payload;
-  close conn
-
 (** Test: control_stream raises when stream 0 is not Live. *)
 let test_control_stream_failure () =
   let s1, s2 = make_socket_pair () in
@@ -922,6 +901,41 @@ let test_control_stream_failure () =
   (try ignore (control_stream conn) with Failure _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised;
   close conn;
+  Unix.close s2
+
+(** Regression test: rapidly creating and closing connections must not hang.
+    Before the fix, close did not join the reader thread, leaving zombie threads
+    that could starve new connections' readers under unlucky scheduling. This
+    test runs 20 create/handshake/close cycles — without the fix it would hang
+    within a few iterations. *)
+let test_rapid_close_does_not_hang () =
+  for _ = 1 to 20 do
+    let s1, s2 = make_socket_pair () in
+    let peer_conn = make_connection s1 ~name:"Peer" () in
+    let client_conn = make_connection s2 ~name:"Client" () in
+    handshake_pair peer_conn client_conn;
+    close peer_conn;
+    close client_conn
+  done
+
+(** Regression test: writing to a socket whose remote end is closed must raise
+    an OCaml exception (EPIPE), not kill the process with SIGPIPE. This relies
+    on SIGPIPE being ignored at module init time. *)
+let test_write_to_broken_socket_raises () =
+  let s1, s2 = make_socket_pair () in
+  (* Close the read end so writes to s2 will get EPIPE *)
+  Unix.close s1;
+  let raised = ref false in
+  (try
+     Protocol.write_packet s2
+       {
+         Protocol.stream_id = 0l;
+         message_id = 1l;
+         is_reply = false;
+         payload = "hello";
+       }
+   with Unix.Unix_error (Unix.EPIPE, _, _) -> raised := true);
+  Alcotest.(check bool) "raised EPIPE" true !raised;
   Unix.close s2
 
 let tests =
@@ -952,7 +966,6 @@ let tests =
       test_stream_close_when_connection_not_live;
     Alcotest.test_case "process message when closed" `Quick
       test_stream_process_message_when_closed;
-    Alcotest.test_case "stream timeout" `Quick test_stream_timeout;
     (* Stream repr/name *)
     Alcotest.test_case "stream repr" `Quick test_stream_repr;
     Alcotest.test_case "stream repr no role" `Quick test_stream_repr_no_role;
@@ -1035,10 +1048,13 @@ let tests =
       test_send_handshake_short_response;
     Alcotest.test_case "wrong prefix handshake response" `Quick
       test_send_handshake_wrong_prefix;
-    (* process_one_message default timeout *)
-    Alcotest.test_case "process_one_message default timeout" `Quick
-      test_process_one_message_default_timeout;
     (* control_stream failure *)
     Alcotest.test_case "control_stream failure" `Quick
       test_control_stream_failure;
+    (* Regression: rapid create/handshake/close must not hang *)
+    Alcotest.test_case "rapid close does not hang" `Quick
+      test_rapid_close_does_not_hang;
+    (* Regression: write to broken socket raises, not SIGPIPE *)
+    Alcotest.test_case "write to broken socket raises EPIPE" `Quick
+      test_write_to_broken_socket_raises;
   ]

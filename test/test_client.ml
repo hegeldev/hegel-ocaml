@@ -109,15 +109,13 @@ let test_nested_test_raises () =
 
 (* ---- Tests using real hegel binary ---- *)
 
-(** Helper: run a test with a specific HEGEL_PROTOCOL_TEST_MODE. Restarts the
-    session so the new env var takes effect on the subprocess. *)
+(** Helper: run a test with a specific HEGEL_PROTOCOL_TEST_MODE.
+    [run_hegel_test] detects the env var and creates a disposable session. *)
 let with_test_mode mode f =
-  Session.restart_session ();
   Core_unix.putenv ~key:"HEGEL_PROTOCOL_TEST_MODE" ~data:mode;
   Exn.protect
     ~finally:(fun () ->
-      Core_unix.putenv ~key:"HEGEL_PROTOCOL_TEST_MODE" ~data:"";
-      Session.restart_session ())
+      Core_unix.putenv ~key:"HEGEL_PROTOCOL_TEST_MODE" ~data:"")
     ~f
 
 let test_simple_passing_test () =
@@ -281,7 +279,7 @@ let test_version_mismatch () =
         (* Receive the handshake and respond with a bad version *)
         peer_conn.connection_state <- Client;
         let ch = control_stream peer_conn in
-        let msg_id, _payload = receive_request_raw ch () in
+        let msg_id, _payload = receive_request_raw ch in
         send_response_raw ch msg_id "Hegel/9.9")
       ()
   in
@@ -306,13 +304,38 @@ let test_version_mismatch_low () =
       (fun () ->
         peer_conn.connection_state <- Client;
         let ch = control_stream peer_conn in
-        let msg_id, _payload = receive_request_raw ch () in
+        let msg_id, _payload = receive_request_raw ch in
         send_response_raw ch msg_id "Hegel/0.0")
       ()
   in
   let raised = ref false in
   (try ignore (create_client client_conn) with Failure _ -> raised := true);
   Alcotest.(check bool) "raised version mismatch low" true !raised;
+  close client_conn;
+  close peer_conn;
+  Thread.join t
+
+(** Test: malformed version string in create_client. *)
+let test_version_mismatch_bad_format () =
+  let server_socket, client_socket =
+    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+  in
+  let peer_conn = Test_helpers.make_connection server_socket ~name:"Peer" () in
+  let client_conn =
+    Test_helpers.make_connection client_socket ~name:"Client" ()
+  in
+  let t =
+    Thread.create
+      (fun () ->
+        peer_conn.connection_state <- Client;
+        let ch = control_stream peer_conn in
+        let msg_id, _payload = receive_request_raw ch in
+        send_response_raw ch msg_id "Hegel/bad")
+      ()
+  in
+  let raised = ref false in
+  (try ignore (create_client client_conn) with Failure _ -> raised := true);
+  Alcotest.(check bool) "raised bad version format" true !raised;
   close client_conn;
   close peer_conn;
   Thread.join t
@@ -361,7 +384,7 @@ let with_fake_server peer_fn client_fn =
     [(ctrl, test_ch)] where test_ch is the test stream. *)
 let accept_run_test peer_conn =
   let ctrl = control_stream peer_conn in
-  let msg_id, msg = receive_request ctrl () in
+  let msg_id, msg = receive_request ctrl in
   let pairs = Cbor_helpers.extract_dict msg in
   let test_ch_id =
     Int32.of_int_exn
@@ -534,27 +557,6 @@ let test_run_test_passed_false () =
            (contains_substring msg "Property test failed"));
       Alcotest.(check bool) "raised" true !raised)
 
-(** Test: server_exited check in pop_inbox_item. Create a connection, set
-    server_exited to true, then try to receive. Should raise with
-    server_crashed_message. *)
-let test_server_exited_in_pop_inbox () =
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
-  let conn = Test_helpers.make_connection s1 ~name:"Test" () in
-  conn.server_exited <- true;
-  let ch = control_stream conn in
-  let raised = ref false in
-  (try ignore (receive_request ch ())
-   with Failure msg ->
-     raised := true;
-     Alcotest.(check bool)
-       "has server crashed message" true
-       (contains_substring msg "hegel server process has exited"));
-  Alcotest.(check bool) "raised" true !raised;
-  close conn;
-  Core_unix.close s2
-
 (** Test: run_hegel_test with explicit settings parameter (covers the Some s
     branch in session.ml line 257). *)
 let test_run_hegel_test_with_settings () =
@@ -594,8 +596,8 @@ let test_session_start_failure () =
   | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
   | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:""
 
-(** Test: monitor thread detects server crash (session.ml line 231). Start a
-    real session, kill the server process, verify server_exited. *)
+(** Test: reader thread detects server crash. Start a real session, kill the
+    server process, verify server_exited is set (reader gets EOF on pipe). *)
 let test_monitor_thread_detects_crash () =
   let session : Session.hegel_session =
     { process = None; connection = None; client = None; lock = Mutex.create () }
@@ -605,7 +607,7 @@ let test_monitor_thread_detects_crash () =
   (match session.process with
   | Some pid -> (
       Caml_unix.kill pid Stdlib.Sys.sigkill;
-      (* Wait for the monitor thread to detect the crash *)
+      (* Wait for the reader thread to detect the crash (EOF on pipe) *)
       Caml_unix.sleepf 0.5;
       match session.connection with
       | Some conn ->
@@ -1479,6 +1481,8 @@ let tests =
     Alcotest.test_case "start/stop span live" `Quick test_start_stop_span_live;
     Alcotest.test_case "version mismatch" `Quick test_version_mismatch;
     Alcotest.test_case "version mismatch low" `Quick test_version_mismatch_low;
+    Alcotest.test_case "version mismatch bad format" `Quick
+      test_version_mismatch_bad_format;
     Alcotest.test_case "run_test with seed" `Quick test_run_test_with_seed;
     Alcotest.test_case "multiple interesting" `Quick test_multiple_interesting;
     Alcotest.test_case "unrecognised event" `Quick test_unrecognised_event;
@@ -1492,8 +1496,6 @@ let tests =
       test_run_test_health_check_failure;
     Alcotest.test_case "run_test flaky" `Quick test_run_test_flaky;
     Alcotest.test_case "run_test passed=false" `Quick test_run_test_passed_false;
-    Alcotest.test_case "server_exited in pop_inbox" `Quick
-      test_server_exited_in_pop_inbox;
     Alcotest.test_case "server crash in event loop" `Quick
       test_server_crash_in_event_loop;
     Alcotest.test_case "send error reply fails silently" `Quick

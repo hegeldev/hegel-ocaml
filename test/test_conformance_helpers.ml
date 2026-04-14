@@ -385,27 +385,19 @@ let test_hashmaps_transform_bad_inner () =
       Alcotest.(check bool) "raises on bad pair" true raised
   | None -> Alcotest.fail "expected basic generator"
 
-(** Test: hashmaps() raises when keys are non-basic. *)
-let test_hashmaps_non_basic_keys_raises () =
+(** Test: hashmaps() with non-basic keys produces a non-basic generator. *)
+let test_hashmaps_non_basic_keys_composite () =
   let key_gen = filter (fun _ -> true) (integers ()) in
   let val_gen = integers () in
-  let raised =
-    match hashmaps key_gen val_gen () with
-    | _ -> false
-    | exception Failure _ -> true
-  in
-  Alcotest.(check bool) "raises on non-basic keys" true raised
+  let gen = hashmaps key_gen val_gen () in
+  Alcotest.(check bool) "not basic" false (is_basic gen)
 
-(** Test: hashmaps() raises when values are non-basic. *)
-let test_hashmaps_non_basic_values_raises () =
+(** Test: hashmaps() with non-basic values produces a non-basic generator. *)
+let test_hashmaps_non_basic_values_composite () =
   let key_gen = integers () in
   let val_gen = filter (fun _ -> true) (integers ()) in
-  let raised =
-    match hashmaps key_gen val_gen () with
-    | _ -> false
-    | exception Failure _ -> true
-  in
-  Alcotest.(check bool) "raises on non-basic values" true raised
+  let gen = hashmaps key_gen val_gen () in
+  Alcotest.(check bool) "not basic" false (is_basic gen)
 
 (* ==== E2E tests for new generators ==== *)
 
@@ -504,10 +496,10 @@ let tests =
       test_hashmaps_transform_bad_outer;
     Alcotest.test_case "hashmaps transform bad inner" `Quick
       test_hashmaps_transform_bad_inner;
-    Alcotest.test_case "hashmaps non-basic keys raises" `Quick
-      test_hashmaps_non_basic_keys_raises;
-    Alcotest.test_case "hashmaps non-basic values raises" `Quick
-      test_hashmaps_non_basic_values_raises;
+    Alcotest.test_case "hashmaps non-basic keys composite" `Quick
+      test_hashmaps_non_basic_keys_composite;
+    Alcotest.test_case "hashmaps non-basic values composite" `Quick
+      test_hashmaps_non_basic_values_composite;
     (* E2E tests *)
     Alcotest.test_case "floats e2e" `Quick test_floats_e2e;
     Alcotest.test_case "floats bounds e2e" `Quick test_floats_bounds_e2e;

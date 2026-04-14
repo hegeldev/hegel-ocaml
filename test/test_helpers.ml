@@ -34,7 +34,7 @@ let make_connection fd ?name ?debug () =
   Connection.create_connection ~read_fd:fd ~write_fd:fd ?name ?debug ()
 
 (** [raw_handshake_responder fd] reads one raw handshake packet from [fd] and
-    responds with ["Hegel/0.3"]. Used by tests that need the client's
+    responds with ["Hegel/0.10"]. Used by tests that need the client's
     {!Connection.send_handshake} to succeed. This function reads and writes on a
     raw fd without a connection object, so it must be used BEFORE any connection
     is created on the same fd, or on a separate fd that has no background
@@ -46,24 +46,28 @@ let raw_handshake_responder fd =
       stream_id = pkt.stream_id;
       message_id = pkt.message_id;
       is_reply = true;
-      payload = "Hegel/0.3";
+      payload = "Hegel/0.10";
     }
 
 (** [handshake_via_stream peer_conn] handles a handshake on the peer side using
     the connection's stream API (compatible with the background reader). *)
 let handshake_via_stream peer_conn =
   let ch = Connection.control_stream peer_conn in
-  let msg_id, _payload = Connection.receive_request_raw ch () in
-  Connection.send_response_raw ch msg_id "Hegel/0.3";
+  let msg_id, _payload = Connection.receive_request_raw ch in
+  Connection.send_response_raw ch msg_id "Hegel/0.10";
   peer_conn.Connection.connection_state <- Connection.Client
 
 (** [handshake_pair peer_conn client_conn] performs a handshake between peer and
     client connections. Uses the stream API for the peer side (compatible with
     the background reader thread). *)
 let handshake_pair peer_conn client_conn =
+  Printf.eprintf "[hegel-debug] handshake_pair: creating peer thread\n%!";
   let t = Thread.create handshake_via_stream peer_conn in
+  Printf.eprintf "[hegel-debug] handshake_pair: send_handshake\n%!";
   let _version = Connection.send_handshake client_conn in
-  Thread.join t
+  Printf.eprintf "[hegel-debug] handshake_pair: joining peer thread\n%!";
+  Thread.join t;
+  Printf.eprintf "[hegel-debug] handshake_pair: done\n%!"
 
 (** Helper: check where a given command is *)
 let find_cmd cmd =

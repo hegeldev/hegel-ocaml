@@ -15,11 +15,14 @@ module Condition = Caml_threads.Condition
 module Thread = Caml_threads.Thread
 open Protocol
 
+(* Ignore SIGPIPE so that writes to broken sockets raise EPIPE instead of
+   killing the process. This is standard practice for network programs and is
+   required because background reader threads may attempt error-reply writes
+   to sockets whose remote end has already been closed. *)
+let () = Stdlib.Sys.set_signal Stdlib.Sys.sigpipe Stdlib.Sys.Signal_ignore
+
 (** Handshake string sent by the client to initiate the protocol. *)
 let handshake_string = "hegel_handshake_start"
-
-(** Default timeout in seconds for stream operations. *)
-let stream_timeout = 30.0
 
 (** Message used when the server has crashed. *)
 let server_crashed_message =
@@ -89,6 +92,7 @@ and connection = {
   writer_lock : Mutex.t;
   mutable connection_state : connection_state;
   mutable server_exited : bool;
+  mutable reader_thread : Thread.t option;
 }
 (** Multiplexed connection to a Hegel peer. *)
 
@@ -239,13 +243,28 @@ let close conn =
   if not conn.running then ()
   else begin
     conn.running <- false;
+    (* Shutdown the read fd to unblock any reader thread blocked in read().
+       On Linux, close() alone does not wake up a blocked read() in another
+       thread. shutdown() ensures the reader gets EOF immediately.
+       Fails harmlessly with ENOTSOCK on pipes. *)
+    let shutdown_ok =
+      try
+        Unix.shutdown conn.read_fd ~mode:Unix.SHUTDOWN_ALL;
+        true
+      with Unix.Unix_error _ -> false
+    in
     (try Unix.close conn.read_fd with Unix.Unix_error _ -> ());
     (* Only close write_fd if it's different from read_fd *)
     (if not (phys_equal conn.write_fd conn.read_fd) then
        try Unix.close conn.write_fd with Unix.Unix_error _ -> ());
     Mutex.lock conn.streams_lock;
     signal_all_streams conn;
-    Mutex.unlock conn.streams_lock
+    Mutex.unlock conn.streams_lock;
+    (* Join the reader thread to ensure it has fully exited before returning.
+       Only safe when shutdown succeeded (sockets), since shutdown guarantees
+       the blocked read returns immediately. On pipes, shutdown fails with
+       ENOTSOCK and close alone may not unblock the reader thread. *)
+    if shutdown_ok then Option.iter conn.reader_thread ~f:Thread.join
   end
 
 (** [create_connection ~read_fd ~write_fd ?name ?debug ()] creates a new
@@ -266,6 +285,7 @@ let create_connection ~read_fd ~write_fd ?name ?(debug = false) () =
       writer_lock = Mutex.create ();
       connection_state = Unresolved;
       server_exited = false;
+      reader_thread = None;
     }
   in
   let control = make_stream conn 0l ~role:(Some "Control") in
@@ -273,7 +293,7 @@ let create_connection ~read_fd ~write_fd ?name ?(debug = false) () =
   Hashtbl.set conn.streams ~key:0l ~data:(Live control);
   Mutex.unlock conn.streams_lock;
   (* Spawn background reader thread *)
-  ignore (Thread.create reader_loop conn);
+  conn.reader_thread <- Some (Thread.create reader_loop conn);
   conn
 
 (** [is_live conn] returns [true] if the connection is still active. *)
@@ -320,12 +340,10 @@ let connect_stream conn stream_id ?role () =
 
 (* --- Stream operations --- *)
 
-(** [pop_inbox_item ch timeout] waits for an item to appear in the stream's
-    inbox, with a timeout. Returns the item or raises [Failure] on timeout or
-    connection close. *)
-let pop_inbox_item ch timeout =
+(** [pop_inbox_item ch] waits for an item to appear in the stream's inbox.
+    Blocks until a packet arrives or the connection shuts down. *)
+let pop_inbox_item ch =
   Mutex.lock ch.inbox.lock;
-  let deadline = Unix.gettimeofday () +. timeout in
   let rec wait () =
     if not (Queue.is_empty ch.inbox.queue) then begin
       let item = Queue.dequeue_exn ch.inbox.queue in
@@ -336,42 +354,29 @@ let pop_inbox_item ch timeout =
       Mutex.unlock ch.inbox.lock;
       raise (Failure (sprintf "%s is closed" (stream_name ch)))
     end
-    else if ch.conn.server_exited then begin
-      Mutex.unlock ch.inbox.lock;
-      raise (Failure server_crashed_message)
-    end
     else begin
-      let remaining = deadline -. Unix.gettimeofday () in
-      if Float.( <= ) remaining 0.0 then begin
-        Mutex.unlock ch.inbox.lock;
-        raise
-          (Failure
-             (sprintf "Timed out after %.1fs waiting for a message on %s"
-                timeout (stream_name ch)))
-      end;
-      (* Release lock, sleep briefly, re-acquire *)
-      Mutex.unlock ch.inbox.lock;
-      Caml_unix.sleepf (Float.min 0.01 remaining);
-      Mutex.lock ch.inbox.lock;
+      (* Condition.wait atomically releases the lock and blocks until
+         signaled, then re-acquires the lock. push_inbox signals on every
+         enqueue; signal_all_streams pushes Shutdown on connection close. *)
+      Condition.wait ch.inbox.cond ch.inbox.lock;
       wait ()
     end
   in
   wait ()
 
-(** [process_one_message ch ?timeout ()] reads and routes one incoming message
-    for stream [ch]. Dispatches replies to [ch.responses] and requests to
-    [ch.requests]. *)
-let process_one_message ch ?(timeout = stream_timeout) () =
-  let item = pop_inbox_item ch timeout in
+(** [process_one_message ch] reads and routes one incoming message for stream
+    [ch]. Dispatches replies to [ch.responses] and requests to [ch.requests]. *)
+let process_one_message ch =
+  let item = pop_inbox_item ch in
   match item with
   | Shutdown -> raise (Failure "Connection closed")
   | Pkt pkt ->
-      if pkt.is_reply then begin
-        if Hashtbl.mem ch.responses pkt.message_id then
+      if pkt.is_reply then
+        begin if Hashtbl.mem ch.responses pkt.message_id then
           failwith
             (sprintf "Got two responses for message ID %ld" pkt.message_id)
         else Hashtbl.set ch.responses ~key:pkt.message_id ~data:pkt.payload
-      end
+        end
       else Queue.enqueue ch.requests pkt
 
 (** [send_request_raw ch payload] sends raw bytes as a request and returns the
@@ -387,36 +392,36 @@ let send_request_raw ch payload =
     message ID. *)
 let send_request ch message = send_request_raw ch (CBOR.Simple.encode message)
 
-(** [receive_response_raw ch message_id ?timeout ()] waits for raw response
-    bytes to a request with the given [message_id]. *)
-let receive_response_raw ch message_id ?(timeout = stream_timeout) () =
+(** [receive_response_raw ch message_id] waits for raw response bytes to a
+    request with the given [message_id]. *)
+let receive_response_raw ch message_id =
   while not (Hashtbl.mem ch.responses message_id) do
-    process_one_message ch ~timeout ()
+    process_one_message ch
   done;
   let result = Hashtbl.find_exn ch.responses message_id in
   Hashtbl.remove ch.responses message_id;
   result
 
-(** [receive_response ch message_id ?timeout ()] waits for and decodes a
-    response, extracting the result or raising {!Request_error}. *)
-let receive_response ch message_id ?(timeout = stream_timeout) () =
-  let raw = receive_response_raw ch message_id ~timeout () in
-  result_or_error (CBOR.Simple.decode raw)
+(** [receive_response ch message_id] waits for and decodes a response,
+    extracting the result or raising {!Request_error}. *)
+let receive_response ch message_id =
+  let raw = receive_response_raw ch message_id in
+  result_or_error (Cbor_helpers.decode raw)
 
-(** [receive_request_raw ch ?timeout ()] receives raw request bytes and returns
+(** [receive_request_raw ch] receives raw request bytes and returns
     [(message_id, payload)]. *)
-let receive_request_raw ch ?(timeout = stream_timeout) () =
+let receive_request_raw ch =
   while Queue.is_empty ch.requests do
-    process_one_message ch ~timeout ()
+    process_one_message ch
   done;
   let pkt = Queue.dequeue_exn ch.requests in
   (pkt.message_id, pkt.payload)
 
-(** [receive_request ch ?timeout ()] receives and CBOR-decodes a request,
-    returning [(message_id, decoded_value)]. *)
-let receive_request ch ?(timeout = stream_timeout) () =
-  let message_id, body = receive_request_raw ch ~timeout () in
-  (message_id, CBOR.Simple.decode body)
+(** [receive_request ch] receives and CBOR-decodes a request, returning
+    [(message_id, decoded_value)]. *)
+let receive_request ch =
+  let message_id, body = receive_request_raw ch in
+  (message_id, Cbor_helpers.decode body)
 
 (** [send_response_raw ch message_id payload] sends raw bytes as a reply. *)
 let send_response_raw ch message_id payload =
@@ -475,11 +480,8 @@ let pending_get pr =
   match pr.pr_value with
   | Some v -> result_or_error v
   | None ->
-      let raw =
-        receive_response_raw pr.pr_stream pr.pr_message_id
-          ~timeout:stream_timeout ()
-      in
-      let v = CBOR.Simple.decode raw in
+      let raw = receive_response_raw pr.pr_stream pr.pr_message_id in
+      let v = Cbor_helpers.decode raw in
       pr.pr_value <- Some v;
       result_or_error v
 
@@ -493,7 +495,7 @@ let send_handshake conn =
   conn.connection_state <- Client;
   let ch = control_stream conn in
   let message_id = send_request_raw ch handshake_string in
-  let response = receive_response_raw ch message_id () in
+  let response = receive_response_raw ch message_id in
   if
     String.length response < 6
     || not (String.equal (String.sub response ~pos:0 ~len:6) "Hegel/")

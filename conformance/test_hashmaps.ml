@@ -14,13 +14,22 @@ let () =
   let max_key = Json_params.get_int params "max_key" 1000 in
   let min_value_p = Json_params.get_int params "min_value" (-1000) in
   let max_value_p = Json_params.get_int params "max_value" 1000 in
+  let mode = Json_params.get_mode params in
   let test_cases = get_test_cases () in
   if key_type = "string" then
     Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
       (fun tc ->
         let key_gen = text ~min_size:1 ~max_size:10 () in
+        let key_gen =
+          if mode = "non_basic" then Json_params.make_non_basic key_gen
+          else key_gen
+        in
         let val_gen =
           integers ~min_value:min_value_p ~max_value:max_value_p ()
+        in
+        let val_gen =
+          if mode = "non_basic" then Json_params.make_non_basic val_gen
+          else val_gen
         in
         let map_gen = hashmaps key_gen val_gen ~min_size ~max_size () in
         let pairs = Hegel.draw tc map_gen in
@@ -46,8 +55,16 @@ let () =
     Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
       (fun tc ->
         let key_gen = integers ~min_value:min_key ~max_value:max_key () in
+        let key_gen =
+          if mode = "non_basic" then Json_params.make_non_basic key_gen
+          else key_gen
+        in
         let val_gen =
           integers ~min_value:min_value_p ~max_value:max_value_p ()
+        in
+        let val_gen =
+          if mode = "non_basic" then Json_params.make_non_basic val_gen
+          else val_gen
         in
         let map_gen = hashmaps key_gen val_gen ~min_size ~max_size () in
         let pairs = Hegel.draw tc map_gen in

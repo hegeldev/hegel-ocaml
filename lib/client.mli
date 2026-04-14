@@ -104,10 +104,10 @@ val start_span : ?label:int -> test_case -> unit
 val stop_span : ?discard:bool -> test_case -> unit
 (** [stop_span ?discard tc] ends the current generation span. *)
 
-val supported_protocol_lo : float
+val supported_protocol_lo : string
 (** Lowest supported protocol version. *)
 
-val supported_protocol_hi : float
+val supported_protocol_hi : string
 (** Highest supported protocol version. *)
 
 type client = {
