@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2 - 2026-04-14
+
+Add `characters()` generator, and add more options to `text()`
+
 ## 0.3.1 - 2026-04-08
 
 Add support for new hegel-core protocol versions.
