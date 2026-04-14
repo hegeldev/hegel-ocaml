@@ -35,6 +35,14 @@ jobs:
         with:
           tools: just
 
+      - name: Cache opam dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: _opam
+          key: opam-${{ runner.os }}-lint-${{ hashFiles('*.opam', '.ocamlformat') }}
+          restore-keys: |
+            opam-${{ runner.os }}-lint-
+
       - name: Install ocamlformat
         run: opam install ocamlformat.0.29.0
 
