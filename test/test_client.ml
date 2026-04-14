@@ -279,7 +279,7 @@ let test_version_mismatch () =
         (* Receive the handshake and respond with a bad version *)
         peer_conn.connection_state <- Client;
         let ch = control_stream peer_conn in
-        let msg_id, _payload = receive_request_raw ch in
+        let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "Hegel/9.9")
       ()
   in
@@ -304,7 +304,7 @@ let test_version_mismatch_low () =
       (fun () ->
         peer_conn.connection_state <- Client;
         let ch = control_stream peer_conn in
-        let msg_id, _payload = receive_request_raw ch in
+        let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "Hegel/0.0")
       ()
   in
@@ -329,7 +329,7 @@ let test_version_mismatch_bad_format () =
       (fun () ->
         peer_conn.connection_state <- Client;
         let ch = control_stream peer_conn in
-        let msg_id, _payload = receive_request_raw ch in
+        let msg_id, _payload = receive_request_raw ch () in
         send_response_raw ch msg_id "Hegel/bad")
       ()
   in
@@ -384,7 +384,7 @@ let with_fake_server peer_fn client_fn =
     [(ctrl, test_ch)] where test_ch is the test stream. *)
 let accept_run_test peer_conn =
   let ctrl = control_stream peer_conn in
-  let msg_id, msg = receive_request ctrl in
+  let msg_id, msg = receive_request ctrl () in
   let pairs = Cbor_helpers.extract_dict msg in
   let test_ch_id =
     Int32.of_int_exn

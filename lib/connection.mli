@@ -120,21 +120,22 @@ val send_request : stream -> CBOR.Simple.t -> int32
 (** [send_request ch message] sends a CBOR-encoded request and returns the
     message ID. *)
 
-val receive_response_raw : stream -> int32 -> string
-(** [receive_response_raw ch message_id] waits for raw response bytes to a
-    request with the given [message_id]. *)
+val receive_response_raw : stream -> int32 -> ?timeout:float -> unit -> string
+(** [receive_response_raw ch message_id ?timeout ()] waits for raw response
+    bytes to a request with the given [message_id]. *)
 
-val receive_response : stream -> int32 -> CBOR.Simple.t
-(** [receive_response ch message_id] waits for and decodes a response,
-    extracting the result or raising {!Request_error}. *)
+val receive_response :
+  stream -> int32 -> ?timeout:float -> unit -> CBOR.Simple.t
+(** [receive_response ch message_id ?timeout ()] waits for and decodes a
+    response, extracting the result or raising {!Request_error}. *)
 
-val receive_request_raw : stream -> int32 * string
-(** [receive_request_raw ch] receives raw request bytes and returns
+val receive_request_raw : stream -> ?timeout:float -> unit -> int32 * string
+(** [receive_request_raw ch ?timeout ()] receives raw request bytes and returns
     [(message_id, payload)]. *)
 
-val receive_request : stream -> int32 * CBOR.Simple.t
-(** [receive_request ch] receives and CBOR-decodes a request, returning
-    [(message_id, decoded_value)]. *)
+val receive_request : stream -> ?timeout:float -> unit -> int32 * CBOR.Simple.t
+(** [receive_request ch ?timeout ()] receives and CBOR-decodes a request,
+    returning [(message_id, decoded_value)]. *)
 
 val send_response_raw : stream -> int32 -> string -> unit
 (** [send_response_raw ch message_id payload] sends raw bytes as a reply. *)
@@ -162,10 +163,10 @@ val pending_get : pending_request -> CBOR.Simple.t
     Caches the response so subsequent calls return the same value or raise the
     same error. *)
 
-val process_one_message : stream -> unit
-(** [process_one_message ch] waits for and routes one incoming message for
-    stream [ch]. Dispatches replies to the stream's responses table and requests
-    to the stream's request queue. *)
+val process_one_message : stream -> ?timeout:float -> unit -> unit
+(** [process_one_message ch ?timeout ()] waits for and routes one incoming
+    message for stream [ch]. Dispatches replies to the stream's responses table
+    and requests to the stream's request queue. *)
 
 val server_crashed_message : string
 (** Error message shown when the server process has exited unexpectedly. *)
