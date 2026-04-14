@@ -14,6 +14,7 @@ let () =
   let max_size = Json_params.get_int_opt params "max_size" in
   let min_value = Json_params.get_int_opt params "min_value" in
   let max_value = Json_params.get_int_opt params "max_value" in
+  let unique = Json_params.get_bool params "unique" false in
   let mode = Json_params.get_mode params in
   let test_cases = get_test_cases () in
   Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
@@ -31,7 +32,7 @@ let () =
         if needs_non_basic then Json_params.make_non_basic base_elem
         else base_elem
       in
-      let list_gen = lists elem_gen ~min_size ?max_size () in
+      let list_gen = lists elem_gen ~min_size ?max_size ~unique () in
       let items = Hegel.draw tc list_gen in
       let elements_json =
         "[" ^ String.concat "," (List.map string_of_int items) ^ "]"

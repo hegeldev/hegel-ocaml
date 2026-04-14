@@ -213,8 +213,14 @@ val just : 'a -> 'a generator
 (** {2 Collection generators} *)
 
 val lists :
-  'a generator -> ?min_size:int -> ?max_size:int -> unit -> 'a list generator
-(** [lists elements ?min_size ?max_size ()] creates a generator for lists. *)
+  'a generator ->
+  ?min_size:int ->
+  ?max_size:int ->
+  ?unique:bool ->
+  unit ->
+  'a list generator
+(** [lists elements ?min_size ?max_size ?unique ()] creates a generator for
+    lists. When [unique] is [true], elements will be distinct. *)
 
 val hashmaps :
   'a generator ->
@@ -224,7 +230,9 @@ val hashmaps :
   unit ->
   ('a * 'b) list generator
 (** [hashmaps keys values ?min_size ?max_size ()] creates a generator for
-    dictionaries (hash maps). [keys] and [values] must be basic generators. *)
+    dictionaries (hash maps). When both [keys] and [values] are basic
+    generators, uses the server-side dict schema. When either is non-basic,
+    falls back to the collection protocol. *)
 
 val sampled_from : 'a list -> 'a generator
 (** [sampled_from options] creates a generator that samples uniformly from a
