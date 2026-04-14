@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3 - 2026-04-14
+
+Restore timeouts to stream receive operations, which were dropped when switching from polling to `Condition.wait`.
+
 ## 0.3.2 - 2026-04-14
 
 Add `characters()` generator, and add more options to `text()`
