@@ -220,6 +220,22 @@ let test_lists_non_basic_unique_e2e () =
       let uniq = List.sort_uniq compare items |> List.length in
       Alcotest.(check int) "all unique" n uniq)
 
+(** Test: lists(non-basic, unique=true) with impossible constraints terminates
+    via the server's rejection limit instead of hanging. Uses
+    min_value=max_value=0 so every second element is a guaranteed duplicate,
+    which causes the server to send StopTest after its rejection threshold. *)
+let test_lists_non_basic_unique_exhaustion_e2e () =
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:10 ())
+    (fun tc ->
+      let elem =
+        filter (fun _ -> true) (integers ~min_value:0 ~max_value:0 ())
+      in
+      (* Asking for ≥2 unique elements from {0} — impossible. The server's
+         many.reject() limit will fire and send StopTest, which
+         collection_reject converts to Data_exhausted. *)
+      let gen = lists elem ~min_size:2 ~unique:true () in
+      ignore (Hegel.draw tc gen))
+
 (** Test: hashmaps(non-basic keys) E2E — generates pairs. *)
 let test_hashmaps_non_basic_keys_e2e () =
   Session.run_hegel_test ~settings:(Client.settings ~test_cases:10 ())
@@ -280,6 +296,8 @@ let tests =
     Alcotest.test_case "lists unique e2e" `Quick test_lists_unique_e2e;
     Alcotest.test_case "lists non-basic unique e2e" `Quick
       test_lists_non_basic_unique_e2e;
+    Alcotest.test_case "lists non-basic unique exhaustion e2e" `Quick
+      test_lists_non_basic_unique_exhaustion_e2e;
     Alcotest.test_case "hashmaps non-basic keys e2e" `Quick
       test_hashmaps_non_basic_keys_e2e;
     Alcotest.test_case "hashmaps non-basic values e2e" `Quick

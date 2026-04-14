@@ -95,7 +95,8 @@ val collection_more : collection -> Client.test_case -> bool
     generated, [false] when the collection is complete. *)
 
 val collection_reject : collection -> Client.test_case -> unit
-(** [collection_reject coll data] rejects the last element of the collection. *)
+(** [collection_reject coll data] rejects the last element of the collection.
+    Raises {!Client.Data_exhausted} on StopTest. *)
 
 val do_draw : 'a generator -> Client.test_case -> 'a
 (** [do_draw gen tc] produces a typed value from generator [gen] using the given

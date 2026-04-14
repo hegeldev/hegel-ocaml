@@ -110,7 +110,9 @@ let lists elements ?(min_size = 0) ?max_size ?(unique = false) () =
         CompositeList { elements; min_size; max_size }
       else
         (* Non-basic with uniqueness: use Composite with collection protocol
-           and duplicate rejection. *)
+           and duplicate rejection.  The server's own rejection limit
+           (via [many.reject]) will send StopTest when too many duplicates
+           occur, which [collection_reject] converts to [Data_exhausted]. *)
         Composite
           {
             label = Labels.list;
