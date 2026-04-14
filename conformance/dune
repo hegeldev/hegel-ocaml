@@ -1,7 +1,7 @@
 (library
  (name json_params)
  (modules json_params)
- (libraries yojson))
+ (libraries yojson hegel))
 
 (executable
  (name test_booleans)

@@ -85,3 +85,11 @@ let get_string_list pairs key =
 (** [int_opt_to_json v] serializes an optional int to JSON: [Some n] becomes the
     string representation of [n], [None] becomes ["null"]. *)
 let int_opt_to_json = function None -> "null" | Some n -> string_of_int n
+
+(** [make_non_basic gen] wraps a generator in a trivial filter so it loses its
+    schema, forcing the compositional fallback path. *)
+let make_non_basic gen = Hegel.Generators.filter (fun _ -> true) gen
+
+(** [get_mode params] extracts the ["mode"] field from parsed params, defaulting
+    to ["basic"]. *)
+let get_mode params = get_string params "mode" "basic"
