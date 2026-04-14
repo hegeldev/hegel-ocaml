@@ -248,6 +248,25 @@ let close conn =
     Mutex.unlock conn.streams_lock
   end
 
+(** Periodic wakeup for timeout support. The reader thread signals stream
+    conditions on message arrival; this thread handles the timeout edge case
+    where no message arrives but [pop_inbox_item] needs to check its deadline.
+    Without this, [Condition.wait] would block forever in the timeout scenario.
+    Exits when [conn.running] becomes [false]. *)
+let timeout_watcher conn =
+  while conn.running do
+    Caml_unix.sleepf 1.0;
+    Mutex.lock conn.streams_lock;
+    Hashtbl.iteri conn.streams ~f:(fun ~key:_ ~data:entry ->
+        match entry with
+        | Live ch ->
+            Mutex.lock ch.inbox.lock;
+            Condition.signal ch.inbox.cond;
+            Mutex.unlock ch.inbox.lock
+        | Dead _ -> ());
+    Mutex.unlock conn.streams_lock
+  done
+
 (** [create_connection ~read_fd ~write_fd ?name ?debug ()] creates a new
     connection using separate file descriptors for reading and writing. A
     control stream (stream 0) is automatically created and a background reader
@@ -274,6 +293,8 @@ let create_connection ~read_fd ~write_fd ?name ?(debug = false) () =
   Mutex.unlock conn.streams_lock;
   (* Spawn background reader thread *)
   ignore (Thread.create reader_loop conn);
+  (* Spawn timeout watcher for deadline-based wakeups *)
+  ignore (Thread.create timeout_watcher conn);
   conn
 
 (** [is_live conn] returns [true] if the connection is still active. *)
@@ -349,10 +370,11 @@ let pop_inbox_item ch timeout =
              (sprintf "Timed out after %.1fs waiting for a message on %s"
                 timeout (stream_name ch)))
       end;
-      (* Release lock, sleep briefly, re-acquire *)
-      Mutex.unlock ch.inbox.lock;
-      Caml_unix.sleepf (Float.min 0.01 remaining);
-      Mutex.lock ch.inbox.lock;
+      (* Block until signaled by push_inbox or signal_all_streams.
+         Condition.wait atomically releases the lock and sleeps; the
+         timeout_watcher thread provides periodic wakeups so we can
+         check the deadline. *)
+      Condition.wait ch.inbox.cond ch.inbox.lock;
       wait ()
     end
   in
