@@ -33,7 +33,18 @@ let () =
       in
       let list_gen = lists elem_gen ~min_size ?max_size () in
       let items = Hegel.draw tc list_gen in
-      let elements_json =
-        "[" ^ String.concat "," (List.map string_of_int items) ^ "]"
+      let size = List.length items in
+      let min_element =
+        if size = 0 then None
+        else Some (List.fold_left min (List.hd items) (List.tl items))
       in
-      write_metrics [ ("elements", elements_json) ])
+      let max_element =
+        if size = 0 then None
+        else Some (List.fold_left max (List.hd items) (List.tl items))
+      in
+      write_metrics
+        [
+          ("size", string_of_int size);
+          ("min_element", Json_params.int_opt_to_json min_element);
+          ("max_element", Json_params.int_opt_to_json max_element);
+        ])

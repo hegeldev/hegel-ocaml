@@ -371,12 +371,12 @@ let process_one_message ch =
   match item with
   | Shutdown -> raise (Failure "Connection closed")
   | Pkt pkt ->
-      if pkt.is_reply then
-        begin if Hashtbl.mem ch.responses pkt.message_id then
+      if pkt.is_reply then begin
+        if Hashtbl.mem ch.responses pkt.message_id then
           failwith
             (sprintf "Got two responses for message ID %ld" pkt.message_id)
         else Hashtbl.set ch.responses ~key:pkt.message_id ~data:pkt.payload
-        end
+      end
       else Queue.enqueue ch.requests pkt
 
 (** [send_request_raw ch payload] sends raw bytes as a request and returns the

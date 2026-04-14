@@ -113,14 +113,14 @@ let recv_exact sock n =
     let rec read_all pos =
       if pos < n then begin
         let chunk = Unix.read sock ~buf ~pos ~len:(n - pos) in
-        if chunk = 0 then
-          begin if pos > 0 then
+        if chunk = 0 then begin
+          if pos > 0 then
             raise (Connection_closed "Connection closed while reading data")
           else
             raise
               (Partial_packet
                  "Connection closed partway through reading packet.")
-          end;
+        end;
         read_all (pos + chunk)
       end
     in
