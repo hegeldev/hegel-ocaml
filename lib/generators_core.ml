@@ -153,19 +153,24 @@ let collection_more coll data =
     more
 
 (** [collection_reject coll data] rejects the last element of the collection.
-    No-op if the collection is already finished. *)
+    No-op if the collection is already finished. Raises {!Client.Data_exhausted}
+    on StopTest. *)
 let collection_reject coll data =
   if not coll.finished then begin
     let collection_id = get_collection_id coll data in
     let stream = data.Client.stream in
-    ignore
-      (pending_get
-         (request stream
-            (`Map
-               [
-                 (`Text "command", `Text "collection_reject");
-                 (`Text "collection_id", collection_id);
-               ])))
+    try
+      ignore
+        (pending_get
+           (request stream
+              (`Map
+                 [
+                   (`Text "command", `Text "collection_reject");
+                   (`Text "collection_id", collection_id);
+                 ])))
+    with Request_error e when String.equal e.error_type "StopTest" ->
+      data.test_aborted <- true;
+      raise Client.Data_exhausted
   end
 
 (** [do_draw gen data] produces a typed value from generator [gen] using the
