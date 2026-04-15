@@ -18,39 +18,49 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # necessary to read the actions cache, where we put the dune builds in for fast ci
       actions: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
 
-      - name: Set up OCaml
-        uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
-        with:
-          ocaml-compiler: 5.2.1
-          dune-cache: true
-
       - uses: ./.github/actions/install-tools
         with:
           tools: just
 
-      - name: Cache opam dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: _opam
-          key: opam-${{ runner.os }}-lint-${{ hashFiles('*.opam', '.ocamlformat') }}
-          restore-keys: |
-            opam-${{ runner.os }}-lint-
+      - name: Install opam
+        run: |
+          OPAM_VERSION="2.2.1"
+          curl -fsSL \
+            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-x86_64-linux" \
+            -o /usr/local/bin/opam
+          chmod +x /usr/local/bin/opam
+          opam --version
+
+      - name: Set up OCaml
+        run: |
+          opam init --disable-sandboxing --yes
+          opam switch create 5.2.1 --yes
+          echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
+          echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
+
+      - name: Install OCaml dependencies
+        run: |
+          eval $(opam env)
+          opam install . --deps-only --yes
 
       - name: Install ocamlformat
-        run: opam install ocamlformat.0.29.0
+        run: |
+          eval $(opam env)
+          opam install ocamlformat.0.29.0 --yes
 
       - name: Check formatting
         run: just check-format
 
       - name: Check opam files are up to date
-        run: opam exec -- dune build hegel.opam && git diff --exit-code '*.opam'
+        run: |
+          eval $(opam env)
+          opam exec -- dune build hegel.opam && git diff --exit-code '*.opam'
 
       - name: Check zizmor
         run: |
@@ -72,22 +82,26 @@ jobs:
         with:
           tools: just uv
 
-      - name: Set up OCaml
-        uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
-        with:
-          ocaml-compiler: 5.2.1
-          dune-cache: true
+      - name: Install opam
+        run: |
+          OPAM_VERSION="2.2.1"
+          curl -fsSL \
+            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-x86_64-linux" \
+            -o /usr/local/bin/opam
+          chmod +x /usr/local/bin/opam
+          opam --version
 
-      - name: Cache opam dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: _opam
-          key: opam-${{ runner.os }}-with-test-${{ hashFiles('*.opam') }}
-          restore-keys: |
-            opam-${{ runner.os }}-with-test-
+      - name: Set up OCaml
+        run: |
+          opam init --disable-sandboxing --yes
+          opam switch create 5.2.1 --yes
+          echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
+          echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
 
       - name: Install OCaml dependencies
-        run: opam install . --deps-only --with-test --yes
+        run: |
+          eval $(opam env)
+          opam install . --deps-only --with-test --yes
 
       - name: Run tests
         run: just check-tests
@@ -107,22 +121,26 @@ jobs:
         with:
           tools: just
 
-      - name: Set up OCaml
-        uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
-        with:
-          ocaml-compiler: 5.2.1
-          dune-cache: true
+      - name: Install opam
+        run: |
+          OPAM_VERSION="2.2.1"
+          curl -fsSL \
+            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-x86_64-linux" \
+            -o /usr/local/bin/opam
+          chmod +x /usr/local/bin/opam
+          opam --version
 
-      - name: Cache opam dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: _opam
-          key: opam-${{ runner.os }}-with-doc-${{ hashFiles('*.opam') }}
-          restore-keys: |
-            opam-${{ runner.os }}-with-doc-
+      - name: Set up OCaml
+        run: |
+          opam init --disable-sandboxing --yes
+          opam switch create 5.2.1 --yes
+          echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
+          echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
 
       - name: Install OCaml dependencies
-        run: opam install . --deps-only --with-doc --yes
+        run: |
+          eval $(opam env)
+          opam install . --deps-only --with-doc --yes
 
       - name: Check docs
         run: just check-docs
@@ -142,22 +160,26 @@ jobs:
         with:
           tools: just uv
 
-      - name: Set up OCaml
-        uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
-        with:
-          ocaml-compiler: 5.2.1
-          dune-cache: true
+      - name: Install opam
+        run: |
+          OPAM_VERSION="2.2.1"
+          curl -fsSL \
+            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-x86_64-linux" \
+            -o /usr/local/bin/opam
+          chmod +x /usr/local/bin/opam
+          opam --version
 
-      - name: Cache opam dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: _opam
-          key: opam-${{ runner.os }}-with-test-${{ hashFiles('*.opam') }}
-          restore-keys: |
-            opam-${{ runner.os }}-with-test-
+      - name: Set up OCaml
+        run: |
+          opam init --disable-sandboxing --yes
+          opam switch create 5.2.1 --yes
+          echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
+          echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
 
       - name: Install OCaml dependencies
-        run: opam install . --deps-only --with-test --yes
+        run: |
+          eval $(opam env)
+          opam install . --deps-only --with-test --yes
 
       - name: Run conformance tests
         run: just check-conformance
