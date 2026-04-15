@@ -47,6 +47,15 @@ check-tests-no-coverage:
     ./_build/default/test/test_ppx_derive.exe
     ./_build/default/test/test_hegel.exe
 
+# Like check-tests-no-coverage but skips the PPX deriver tests.
+# Used for OxCaml CI where the ppxlib API differs from standard ppxlib.
+check-tests-no-ppx:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    eval $(opam env)
+    dune build test/test_hegel.exe
+    ./_build/default/test/test_hegel.exe
+
 check-conformance:
     #!/usr/bin/env bash
     set -euo pipefail
