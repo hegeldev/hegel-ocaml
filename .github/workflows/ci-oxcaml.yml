@@ -37,7 +37,9 @@ jobs:
           opam-pin: false
 
       - name: Install OCaml dependencies
-        run: opam install . --deps-only --with-test --with-doc --yes
+        run: |
+          opam install . --deps-only --with-test --yes --ignore-constraints-on=ocamlformat
+          opam install . --deps-only --with-doc --yes
 
       - run: just setup
       - name: Run tests
@@ -71,7 +73,7 @@ jobs:
           opam-pin: false
 
       - name: Install OCaml dependencies
-        run: opam install . --deps-only --with-test --yes
+        run: opam install . --deps-only --with-test --yes --ignore-constraints-on=ocamlformat
 
       - run: just setup hegel-core==0.3.0
       - run: pip install pytest
@@ -97,7 +99,7 @@ jobs:
           opam-pin: false
 
       - name: Install OCaml dependencies
-        run: opam install . --deps-only --with-test --with-doc --yes
+        run: opam install . --deps-only --with-doc --yes
 
       - name: Build docs
         run: opam exec -- dune build @doc
