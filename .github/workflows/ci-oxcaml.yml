@@ -42,10 +42,12 @@ jobs:
           dune-cache: true
 
       - name: Install OCaml dependencies
-        run: opam install . --deps-only --with-test --yes --ignore-constraints-on=ocamlformat
+        run: |
+          opam install . --deps-only --yes
+          opam install alcotest --yes
 
       - name: Run tests
-        run: just check-tests
+        run: just check-tests-no-coverage
 
   conformance:
     name: conformance (oxcaml)
@@ -76,7 +78,7 @@ jobs:
           dune-cache: true
 
       - name: Install OCaml dependencies
-        run: opam install . --deps-only --with-test --yes --ignore-constraints-on=ocamlformat
+        run: opam install . --deps-only --yes
 
       - name: Run conformance tests
         run: just check-conformance

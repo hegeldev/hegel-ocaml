@@ -39,6 +39,14 @@ docs:
     dune build @doc 2>&1
     open _build/default/_doc/_html/index.html
 
+check-tests-no-coverage:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    eval $(opam env)
+    dune build test/test_hegel.exe test/test_ppx_derive.exe
+    ./_build/default/test/test_ppx_derive.exe
+    ./_build/default/test/test_hegel.exe
+
 check-conformance:
     #!/usr/bin/env bash
     set -euo pipefail
