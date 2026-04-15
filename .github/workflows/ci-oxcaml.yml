@@ -40,7 +40,6 @@ jobs:
             default: "git+https://github.com/ocaml/opam-repository.git"
           opam-pin: false
           dune-cache: true
-          allow-prerelease-opam: true
 
       - name: Install OCaml dependencies
         run: opam install . --deps-only --with-test --yes --ignore-constraints-on=ocamlformat
@@ -75,7 +74,6 @@ jobs:
             default: "git+https://github.com/ocaml/opam-repository.git"
           opam-pin: false
           dune-cache: true
-          allow-prerelease-opam: true
 
       - name: Install OCaml dependencies
         run: opam install . --deps-only --with-test --yes --ignore-constraints-on=ocamlformat
@@ -110,7 +108,6 @@ jobs:
             default: "git+https://github.com/ocaml/opam-repository.git"
           opam-pin: false
           dune-cache: true
-          allow-prerelease-opam: true
 
       - name: Install OCaml dependencies
         run: opam install . --deps-only --with-doc --yes
