@@ -28,8 +28,6 @@ jobs:
         with:
           tools: just uv
 
-      # OxCaml compiler + deps need more disk than ubuntu-latest provides by
-      # default. Remove pre-installed Android SDK (~10GB) and .NET (~2.5GB).
       - name: Free disk space
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet
 
@@ -42,6 +40,7 @@ jobs:
             default: "git+https://github.com/ocaml/opam-repository.git"
           opam-pin: false
           dune-cache: true
+          allow-prerelease-opam: true
 
       - name: Install OCaml dependencies
         run: opam install . --deps-only --with-test --yes --ignore-constraints-on=ocamlformat
@@ -76,6 +75,7 @@ jobs:
             default: "git+https://github.com/ocaml/opam-repository.git"
           opam-pin: false
           dune-cache: true
+          allow-prerelease-opam: true
 
       - name: Install OCaml dependencies
         run: opam install . --deps-only --with-test --yes --ignore-constraints-on=ocamlformat
@@ -110,6 +110,7 @@ jobs:
             default: "git+https://github.com/ocaml/opam-repository.git"
           opam-pin: false
           dune-cache: true
+          allow-prerelease-opam: true
 
       - name: Install OCaml dependencies
         run: opam install . --deps-only --with-doc --yes
