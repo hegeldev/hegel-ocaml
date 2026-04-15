@@ -31,19 +31,27 @@ jobs:
       - name: Free disk space
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet
 
+      - name: Install opam
+        run: |
+          OPAM_VERSION="2.2.1"
+          curl -fsSL \
+            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-x86_64-linux" \
+            -o /usr/local/bin/opam
+          chmod +x /usr/local/bin/opam
+          opam --version
+
       - name: Set up OxCaml
-        uses: ocaml/setup-ocaml@fefd9c240b9d934d5d25aa9c2a8caae6c7b40079 # v3.6.0
-        with:
-          ocaml-compiler: ocaml-variants.5.2.0+ox
-          opam-repositories: |
-            oxcaml: "git+https://github.com/oxcaml/opam-repository.git"
-            default: "git+https://github.com/ocaml/opam-repository.git"
-          opam-pin: false
-          dune-cache: true
-          allow-prerelease-opam: true
+        run: |
+          opam init --bare --disable-sandboxing --yes
+          opam repo add oxcaml "git+https://github.com/oxcaml/opam-repository.git" --all --yes
+          opam repo add default "git+https://github.com/ocaml/opam-repository.git" --all --yes
+          opam switch create oxcaml "ocaml-variants.5.2.0+ox" --yes
+          echo "$HOME/.opam/oxcaml/bin" >> $GITHUB_PATH
+          echo "OPAMSWITCH=oxcaml" >> $GITHUB_ENV
 
       - name: Install OCaml dependencies
         run: |
+          eval $(opam env)
           opam install . --deps-only --yes
           opam install alcotest --yes
 
@@ -68,19 +76,28 @@ jobs:
       - name: Free disk space
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet
 
+      - name: Install opam
+        run: |
+          OPAM_VERSION="2.2.1"
+          curl -fsSL \
+            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-x86_64-linux" \
+            -o /usr/local/bin/opam
+          chmod +x /usr/local/bin/opam
+          opam --version
+
       - name: Set up OxCaml
-        uses: ocaml/setup-ocaml@fefd9c240b9d934d5d25aa9c2a8caae6c7b40079 # v3.6.0
-        with:
-          ocaml-compiler: ocaml-variants.5.2.0+ox
-          opam-repositories: |
-            oxcaml: "git+https://github.com/oxcaml/opam-repository.git"
-            default: "git+https://github.com/ocaml/opam-repository.git"
-          opam-pin: false
-          dune-cache: true
-          allow-prerelease-opam: true
+        run: |
+          opam init --bare --disable-sandboxing --yes
+          opam repo add oxcaml "git+https://github.com/oxcaml/opam-repository.git" --all --yes
+          opam repo add default "git+https://github.com/ocaml/opam-repository.git" --all --yes
+          opam switch create oxcaml "ocaml-variants.5.2.0+ox" --yes
+          echo "$HOME/.opam/oxcaml/bin" >> $GITHUB_PATH
+          echo "OPAMSWITCH=oxcaml" >> $GITHUB_ENV
 
       - name: Install OCaml dependencies
-        run: opam install . --deps-only --yes
+        run: |
+          eval $(opam env)
+          opam install . --deps-only --yes
 
       - name: Run conformance tests
         run: just check-conformance
@@ -103,19 +120,28 @@ jobs:
       - name: Free disk space
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet
 
+      - name: Install opam
+        run: |
+          OPAM_VERSION="2.2.1"
+          curl -fsSL \
+            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-x86_64-linux" \
+            -o /usr/local/bin/opam
+          chmod +x /usr/local/bin/opam
+          opam --version
+
       - name: Set up OxCaml
-        uses: ocaml/setup-ocaml@fefd9c240b9d934d5d25aa9c2a8caae6c7b40079 # v3.6.0
-        with:
-          ocaml-compiler: ocaml-variants.5.2.0+ox
-          opam-repositories: |
-            oxcaml: "git+https://github.com/oxcaml/opam-repository.git"
-            default: "git+https://github.com/ocaml/opam-repository.git"
-          opam-pin: false
-          dune-cache: true
-          allow-prerelease-opam: true
+        run: |
+          opam init --bare --disable-sandboxing --yes
+          opam repo add oxcaml "git+https://github.com/oxcaml/opam-repository.git" --all --yes
+          opam repo add default "git+https://github.com/ocaml/opam-repository.git" --all --yes
+          opam switch create oxcaml "ocaml-variants.5.2.0+ox" --yes
+          echo "$HOME/.opam/oxcaml/bin" >> $GITHUB_PATH
+          echo "OPAMSWITCH=oxcaml" >> $GITHUB_ENV
 
       - name: Install OCaml dependencies
-        run: opam install . --deps-only --with-doc --yes
+        run: |
+          eval $(opam env)
+          opam install . --deps-only --with-doc --yes
 
       - name: Check docs
         run: just check-docs
