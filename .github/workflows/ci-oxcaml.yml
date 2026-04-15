@@ -32,7 +32,7 @@ jobs:
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet
 
       - name: Set up OxCaml
-        uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
+        uses: ocaml/setup-ocaml@fefd9c240b9d934d5d25aa9c2a8caae6c7b40079 # v3.6.0
         with:
           ocaml-compiler: ocaml-variants.5.2.0+ox
           opam-repositories: |
@@ -40,6 +40,7 @@ jobs:
             default: "git+https://github.com/ocaml/opam-repository.git"
           opam-pin: false
           dune-cache: true
+          allow-prerelease-opam: true
 
       - name: Install OCaml dependencies
         run: |
@@ -68,7 +69,7 @@ jobs:
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet
 
       - name: Set up OxCaml
-        uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
+        uses: ocaml/setup-ocaml@fefd9c240b9d934d5d25aa9c2a8caae6c7b40079 # v3.6.0
         with:
           ocaml-compiler: ocaml-variants.5.2.0+ox
           opam-repositories: |
@@ -76,6 +77,7 @@ jobs:
             default: "git+https://github.com/ocaml/opam-repository.git"
           opam-pin: false
           dune-cache: true
+          allow-prerelease-opam: true
 
       - name: Install OCaml dependencies
         run: opam install . --deps-only --yes
@@ -102,7 +104,7 @@ jobs:
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet
 
       - name: Set up OxCaml
-        uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
+        uses: ocaml/setup-ocaml@fefd9c240b9d934d5d25aa9c2a8caae6c7b40079 # v3.6.0
         with:
           ocaml-compiler: ocaml-variants.5.2.0+ox
           opam-repositories: |
@@ -110,6 +112,7 @@ jobs:
             default: "git+https://github.com/ocaml/opam-repository.git"
           opam-pin: false
           dune-cache: true
+          allow-prerelease-opam: true
 
       - name: Install OCaml dependencies
         run: opam install . --deps-only --with-doc --yes
