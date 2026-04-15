@@ -43,8 +43,10 @@ jobs:
       - name: Set up OxCaml
         run: |
           opam init --bare --disable-sandboxing --yes
-          opam repo add oxcaml "git+https://github.com/oxcaml/opam-repository.git" --all --yes
-          opam switch create oxcaml "ocaml-variants.5.2.0+ox" --yes
+          opam switch create oxcaml \
+            --packages "ocaml-variants.5.2.0+ox" \
+            --repos "oxcaml=git+https://github.com/oxcaml/opam-repository.git,default" \
+            --yes
           echo "$HOME/.opam/oxcaml/bin" >> $GITHUB_PATH
           echo "OPAMSWITCH=oxcaml" >> $GITHUB_ENV
 
@@ -87,8 +89,10 @@ jobs:
       - name: Set up OxCaml
         run: |
           opam init --bare --disable-sandboxing --yes
-          opam repo add oxcaml "git+https://github.com/oxcaml/opam-repository.git" --all --yes
-          opam switch create oxcaml "ocaml-variants.5.2.0+ox" --yes
+          opam switch create oxcaml \
+            --packages "ocaml-variants.5.2.0+ox" \
+            --repos "oxcaml=git+https://github.com/oxcaml/opam-repository.git,default" \
+            --yes
           echo "$HOME/.opam/oxcaml/bin" >> $GITHUB_PATH
           echo "OPAMSWITCH=oxcaml" >> $GITHUB_ENV
 
@@ -130,8 +134,10 @@ jobs:
       - name: Set up OxCaml
         run: |
           opam init --bare --disable-sandboxing --yes
-          opam repo add oxcaml "git+https://github.com/oxcaml/opam-repository.git" --all --yes
-          opam switch create oxcaml "ocaml-variants.5.2.0+ox" --yes
+          opam switch create oxcaml \
+            --packages "ocaml-variants.5.2.0+ox" \
+            --repos "oxcaml=git+https://github.com/oxcaml/opam-repository.git,default" \
+            --yes
           echo "$HOME/.opam/oxcaml/bin" >> $GITHUB_PATH
           echo "OPAMSWITCH=oxcaml" >> $GITHUB_ENV
 
