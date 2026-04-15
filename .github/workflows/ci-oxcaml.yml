@@ -28,6 +28,14 @@ jobs:
         with:
           tools: just uv
 
+      # OxCaml compiler + deps need more disk than ubuntu-latest provides by
+      # default. Remove pre-installed toolchains we don't need.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+
       - name: Set up OxCaml
         uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
         with:
@@ -59,6 +67,12 @@ jobs:
         with:
           tools: just uv
 
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+
       - name: Set up OxCaml
         uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
         with:
@@ -89,6 +103,12 @@ jobs:
       - uses: ./.github/actions/install-tools
         with:
           tools: just
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
 
       - name: Set up OxCaml
         uses: ocaml/setup-ocaml@dec6499fef64fc5d7ed43d43a87251b7b1c306f5 # v3
