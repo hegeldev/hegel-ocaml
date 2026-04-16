@@ -3,5 +3,18 @@
  (public_name ppx_hegel_generator)
  (kind ppx_deriver)
  (libraries ppxlib)
+ (modules ppx_hegel_generator ppx_compat)
  (preprocess
   (pps ppxlib.metaquot)))
+
+; Select the ppx_compat implementation based on whether we are building on
+; OxCaml (ppxlib AST has labeled tuples and constructor modalities) or
+; standard OCaml.
+
+(rule
+ (target ppx_compat.ml)
+ (action
+  (with-stdout-to
+   %{target}
+   (bash
+    "case '%{ocaml_version}' in *+ox*) cat %{dep:ppx_compat_oxcaml.ml};; *) cat %{dep:ppx_compat_standard.ml};; esac"))))

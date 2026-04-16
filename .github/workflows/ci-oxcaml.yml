@@ -1,0 +1,125 @@
+name: CI (OxCaml)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (oxcaml)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/install-tools
+        with:
+          tools: just uv
+
+      - name: Free disk space
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet
+
+      - name: Install opam
+        run: |
+          OPAM_VERSION="2.2.1"
+          curl -fsSL \
+            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-x86_64-linux" \
+            -o /usr/local/bin/opam
+          chmod +x /usr/local/bin/opam
+          opam --version
+
+      - name: Cache opam switch
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.opam
+          key: opam-oxcaml-${{ runner.os }}-with-test-${{ hashFiles('*.opam') }}
+          restore-keys: |
+            opam-oxcaml-${{ runner.os }}-with-test-
+
+      - name: Set up OxCaml
+        run: |
+          opam init --bare --disable-sandboxing --yes
+          if ! opam switch list --short 2>/dev/null | grep -q '^oxcaml$'; then
+            opam switch create oxcaml \
+              --packages "ocaml-variants.5.2.0+ox" \
+              --repos "oxcaml=git+https://github.com/oxcaml/opam-repository.git,default" \
+              --yes
+          fi
+          echo "$HOME/.opam/oxcaml/bin" >> $GITHUB_PATH
+          echo "OPAMSWITCH=oxcaml" >> $GITHUB_ENV
+
+      - name: Install OCaml dependencies
+        run: |
+          eval $(opam env)
+          opam install . --deps-only --yes
+          opam install alcotest --yes
+
+      - name: Run tests
+        run: just check-tests-no-coverage
+
+  conformance:
+    name: conformance (oxcaml)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/install-tools
+        with:
+          tools: just uv
+
+      - name: Free disk space
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet
+
+      - name: Install opam
+        run: |
+          OPAM_VERSION="2.2.1"
+          curl -fsSL \
+            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-x86_64-linux" \
+            -o /usr/local/bin/opam
+          chmod +x /usr/local/bin/opam
+          opam --version
+
+      - name: Cache opam switch
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.opam
+          key: opam-oxcaml-${{ runner.os }}-${{ hashFiles('*.opam') }}
+          restore-keys: |
+            opam-oxcaml-${{ runner.os }}-
+
+      - name: Set up OxCaml
+        run: |
+          opam init --bare --disable-sandboxing --yes
+          if ! opam switch list --short 2>/dev/null | grep -q '^oxcaml$'; then
+            opam switch create oxcaml \
+              --packages "ocaml-variants.5.2.0+ox" \
+              --repos "oxcaml=git+https://github.com/oxcaml/opam-repository.git,default" \
+              --yes
+          fi
+          echo "$HOME/.opam/oxcaml/bin" >> $GITHUB_PATH
+          echo "OPAMSWITCH=oxcaml" >> $GITHUB_ENV
+
+      - name: Install OCaml dependencies
+        run: |
+          eval $(opam env)
+          opam install . --deps-only --yes
+
+      - name: Run conformance tests
+        run: just check-conformance

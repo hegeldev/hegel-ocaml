@@ -80,10 +80,12 @@ let rec generate_expr_of_core_type (ct : core_type) : expression =
         Ast_builder.Default.pexp_ident ~loc { txt = full_lid; loc }
       in
       [%expr fun _hegel_tc -> [%e gen_fn] _hegel_tc]
-  | Ptyp_tuple components -> generate_expr_of_tuple ~loc components
-  | _ ->
-      Location.raise_errorf ~loc
-        "ppx_hegel_generator: unsupported type in [@@deriving generator]"
+  | _ -> (
+      match Ppx_compat.extract_tuple_types ct with
+      | Some components -> generate_expr_of_tuple ~loc components
+      | None ->
+          Location.raise_errorf ~loc
+            "ppx_hegel_generator: unsupported type in [@@deriving generator]")
 
 (** Generate a [test_case -> (t1 * t2 * ...)] function for a tuple type. *)
 and generate_expr_of_tuple ~loc components =
@@ -168,13 +170,13 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) :
       (fun i (cd : constructor_declaration) ->
         let constr_name = cd.pcd_name.txt in
         let constr_lid = { txt = Lident constr_name; loc } in
-        match cd.pcd_args with
-        | Pcstr_tuple [] ->
+        match Ppx_compat.extract_constr_tuple_types cd.pcd_args with
+        | Some [] ->
             Ast_builder.Default.case
               ~lhs:(Ast_builder.Default.pint ~loc i)
               ~guard:None
               ~rhs:(Ast_builder.Default.pexp_construct ~loc constr_lid None)
-        | Pcstr_tuple [ ct ] ->
+        | Some [ ct ] ->
             let gen_fn = generate_expr_of_core_type ct in
             let body =
               Ast_builder.Default.pexp_construct ~loc constr_lid
@@ -183,7 +185,7 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) :
             Ast_builder.Default.case
               ~lhs:(Ast_builder.Default.pint ~loc i)
               ~guard:None ~rhs:body
-        | Pcstr_tuple cts ->
+        | Some cts ->
             let gen_fns =
               List.mapi
                 (fun j ct ->
@@ -218,8 +220,12 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) :
             Ast_builder.Default.case
               ~lhs:(Ast_builder.Default.pint ~loc i)
               ~guard:None ~rhs:inner_body
-        | Pcstr_record labels ->
-            let record_gen = generator_of_record ~loc labels in
+        | None ->
+            let record_gen =
+              match cd.pcd_args with
+              | Pcstr_record labels -> generator_of_record ~loc labels
+              | _ -> assert false
+            in
             let body =
               Ast_builder.Default.pexp_construct ~loc constr_lid
                 (Some [%expr [%e record_gen] _hegel_tc])
@@ -269,9 +275,10 @@ let generate_impl ~ctxt
             Location.raise_errorf ~loc
               "ppx_hegel_generator: abstract types without manifest not \
                supported"
-        | Ptype_open, _ ->
+        | _, _ ->
             Location.raise_errorf ~loc
-              "ppx_hegel_generator: open types not supported"
+              "ppx_hegel_generator: unsupported type kind in [@@deriving \
+               generator]"
       in
       [%stri let [%p Ast_builder.Default.pvar ~loc gen_name] = [%e gen_expr]])
     type_decls
