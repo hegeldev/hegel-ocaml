@@ -184,10 +184,29 @@ jobs:
       - name: Run conformance tests
         run: just check-conformance
 
+  nix:
+    name: nix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@1ca7d21a94afc7c957383a2d217460d980de4934 # v31.10.1
+
+      - uses: ./.github/actions/install-tools
+        with:
+          tools: just
+
+      - name: lint
+        run: just check-format-nix
+
   release:
     name: release
     if: github.event_name == 'push' && github.repository == 'hegeldev/hegel-ocaml'
-    needs: [lint, test, docs, conformance]
+    needs: [lint, test, docs, conformance, nix]
     runs-on: ubuntu-latest
     permissions:
       contents: write
