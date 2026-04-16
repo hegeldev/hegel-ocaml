@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.5 - 2026-04-16
+
+Add support for building and running on the OxCaml compiler (`ocaml-variants.5.2.0+ox`). The `ppx_hegel_generator` PPX deriver now works on both standard OCaml and OxCaml by abstracting over ppxlib AST differences (labeled tuples, constructor modalities) via a platform-selected compatibility module.
+
 ## 0.3.4 - 2026-04-14
 
 Handle `StopTest` in `collection_reject` so that unique non-basic lists terminate cleanly when the server's rejection limit is reached, instead of raising an unhandled protocol error.
