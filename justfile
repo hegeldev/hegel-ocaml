@@ -20,6 +20,12 @@ format:
     eval $(opam env)
     dune fmt || true
 
+format-nix:
+    nix run nixpkgs#nixfmt -- nix/flake.nix
+
+check-format-nix:
+    nix run nixpkgs#nixfmt -- --check nix/flake.nix
+
 check-format:
     #!/usr/bin/env bash
     set -euo pipefail

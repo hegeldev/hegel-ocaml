@@ -37,10 +37,23 @@ jobs:
           chmod +x /usr/local/bin/opam
           opam --version
 
+      - name: Cache opam
+        id: cache-opam
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.opam
+          key: opam-${{ runner.os }}-lint-${{ hashFiles('*.opam', '.ocamlformat') }}
+          restore-keys: |
+            opam-${{ runner.os }}-lint-
+
       - name: Set up OCaml
+        if: steps.cache-opam.outputs.cache-hit != 'true'
         run: |
           opam init --disable-sandboxing --yes
           opam switch create 5.2.1 --yes
+
+      - name: Set opam environment
+        run: |
           echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
           echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
 
@@ -91,10 +104,23 @@ jobs:
           chmod +x /usr/local/bin/opam
           opam --version
 
+      - name: Cache opam
+        id: cache-opam
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.opam
+          key: opam-${{ runner.os }}-with-test-${{ hashFiles('*.opam') }}
+          restore-keys: |
+            opam-${{ runner.os }}-with-test-
+
       - name: Set up OCaml
+        if: steps.cache-opam.outputs.cache-hit != 'true'
         run: |
           opam init --disable-sandboxing --yes
           opam switch create 5.2.1 --yes
+
+      - name: Set opam environment
+        run: |
           echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
           echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
 
@@ -130,10 +156,23 @@ jobs:
           chmod +x /usr/local/bin/opam
           opam --version
 
+      - name: Cache opam
+        id: cache-opam
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.opam
+          key: opam-${{ runner.os }}-with-doc-${{ hashFiles('*.opam') }}
+          restore-keys: |
+            opam-${{ runner.os }}-with-doc-
+
       - name: Set up OCaml
+        if: steps.cache-opam.outputs.cache-hit != 'true'
         run: |
           opam init --disable-sandboxing --yes
           opam switch create 5.2.1 --yes
+
+      - name: Set opam environment
+        run: |
           echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
           echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
 
@@ -169,10 +208,23 @@ jobs:
           chmod +x /usr/local/bin/opam
           opam --version
 
+      - name: Cache opam
+        id: cache-opam
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.opam
+          key: opam-${{ runner.os }}-with-test-${{ hashFiles('*.opam') }}
+          restore-keys: |
+            opam-${{ runner.os }}-with-test-
+
       - name: Set up OCaml
+        if: steps.cache-opam.outputs.cache-hit != 'true'
         run: |
           opam init --disable-sandboxing --yes
           opam switch create 5.2.1 --yes
+
+      - name: Set opam environment
+        run: |
           echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
           echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
 
@@ -184,10 +236,29 @@ jobs:
       - name: Run conformance tests
         run: just check-conformance
 
+  nix:
+    name: nix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@1ca7d21a94afc7c957383a2d217460d980de4934 # v31.10.1
+
+      - uses: ./.github/actions/install-tools
+        with:
+          tools: just
+
+      - name: lint
+        run: just check-format-nix
+
   release:
     name: release
     if: github.event_name == 'push' && github.repository == 'hegeldev/hegel-ocaml'
-    needs: [lint, test, docs, conformance]
+    needs: [lint, test, docs, conformance, nix]
     runs-on: ubuntu-latest
     permissions:
       contents: write
