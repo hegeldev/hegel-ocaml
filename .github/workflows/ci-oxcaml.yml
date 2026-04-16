@@ -57,7 +57,7 @@ jobs:
           opam install alcotest --yes
 
       - name: Run tests
-        run: just check-tests-no-ppx
+        run: just check-tests-no-coverage
 
   conformance:
     name: conformance (oxcaml)
