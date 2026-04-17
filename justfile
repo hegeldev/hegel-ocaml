@@ -19,6 +19,8 @@ format:
     set -euo pipefail
     eval $(opam env)
     dune fmt || true
+    # also run format-nix if we have nix installed
+    @which nix && just format-nix || true
 
 format-nix:
     nix run nixpkgs#nixfmt -- nix/flake.nix
