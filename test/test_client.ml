@@ -191,17 +191,27 @@ let test_target_e2e () =
       target tc (float_of_int x) "maximize_x")
 
 let test_flaky_strategy () =
-  let global_min = ref 0 in
-  Session.run_hegel_test
-    ~settings:
-      (Client.settings ~test_cases:2 ()
-      |> Client.with_suppress_health_check [ Client.Large_initial_test_case ])
-    (fun tc ->
-      let min_value = !global_min in
-      incr global_min;
-      let gen = Hegel.Generators.integers ~min_value ~max_value:1000 () in
-      let _ = Hegel.draw tc gen in
-      ())
+  let raised = ref false in
+  try
+    let global_min = ref 0 in
+    Session.run_hegel_test
+      ~settings:
+        (Client.settings ~test_cases:2 ()
+        |> Client.with_suppress_health_check [ Client.Large_initial_test_case ]
+        )
+      (fun tc ->
+        let min_value = !global_min in
+        incr global_min;
+        let gen = Hegel.Generators.integers ~min_value ~max_value:1000 () in
+        let _ = Hegel.draw tc gen in
+        ())
+  with Failure msg ->
+    raised := true;
+    Alcotest.(check bool)
+      "has 'Flaky test detected'" true
+      (contains_substring msg
+         "Flaky test detected: Your data generation is non-deterministic:");
+    Alcotest.(check bool) "raised" true !raised
 
 (* ---- HEGEL_PROTOCOL_TEST_MODE error injection tests ---- *)
 

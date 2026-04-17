@@ -155,14 +155,13 @@ let generate_from_schema schema tc =
     pending_get
       (request stream
          (`Map [ (`Text "command", `Text "generate"); (`Text "schema", schema) ]))
-  with 
+  with
   | Request_error e when String.equal e.error_type "StopTest" ->
-    tc.test_aborted <- true;
-    raise Data_exhausted
+      tc.test_aborted <- true;
+      raise Data_exhausted
   | Request_error e when String.equal e.error_type "FlakyStrategyDefinition" ->
-    tc.test_aborted <- true;
-    raise Flaky_strategy
-    
+      tc.test_aborted <- true;
+      raise Flaky_strategy
 
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)
