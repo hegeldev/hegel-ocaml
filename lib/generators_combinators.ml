@@ -27,7 +27,7 @@ let one_of (generators : 'a generator list) =
   if List.length generators = 0 then
     failwith "one_of requires at least one generator";
   let basics = List.filter_map generators ~f:as_basic in
-  if List.length basics <> List.length generators then begin
+  if List.length basics <> List.length generators then
     (* Path 3: composite — generate index in ONE_OF span, then delegate *)
     let gens = Array.of_list generators in
     let n = Array.length gens in
@@ -49,7 +49,6 @@ let one_of (generators : 'a generator list) =
             in
             do_draw gens.(idx) data);
       }
-  end
   else
     (* Check if all have identity transforms by testing if the transform is
        literally the identity. We can't test function equality, so we check

@@ -108,25 +108,22 @@ exception Connection_closed of string
     or {!Connection_closed} if it closes after partial data. *)
 let recv_exact sock n =
   if n = 0 then Bytes.create 0
-  else begin
+  else
     let buf = Bytes.create n in
     let rec read_all pos =
-      if pos < n then begin
+      if pos < n then (
         let chunk = Unix.read sock ~buf ~pos ~len:(n - pos) in
         if chunk = 0 then
-          begin if pos > 0 then
+          if pos > 0 then
             raise (Connection_closed "Connection closed while reading data")
           else
             raise
               (Partial_packet
-                 "Connection closed partway through reading packet.")
-          end;
-        read_all (pos + chunk)
-      end
+                 "Connection closed partway through reading packet.");
+        read_all (pos + chunk))
     in
     read_all 0;
     buf
-  end
 
 (** [read_packet sock] reads and parses a single packet from Unix file
     descriptor [sock].

@@ -189,12 +189,12 @@ let cleanup session =
     server with [--stdio] for pipe-based communication. *)
 let start session =
   if has_working_client session then ()
-  else begin
+  else (
     Mutex.lock session.lock;
     Exn.protect
       ~finally:(fun () -> Mutex.unlock session.lock)
       ~f:(fun () ->
-        if not (has_working_client session) then begin
+        if not (has_working_client session) then (
           (* Clean up any old session *)
           cleanup session;
           let hegel_cmd = find_hegel () in
@@ -223,9 +223,7 @@ let start session =
           Stdlib.at_exit (fun () ->
               Printf.eprintf "[hegel-debug] at_exit handler invoked\n%!";
               cleanup session;
-              Printf.eprintf "[hegel-debug] at_exit handler done\n%!")
-        end)
-  end
+              Printf.eprintf "[hegel-debug] at_exit handler done\n%!"))))
 
 (** [run_hegel_test ?settings test_fn] runs a property test using the shared
     hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is set, creates a disposable

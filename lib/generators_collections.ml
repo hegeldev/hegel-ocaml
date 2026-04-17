@@ -48,11 +48,10 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
             (fun data ->
               let coll = new_collection ~min_size ?max_size data () in
               let rec collect acc =
-                if collection_more coll data then begin
+                if collection_more coll data then
                   let k = do_draw keys data in
                   let v = do_draw values data in
                   collect ((k, v) :: acc)
-                end
                 else List.rev acc
               in
               collect []);
@@ -120,14 +119,12 @@ let lists elements ?(min_size = 0) ?max_size ?(unique = false) () =
               (fun data ->
                 let coll = new_collection ~min_size ?max_size data () in
                 let rec collect acc =
-                  if collection_more coll data then begin
+                  if collection_more coll data then
                     let elem = do_draw elements data in
-                    if List.mem acc elem ~equal:Poly.equal then begin
+                    if List.mem acc elem ~equal:Poly.equal then (
                       collection_reject coll data;
-                      collect acc
-                    end
+                      collect acc)
                     else collect (elem :: acc)
-                  end
                   else List.rev acc
                 in
                 collect []);

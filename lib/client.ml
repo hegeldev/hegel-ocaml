@@ -17,6 +17,9 @@ exception Assume_rejected
 exception Data_exhausted
 (** Raised when the server runs out of test data (StopTest). *)
 
+exception Flaky_strategy
+(** Raised when the server detects a flaky strategy definition. *)
+
 (** Health checks that can be suppressed during test execution. *)
 type health_check =
   | Filter_too_much
@@ -152,9 +155,14 @@ let generate_from_schema schema tc =
     pending_get
       (request stream
          (`Map [ (`Text "command", `Text "generate"); (`Text "schema", schema) ]))
-  with Request_error e when String.equal e.error_type "StopTest" ->
+  with 
+  | Request_error e when String.equal e.error_type "StopTest" ->
     tc.test_aborted <- true;
     raise Data_exhausted
+  | Request_error e when String.equal e.error_type "FlakyStrategyDefinition" ->
+    tc.test_aborted <- true;
+    raise Flaky_strategy
+    
 
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)
@@ -181,7 +189,7 @@ let target tc value label =
 (** [start_span ?label tc] starts a generation span for better shrinking. *)
 let start_span ?(label = 0) tc =
   if tc.test_aborted then ()
-  else begin
+  else
     let stream = tc.stream in
     ignore
       (pending_get
@@ -191,12 +199,11 @@ let start_span ?(label = 0) tc =
                  (`Text "command", `Text "start_span");
                  (`Text "label", `Int label);
                ])))
-  end
 
 (** [stop_span ?discard tc] ends the current generation span. *)
 let stop_span ?(discard = false) tc =
   if tc.test_aborted then ()
-  else begin
+  else
     let stream = tc.stream in
     ignore
       (pending_get
@@ -206,7 +213,6 @@ let stop_span ?(discard = false) tc =
                  (`Text "command", `Text "stop_span");
                  (`Text "discard", `Bool discard);
                ])))
-  end
 
 (** Supported protocol version range. *)
 let supported_protocol_lo = "0.10"
@@ -255,6 +261,7 @@ type test_outcome =
   | Valid
   | Invalid
   | Data_was_exhausted
+  | Flaky_strategy_definition
   | Interesting of { origin_text : string; exn : exn option }
 
 let run_test_case _client stream test_fn ~is_final =
@@ -267,6 +274,7 @@ let run_test_case _client stream test_fn ~is_final =
     with
     | Assume_rejected -> Invalid
     | Data_exhausted -> Data_was_exhausted
+    | Flaky_strategy -> Flaky_strategy_definition
     | exn ->
         Interesting
           {
@@ -276,14 +284,14 @@ let run_test_case _client stream test_fn ~is_final =
   in
   Stdlib.Domain.DLS.set in_test_context false;
   (match outcome with
-  | Data_was_exhausted -> ()
+  | Data_was_exhausted | Flaky_strategy_definition -> ()
   | Valid | Invalid | Interesting _ -> (
       let status, origin =
         match outcome with
         | Valid -> ("VALID", `Null)
         | Invalid -> ("INVALID", `Null)
         | Interesting { origin_text; _ } -> ("INTERESTING", `Text origin_text)
-        | Data_was_exhausted -> assert false
+        | Data_was_exhausted | Flaky_strategy_definition -> assert false
       in
       try
         ignore
@@ -368,7 +376,7 @@ let run_test client ~settings ?database_key test_fn =
       Cbor_helpers.extract_string
         (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "event"))
     in
-    if String.equal event "test_case" then begin
+    if String.equal event "test_case" then (
       let ch_id =
         Int32.of_int_exn
           (Cbor_helpers.extract_int
@@ -381,14 +389,12 @@ let run_test client ~settings ?database_key test_fn =
       run_test_case client test_case_stream test_fn ~is_final:false;
       if server_has_exited client.connection then
         failwith server_crashed_message;
-      receive_events ()
-    end
-    else if String.equal event "test_done" then begin
+      receive_events ())
+    else if String.equal event "test_done" then (
       send_response_value test_stream message_id (`Bool true);
       Cbor_helpers.extract_dict
-        (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "results"))
-    end
-    else begin
+        (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "results")))
+    else (
       send_response_raw test_stream message_id
         (CBOR.Simple.encode
            (`Map
@@ -396,8 +402,7 @@ let run_test client ~settings ?database_key test_fn =
                 (`Text "error", `Text (sprintf "Unrecognised event %s" event));
                 (`Text "type", `Text "InvalidMessage");
               ]));
-      receive_events ()
-    end
+      receive_events ())
   in
   let results = receive_events () in
   (* Check for server-side errors *)
@@ -432,10 +437,9 @@ let run_test client ~settings ?database_key test_fn =
          (`Text "interesting_test_cases"))
   in
   if n_interesting = 0 && passed then ()
-  else if n_interesting <= 1 then begin
+  else if n_interesting <= 1 then (
     if n_interesting = 1 then receive_and_run_test_case ~is_final:true;
-    if not passed then failwith "Property test failed"
-  end
+    if not passed then failwith "Property test failed")
   else
     let rec replay_interesting remaining acc =
       if remaining = 0 then List.rev acc

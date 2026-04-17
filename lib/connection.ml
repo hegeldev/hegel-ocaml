@@ -49,7 +49,7 @@ let result_or_error body =
     | Some v -> Cbor_helpers.extract_string v
     | None -> ""
   in
-  if List.Assoc.mem pairs ~equal:Poly.( = ) (`Text "error") then begin
+  if List.Assoc.mem pairs ~equal:Poly.( = ) (`Text "error") then
     let msg = find_text "error" in
     let error_type = find_text "type" in
     let data =
@@ -57,7 +57,6 @@ let result_or_error body =
           Poly.( <> ) k (`Text "error") && Poly.( <> ) k (`Text "type"))
     in
     raise (Request_error { message = msg; error_type; data })
-  end
   else
     match List.Assoc.find pairs ~equal:Poly.( = ) (`Text "result") with
     | Some v -> v
@@ -179,9 +178,9 @@ let send_packet conn packet =
 let reader_loop conn =
   let dispatch_packet (pkt : packet) =
     (* Handle close_stream_payload for ANY stream (even unregistered) *)
-    if String.equal pkt.payload close_stream_payload then begin
+    if String.equal pkt.payload close_stream_payload then (
       assert (Int32.equal pkt.message_id close_stream_message_id);
-      if conn.debug then begin
+      if conn.debug then (
         Mutex.lock conn.streams_lock;
         let prev_name =
           match Hashtbl.find conn.streams pkt.stream_id with
@@ -191,19 +190,17 @@ let reader_loop conn =
         in
         Hashtbl.set conn.streams ~key:pkt.stream_id
           ~data:(Dead { stream_id = pkt.stream_id; name = prev_name });
-        Mutex.unlock conn.streams_lock
-      end
-    end
-    else begin
+        Mutex.unlock conn.streams_lock))
+    else (
       Mutex.lock conn.streams_lock;
       let entry = Hashtbl.find conn.streams pkt.stream_id in
       match entry with
       | Some (Live ch) ->
           Mutex.unlock conn.streams_lock;
           push_inbox ch (Pkt pkt)
-      | (Some (Dead _) | None) as entry ->
+      | (Some (Dead _) | None) as entry -> (
           Mutex.unlock conn.streams_lock;
-          if not pkt.is_reply then begin
+          if not pkt.is_reply then
             let disposition =
               match entry with Some (Dead _) -> "closed" | _ -> "non-existent"
             in
@@ -221,9 +218,7 @@ let reader_loop conn =
                     CBOR.Simple.encode
                       (`Map [ (`Text "error", `Text error_msg) ]);
                 }
-            with _ -> ()
-          end
-    end
+            with _ -> ()))
   in
   (try
      while conn.running do
@@ -241,7 +236,7 @@ let reader_loop conn =
 (** [close conn] closes the connection and signals all live streams. *)
 let close conn =
   if not conn.running then ()
-  else begin
+  else (
     conn.running <- false;
     (* Shutdown the read fd to unblock any reader thread blocked in read().
        On Linux, close() alone does not wake up a blocked read() in another
@@ -264,8 +259,7 @@ let close conn =
        Only safe when shutdown succeeded (sockets), since shutdown guarantees
        the blocked read returns immediately. On pipes, shutdown fails with
        ENOTSOCK and close alone may not unblock the reader thread. *)
-    if shutdown_ok then Option.iter conn.reader_thread ~f:Thread.join
-  end
+    if shutdown_ok then Option.iter conn.reader_thread ~f:Thread.join)
 
 (** Default timeout in seconds for stream operations. *)
 let stream_timeout = 30.0
@@ -339,7 +333,7 @@ let control_stream conn =
 let new_stream conn ?role () =
   if equal_connection_state conn.connection_state Unresolved then
     failwith "Cannot create a new stream before handshake has been performed."
-  else begin
+  else
     let stream_id = Int32.of_int_exn ((conn.next_stream_id lsl 1) lor 1) in
     conn.next_stream_id <- conn.next_stream_id + 1;
     let ch = make_stream conn stream_id ~role in
@@ -347,7 +341,6 @@ let new_stream conn ?role () =
     Hashtbl.set conn.streams ~key:stream_id ~data:(Live ch);
     Mutex.unlock conn.streams_lock;
     ch
-  end
 
 (** [connect_stream conn stream_id ?role ()] connects to a stream created by the
     peer. *)
@@ -371,35 +364,30 @@ let pop_inbox_item ch timeout =
   Mutex.lock ch.inbox.lock;
   let deadline = Unix.gettimeofday () +. timeout in
   let rec wait () =
-    if not (Queue.is_empty ch.inbox.queue) then begin
+    if not (Queue.is_empty ch.inbox.queue) then (
       let item = Queue.dequeue_exn ch.inbox.queue in
       Mutex.unlock ch.inbox.lock;
-      item
-    end
-    else if ch.closed then begin
+      item)
+    else if ch.closed then (
       Mutex.unlock ch.inbox.lock;
-      raise (Failure (sprintf "%s is closed" (stream_name ch)))
-    end
-    else if ch.conn.server_exited then begin
+      raise (Failure (sprintf "%s is closed" (stream_name ch))))
+    else if ch.conn.server_exited then (
       Mutex.unlock ch.inbox.lock;
-      raise (Failure server_crashed_message)
-    end
-    else begin
+      raise (Failure server_crashed_message))
+    else
       let remaining = deadline -. Unix.gettimeofday () in
-      if Float.( <= ) remaining 0.0 then begin
+      if Float.( <= ) remaining 0.0 then (
         Mutex.unlock ch.inbox.lock;
         raise
           (Failure
              (sprintf "Timed out after %.1fs waiting for a message on %s"
-                timeout (stream_name ch)))
-      end;
+                timeout (stream_name ch))));
       (* Block until signaled by push_inbox or signal_all_streams.
          Condition.wait atomically releases the lock and sleeps; the
          timeout_watcher thread provides periodic wakeups so we can
          check the deadline. *)
       Condition.wait ch.inbox.cond ch.inbox.lock;
       wait ()
-    end
   in
   wait ()
 
@@ -412,11 +400,10 @@ let process_one_message ch ?(timeout = stream_timeout) () =
   | Shutdown -> raise (Failure "Connection closed")
   | Pkt pkt ->
       if pkt.is_reply then
-        begin if Hashtbl.mem ch.responses pkt.message_id then
+        if Hashtbl.mem ch.responses pkt.message_id then
           failwith
             (sprintf "Got two responses for message ID %ld" pkt.message_id)
         else Hashtbl.set ch.responses ~key:pkt.message_id ~data:pkt.payload
-        end
       else Queue.enqueue ch.requests pkt
 
 (** [send_request_raw ch payload] sends raw bytes as a request and returns the
@@ -477,14 +464,14 @@ let send_response_value ch message_id value =
 (** [close_stream ch] closes the stream and notifies the peer. Idempotent. *)
 let close_stream ch =
   if ch.closed then ()
-  else begin
+  else
     let is_registered =
       match Hashtbl.find ch.conn.streams ch.stream_id with
       | Some (Live ch2) -> phys_equal ch2 ch
       | _ -> false
     in
     if not is_registered then ch.closed <- true
-    else begin
+    else (
       ch.closed <- true;
       if ch.conn.debug then
         Hashtbl.set ch.conn.streams ~key:ch.stream_id
@@ -496,9 +483,7 @@ let close_stream ch =
             message_id = close_stream_message_id;
             stream_id = ch.stream_id;
             is_reply = false;
-          }
-    end
-  end
+          })
 
 type pending_request = {
   pr_stream : stream;

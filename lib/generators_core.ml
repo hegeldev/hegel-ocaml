@@ -156,7 +156,7 @@ let collection_more coll data =
     No-op if the collection is already finished. Raises {!Client.Data_exhausted}
     on StopTest. *)
 let collection_reject coll data =
-  if not coll.finished then begin
+  if not coll.finished then (
     let collection_id = get_collection_id coll data in
     let stream = data.Client.stream in
     try
@@ -170,8 +170,7 @@ let collection_reject coll data =
                  ])))
     with Request_error e when String.equal e.error_type "StopTest" ->
       data.test_aborted <- true;
-      raise Client.Data_exhausted
-  end
+      raise Client.Data_exhausted)
 
 (** [do_draw gen data] produces a typed value from generator [gen] using the
     given test case [data]. *)
@@ -192,18 +191,15 @@ let rec do_draw : type a. a generator -> Client.test_case -> a =
   | Filtered { source; predicate } ->
       let rec attempt i =
         if i > max_filter_attempts then raise Client.Assume_rejected
-        else begin
+        else (
           Client.start_span ~label:Labels.filter data;
           let value = do_draw source data in
-          if predicate value then begin
+          if predicate value then (
             Client.stop_span data;
-            value
-          end
-          else begin
+            value)
+          else (
             Client.stop_span ~discard:true data;
-            attempt (i + 1)
-          end
-        end
+            attempt (i + 1)))
       in
       attempt 1
   | CompositeList { elements; min_size; max_size } ->
