@@ -190,6 +190,29 @@ let test_target_e2e () =
       let x = Cbor_helpers.extract_int v in
       target tc (float_of_int x) "maximize_x")
 
+let test_flaky_strategy () =
+  let raised = ref false in
+  try
+    let global_min = ref 0 in
+    Session.run_hegel_test
+      ~settings:
+        (Client.settings ~test_cases:2 ()
+        |> Client.with_suppress_health_check [ Client.Large_initial_test_case ]
+        )
+      (fun tc ->
+        let min_value = !global_min in
+        incr global_min;
+        let gen = Hegel.Generators.integers ~min_value ~max_value:1000 () in
+        let _ = Hegel.draw tc gen in
+        ())
+  with Failure msg ->
+    raised := true;
+    Alcotest.(check bool)
+      "has 'Flaky test detected'" true
+      (contains_substring msg
+         "Flaky test detected: Your data generation is non-deterministic:");
+    Alcotest.(check bool) "raised" true !raised
+
 (* ---- HEGEL_PROTOCOL_TEST_MODE error injection tests ---- *)
 
 let test_stop_test_on_generate () =
@@ -952,11 +975,10 @@ let test_ensure_hegel_installed_cached () =
       Stdlib.Sys.chdir orig_cwd;
       let rec rm_rf path =
         let stat = Core_unix.lstat path in
-        if Poly.( = ) stat.st_kind Core_unix.S_DIR then begin
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR then (
           Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
               rm_rf (Filename.concat path entry));
-          Core_unix.rmdir path
-        end
+          Core_unix.rmdir path)
         else Stdlib.Sys.remove path
       in
       rm_rf tmp_dir)
@@ -1158,11 +1180,10 @@ let test_ensure_hegel_installed_version_mismatch () =
       Stdlib.Sys.chdir orig_cwd;
       let rec rm_rf path =
         let stat = Core_unix.lstat path in
-        if Poly.( = ) stat.st_kind Core_unix.S_DIR then begin
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR then (
           Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
               rm_rf (Filename.concat path entry));
-          Core_unix.rmdir path
-        end
+          Core_unix.rmdir path)
         else Stdlib.Sys.remove path
       in
       rm_rf tmp_dir)
@@ -1206,11 +1227,10 @@ let test_ensure_hegel_installed_uv_not_found () =
       | None -> Core_unix.putenv ~key:"PATH" ~data:"");
       let rec rm_rf path =
         let stat = Core_unix.lstat path in
-        if Poly.( = ) stat.st_kind Core_unix.S_DIR then begin
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR then (
           Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
               rm_rf (Filename.concat path entry));
-          Core_unix.rmdir path
-        end
+          Core_unix.rmdir path)
         else Stdlib.Sys.remove path
       in
       rm_rf tmp_dir)
@@ -1275,11 +1295,10 @@ let with_fake_uv_env ~venv_exit ~pip_exit ?(delete_log = false) f =
       | None -> Core_unix.putenv ~key:"PATH" ~data:"");
       let rec rm_rf path =
         let stat = Core_unix.lstat path in
-        if Poly.( = ) stat.st_kind Core_unix.S_DIR then begin
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR then (
           Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
               rm_rf (Filename.concat path entry));
-          Core_unix.rmdir path
-        end
+          Core_unix.rmdir path)
         else Stdlib.Sys.remove path
       in
       try rm_rf tmp_dir with _ -> ())
@@ -1365,11 +1384,10 @@ let test_ensure_installed_binary_missing () =
       | None -> Core_unix.putenv ~key:"PATH" ~data:"");
       let rec rm_rf path =
         let stat = Core_unix.lstat path in
-        if Poly.( = ) stat.st_kind Core_unix.S_DIR then begin
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR then (
           Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
               rm_rf (Filename.concat path entry));
-          Core_unix.rmdir path
-        end
+          Core_unix.rmdir path)
         else Stdlib.Sys.remove path
       in
       try rm_rf tmp_dir with _ -> ())
@@ -1423,11 +1441,10 @@ let test_session_start_creates_hegel_dir () =
       | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:"");
       let rec rm_rf path =
         let stat = Core_unix.lstat path in
-        if Poly.( = ) stat.st_kind Core_unix.S_DIR then begin
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR then (
           Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
               rm_rf (Filename.concat path entry));
-          Core_unix.rmdir path
-        end
+          Core_unix.rmdir path)
         else Stdlib.Sys.remove path
       in
       try rm_rf tmp_dir with _ -> ())
@@ -1580,6 +1597,7 @@ let tests =
     Alcotest.test_case "assume false e2e" `Quick test_assume_false_e2e;
     Alcotest.test_case "note not final e2e" `Quick test_note_not_final_e2e;
     Alcotest.test_case "target e2e" `Quick test_target_e2e;
+    Alcotest.test_case "flaky strategy" `Quick test_flaky_strategy;
     Alcotest.test_case "mark_complete VALID" `Quick test_mark_complete_valid;
     Alcotest.test_case "mark_complete INVALID" `Quick test_mark_complete_invalid;
     Alcotest.test_case "mark_complete INTERESTING" `Quick

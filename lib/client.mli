@@ -11,6 +11,9 @@ exception Assume_rejected
 exception Data_exhausted
 (** Raised when the server runs out of test data (StopTest). *)
 
+exception Flaky_strategy
+(** Raised when the server detects a flaky strategy definition. *)
+
 (** Health checks that can be suppressed during test execution. *)
 type health_check =
   | Filter_too_much
@@ -84,7 +87,8 @@ val extract_origin : exn -> string
 val generate_from_schema : CBOR.Simple.t -> test_case -> CBOR.Simple.t
 (** [generate_from_schema schema tc] generates a value from a schema by sending
     a generate command to the server. Raises {!Data_exhausted} if the server
-    signals StopTest. *)
+    signals StopTest or {!Flaky_strategy} if it signals FlakyStrategyDefinition.
+*)
 
 val assume : test_case -> bool -> unit
 (** [assume tc condition] rejects the current test case if [condition] is
