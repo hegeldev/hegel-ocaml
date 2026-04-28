@@ -22,10 +22,7 @@ let test_sampled_from_empty () =
 let test_one_of_basic_schema () =
   let gen =
     one_of
-      [
-        integers ~min_value:0 ~max_value:10 ();
-        map (fun _ -> 0) (booleans ());
-      ]
+      [ integers ~min_value:0 ~max_value:10 (); map (fun _ -> 0) (booleans ()) ]
   in
   Alcotest.(check bool) "is_basic" true (is_basic gen);
   match schema gen with
@@ -41,8 +38,7 @@ let test_one_of_basic_schema () =
         List.map
           (fun child ->
             let child_pairs = Cbor_helpers.extract_dict child in
-            Cbor_helpers.extract_string
-              (List.assoc (`Text "type") child_pairs))
+            Cbor_helpers.extract_string (List.assoc (`Text "type") child_pairs))
           children
       in
       (* Children must be the raw child schemas — never the old
