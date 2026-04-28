@@ -17,7 +17,7 @@ let () =
   let mode = Json_params.get_mode params in
   let test_cases = get_test_cases () in
   if key_type = "string" then
-    Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
+    run_conformance_test ~settings:(Hegel.Client.settings ~test_cases ())
       (fun tc ->
         let key_gen = text ~min_size:1 ~max_size:10 () in
         let key_gen =
@@ -52,7 +52,7 @@ let () =
             ("max_value", Json_params.int_opt_to_json max_val_result);
           ])
   else
-    Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
+    run_conformance_test ~settings:(Hegel.Client.settings ~test_cases ())
       (fun tc ->
         let key_gen = integers ~min_value:min_key ~max_value:max_key () in
         let key_gen =

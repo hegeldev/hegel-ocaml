@@ -4,7 +4,6 @@ These tests verify that Hegel for OCaml generates values matching the
 statistical properties expected by the Hypothesis-based conformance framework.
 """
 
-import os
 from pathlib import Path
 
 import pytest
@@ -17,6 +16,8 @@ from hegel.conformance import (
     FloatConformance,
     IntegerConformance,
     ListConformance,
+    OneOfConformance,
+    OriginDeduplicationConformance,
     SampledFromConformance,
     StopTestOnCollectionMoreConformance,
     StopTestOnGenerateConformance,
@@ -37,9 +38,16 @@ def binary(name: str) -> Path:
 
 def test_conformance(subtests: pytest.Subtests) -> None:
     """Run all conformance tests for Hegel for OCaml."""
+    # Error-handling tests intentionally inject server-side faults that prevent
+    # the per-test-case server metrics line from being written, so they must
+    # opt out of the server-metrics check.
+    no_server_metrics = {"skip_server_metrics": True}
+
     tests = [
         BooleanConformance(binary("test_booleans")),
-        IntegerConformance(binary("test_integers"), min_value=-(2**62), max_value=2**62-1),
+        IntegerConformance(
+            binary("test_integers"), min_value=-(2**62), max_value=2**62 - 1
+        ),
         FloatConformance(binary("test_floats")),
         TextConformance(binary("test_text"), no_surrogates=True),
         BinaryConformance(binary("test_binary")),
@@ -47,12 +55,21 @@ def test_conformance(subtests: pytest.Subtests) -> None:
         SampledFromConformance(binary("test_sampled_from")),
         DictConformance(binary("test_hashmaps")),
         # Error handling conformance tests
-        StopTestOnGenerateConformance(binary("test_booleans")),
-        StopTestOnMarkCompleteConformance(binary("test_booleans")),
-        StopTestOnCollectionMoreConformance(binary("test_lists")),
-        StopTestOnNewCollectionConformance(binary("test_lists")),
-        ErrorResponseConformance(binary("test_booleans")),
-        EmptyTestConformance(binary("test_booleans")),
+        StopTestOnGenerateConformance(binary("test_booleans"), **no_server_metrics),
+        StopTestOnMarkCompleteConformance(binary("test_booleans"), **no_server_metrics),
+        StopTestOnCollectionMoreConformance(binary("test_lists"), **no_server_metrics),
+        StopTestOnNewCollectionConformance(binary("test_lists"), **no_server_metrics),
+        ErrorResponseConformance(binary("test_booleans"), **no_server_metrics),
+        EmptyTestConformance(binary("test_booleans"), **no_server_metrics),
     ]
 
-    run_conformance_tests(tests, subtests)
+    run_conformance_tests(
+        tests,
+        subtests,
+        # Conformance tests added in newer hegel-core releases that the OCaml
+        # library does not yet have a dedicated conformance binary for.
+        skip_tests=[
+            OneOfConformance,
+            OriginDeduplicationConformance,
+        ],
+    )

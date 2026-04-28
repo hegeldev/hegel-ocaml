@@ -100,6 +100,109 @@ let test_write_metrics_appends () =
       close_in ic;
       Alcotest.(check string) "appended" {|{"value": 42}|} (String.trim content))
 
+(** Test: with_overrun_metric is a passthrough when [f] returns normally. *)
+let test_with_overrun_metric_passthrough () =
+  let n = Hegel.Conformance.with_overrun_metric (fun () -> 42) in
+  Alcotest.(check int) "passthrough" 42 n
+
+(** Test: with_overrun_metric writes a placeholder when [f] raises
+    {!Client.Data_exhausted}, then re-raises. *)
+let test_with_overrun_metric_data_exhausted () =
+  let tmp = Filename.temp_file "hegel_overrun" ".jsonl" in
+  let saved = Sys.getenv_opt "CONFORMANCE_METRICS_FILE" in
+  Unix.putenv "CONFORMANCE_METRICS_FILE" tmp;
+  Fun.protect
+    ~finally:(fun () ->
+      (try Sys.remove tmp with _ -> ());
+      match saved with
+      | None -> ()
+      | Some v -> Unix.putenv "CONFORMANCE_METRICS_FILE" v)
+    (fun () ->
+      let raised =
+        try
+          ignore
+            (Hegel.Conformance.with_overrun_metric (fun () ->
+                 raise Hegel.Client.Data_exhausted));
+          false
+        with Hegel.Client.Data_exhausted -> true
+      in
+      Alcotest.(check bool) "re-raises Data_exhausted" true raised;
+      let ic = open_in tmp in
+      let content = really_input_string ic (in_channel_length ic) in
+      close_in ic;
+      Alcotest.(check string) "wrote empty placeholder" "{}" (String.trim content))
+
+(** Test: with_overrun_metric swallows a [Sys_error] from a failing
+    placeholder write and still re-raises the original {!Client.Data_exhausted}.
+    Triggered by pointing [CONFORMANCE_METRICS_FILE] at an unwritable path. *)
+let test_with_overrun_metric_swallows_write_failure () =
+  let saved = Sys.getenv_opt "CONFORMANCE_METRICS_FILE" in
+  Unix.putenv "CONFORMANCE_METRICS_FILE" "/nonexistent/dir/file.jsonl";
+  Fun.protect
+    ~finally:(fun () ->
+      match saved with
+      | None -> ()
+      | Some v -> Unix.putenv "CONFORMANCE_METRICS_FILE" v)
+    (fun () ->
+      let raised =
+        try
+          ignore
+            (Hegel.Conformance.with_overrun_metric (fun () ->
+                 raise Hegel.Client.Data_exhausted));
+          false
+        with Hegel.Client.Data_exhausted -> true
+      in
+      Alcotest.(check bool)
+        "re-raises Data_exhausted even on placeholder write failure" true raised)
+
+(** Test: run_conformance_test wraps the body in with_overrun_metric and
+    forwards to {!Session.run_hegel_test}. Pointed at a temporary metrics
+    file, the body's call to write_metrics must produce one line per test
+    case. *)
+let test_run_conformance_test_e2e () =
+  let tmp = Filename.temp_file "hegel_run_conformance" ".jsonl" in
+  let saved = Sys.getenv_opt "CONFORMANCE_METRICS_FILE" in
+  Unix.putenv "CONFORMANCE_METRICS_FILE" tmp;
+  Fun.protect
+    ~finally:(fun () ->
+      (try Sys.remove tmp with _ -> ());
+      match saved with
+      | None -> ()
+      | Some v -> Unix.putenv "CONFORMANCE_METRICS_FILE" v)
+    (fun () ->
+      Hegel.Conformance.run_conformance_test
+        ~settings:(Hegel.Client.settings ~test_cases:5 ())
+        (fun tc ->
+          let _ = Hegel.draw tc (booleans ()) in
+          Hegel.Conformance.write_metrics [ ("ok", "true") ]);
+      let ic = open_in tmp in
+      let content = really_input_string ic (in_channel_length ic) in
+      close_in ic;
+      let lines =
+        List.filter (fun l -> l <> "") (String.split_on_char '\n' content)
+      in
+      Alcotest.(check bool)
+        "wrote at least one metrics line" true
+        (List.length lines >= 1);
+      List.iter
+        (fun line ->
+          (* Either the body's metric or a placeholder from with_overrun_metric. *)
+          Alcotest.(check bool)
+            "valid line content" true
+            (line = {|{"ok": true}|} || line = "{}"))
+        lines)
+
+(** Test: with_overrun_metric does not catch other exceptions. *)
+let test_with_overrun_metric_other_exn () =
+  let raised =
+    try
+      ignore
+        (Hegel.Conformance.with_overrun_metric (fun () -> failwith "boom"));
+      false
+    with Failure _ -> true
+  in
+  Alcotest.(check bool) "passes through Failure" true raised
+
 (** Test: write_metrics raises Sys_error on bad path. *)
 let test_write_metrics_bad_path () =
   let saved = Sys.getenv_opt "CONFORMANCE_METRICS_FILE" in
@@ -471,6 +574,16 @@ let tests =
     Alcotest.test_case "write_metrics appends" `Quick test_write_metrics_appends;
     Alcotest.test_case "write_metrics bad path" `Quick
       test_write_metrics_bad_path;
+    Alcotest.test_case "with_overrun_metric passthrough" `Quick
+      test_with_overrun_metric_passthrough;
+    Alcotest.test_case "with_overrun_metric Data_exhausted" `Quick
+      test_with_overrun_metric_data_exhausted;
+    Alcotest.test_case "with_overrun_metric swallows write failure" `Quick
+      test_with_overrun_metric_swallows_write_failure;
+    Alcotest.test_case "with_overrun_metric other exn" `Quick
+      test_with_overrun_metric_other_exn;
+    Alcotest.test_case "run_conformance_test e2e" `Quick
+      test_run_conformance_test_e2e;
     (* New generator schema tests *)
     Alcotest.test_case "floats schema no bounds" `Quick
       test_floats_schema_no_bounds;
