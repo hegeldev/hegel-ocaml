@@ -56,8 +56,8 @@ val cleanup : hegel_session -> unit
 
 val start : hegel_session -> unit
 (** [start session] starts the hegel server if not already running. The server
-    communicates over its own stdin/stdout, which we wire up to a pair of
-    pipes. *)
+    communicates over its own stdin/stdout, which we wire up to a pair of pipes.
+*)
 
 val run_hegel_test :
   ?settings:Client.settings -> (Client.test_case -> unit) -> unit

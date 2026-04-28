@@ -186,8 +186,8 @@ let cleanup session =
       Printf.eprintf "[hegel-debug] cleanup: done\n%!"
 
 (** [start session] starts the hegel server if not already running. The server
-    communicates over its own stdin/stdout, which we wire up to a pair of
-    pipes. *)
+    communicates over its own stdin/stdout, which we wire up to a pair of pipes.
+*)
 let start session =
   if has_working_client session then ()
   else (

@@ -58,9 +58,10 @@ let with_overrun_metric f =
     (try write_metrics [] with _ -> ());
     raise e
 
-(** [run_conformance_test ?settings body] runs a property test for a
-    conformance binary. Equivalent to {!Session.run_hegel_test} except that
-    the test [body] is wrapped in {!with_overrun_metric}, so that conformance
-    binaries do not have to remember to do that wrapping themselves. *)
+(** [run_conformance_test ?settings body] runs a property test for a conformance
+    binary. Equivalent to {!Session.run_hegel_test} except that the test [body]
+    is wrapped in {!with_overrun_metric}, so that conformance binaries do not
+    have to remember to do that wrapping themselves. *)
 let run_conformance_test ?settings body =
-  Session.run_hegel_test ?settings (fun tc -> with_overrun_metric (fun () -> body tc))
+  Session.run_hegel_test ?settings (fun tc ->
+      with_overrun_metric (fun () -> body tc))

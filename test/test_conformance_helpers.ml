@@ -130,11 +130,12 @@ let test_with_overrun_metric_data_exhausted () =
       let ic = open_in tmp in
       let content = really_input_string ic (in_channel_length ic) in
       close_in ic;
-      Alcotest.(check string) "wrote empty placeholder" "{}" (String.trim content))
+      Alcotest.(check string)
+        "wrote empty placeholder" "{}" (String.trim content))
 
-(** Test: with_overrun_metric swallows a [Sys_error] from a failing
-    placeholder write and still re-raises the original {!Client.Data_exhausted}.
-    Triggered by pointing [CONFORMANCE_METRICS_FILE] at an unwritable path. *)
+(** Test: with_overrun_metric swallows a [Sys_error] from a failing placeholder
+    write and still re-raises the original {!Client.Data_exhausted}. Triggered
+    by pointing [CONFORMANCE_METRICS_FILE] at an unwritable path. *)
 let test_with_overrun_metric_swallows_write_failure () =
   let saved = Sys.getenv_opt "CONFORMANCE_METRICS_FILE" in
   Unix.putenv "CONFORMANCE_METRICS_FILE" "/nonexistent/dir/file.jsonl";
@@ -156,9 +157,8 @@ let test_with_overrun_metric_swallows_write_failure () =
         "re-raises Data_exhausted even on placeholder write failure" true raised)
 
 (** Test: run_conformance_test wraps the body in with_overrun_metric and
-    forwards to {!Session.run_hegel_test}. Pointed at a temporary metrics
-    file, the body's call to write_metrics must produce one line per test
-    case. *)
+    forwards to {!Session.run_hegel_test}. Pointed at a temporary metrics file,
+    the body's call to write_metrics must produce one line per test case. *)
 let test_run_conformance_test_e2e () =
   let tmp = Filename.temp_file "hegel_run_conformance" ".jsonl" in
   let saved = Sys.getenv_opt "CONFORMANCE_METRICS_FILE" in
@@ -171,8 +171,7 @@ let test_run_conformance_test_e2e () =
       | Some v -> Unix.putenv "CONFORMANCE_METRICS_FILE" v)
     (fun () ->
       Hegel.Conformance.run_conformance_test
-        ~settings:(Hegel.Client.settings ~test_cases:5 ())
-        (fun tc ->
+        ~settings:(Hegel.Client.settings ~test_cases:5 ()) (fun tc ->
           let _ = Hegel.draw tc (booleans ()) in
           Hegel.Conformance.write_metrics [ ("ok", "true") ]);
       let ic = open_in tmp in
@@ -196,8 +195,7 @@ let test_run_conformance_test_e2e () =
 let test_with_overrun_metric_other_exn () =
   let raised =
     try
-      ignore
-        (Hegel.Conformance.with_overrun_metric (fun () -> failwith "boom"));
+      ignore (Hegel.Conformance.with_overrun_metric (fun () -> failwith "boom"));
       false
     with Failure _ -> true
   in
