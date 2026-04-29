@@ -17,7 +17,7 @@ module Thread = Caml_threads.Thread
 open Connection
 
 (** Version of hegel-core to install. *)
-let hegel_server_version = "0.4.1"
+let hegel_server_version = "0.4.14"
 
 (** Environment variable to override the hegel server command. *)
 let hegel_server_command_env = "HEGEL_SERVER_COMMAND"
@@ -185,8 +185,9 @@ let cleanup session =
       ();
       Printf.eprintf "[hegel-debug] cleanup: done\n%!"
 
-(** [start session] starts the hegel server if not already running. Spawns the
-    server with [--stdio] for pipe-based communication. *)
+(** [start session] starts the hegel server if not already running. The server
+    communicates over its own stdin/stdout, which we wire up to a pair of pipes.
+*)
 let start session =
   if has_working_client session then ()
   else (
@@ -202,10 +203,12 @@ let start session =
           let child_stdin_read, child_stdin_write = Unix.pipe () in
           let child_stdout_read, child_stdout_write = Unix.pipe () in
           let log_fd = server_log_fd () in
-          (* Start hegel subprocess with --stdio *)
+          (* Start hegel subprocess. Since hegel-core 0.4.8 the server
+             always communicates over stdin/stdout, so no transport flag is
+             needed. *)
           let pid =
             Caml_unix.create_process hegel_cmd
-              [| hegel_cmd; "--stdio"; "--verbosity"; "normal" |]
+              [| hegel_cmd; "--verbosity"; "normal" |]
               child_stdin_read child_stdout_write log_fd
           in
           (* Close the child's ends of the pipes *)
