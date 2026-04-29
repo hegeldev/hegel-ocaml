@@ -49,8 +49,14 @@ jobs:
       - name: Set up OCaml
         if: steps.cache-opam.outputs.cache-hit != 'true'
         run: |
-          opam init --disable-sandboxing --yes
-          opam switch create 5.2.1 --yes
+          # Cache may be partially restored via restore-keys (a different key
+          # prefix matched); guard each step so it's idempotent.
+          if [ ! -d "$HOME/.opam" ]; then
+            opam init --disable-sandboxing --yes
+          fi
+          if ! opam switch list --short 2>/dev/null | grep -q '^5.2.1$'; then
+            opam switch create 5.2.1 --yes
+          fi
 
       - name: Set opam environment
         run: |
@@ -116,8 +122,14 @@ jobs:
       - name: Set up OCaml
         if: steps.cache-opam.outputs.cache-hit != 'true'
         run: |
-          opam init --disable-sandboxing --yes
-          opam switch create 5.2.1 --yes
+          # Cache may be partially restored via restore-keys (a different key
+          # prefix matched); guard each step so it's idempotent.
+          if [ ! -d "$HOME/.opam" ]; then
+            opam init --disable-sandboxing --yes
+          fi
+          if ! opam switch list --short 2>/dev/null | grep -q '^5.2.1$'; then
+            opam switch create 5.2.1 --yes
+          fi
 
       - name: Set opam environment
         run: |
@@ -168,8 +180,14 @@ jobs:
       - name: Set up OCaml
         if: steps.cache-opam.outputs.cache-hit != 'true'
         run: |
-          opam init --disable-sandboxing --yes
-          opam switch create 5.2.1 --yes
+          # Cache may be partially restored via restore-keys (a different key
+          # prefix matched); guard each step so it's idempotent.
+          if [ ! -d "$HOME/.opam" ]; then
+            opam init --disable-sandboxing --yes
+          fi
+          if ! opam switch list --short 2>/dev/null | grep -q '^5.2.1$'; then
+            opam switch create 5.2.1 --yes
+          fi
 
       - name: Set opam environment
         run: |
@@ -220,8 +238,14 @@ jobs:
       - name: Set up OCaml
         if: steps.cache-opam.outputs.cache-hit != 'true'
         run: |
-          opam init --disable-sandboxing --yes
-          opam switch create 5.2.1 --yes
+          # Cache may be partially restored via restore-keys (a different key
+          # prefix matched); guard each step so it's idempotent.
+          if [ ! -d "$HOME/.opam" ]; then
+            opam init --disable-sandboxing --yes
+          fi
+          if ! opam switch list --short 2>/dev/null | grep -q '^5.2.1$'; then
+            opam switch create 5.2.1 --yes
+          fi
 
       - name: Set opam environment
         run: |
