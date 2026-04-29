@@ -19,7 +19,7 @@ let sampled_from options =
 
     Two code paths depending on generator types:
     - All basic: a single [one_of] schema with the raw child schemas. The
-      server's response is [\[index, value\]]; the index selects which branch's
+      server's response is [[index, value]]; the index selects which branch's
       transform to apply.
     - Any non-basic: compositional via [ONE_OF] span.
 
