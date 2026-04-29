@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.7 - 2026-04-29
+
+Bump our pinned hegel-core version from `0.4.1` to [`0.4.14`](https://github.com/hegeldev/hegel-core/releases/tag/v0.4.14).
+
 ## 0.3.6 - 2026-04-17
 
 Properly handle flaky generation failures.
