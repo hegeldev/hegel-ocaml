@@ -19,7 +19,7 @@ let () =
   let allow_nan = Json_params.get_bool_opt params "allow_nan" in
   let allow_infinity = Json_params.get_bool_opt params "allow_infinity" in
   let test_cases = get_test_cases () in
-  run_conformance_test ~settings:(Hegel.Client.settings ~test_cases ())
+  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
     (fun tc ->
       let f =
         Hegel.draw tc

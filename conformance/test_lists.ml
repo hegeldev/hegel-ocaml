@@ -17,7 +17,7 @@ let () =
   let unique = Json_params.get_bool params "unique" false in
   let mode = Json_params.get_mode params in
   let test_cases = get_test_cases () in
-  run_conformance_test ~settings:(Hegel.Client.settings ~test_cases ())
+  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
     (fun tc ->
       let test_mode =
         try Sys.getenv "HEGEL_PROTOCOL_TEST_MODE" with Not_found -> ""

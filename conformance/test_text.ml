@@ -64,7 +64,7 @@ let () =
     Json_params.get_string_opt params "exclude_characters"
   in
   let test_cases = get_test_cases () in
-  run_conformance_test ~settings:(Hegel.Client.settings ~test_cases ())
+  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
     (fun tc ->
       let s =
         Hegel.draw tc
