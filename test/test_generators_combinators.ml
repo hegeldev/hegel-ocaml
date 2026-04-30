@@ -90,7 +90,7 @@ let test_ip_v4_schema () =
       let pairs = Cbor_helpers.extract_dict s in
       let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
       let ver = Cbor_helpers.extract_int (List.assoc (`Text "version") pairs) in
-      Alcotest.(check string) "type" "ip_addresses" typ;
+      Alcotest.(check string) "type" "ip_address" typ;
       Alcotest.(check int) "version" 4 ver
   | None -> Alcotest.fail "expected schema"
 
@@ -102,7 +102,7 @@ let test_ip_v6_schema () =
       let pairs = Cbor_helpers.extract_dict s in
       let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
       let ver = Cbor_helpers.extract_int (List.assoc (`Text "version") pairs) in
-      Alcotest.(check string) "type" "ip_addresses" typ;
+      Alcotest.(check string) "type" "ip_address" typ;
       Alcotest.(check int) "version" 6 ver
   | None -> Alcotest.fail "expected schema"
 

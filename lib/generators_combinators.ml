@@ -108,9 +108,7 @@ let rec ip_addresses ?version () =
         {
           schema =
             `Map
-              [
-                (`Text "type", `Text "ip_addresses"); (`Text "version", `Int 4);
-              ];
+              [ (`Text "type", `Text "ip_address"); (`Text "version", `Int 4) ];
           transform = Cbor_helpers.extract_string;
         }
   | Some 6 ->
@@ -118,9 +116,7 @@ let rec ip_addresses ?version () =
         {
           schema =
             `Map
-              [
-                (`Text "type", `Text "ip_addresses"); (`Text "version", `Int 6);
-              ];
+              [ (`Text "type", `Text "ip_address"); (`Text "version", `Int 6) ];
           transform = Cbor_helpers.extract_string;
         }
   | None -> one_of [ ip_addresses ~version:4 (); ip_addresses ~version:6 () ]
