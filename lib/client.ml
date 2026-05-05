@@ -214,9 +214,9 @@ let stop_span ?(discard = false) tc =
                ])))
 
 (** Supported protocol version range. *)
-let supported_protocol_lo = "0.12"
+let supported_protocol_lo = "0.13"
 
-let supported_protocol_hi = "0.12"
+let supported_protocol_hi = "0.13"
 
 (** Compare two "major.minor" version strings numerically. Returns a negative
     number if a < b, 0 if a = b, positive if a > b. *)
