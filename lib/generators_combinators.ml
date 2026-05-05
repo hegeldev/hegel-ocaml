@@ -17,9 +17,10 @@ let sampled_from options =
 (** [one_of generators] creates a generator that picks from one of the given
     [generators].
 
-    Three code paths depending on generator types:
-    - All basic with identity transforms: simple [one_of] schema.
-    - All basic with some transforms: tagged-tuple schema with dispatch.
+    Two code paths depending on generator types:
+    - All basic: a single [one_of] schema with the raw child schemas. The
+      server's response is [[index, value]]; the index selects which branch's
+      transform to apply.
     - Any non-basic: compositional via [ONE_OF] span.
 
     Requires at least one generator. *)
@@ -28,7 +29,7 @@ let one_of (generators : 'a generator list) =
     failwith "one_of requires at least one generator";
   let basics = List.filter_map generators ~f:as_basic in
   if List.length basics <> List.length generators then
-    (* Path 3: composite — generate index in ONE_OF span, then delegate *)
+    (* Composite path: generate index in ONE_OF span, then delegate *)
     let gens = Array.of_list generators in
     let n = Array.length gens in
     Composite
@@ -50,34 +51,15 @@ let one_of (generators : 'a generator list) =
             do_draw gens.(idx) data);
       }
   else
-    (* Check if all have identity transforms by testing if the transform is
-       literally the identity. We can't test function equality, so we check
-       if all transforms act as identity on a canary value. Instead, we use
-       the tagged-tuple path which is always correct. *)
-    (* Path 2: tagged-tuple schema with dispatch transform *)
-    let tagged_schemas =
-      List.mapi basics ~f:(fun i (s, _) ->
-          `Map
-            [
-              (`Text "type", `Text "tuple");
-              ( `Text "elements",
-                `Array
-                  [
-                    `Map
-                      [
-                        (`Text "type", `Text "constant"); (`Text "value", `Int i);
-                      ];
-                    s;
-                  ] );
-            ])
-    in
+    (* Basic path: one_of schema with raw child schemas. The server returns
+       [index, value]; dispatch through the per-branch transform table. *)
+    let child_schemas = List.map basics ~f:fst in
     let transforms = Array.of_list (List.map basics ~f:snd) in
     let dispatch raw =
       match raw with
-      | `Array [ tag; value ] ->
-          let idx = Cbor_helpers.extract_int tag in
-          transforms.(idx) value
-      | _ -> failwith "one_of: expected [tag, value] tuple from server"
+      | `Array [ raw_idx; value ] ->
+          transforms.(Cbor_helpers.extract_int raw_idx) value
+      | _ -> failwith "one_of: expected [index, value] from server"
     in
     Basic
       {
@@ -85,7 +67,7 @@ let one_of (generators : 'a generator list) =
           `Map
             [
               (`Text "type", `Text "one_of");
-              (`Text "generators", `Array tagged_schemas);
+              (`Text "generators", `Array child_schemas);
             ];
         transform = dispatch;
       }
@@ -106,13 +88,17 @@ let rec ip_addresses ?version () =
   | Some 4 ->
       Basic
         {
-          schema = `Map [ (`Text "type", `Text "ipv4") ];
+          schema =
+            `Map
+              [ (`Text "type", `Text "ip_address"); (`Text "version", `Int 4) ];
           transform = Cbor_helpers.extract_string;
         }
   | Some 6 ->
       Basic
         {
-          schema = `Map [ (`Text "type", `Text "ipv6") ];
+          schema =
+            `Map
+              [ (`Text "type", `Text "ip_address"); (`Text "version", `Int 6) ];
           transform = Cbor_helpers.extract_string;
         }
   | None -> one_of [ ip_addresses ~version:4 (); ip_addresses ~version:6 () ]

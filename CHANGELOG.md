@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.9 - 2026-05-05
+
+`ip_addresses` now emits the protocol schema `{"type": "ip_address", "version": 4|6}` instead of different types per version (`{"type": "ipv4"}` / `{"type": "ipv6"}`)
+
+## 0.3.8 - 2026-05-05
+
+`one_of` no longer wraps each child schema in a tagged tuple. It now sends the raw children and relies on the new protocol contract in which the server emits `[index, value]` for `one_of` schemas.
+
+This release also bumps our pinned hegel-core to [0.5.0](https://github.com/hegeldev/hegel-core/releases/tag/v0.5.0), which ships the matching server-side protocol change:
+
+> This release changes the `one_of` protocol request to return a tuple of `[index, value]`, rather than just `value`.
+>
+> — [v0.5.0](https://github.com/hegeldev/hegel-core/releases/tag/v0.5.0)
+
 ## 0.3.7 - 2026-04-29
 
 Bump our pinned hegel-core version from `0.4.1` to [`0.4.14`](https://github.com/hegeldev/hegel-core/releases/tag/v0.4.14).

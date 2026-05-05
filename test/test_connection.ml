@@ -35,7 +35,7 @@ let test_send_handshake_returns_version () =
   let t = Thread.create Test_helpers.handshake_via_stream peer_conn in
   let version = send_handshake client_conn in
   Thread.join t;
-  Alcotest.(check string) "version" "0.10" version;
+  Alcotest.(check string) "version" "0.13" version;
   close client_conn;
   close peer_conn
 

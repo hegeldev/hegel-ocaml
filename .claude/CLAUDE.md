@@ -211,7 +211,7 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
 - `{"type": "regex", "pattern": str, "fullmatch": bool}` — from_regex
 - `{"type": "email"}`, `{"type": "url"}`, `{"type": "domain", "max_length"?: N}` — format generators
 - `{"type": "date"}`, `{"type": "time"}`, `{"type": "datetime"}` — date/time generators
-- `{"type": "ipv4"}`, `{"type": "ipv6"}` — IP address generators
+- `{"type": "ip_addresses", "version": 4|6}` — IP address generators
 - `{"one_of": [tagged_schema, ...]}` — one_of (tagged-tuple schemas for dispatch)
 - `{"type": "tuple", "elements": [schema, ...]}` — tuples
 
