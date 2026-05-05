@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.9 - 2026-05-05
+
+`ip_addresses` now emits the protocol schema `{"type": "ip_address", "version": 4|6}` instead of different types per version (`{"type": "ipv4"}` / `{"type": "ipv6"}`)
+
 ## 0.3.8 - 2026-05-05
 
 `one_of` no longer wraps each child schema in a tagged tuple. It now sends the raw children and relies on the new protocol contract in which the server emits `[index, value]` for `one_of` schemas.
