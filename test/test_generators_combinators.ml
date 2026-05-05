@@ -16,14 +16,13 @@ let test_sampled_from_empty () =
   | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 
-(** Test: one_of all basic uses tagged-tuple schema. *)
+(** Test: one_of all basic emits a one_of schema whose children are the raw
+    child schemas — not wrapped in tagged tuples. Uses heterogeneous element
+    schemas so any partial tuple-wrapping regression would be visible. *)
 let test_one_of_basic_schema () =
   let gen =
     one_of
-      [
-        integers ~min_value:0 ~max_value:10 ();
-        integers ~min_value:100 ~max_value:200 ();
-      ]
+      [ integers ~min_value:0 ~max_value:10 (); map (fun _ -> 0) (booleans ()) ]
   in
   Alcotest.(check bool) "is_basic" true (is_basic gen);
   match schema gen with
@@ -32,9 +31,21 @@ let test_one_of_basic_schema () =
       Alcotest.(check string)
         "type is one_of" "one_of"
         (Cbor_helpers.extract_string (List.assoc (`Text "type") pairs));
-      Alcotest.(check bool)
-        "has generators key" true
-        (List.mem_assoc (`Text "generators") pairs)
+      let children =
+        Cbor_helpers.extract_list (List.assoc (`Text "generators") pairs)
+      in
+      let child_types =
+        List.map
+          (fun child ->
+            let child_pairs = Cbor_helpers.extract_dict child in
+            Cbor_helpers.extract_string (List.assoc (`Text "type") child_pairs))
+          children
+      in
+      (* Children must be the raw child schemas — never the old
+         [{"type": "tuple", "elements": [{"type": "constant", ...}, child]}]
+         workaround. *)
+      Alcotest.(check (list string))
+        "child types in order" [ "integer"; "boolean" ] child_types
   | None -> Alcotest.fail "expected schema"
 
 (** Test: one_of with non-basic generators is not basic. *)
@@ -43,7 +54,7 @@ let test_one_of_non_basic () =
   let gen = one_of [ integers (); filtered ] in
   Alcotest.(check bool) "not basic" false (is_basic gen)
 
-(** Test: one_of tagged-tuple dispatch transform. *)
+(** Test: one_of [index, value] dispatch transform. *)
 let test_one_of_dispatch () =
   let gen =
     one_of
@@ -53,10 +64,10 @@ let test_one_of_dispatch () =
   in
   match gen with
   | Basic { transform; _ } ->
-      (* Tag 0 → first branch, value 5 → 5 * 2 = 10 *)
+      (* index 0 → first branch, value 5 → 5 * 2 = 10 *)
       let result = transform (`Array [ `Int 0; `Int 5 ]) in
       Alcotest.(check int) "dispatched first" 10 result;
-      (* Tag 1 → second branch, value 7 → 7 + 100 = 107 *)
+      (* index 1 → second branch, value 7 → 7 + 100 = 107 *)
       let result2 = transform (`Array [ `Int 1; `Int 7 ]) in
       Alcotest.(check int) "dispatched second" 107 result2
   | _ -> Alcotest.fail "expected Basic"
