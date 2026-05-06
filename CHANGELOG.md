@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.11 - 2026-05-06
+
+Restore compatibility with OxCaml.
+
 ## 0.3.10 - 2026-05-05
 
 Bump our pinned hegel-core from 0.5.0 to [0.7.0](https://github.com/hegeldev/hegel-core/releases/tag/v0.7.0)
