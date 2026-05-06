@@ -1,0 +1,5 @@
+(library
+ (name cbor)
+ (package hegel)
+ (wrapped false)
+ (libraries ocplib-endian))
