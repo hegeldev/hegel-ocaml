@@ -1,3 +1,6 @@
+(* Vendored from https://github.com/mirage/ocaml-cbor (v0.5).
+   Original work: Copyright (c) 2014 ygrek, MIT-licensed (see LICENSE in this directory). *)
+
 (** CBOR encoder/decoder, RFC 7049 *)
 
 open Printf
