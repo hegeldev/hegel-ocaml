@@ -17,6 +17,8 @@ from hegel.conformance import (
     FloatConformance,
     IntegerConformance,
     ListConformance,
+    OneOfConformance,
+    OriginDeduplicationConformance,
     SampledFromConformance,
     StopTestOnCollectionMoreConformance,
     StopTestOnGenerateConformance,
@@ -46,13 +48,16 @@ def test_conformance(subtests: pytest.Subtests) -> None:
         ListConformance(binary("test_lists"), min_value=-1000, max_value=1000),
         SampledFromConformance(binary("test_sampled_from")),
         DictConformance(binary("test_hashmaps")),
-        # Error handling conformance tests
-        StopTestOnGenerateConformance(binary("test_booleans")),
-        StopTestOnMarkCompleteConformance(binary("test_booleans")),
-        StopTestOnCollectionMoreConformance(binary("test_lists")),
-        StopTestOnNewCollectionConformance(binary("test_lists")),
-        ErrorResponseConformance(binary("test_booleans")),
-        EmptyTestConformance(binary("test_booleans")),
+        OneOfConformance(binary("test_one_of")),
+        OriginDeduplicationConformance(binary("test_origin_deduplication")),
+        # Error handling tests run against the protocol test server, which
+        # does not write the per-test-case server metrics file.
+        StopTestOnGenerateConformance(binary("test_booleans"), skip_server_metrics=True),
+        StopTestOnMarkCompleteConformance(binary("test_booleans"), skip_server_metrics=True),
+        StopTestOnCollectionMoreConformance(binary("test_lists"), skip_server_metrics=True),
+        StopTestOnNewCollectionConformance(binary("test_lists"), skip_server_metrics=True),
+        ErrorResponseConformance(binary("test_booleans"), skip_server_metrics=True),
+        EmptyTestConformance(binary("test_booleans"), skip_server_metrics=True),
     ]
 
     run_conformance_tests(tests, subtests)
