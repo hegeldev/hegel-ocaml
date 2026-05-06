@@ -100,6 +100,48 @@ let test_write_metrics_appends () =
       close_in ic;
       Alcotest.(check string) "appended" {|{"value": 42}|} (String.trim content))
 
+(** Test: with_metrics writes the body's returned pairs on success. *)
+let test_with_metrics_success () =
+  let tmp = Filename.temp_file "hegel_test_with" ".jsonl" in
+  let saved = Sys.getenv_opt "CONFORMANCE_METRICS_FILE" in
+  Unix.putenv "CONFORMANCE_METRICS_FILE" tmp;
+  Fun.protect
+    ~finally:(fun () ->
+      (try Sys.remove tmp with _ -> ());
+      match saved with
+      | None -> ()
+      | Some v -> Unix.putenv "CONFORMANCE_METRICS_FILE" v)
+    (fun () ->
+      Hegel.Conformance.with_metrics (fun () -> [ ("value", "7") ]);
+      let ic = open_in tmp in
+      let content = really_input_string ic (in_channel_length ic) in
+      close_in ic;
+      Alcotest.(check string)
+        "wrote pairs" {|{"value": 7}|} (String.trim content))
+
+(** Test: with_metrics writes empty metrics and re-raises on exception. *)
+let test_with_metrics_failure () =
+  let tmp = Filename.temp_file "hegel_test_with_fail" ".jsonl" in
+  let saved = Sys.getenv_opt "CONFORMANCE_METRICS_FILE" in
+  Unix.putenv "CONFORMANCE_METRICS_FILE" tmp;
+  Fun.protect
+    ~finally:(fun () ->
+      (try Sys.remove tmp with _ -> ());
+      match saved with
+      | None -> ()
+      | Some v -> Unix.putenv "CONFORMANCE_METRICS_FILE" v)
+    (fun () ->
+      let raised =
+        match Hegel.Conformance.with_metrics (fun () -> failwith "boom") with
+        | () -> false
+        | exception Failure _ -> true
+      in
+      Alcotest.(check bool) "re-raised exception" true raised;
+      let ic = open_in tmp in
+      let content = really_input_string ic (in_channel_length ic) in
+      close_in ic;
+      Alcotest.(check string) "wrote empty metric" "{}" (String.trim content))
+
 (** Test: write_metrics raises Sys_error on bad path. *)
 let test_write_metrics_bad_path () =
   let saved = Sys.getenv_opt "CONFORMANCE_METRICS_FILE" in
@@ -471,6 +513,8 @@ let tests =
     Alcotest.test_case "write_metrics appends" `Quick test_write_metrics_appends;
     Alcotest.test_case "write_metrics bad path" `Quick
       test_write_metrics_bad_path;
+    Alcotest.test_case "with_metrics success" `Quick test_with_metrics_success;
+    Alcotest.test_case "with_metrics failure" `Quick test_with_metrics_failure;
     (* New generator schema tests *)
     Alcotest.test_case "floats schema no bounds" `Quick
       test_floats_schema_no_bounds;

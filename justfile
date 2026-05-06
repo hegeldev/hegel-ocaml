@@ -60,7 +60,7 @@ check-conformance:
     set -euo pipefail
     eval $(opam env 2>/dev/null || true)
     dune build conformance/
-    uv run --with 'hegel-core==0.4.1' --with pytest pytest test/conformance/ -v
+    uv run --with 'hegel-core==0.7.0' --with pytest pytest test/conformance/ -v
 
 # these aliases are provided as ux improvements for local developers. CI should use the longer
 # forms.

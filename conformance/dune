@@ -42,3 +42,13 @@
  (name test_hashmaps)
  (modules test_hashmaps)
  (libraries hegel json_params core))
+
+(executable
+ (name test_one_of)
+ (modules test_one_of)
+ (libraries hegel json_params core))
+
+(executable
+ (name test_origin_deduplication)
+ (modules test_origin_deduplication)
+ (libraries hegel json_params core))

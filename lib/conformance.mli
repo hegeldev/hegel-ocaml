@@ -24,3 +24,9 @@ val write_metrics : (string * string) list -> unit
     [CONFORMANCE_METRICS_FILE] env var. [metrics] is a list of [(key, value)]
     pairs where values are already serialized JSON strings. Raises [Failure] if
     the env var is not set. *)
+
+val with_metrics : (unit -> (string * string) list) -> unit
+(** [with_metrics body] runs [body ()] and writes its result as a single metrics
+    line. If [body] raises, an empty metrics line is written and the exception
+    is re-raised. Use to keep client metric counts aligned with the server's
+    per-test-case metrics, including invalid and overrun cases. *)
