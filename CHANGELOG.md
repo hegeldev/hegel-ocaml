@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.12 - 2026-05-06
+
+Raise conformance to hegel-core 0.7.0.
+
 ## 0.3.11 - 2026-05-06
 
 Restore compatibility with OxCaml.
