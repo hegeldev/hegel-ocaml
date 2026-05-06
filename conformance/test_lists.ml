@@ -19,22 +19,23 @@ let () =
   let test_cases = get_test_cases () in
   Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
     (fun tc ->
-      let test_mode =
-        try Sys.getenv "HEGEL_PROTOCOL_TEST_MODE" with Not_found -> ""
-      in
-      let needs_non_basic =
-        mode = "non_basic"
-        || test_mode = "stop_test_on_collection_more"
-        || test_mode = "stop_test_on_new_collection"
-      in
-      let base_elem = integers ?min_value ?max_value () in
-      let elem_gen =
-        if needs_non_basic then Json_params.make_non_basic base_elem
-        else base_elem
-      in
-      let list_gen = lists elem_gen ~min_size ?max_size ~unique () in
-      let items = Hegel.draw tc list_gen in
-      let elements_json =
-        "[" ^ String.concat "," (List.map string_of_int items) ^ "]"
-      in
-      write_metrics [ ("elements", elements_json) ])
+      with_metrics (fun () ->
+          let test_mode =
+            try Sys.getenv "HEGEL_PROTOCOL_TEST_MODE" with Not_found -> ""
+          in
+          let needs_non_basic =
+            mode = "non_basic"
+            || test_mode = "stop_test_on_collection_more"
+            || test_mode = "stop_test_on_new_collection"
+          in
+          let base_elem = integers ?min_value ?max_value () in
+          let elem_gen =
+            if needs_non_basic then Json_params.make_non_basic base_elem
+            else base_elem
+          in
+          let list_gen = lists elem_gen ~min_size ?max_size ~unique () in
+          let items = Hegel.draw tc list_gen in
+          let elements_json =
+            "[" ^ String.concat "," (List.map string_of_int items) ^ "]"
+          in
+          [ ("elements", elements_json) ]))

@@ -45,3 +45,18 @@ let write_metrics pairs =
   match Sys.getenv "CONFORMANCE_METRICS_FILE" with
   | None -> failwith "CONFORMANCE_METRICS_FILE env var not set"
   | Some filename -> write_metrics_to filename pairs
+
+(** [with_metrics body] runs [body ()] and writes its result as a single metrics
+    line. If [body] raises, an empty metrics line is written and the exception
+    is re-raised.
+
+    The hegel server writes one metric line per test case it dispatches
+    (including invalid and overrun cases). To keep the client and server metric
+    counts aligned, conformance binaries should wrap their per-test body with
+    this helper. *)
+let with_metrics body =
+  match body () with
+  | metrics -> write_metrics metrics
+  | exception exn ->
+      write_metrics [];
+      raise exn
