@@ -9,7 +9,7 @@ homepage: "https://github.com/hegeldev/hegel-ocaml"
 bug-reports: "https://github.com/hegeldev/hegel-ocaml/issues"
 depends: [
   "ocaml" {>= "5.2"}
-  "dune" {>= "3.16" & >= "3.16"}
+  "dune" {>= "3.16"}
   "core" {>= "0.17"}
   "core_unix" {>= "0.17"}
   "alcotest" {with-test & >= "1.7"}
