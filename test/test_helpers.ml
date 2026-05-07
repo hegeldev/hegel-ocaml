@@ -33,12 +33,17 @@ let make_socket_pair () =
 let make_connection fd ?name ?debug () =
   Connection.create_connection ~read_fd:fd ~write_fd:fd ?name ?debug ()
 
+(** A handshake payload that the real client will accept — built from the
+    client's own supported-protocol constant so it stays valid across protocol
+    bumps. *)
+let supported_handshake_payload = "Hegel/" ^ Client.supported_protocol_hi
+
 (** [raw_handshake_responder fd] reads one raw handshake packet from [fd] and
-    responds with ["Hegel/0.13"]. Used by tests that need the client's
-    {!Connection.send_handshake} to succeed. This function reads and writes on a
-    raw fd without a connection object, so it must be used BEFORE any connection
-    is created on the same fd, or on a separate fd that has no background
-    reader. *)
+    responds with a payload the client will accept. Used by tests that need the
+    client's {!Connection.send_handshake} to succeed. This function reads and
+    writes on a raw fd without a connection object, so it must be used BEFORE
+    any connection is created on the same fd, or on a separate fd that has no
+    background reader. *)
 let raw_handshake_responder fd =
   let pkt = Protocol.read_packet fd in
   Protocol.write_packet fd
@@ -46,7 +51,7 @@ let raw_handshake_responder fd =
       stream_id = pkt.stream_id;
       message_id = pkt.message_id;
       is_reply = true;
-      payload = "Hegel/0.13";
+      payload = supported_handshake_payload;
     }
 
 (** [handshake_via_stream peer_conn] handles a handshake on the peer side using
@@ -54,7 +59,7 @@ let raw_handshake_responder fd =
 let handshake_via_stream peer_conn =
   let ch = Connection.control_stream peer_conn in
   let msg_id, _payload = Connection.receive_request_raw ch () in
-  Connection.send_response_raw ch msg_id "Hegel/0.13";
+  Connection.send_response_raw ch msg_id supported_handshake_payload;
   peer_conn.Connection.connection_state <- Connection.Client
 
 (** [handshake_pair peer_conn client_conn] performs a handshake between peer and
