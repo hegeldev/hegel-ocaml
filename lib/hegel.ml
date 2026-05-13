@@ -25,6 +25,9 @@ module Conformance = Conformance
 module Derive = Derive
 (** Runtime support for [@@deriving generator]. *)
 
+module Stateful = Stateful
+(** Stateful property-based testing on top of {!Generators}. *)
+
 (** {2 Convenience re-exports} *)
 
 (** [assume tc condition] rejects the current test case if [condition] is

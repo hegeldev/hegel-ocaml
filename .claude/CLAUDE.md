@@ -228,7 +228,7 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
 ### PPX Deriver Implementation
 
 1. **PPX generates `unit -> 'a` functions, not `generator` values**: The Hegel generator
-   system operates at the CBOR level — `generate gen` returns `CBOR.Simple.t`. For
+   system operates at the CBOR level — `generate gen` returns `Cbor.Simple.t`. For
    type-directed derivation to be ergonomic, the PPX generates functions that call
    `generate` internally and extract typed OCaml values. This means derived generators
    are `unit -> my_type` thunks, not `Hegel.Generators.generator` values.

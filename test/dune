@@ -12,7 +12,8 @@
   test_generators_collections
   test_generators_combinators
   test_conformance_helpers
-  test_derive)
+  test_derive
+  test_stateful)
  (libraries hegel alcotest core core_unix threads.posix)
  (foreign_stubs
   (language c)

@@ -17,4 +17,5 @@ let () =
       ("generators_combinators", Test_generators_combinators.tests);
       ("conformance_helpers", Test_conformance_helpers.tests);
       ("derive", Test_derive.tests);
+      ("stateful", Test_stateful.tests);
     ]
