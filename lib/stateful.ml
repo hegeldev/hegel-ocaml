@@ -53,7 +53,7 @@ module Settings = struct
 end
 
 type 'state machine = {
-  init : Client.test_case -> 'state;
+  init : 'state;
   rules : 'state Rule.t list;
   invariants : ('state -> unit) list;
 }
@@ -67,11 +67,10 @@ let run ?(settings = Settings.default) state_machine tc =
   | [] -> invalid_arg "Cannot run a state machine with no rules."
   | _ ->
       let rule_generator = Generators.sampled_from rules in
-      let initial_state = init tc in
       let run_invariants state =
         List.iter invariants ~f:(fun inv -> inv state)
       in
-      run_invariants initial_state;
+      run_invariants init;
       let step_cap =
         Generators.draw tc
           (Generators.integers ~min_value:1
@@ -111,4 +110,4 @@ let run ?(settings = Settings.default) state_machine tc =
           loop ~state:next_state ~num_steps_succeeded ~num_steps:(num_steps + 1)
         else if num_steps_succeeded = 0 then Client.assume tc false
       in
-      loop ~state:initial_state ~num_steps_succeeded:0 ~num_steps:0
+      loop ~state:init ~num_steps_succeeded:0 ~num_steps:0

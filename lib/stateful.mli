@@ -34,11 +34,11 @@
 
 module Variables : sig
   type 'a t
-  (** A typed handle for a per-trial pool of variables. *)
+  (** A typed handle for a per-test case pool of variables. *)
 
   val create : Client.test_case -> 'a t
-  (** Creates an empty {!Variables.t}. Variables are tied to a trial; do not
-      reuse one across trials. Create once per trial inside [init]. *)
+  (** Creates an empty {!Variables.t}. Variables are tied to a test case; do not
+      reuse one across trials. *)
 
   val add : 'a t -> 'a -> unit
   (** Records [value] in [variables] for later draws. *)
@@ -66,7 +66,7 @@ module Rule : sig
     name:string -> step:(Client.test_case -> 'state -> 'state) -> 'state t
   (** Declares a rule.
 
-      - [name] is used in [note] output on the final shrunk run.
+      - [name] is printed in the final output when the rule is run
       - [step tc state] performs one application of the rule, drawing any
         arguments it needs from [tc] and returning the new state. *)
 
@@ -80,14 +80,14 @@ module Settings : sig
 end
 
 type 'state machine = {
-  init : Client.test_case -> 'state;
+  init : 'state;
   rules : 'state Rule.t list;
   invariants : ('state -> unit) list;
 }
 (** Record describing the state machine. *)
 
 val make_machine :
-  init:(Client.test_case -> 'state) ->
+  init:'state ->
   rules:'state Rule.t list ->
   ?invariants:('state -> unit) list ->
   unit ->

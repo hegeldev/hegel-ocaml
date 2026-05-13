@@ -27,9 +27,7 @@ let stateful_failure_test () =
      Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~seed:0 ())
        (fun tc ->
          let state_machine =
-           S.make_machine
-             ~init:(fun _tc -> [])
-             ~rules:[ push_rule; pop_rule ] ()
+           S.make_machine ~init:[] ~rules:[ push_rule; pop_rule ] ()
          in
          S.run state_machine tc);
      failwith "expected property to fail"
@@ -66,8 +64,8 @@ let stateful_variables_test () =
       next_id := 0;
       let state_machine =
         S.make_machine
-          ~init:(fun tc ->
-            { State.live = Int.Set.empty; variables = S.Variables.create tc })
+          ~init:
+            { State.live = Int.Set.empty; variables = S.Variables.create tc }
           ~rules:[ alloc_rule; free_rule ]
           ~invariants:
             [
@@ -104,8 +102,8 @@ let stateful_variables_draw_test () =
       next_id := 0;
       let state_machine =
         S.make_machine
-          ~init:(fun tc ->
-            { State.live = Int.Set.empty; variables = S.Variables.create tc })
+          ~init:
+            { State.live = Int.Set.empty; variables = S.Variables.create tc }
           ~rules:[ alloc_rule; use_rule ] ()
       in
       S.run state_machine tc)
@@ -154,6 +152,6 @@ let tests =
       stateful_rule_name_test;
     Alcotest.test_case "stateful: empty rules raises" `Quick
       stateful_no_rules_test;
-    Alcotest.test_case "stateful: all-rejected trial is invalid" `Quick
+    Alcotest.test_case "stateful: all-rejected test case is invalid" `Quick
       stateful_retry_budget_floor_test;
   ]
