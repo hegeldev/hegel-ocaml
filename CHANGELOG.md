@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.14 - 2026-05-13
+
+This release adds the `phase` enum and using `with_phases` to control which test lifecycle phases run.
+
 ## 0.3.13 - 2026-05-07
 
 Bump our pinned hegel-core to [0.8.0](https://github.com/hegeldev/hegel-core/releases/tag/v0.8.0).
