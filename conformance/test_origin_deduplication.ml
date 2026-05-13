@@ -24,8 +24,7 @@ let () =
   let mode = Json_params.get_mode params in
   let test_cases = get_test_cases () in
   try
-    Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
-      (fun tc ->
+    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases ()) (fun tc ->
         with_metrics (fun () ->
             let x = Hegel.draw tc (integers ~min_value:0 ~max_value:100 ()) in
             (match mode with

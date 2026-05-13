@@ -39,8 +39,7 @@ let () =
   in
   let branches = List.map make_branch ranges in
   let test_cases = get_test_cases () in
-  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases ())
-    (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases ()) (fun tc ->
       with_metrics (fun () ->
           let n = Hegel.draw tc (one_of branches) in
           [ ("value", string_of_int n) ]))

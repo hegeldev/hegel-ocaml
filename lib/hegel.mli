@@ -50,3 +50,7 @@ val run_hegel_test :
 val default_settings : unit -> Client.settings
 (** [default_settings ()] creates default test settings with CI auto-detection.
 *)
+
+val settings : ?test_cases:int -> ?seed:int -> unit -> Client.settings
+(** [settings ?test_cases ?seed ()] creates settings with the given overrides
+    applied to {!default_settings}. Convenience constructor for common cases. *)

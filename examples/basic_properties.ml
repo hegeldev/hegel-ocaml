@@ -6,8 +6,7 @@ open Hegel.Generators
 
 (** Property: integer arithmetic identities. *)
 let test_integer_arithmetic () =
-  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases:100 ())
-    (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
       let a = Hegel.draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
       let b = Hegel.draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
       (* Addition is commutative *)
@@ -19,8 +18,7 @@ let test_integer_arithmetic () =
 
 (** Property: boolean identities. *)
 let test_boolean_laws () =
-  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases:50 ())
-    (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
       let p = Hegel.draw tc (booleans ()) in
       let q = Hegel.draw tc (booleans ()) in
       (* De Morgan's law *)
@@ -32,8 +30,7 @@ let test_boolean_laws () =
 
 (** Property: division identity (with assume to avoid division by zero). *)
 let test_division () =
-  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases:100 ())
-    (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
       let n = Hegel.draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
       let d = Hegel.draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
       Hegel.assume tc (d <> 0);
@@ -43,23 +40,20 @@ let test_division () =
 
 (** Property: text strings have non-negative length. *)
 let test_text_length () =
-  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases:100 ())
-    (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
       let s = Hegel.draw tc (text ~min_size:0 ~max_size:50 ()) in
       assert (String.length s >= 0))
 
 (** Property: binary blobs have non-negative byte length. *)
 let test_binary_length () =
-  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases:100 ())
-    (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
       let b = Hegel.draw tc (binary ~min_size:0 ~max_size:50 ()) in
       assert (String.length b >= 0))
 
 (** Property: finite floats are their own doubles divided by two. Uses
     allow_nan:false and allow_infinity:false to restrict to finite values. *)
 let test_float_finite () =
-  Hegel.run_hegel_test ~settings:(Hegel.Client.settings ~test_cases:100 ())
-    (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
       let x =
         Hegel.draw tc
           (floats ~min_value:(-1e6) ~max_value:1e6 ~allow_nan:false
