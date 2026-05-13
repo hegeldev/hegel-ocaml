@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.15 - 2026-05-13
+
+Reexports `settings` in the top level `Hegel` module.
+
 ## 0.3.14 - 2026-05-13
 
 This release adds the `phase` enum and using `with_phases` to control which test lifecycle phases run.
