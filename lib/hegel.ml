@@ -52,5 +52,4 @@ let default_settings = Client.default_settings
 
 (** [settings ?test_cases ?seed ()] creates settings with the given overrides
     applied to {!default_settings}. Convenience constructor for common cases. *)
-
 let settings = Client.settings
