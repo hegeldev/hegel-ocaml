@@ -191,43 +191,49 @@ let note tc message = if tc.is_final then eprintf "%s\n%!" message
     toward higher values. *)
 let target tc value label =
   let stream = tc.stream in
-  ignore
-    (pending_get
-       (request stream
-          (`Map
-             [
-               (`Text "command", `Text "target");
-               (`Text "value", `Float value);
-               (`Text "label", `Text label);
-             ])))
+  let (_ : Cbor.Simple.t) =
+    pending_get
+      (request stream
+         (`Map
+            [
+              (`Text "command", `Text "target");
+              (`Text "value", `Float value);
+              (`Text "label", `Text label);
+            ]))
+  in
+  ()
 
 (** [start_span ?label tc] starts a generation span for better shrinking. *)
 let start_span ?(label = 0) tc =
   if tc.test_aborted then ()
   else
     let stream = tc.stream in
-    ignore
-      (pending_get
-         (request stream
-            (`Map
-               [
-                 (`Text "command", `Text "start_span");
-                 (`Text "label", `Int label);
-               ])))
+    let (_ : Cbor.Simple.t) =
+      pending_get
+        (request stream
+           (`Map
+              [
+                (`Text "command", `Text "start_span");
+                (`Text "label", `Int label);
+              ]))
+    in
+    ()
 
 (** [stop_span ?discard tc] ends the current generation span. *)
 let stop_span ?(discard = false) tc =
   if tc.test_aborted then ()
   else
     let stream = tc.stream in
-    ignore
-      (pending_get
-         (request stream
-            (`Map
-               [
-                 (`Text "command", `Text "stop_span");
-                 (`Text "discard", `Bool discard);
-               ])))
+    let (_ : Cbor.Simple.t) =
+      pending_get
+        (request stream
+           (`Map
+              [
+                (`Text "command", `Text "stop_span");
+                (`Text "discard", `Bool discard);
+              ]))
+    in
+    ()
 
 (** Supported protocol version range. *)
 let supported_protocol_lo = "0.14"
@@ -309,15 +315,17 @@ let run_test_case _client stream test_fn ~is_final =
         | Data_was_exhausted | Flaky_strategy_definition -> assert false
       in
       try
-        ignore
-          (pending_get
-             (request stream
-                (`Map
-                   [
-                     (`Text "command", `Text "mark_complete");
-                     (`Text "status", `Text status);
-                     (`Text "origin", origin);
-                   ])))
+        let (_ : Cbor.Simple.t) =
+          pending_get
+            (request stream
+               (`Map
+                  [
+                    (`Text "command", `Text "mark_complete");
+                    (`Text "status", `Text status);
+                    (`Text "origin", origin);
+                  ]))
+        in
+        ()
       with Request_error e when String.equal e.error_type "StopTest" -> ()));
   close_stream stream;
   match outcome with Interesting { exn = Some e; _ } -> raise e | _ -> ()
@@ -381,7 +389,10 @@ let run_test client ~settings ?database_key test_fn =
       let fields =
         base_fields @ database_field @ suppress_field @ phases_field
       in
-      ignore (pending_get (request client.control (`Map fields))));
+      let (_ : Cbor.Simple.t) =
+        pending_get (request client.control (`Map fields))
+      in
+      ());
   let receive_and_run_test_case ~is_final =
     let message_id, message = receive_request test_stream () in
     let pairs = Cbor_helpers.extract_dict message in

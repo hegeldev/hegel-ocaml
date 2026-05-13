@@ -160,14 +160,16 @@ let collection_reject coll data =
     let collection_id = get_collection_id coll data in
     let stream = data.Client.stream in
     try
-      ignore
-        (pending_get
-           (request stream
-              (`Map
-                 [
-                   (`Text "command", `Text "collection_reject");
-                   (`Text "collection_id", collection_id);
-                 ])))
+      let (_ : Cbor.Simple.t) =
+        pending_get
+          (request stream
+             (`Map
+                [
+                  (`Text "command", `Text "collection_reject");
+                  (`Text "collection_id", collection_id);
+                ]))
+      in
+      ()
     with Request_error e when String.equal e.error_type "StopTest" ->
       data.test_aborted <- true;
       raise Client.Data_exhausted)

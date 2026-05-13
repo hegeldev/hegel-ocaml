@@ -311,7 +311,7 @@ let create_connection ~read_fd ~write_fd ?name ?(debug = false) () =
   (* Spawn background reader thread *)
   conn.reader_thread <- Some (Thread.create reader_loop conn);
   (* Spawn timeout watcher for deadline-based wakeups *)
-  ignore (Thread.create timeout_watcher conn);
+  let (_ : Thread.t) = Thread.create timeout_watcher conn in
   conn
 
 (** [is_live conn] returns [true] if the connection is still active. *)
