@@ -913,6 +913,50 @@ let test_with_suppress_health_check () =
        (List.nth_exn s.Client.suppress_health_check 1)
        Client.Filter_too_much)
 
+let test_phase_to_string () =
+  Alcotest.(check string)
+    "explicit" "explicit"
+    (Client.phase_to_string Client.Explicit);
+  Alcotest.(check string) "reuse" "reuse" (Client.phase_to_string Client.Reuse);
+  Alcotest.(check string)
+    "generate" "generate"
+    (Client.phase_to_string Client.Generate);
+  Alcotest.(check string)
+    "target" "target"
+    (Client.phase_to_string Client.Target);
+  Alcotest.(check string)
+    "shrink" "shrink"
+    (Client.phase_to_string Client.Shrink)
+
+let test_with_phases () =
+  let s =
+    Client.default_settings ()
+    |> Client.with_phases [ Client.Generate; Client.Shrink ]
+  in
+  match s.Client.phases with
+  | None -> Alcotest.fail "phases should be Some"
+  | Some xs ->
+      Alcotest.(check int) "phases length" 2 (List.length xs);
+      Alcotest.(check bool)
+        "first is Generate" true
+        (Poly.( = ) (List.nth_exn xs 0) Client.Generate);
+      Alcotest.(check bool)
+        "second is Shrink" true
+        (Poly.( = ) (List.nth_exn xs 1) Client.Shrink)
+
+(** Test: run_test with phases set sends the phases field over the wire. *)
+let test_run_test_phases () =
+  with_fake_server
+    (fun peer_conn ->
+      let _ctrl, test_ch = accept_run_test peer_conn in
+      send_test_done test_ch [ (`Text "interesting_test_cases", `Int 0) ])
+    (fun client ->
+      let settings =
+        Client.default_settings () |> Client.with_test_cases 0
+        |> Client.with_phases [ Client.Generate; Client.Shrink ]
+      in
+      run_test client ~settings (fun _tc -> ()))
+
 (** Test: default_settings in CI sets derandomize and disables database. *)
 let test_default_settings_in_ci () =
   with_clean_ci_env (fun () ->
@@ -1507,6 +1551,9 @@ let tests =
     Alcotest.test_case "with_database" `Quick test_with_database;
     Alcotest.test_case "with_suppress_health_check" `Quick
       test_with_suppress_health_check;
+    Alcotest.test_case "phase_to_string" `Quick test_phase_to_string;
+    Alcotest.test_case "with_phases" `Quick test_with_phases;
+    Alcotest.test_case "run_test with phases" `Quick test_run_test_phases;
     Alcotest.test_case "default_settings in CI" `Quick
       test_default_settings_in_ci;
     Alcotest.test_case "default_settings not in CI" `Quick

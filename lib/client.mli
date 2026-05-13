@@ -30,6 +30,13 @@ type verbosity = Quiet | Normal | Verbose | Debug
 (** The database setting: unset, disabled, or a path. *)
 type database = Unset | Disabled | Path of string
 
+(** Phases of the test that can be enabled or disabled. *)
+type phase = Explicit | Reuse | Generate | Target | Shrink
+
+val phase_to_string : phase -> string
+(** [phase_to_string p] returns the wire protocol name for [p] (the lowercase
+    [hypothesis.Phase] value name). *)
+
 type settings = {
   test_cases : int;
   verbosity : verbosity;
@@ -37,6 +44,9 @@ type settings = {
   derandomize : bool;
   database : database;
   suppress_health_check : health_check list;
+  phases : phase list option;
+      (** [None] uses the server's default phase list (all phases); [Some xs]
+          restricts execution to [xs]. *)
 }
 (** Configuration for a Hegel test run. *)
 
@@ -71,6 +81,10 @@ val with_database : database -> settings -> settings
 val with_suppress_health_check : health_check list -> settings -> settings
 (** [with_suppress_health_check checks s] returns settings [s] with additional
     health checks suppressed. *)
+
+val with_phases : phase list -> settings -> settings
+(** [with_phases phases s] returns settings [s] with [phases] set to restrict
+    test execution to those phases. *)
 
 type test_case = {
   stream : Connection.stream;

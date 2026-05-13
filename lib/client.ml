@@ -40,6 +40,17 @@ type verbosity = Quiet | Normal | Verbose | Debug
 (** The database setting: unset, disabled, or a path. *)
 type database = Unset | Disabled | Path of string
 
+(** Phases of the test lifecycle. Mirrors [hypothesis.Phase]. *)
+type phase = Explicit | Reuse | Generate | Target | Shrink
+
+(** [phase_to_string p] returns the lowercase wire-protocol name for [p]. *)
+let phase_to_string = function
+  | Explicit -> "explicit"
+  | Reuse -> "reuse"
+  | Generate -> "generate"
+  | Target -> "target"
+  | Shrink -> "shrink"
+
 type settings = {
   test_cases : int;
   verbosity : verbosity;
@@ -47,6 +58,7 @@ type settings = {
   derandomize : bool;
   database : database;
   suppress_health_check : health_check list;
+  phases : phase list option;
 }
 (** Configuration for a Hegel test run. *)
 
@@ -85,6 +97,7 @@ let default_settings () =
     derandomize = in_ci;
     database = (if in_ci then Disabled else Unset);
     suppress_health_check = [];
+    phases = None;
   }
 
 (** [settings ?test_cases ?seed ()] creates settings with the given overrides
@@ -114,6 +127,9 @@ let with_database db s = { s with database = db }
     health checks suppressed. *)
 let with_suppress_health_check checks s =
   { s with suppress_health_check = s.suppress_health_check @ checks }
+
+(** [with_phases phases s] returns settings [s] with [phases] set. *)
+let with_phases phases s = { s with phases = Some phases }
 
 type test_case = {
   stream : stream;
@@ -352,7 +368,19 @@ let run_test client ~settings ?database_key test_fn =
                        `Text (health_check_to_string hc))) );
             ]
       in
-      let fields = base_fields @ database_field @ suppress_field in
+      let phases_field =
+        match settings.phases with
+        | None -> []
+        | Some phases ->
+            [
+              ( `Text "phases",
+                `Array (List.map phases ~f:(fun p -> `Text (phase_to_string p)))
+              );
+            ]
+      in
+      let fields =
+        base_fields @ database_field @ suppress_field @ phases_field
+      in
       ignore (pending_get (request client.control (`Map fields))));
   let receive_and_run_test_case ~is_final =
     let message_id, message = receive_request test_stream () in
