@@ -6,11 +6,11 @@
 
 open! Core
 
-(** The type of CBOR values, re-exported from [Cbor.Simple]. *)
-type t = Cbor.Simple.t
+(** The type of CBOR values, re-exported from [Cbor]. *)
+type t = Cbor.t
 
 (** [encode v] serializes the CBOR value [v] to a binary string. *)
-let encode = Cbor.Simple.encode
+let encode = Cbor.encode
 
 (** CBOR tag used by Hegel to encode strings as raw UTF-8 bytes (WTF-8). *)
 let hegel_string_tag = 91
@@ -29,7 +29,7 @@ let rec convert_tagged_strings = function
 
 (** [decode s] deserializes a CBOR value from the binary string [s], converting
     Hegel's tag-91 encoded strings to plain text values. *)
-let decode s = Cbor.Simple.decode s |> convert_tagged_strings
+let decode s = Cbor.decode s |> convert_tagged_strings
 
 (** [type_name v] returns a human-readable name for the CBOR type of [v]. *)
 let type_name = function

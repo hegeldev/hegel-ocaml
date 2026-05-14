@@ -39,7 +39,7 @@ exception
   Request_error of
     { message : string
     ; error_type : string
-    ; data : (Cbor.Simple.t * Cbor.Simple.t) list
+    ; data : (Cbor.t * Cbor.t) list
     }
 
 (** [result_or_error body] extracts the ["result"] field from a CBOR map, or
@@ -237,7 +237,7 @@ let reader_loop conn =
               { stream_id = pkt.stream_id
               ; message_id = pkt.message_id
               ; is_reply = true
-              ; payload = Cbor.Simple.encode (`Map [ `Text "error", `Text error_msg ])
+              ; payload = Cbor.encode (`Map [ `Text "error", `Text error_msg ])
               }
           with
           | _ -> ()))
@@ -459,7 +459,7 @@ let send_request_raw ch payload =
 
 (** [send_request ch message] sends a CBOR-encoded request and returns the
     message ID. *)
-let send_request ch message = send_request_raw ch (Cbor.Simple.encode message)
+let send_request ch message = send_request_raw ch (Cbor.encode message)
 
 (** [receive_response_raw ch message_id ?timeout ()] waits for raw response
     bytes to a request with the given [message_id]. *)
@@ -504,7 +504,7 @@ let send_response_raw ch message_id payload =
 (** [send_response_value ch message_id value] sends a success response with
     [value] wrapped as [{"result": value}]. *)
 let send_response_value ch message_id value =
-  send_response_raw ch message_id (Cbor.Simple.encode (`Map [ `Text "result", value ]))
+  send_response_raw ch message_id (Cbor.encode (`Map [ `Text "result", value ]))
 ;;
 
 (** [close_stream ch] closes the stream and notifies the peer. Idempotent. *)
@@ -542,7 +542,7 @@ let close_stream ch =
 type pending_request =
   { pr_stream : stream
   ; pr_message_id : int32
-  ; mutable pr_value : Cbor.Simple.t option
+  ; mutable pr_value : Cbor.t option
   }
 
 (** [request ch message] sends a CBOR request and returns a {!pending_request}

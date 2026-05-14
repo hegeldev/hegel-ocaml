@@ -4,8 +4,8 @@
     values, plus type-safe extractor functions that produce clear error messages
     when a value has an unexpected type. *)
 
-(** The type of CBOR values, re-exported from [Cbor.Simple]. *)
-type t = Cbor.Simple.t
+(** The type of CBOR values, re-exported from [Cbor]. *)
+type t = Cbor.t
 
 (** [encode v] serializes the CBOR value [v] to a binary string. *)
 val encode : t -> string
