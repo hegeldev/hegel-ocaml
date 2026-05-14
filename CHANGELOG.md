@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.16 - 2026-05-14
+
+Add `Hegel.Stateful` module for rule based stateful testing.
+
 ## 0.3.15 - 2026-05-13
 
 Reexports `settings` in the top level `Hegel` module.
