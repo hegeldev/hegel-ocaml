@@ -11,6 +11,7 @@ open! Core
 let parse_test_cases = function
   | None -> 50
   | Some s -> Option.value ~default:50 (Int.of_string_opt s)
+;;
 
 (** [get_test_cases ()] returns the number of test cases to run. Reads
     [CONFORMANCE_TEST_CASES] env var; defaults to [50]. *)
@@ -21,20 +22,19 @@ let get_test_cases () = parse_test_cases (Sys.getenv "CONFORMANCE_TEST_CASES")
     (e.g. ["true"], ["42"], ["-3.14"]). *)
 let format_metrics pairs =
   let json_body =
-    String.concat ~sep:", "
-      (List.map pairs ~f:(fun (k, v) -> sprintf "%S: %s" k v))
+    String.concat ~sep:", " (List.map pairs ~f:(fun (k, v) -> sprintf "%S: %s" k v))
   in
   sprintf "{%s}\n" json_body
+;;
 
 (** [write_metrics_to filename pairs] appends a JSON metrics line to [filename].
 *)
 let write_metrics_to filename pairs =
-  let oc =
-    Stdlib.open_out_gen [ Stdlib.Open_append; Stdlib.Open_creat ] 0o644 filename
-  in
+  let oc = Stdlib.open_out_gen [ Stdlib.Open_append; Stdlib.Open_creat ] 0o644 filename in
   Exn.protect
     ~finally:(fun () -> Stdlib.close_out oc)
     ~f:(fun () -> Stdlib.output_string oc (format_metrics pairs))
+;;
 
 (** [write_metrics metrics] appends a JSON line to the file indicated by the
     [CONFORMANCE_METRICS_FILE] env var. [metrics] is a list of [(key, value)]
@@ -45,6 +45,7 @@ let write_metrics pairs =
   match Sys.getenv "CONFORMANCE_METRICS_FILE" with
   | None -> failwith "CONFORMANCE_METRICS_FILE env var not set"
   | Some filename -> write_metrics_to filename pairs
+;;
 
 (** [with_metrics body] runs [body ()] and writes its result as a single metrics
     line. If [body] raises, an empty metrics line is written and the exception
@@ -58,5 +59,6 @@ let with_metrics body =
   match body () with
   | metrics -> write_metrics metrics
   | exception exn ->
-      write_metrics [];
-      raise exn
+    write_metrics [];
+    raise exn
+;;

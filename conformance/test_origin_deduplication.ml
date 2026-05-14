@@ -25,15 +25,15 @@ let () =
   let test_cases = get_test_cases () in
   try
     Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases ()) (fun tc ->
-        with_metrics (fun () ->
-            let x = Hegel.draw tc (integers ~min_value:0 ~max_value:100 ()) in
-            (match mode with
-            | "value_in_error_message" ->
-                if x > 10 then
-                  failwith
-                    (Printf.sprintf "Generated value %d exceeded threshold 10" x)
-            | "multiple_call_sites" ->
-                if x mod 2 = 0 then call_path_a x else call_path_b x
-            | _ -> failwith ("unknown mode: " ^ mode));
-            []))
-  with Failure _ | Bug _ -> ()
+      with_metrics (fun () ->
+        let x = Hegel.draw tc (integers ~min_value:0 ~max_value:100 ()) in
+        (match mode with
+         | "value_in_error_message" ->
+           if x > 10
+           then failwith (Printf.sprintf "Generated value %d exceeded threshold 10" x)
+         | "multiple_call_sites" -> if x mod 2 = 0 then call_path_a x else call_path_b x
+         | _ -> failwith ("unknown mode: " ^ mode));
+        []))
+  with
+  | Failure _ | Bug _ -> ()
+;;

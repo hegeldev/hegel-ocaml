@@ -26,19 +26,21 @@ let handshake_string = "hegel_handshake_start"
 
 (** Message used when the server has crashed. *)
 let server_crashed_message =
-  "The hegel server process has exited unexpectedly. Check .hegel/server.log \
-   for details."
+  "The hegel server process has exited unexpectedly. Check .hegel/server.log for details."
+;;
 
 (** Sentinel value placed in a stream's inbox when the connection shuts down. *)
-type inbox_item = Pkt of packet | Shutdown
+type inbox_item =
+  | Pkt of packet
+  | Shutdown
 
-exception
-  Request_error of {
-    message : string;
-    error_type : string;
-    data : (Cbor.Simple.t * Cbor.Simple.t) list;
-  }
 (** Error response from the peer. *)
+exception
+  Request_error of
+    { message : string
+    ; error_type : string
+    ; data : (Cbor.Simple.t * Cbor.Simple.t) list
+    }
 
 (** [result_or_error body] extracts the ["result"] field from a CBOR map, or
     raises {!Request_error} if an ["error"] field is present. *)
@@ -49,80 +51,89 @@ let result_or_error body =
     | Some v -> Cbor_helpers.extract_string v
     | None -> ""
   in
-  if List.Assoc.mem pairs ~equal:Poly.( = ) (`Text "error") then
+  if List.Assoc.mem pairs ~equal:Poly.( = ) (`Text "error")
+  then (
     let msg = find_text "error" in
     let error_type = find_text "type" in
     let data =
       List.filter pairs ~f:(fun (k, _) ->
-          Poly.( <> ) k (`Text "error") && Poly.( <> ) k (`Text "type"))
+        Poly.( <> ) k (`Text "error") && Poly.( <> ) k (`Text "type"))
     in
-    raise (Request_error { message = msg; error_type; data })
-  else
+    raise (Request_error { message = msg; error_type; data }))
+  else (
     match List.Assoc.find pairs ~equal:Poly.( = ) (`Text "result") with
     | Some v -> v
-    | None -> failwith "Response has neither 'result' nor 'error'"
+    | None -> failwith "Response has neither 'result' nor 'error'")
+;;
 
 (** Connection state after handshake. *)
-type connection_state = Unresolved | Client
+type connection_state =
+  | Unresolved
+  | Client
 
 let equal_connection_state a b = Poly.( = ) a b
 
-type stream_inbox = {
-  queue : inbox_item Queue.t;
-  lock : Mutex.t;
-  cond : Condition.t;
-}
 (** Thread-safe inbox for a stream, with condition-variable signaling. *)
+type stream_inbox =
+  { queue : inbox_item Queue.t
+  ; lock : Mutex.t
+  ; cond : Condition.t
+  }
 
 (** A stream entry in the connection's stream table. *)
 type stream_entry =
   | Live of stream
-  | Dead of { stream_id : int32; name : string }
+  | Dead of
+      { stream_id : int32
+      ; name : string
+      }
 
-and connection = {
-  name : string option;
-  read_fd : Unix.File_descr.t;
-  write_fd : Unix.File_descr.t;
-  mutable next_stream_id : int;
-  streams : (Int32.t, stream_entry) Hashtbl.t;
-  streams_lock : Mutex.t;
-  mutable running : bool;
-  debug : bool;
-  writer_lock : Mutex.t;
-  mutable connection_state : connection_state;
-  mutable server_exited : bool;
-  mutable reader_thread : Thread.t option;
-}
 (** Multiplexed connection to a Hegel peer. *)
+and connection =
+  { name : string option
+  ; read_fd : Unix.File_descr.t
+  ; write_fd : Unix.File_descr.t
+  ; mutable next_stream_id : int
+  ; streams : (Int32.t, stream_entry) Hashtbl.t
+  ; streams_lock : Mutex.t
+  ; mutable running : bool
+  ; debug : bool
+  ; writer_lock : Mutex.t
+  ; mutable connection_state : connection_state
+  ; mutable server_exited : bool
+  ; mutable reader_thread : Thread.t option
+  }
 
-and stream = {
-  stream_id : int32;
-  conn : connection;
-  inbox : stream_inbox;
-  requests : packet Queue.t;
-  responses : (Int32.t, string) Hashtbl.t;
-  role : string option;
-  mutable next_message_id : int32;
-  mutable closed : bool;
-}
 (** Logical stream for request/response messaging. *)
+and stream =
+  { stream_id : int32
+  ; conn : connection
+  ; inbox : stream_inbox
+  ; requests : packet Queue.t
+  ; responses : (Int32.t, string) Hashtbl.t
+  ; role : string option
+  ; mutable next_message_id : int32
+  ; mutable closed : bool
+  }
 
 (** [stream_id ch] returns the stream ID of [ch]. *)
 let stream_id ch = ch.stream_id
 
 (** [stream_name ch] returns a human-readable name for stream [ch]. *)
 let stream_name ch =
-  match (ch.role, ch.conn.name) with
+  match ch.role, ch.conn.name with
   | None, None -> sprintf "Stream %ld" ch.stream_id
   | None, Some n -> sprintf "%s stream [id=%ld]" n ch.stream_id
   | Some r, None -> sprintf "stream [id=%ld] (%s)" ch.stream_id r
   | Some r, Some n -> sprintf "%s stream [id=%ld] (%s)" n ch.stream_id r
+;;
 
 (** [stream_repr ch] returns a debug representation of stream [ch]. *)
 let stream_repr ch =
   match ch.role with
   | None -> sprintf "Stream(%ld)" ch.stream_id
   | Some r -> sprintf "Stream(%ld, role=%s)" ch.stream_id r
+;;
 
 (** [entry_name conn stream_id] returns the name of the stream entry for
     [stream_id] in [conn], or a default. *)
@@ -131,25 +142,22 @@ let entry_name conn stream_id =
   | Some (Live ch) -> stream_name ch
   | Some (Dead d) -> d.name
   | None -> sprintf "stream %ld" stream_id
+;;
 
 (** [make_stream conn stream_id ~role] creates a new stream. *)
 let make_stream conn stream_id ~role =
   assert (Int32.( <> ) stream_id 0l || Poly.( = ) role (Some "Control"));
-  {
-    stream_id;
-    conn;
-    inbox =
-      {
-        queue = Queue.create ();
-        lock = Mutex.create ();
-        cond = Condition.create ();
-      };
-    requests = Queue.create ();
-    responses = Hashtbl.create (module Int32);
-    role;
-    next_message_id = 1l;
-    closed = false;
+  { stream_id
+  ; conn
+  ; inbox =
+      { queue = Queue.create (); lock = Mutex.create (); cond = Condition.create () }
+  ; requests = Queue.create ()
+  ; responses = Hashtbl.create (module Int32)
+  ; role
+  ; next_message_id = 1l
+  ; closed = false
   }
+;;
 
 (** [push_inbox ch item] pushes an item to a stream's inbox and signals the
     condition variable. Must be called without holding [ch.inbox.lock]. *)
@@ -158,12 +166,16 @@ let push_inbox ch item =
   Queue.enqueue ch.inbox.queue item;
   Condition.signal ch.inbox.cond;
   Mutex.unlock ch.inbox.lock
+;;
 
 (** [signal_all_streams conn] pushes {!Shutdown} into all live streams' inboxes.
     Must be called while holding [conn.streams_lock]. *)
 let signal_all_streams conn =
   Hashtbl.iteri conn.streams ~f:(fun ~key:_ ~data:entry ->
-      match entry with Live ch -> push_inbox ch Shutdown | Dead _ -> ())
+    match entry with
+    | Live ch -> push_inbox ch Shutdown
+    | Dead _ -> ())
+;;
 
 (** [send_packet conn packet] sends a packet on the connection, thread-safe. *)
 let send_packet conn packet =
@@ -171,6 +183,7 @@ let send_packet conn packet =
   Exn.protect
     ~finally:(fun () -> Mutex.unlock conn.writer_lock)
     ~f:(fun () -> write_packet conn.write_fd packet)
+;;
 
 (** Background reader thread function. Reads packets from [conn.read_fd] and
     dispatches them to the appropriate stream's inbox. Exits when the stream
@@ -178,9 +191,11 @@ let send_packet conn packet =
 let reader_loop conn =
   let dispatch_packet (pkt : packet) =
     (* Handle close_stream_payload for ANY stream (even unregistered) *)
-    if String.equal pkt.payload close_stream_payload then (
+    if String.equal pkt.payload close_stream_payload
+    then (
       assert (Int32.equal pkt.message_id close_stream_message_id);
-      if conn.debug then (
+      if conn.debug
+      then (
         Mutex.lock conn.streams_lock;
         let prev_name =
           match Hashtbl.find conn.streams pkt.stream_id with
@@ -188,7 +203,9 @@ let reader_loop conn =
           | Some (Dead d) -> d.name
           | None -> "Never opened!"
         in
-        Hashtbl.set conn.streams ~key:pkt.stream_id
+        Hashtbl.set
+          conn.streams
+          ~key:pkt.stream_id
           ~data:(Dead { stream_id = pkt.stream_id; name = prev_name });
         Mutex.unlock conn.streams_lock))
     else (
@@ -196,46 +213,54 @@ let reader_loop conn =
       let entry = Hashtbl.find conn.streams pkt.stream_id in
       match entry with
       | Some (Live ch) ->
-          Mutex.unlock conn.streams_lock;
-          push_inbox ch (Pkt pkt)
-      | (Some (Dead _) | None) as entry -> (
-          Mutex.unlock conn.streams_lock;
-          if not pkt.is_reply then
-            let disposition =
-              match entry with Some (Dead _) -> "closed" | _ -> "non-existent"
-            in
-            let error_msg =
-              sprintf "Message %ld sent to %s %s" pkt.message_id disposition
-                (entry_name conn pkt.stream_id)
-            in
-            try
-              send_packet conn
-                {
-                  stream_id = pkt.stream_id;
-                  message_id = pkt.message_id;
-                  is_reply = true;
-                  payload =
-                    Cbor.Simple.encode
-                      (`Map [ (`Text "error", `Text error_msg) ]);
-                }
-            with _ -> ()))
+        Mutex.unlock conn.streams_lock;
+        push_inbox ch (Pkt pkt)
+      | (Some (Dead _) | None) as entry ->
+        Mutex.unlock conn.streams_lock;
+        if not pkt.is_reply
+        then (
+          let disposition =
+            match entry with
+            | Some (Dead _) -> "closed"
+            | _ -> "non-existent"
+          in
+          let error_msg =
+            sprintf
+              "Message %ld sent to %s %s"
+              pkt.message_id
+              disposition
+              (entry_name conn pkt.stream_id)
+          in
+          try
+            send_packet
+              conn
+              { stream_id = pkt.stream_id
+              ; message_id = pkt.message_id
+              ; is_reply = true
+              ; payload = Cbor.Simple.encode (`Map [ `Text "error", `Text error_msg ])
+              }
+          with
+          | _ -> ()))
   in
   (try
      while conn.running do
        let pkt = read_packet conn.read_fd in
        dispatch_packet pkt
      done
-   with _ ->
+   with
+   | _ ->
      (* Stream closed or error — mark server as exited *)
      conn.server_exited <- true);
   (* Signal shutdown to all streams *)
   Mutex.lock conn.streams_lock;
   signal_all_streams conn;
   Mutex.unlock conn.streams_lock
+;;
 
 (** [close conn] closes the connection and signals all live streams. *)
 let close conn =
-  if not conn.running then ()
+  if not conn.running
+  then ()
   else (
     conn.running <- false;
     (* Shutdown the read fd to unblock any reader thread blocked in read().
@@ -246,12 +271,16 @@ let close conn =
       try
         Unix.shutdown conn.read_fd ~mode:Unix.SHUTDOWN_ALL;
         true
-      with Unix.Unix_error _ -> false
+      with
+      | Unix.Unix_error _ -> false
     in
-    (try Unix.close conn.read_fd with Unix.Unix_error _ -> ());
+    (try Unix.close conn.read_fd with
+     | Unix.Unix_error _ -> ());
     (* Only close write_fd if it's different from read_fd *)
-    (if not (phys_equal conn.write_fd conn.read_fd) then
-       try Unix.close conn.write_fd with Unix.Unix_error _ -> ());
+    if not (phys_equal conn.write_fd conn.read_fd)
+    then (
+      try Unix.close conn.write_fd with
+      | Unix.Unix_error _ -> ());
     Mutex.lock conn.streams_lock;
     signal_all_streams conn;
     Mutex.unlock conn.streams_lock;
@@ -260,6 +289,7 @@ let close conn =
        the blocked read returns immediately. On pipes, shutdown fails with
        ENOTSOCK and close alone may not unblock the reader thread. *)
     if shutdown_ok then Option.iter conn.reader_thread ~f:Thread.join)
+;;
 
 (** Default timeout in seconds for stream operations. *)
 let stream_timeout = 30.0
@@ -274,14 +304,15 @@ let timeout_watcher conn =
     Caml_unix.sleepf 1.0;
     Mutex.lock conn.streams_lock;
     Hashtbl.iteri conn.streams ~f:(fun ~key:_ ~data:entry ->
-        match entry with
-        | Live ch ->
-            Mutex.lock ch.inbox.lock;
-            Condition.signal ch.inbox.cond;
-            Mutex.unlock ch.inbox.lock
-        | Dead _ -> ());
+      match entry with
+      | Live ch ->
+        Mutex.lock ch.inbox.lock;
+        Condition.signal ch.inbox.cond;
+        Mutex.unlock ch.inbox.lock
+      | Dead _ -> ());
     Mutex.unlock conn.streams_lock
   done
+;;
 
 (** [create_connection ~read_fd ~write_fd ?name ?debug ()] creates a new
     connection using separate file descriptors for reading and writing. A
@@ -289,19 +320,18 @@ let timeout_watcher conn =
     thread is spawned. *)
 let create_connection ~read_fd ~write_fd ?name ?(debug = false) () =
   let conn =
-    {
-      name;
-      read_fd;
-      write_fd;
-      next_stream_id = 1;
-      streams = Hashtbl.create (module Int32);
-      streams_lock = Mutex.create ();
-      running = true;
-      debug;
-      writer_lock = Mutex.create ();
-      connection_state = Unresolved;
-      server_exited = false;
-      reader_thread = None;
+    { name
+    ; read_fd
+    ; write_fd
+    ; next_stream_id = 1
+    ; streams = Hashtbl.create (module Int32)
+    ; streams_lock = Mutex.create ()
+    ; running = true
+    ; debug
+    ; writer_lock = Mutex.create ()
+    ; connection_state = Unresolved
+    ; server_exited = false
+    ; reader_thread = None
     }
   in
   let control = make_stream conn 0l ~role:(Some "Control") in
@@ -313,6 +343,7 @@ let create_connection ~read_fd ~write_fd ?name ?(debug = false) () =
   (* Spawn timeout watcher for deadline-based wakeups *)
   let (_ : Thread.t) = Thread.create timeout_watcher conn in
   conn
+;;
 
 (** [is_live conn] returns [true] if the connection is still active. *)
 let is_live conn = conn.running
@@ -325,35 +356,38 @@ let control_stream conn =
   match Hashtbl.find conn.streams 0l with
   | Some (Live ch) -> ch
   | _ -> failwith "Internal error: no control stream"
+;;
 
 (** [new_stream conn ?role ()] creates a new logical stream on the connection.
 
     Client streams use odd IDs [(counter << 1) | 1], server streams use even IDs
     [(counter << 1)]. *)
 let new_stream conn ?role () =
-  if equal_connection_state conn.connection_state Unresolved then
-    failwith "Cannot create a new stream before handshake has been performed."
-  else
+  if equal_connection_state conn.connection_state Unresolved
+  then failwith "Cannot create a new stream before handshake has been performed."
+  else (
     let stream_id = Int32.of_int_exn ((conn.next_stream_id lsl 1) lor 1) in
     conn.next_stream_id <- conn.next_stream_id + 1;
     let ch = make_stream conn stream_id ~role in
     Mutex.lock conn.streams_lock;
     Hashtbl.set conn.streams ~key:stream_id ~data:(Live ch);
     Mutex.unlock conn.streams_lock;
-    ch
+    ch)
+;;
 
 (** [connect_stream conn stream_id ?role ()] connects to a stream created by the
     peer. *)
 let connect_stream conn stream_id ?role () =
-  if equal_connection_state conn.connection_state Unresolved then
-    failwith "Cannot create a new stream before handshake has been performed.";
-  if Hashtbl.mem conn.streams stream_id then
-    failwith (sprintf "Stream already connected as %ld." stream_id);
+  if equal_connection_state conn.connection_state Unresolved
+  then failwith "Cannot create a new stream before handshake has been performed.";
+  if Hashtbl.mem conn.streams stream_id
+  then failwith (sprintf "Stream already connected as %ld." stream_id);
   let ch = make_stream conn stream_id ~role in
   Mutex.lock conn.streams_lock;
   Hashtbl.set conn.streams ~key:stream_id ~data:(Live ch);
   Mutex.unlock conn.streams_lock;
   ch
+;;
 
 (* --- Stream operations --- *)
 
@@ -364,32 +398,39 @@ let pop_inbox_item ch timeout =
   Mutex.lock ch.inbox.lock;
   let deadline = Unix.gettimeofday () +. timeout in
   let rec wait () =
-    if not (Queue.is_empty ch.inbox.queue) then (
+    if not (Queue.is_empty ch.inbox.queue)
+    then (
       let item = Queue.dequeue_exn ch.inbox.queue in
       Mutex.unlock ch.inbox.lock;
       item)
-    else if ch.closed then (
+    else if ch.closed
+    then (
       Mutex.unlock ch.inbox.lock;
       raise (Failure (sprintf "%s is closed" (stream_name ch))))
-    else if ch.conn.server_exited then (
+    else if ch.conn.server_exited
+    then (
       Mutex.unlock ch.inbox.lock;
       raise (Failure server_crashed_message))
-    else
+    else (
       let remaining = deadline -. Unix.gettimeofday () in
-      if Float.( <= ) remaining 0.0 then (
+      if Float.( <= ) remaining 0.0
+      then (
         Mutex.unlock ch.inbox.lock;
         raise
           (Failure
-             (sprintf "Timed out after %.1fs waiting for a message on %s"
-                timeout (stream_name ch))));
+             (sprintf
+                "Timed out after %.1fs waiting for a message on %s"
+                timeout
+                (stream_name ch))));
       (* Block until signaled by push_inbox or signal_all_streams.
          Condition.wait atomically releases the lock and sleeps; the
          timeout_watcher thread provides periodic wakeups so we can
          check the deadline. *)
       Condition.wait ch.inbox.cond ch.inbox.lock;
-      wait ()
+      wait ())
   in
   wait ()
+;;
 
 (** [process_one_message ch ?timeout ()] reads and routes one incoming message
     for stream [ch]. Dispatches replies to [ch.responses] and requests to
@@ -399,21 +440,22 @@ let process_one_message ch ?(timeout = stream_timeout) () =
   match item with
   | Shutdown -> raise (Failure "Connection closed")
   | Pkt pkt ->
-      if pkt.is_reply then
-        if Hashtbl.mem ch.responses pkt.message_id then
-          failwith
-            (sprintf "Got two responses for message ID %ld" pkt.message_id)
-        else Hashtbl.set ch.responses ~key:pkt.message_id ~data:pkt.payload
-      else Queue.enqueue ch.requests pkt
+    if pkt.is_reply
+    then
+      if Hashtbl.mem ch.responses pkt.message_id
+      then failwith (sprintf "Got two responses for message ID %ld" pkt.message_id)
+      else Hashtbl.set ch.responses ~key:pkt.message_id ~data:pkt.payload
+    else Queue.enqueue ch.requests pkt
+;;
 
 (** [send_request_raw ch payload] sends raw bytes as a request and returns the
     message ID for matching the response. *)
 let send_request_raw ch payload =
   let message_id = ch.next_message_id in
   ch.next_message_id <- Int32.( + ) ch.next_message_id 1l;
-  send_packet ch.conn
-    { payload; stream_id = ch.stream_id; is_reply = false; message_id };
+  send_packet ch.conn { payload; stream_id = ch.stream_id; is_reply = false; message_id };
   message_id
+;;
 
 (** [send_request ch message] sends a CBOR-encoded request and returns the
     message ID. *)
@@ -428,12 +470,14 @@ let receive_response_raw ch message_id ?(timeout = stream_timeout) () =
   let result = Hashtbl.find_exn ch.responses message_id in
   Hashtbl.remove ch.responses message_id;
   result
+;;
 
 (** [receive_response ch message_id ?timeout ()] waits for and decodes a
     response, extracting the result or raising {!Request_error}. *)
 let receive_response ch message_id ?(timeout = stream_timeout) () =
   let raw = receive_response_raw ch message_id ~timeout () in
   result_or_error (Cbor_helpers.decode raw)
+;;
 
 (** [receive_request_raw ch ?timeout ()] receives raw request bytes and returns
     [(message_id, payload)]. *)
@@ -442,61 +486,71 @@ let receive_request_raw ch ?(timeout = stream_timeout) () =
     process_one_message ch ~timeout ()
   done;
   let pkt = Queue.dequeue_exn ch.requests in
-  (pkt.message_id, pkt.payload)
+  pkt.message_id, pkt.payload
+;;
 
 (** [receive_request ch ?timeout ()] receives and CBOR-decodes a request,
     returning [(message_id, decoded_value)]. *)
 let receive_request ch ?(timeout = stream_timeout) () =
   let message_id, body = receive_request_raw ch ~timeout () in
-  (message_id, Cbor_helpers.decode body)
+  message_id, Cbor_helpers.decode body
+;;
 
 (** [send_response_raw ch message_id payload] sends raw bytes as a reply. *)
 let send_response_raw ch message_id payload =
-  send_packet ch.conn
-    { payload; stream_id = ch.stream_id; is_reply = true; message_id }
+  send_packet ch.conn { payload; stream_id = ch.stream_id; is_reply = true; message_id }
+;;
 
 (** [send_response_value ch message_id value] sends a success response with
     [value] wrapped as [{"result": value}]. *)
 let send_response_value ch message_id value =
-  send_response_raw ch message_id
-    (Cbor.Simple.encode (`Map [ (`Text "result", value) ]))
+  send_response_raw ch message_id (Cbor.Simple.encode (`Map [ `Text "result", value ]))
+;;
 
 (** [close_stream ch] closes the stream and notifies the peer. Idempotent. *)
 let close_stream ch =
-  if ch.closed then ()
-  else
+  if ch.closed
+  then ()
+  else (
     let is_registered =
       match Hashtbl.find ch.conn.streams ch.stream_id with
       | Some (Live ch2) -> phys_equal ch2 ch
       | _ -> false
     in
-    if not is_registered then ch.closed <- true
+    if not is_registered
+    then ch.closed <- true
     else (
       ch.closed <- true;
-      if ch.conn.debug then
-        Hashtbl.set ch.conn.streams ~key:ch.stream_id
+      if ch.conn.debug
+      then
+        Hashtbl.set
+          ch.conn.streams
+          ~key:ch.stream_id
           ~data:(Dead { name = stream_name ch; stream_id = ch.stream_id });
-      if is_live ch.conn then
-        send_packet ch.conn
-          {
-            payload = close_stream_payload;
-            message_id = close_stream_message_id;
-            stream_id = ch.stream_id;
-            is_reply = false;
-          })
+      if is_live ch.conn
+      then
+        send_packet
+          ch.conn
+          { payload = close_stream_payload
+          ; message_id = close_stream_message_id
+          ; stream_id = ch.stream_id
+          ; is_reply = false
+          }))
+;;
 
-type pending_request = {
-  pr_stream : stream;
-  pr_message_id : int32;
-  mutable pr_value : Cbor.Simple.t option;
-}
 (** Pending request handle that caches the decoded response. *)
+type pending_request =
+  { pr_stream : stream
+  ; pr_message_id : int32
+  ; mutable pr_value : Cbor.Simple.t option
+  }
 
 (** [request ch message] sends a CBOR request and returns a {!pending_request}
     handle. *)
 let request ch message =
   let message_id = send_request ch message in
   { pr_stream = ch; pr_message_id = message_id; pr_value = None }
+;;
 
 (** [pending_get pr] blocks until the response arrives and returns the result.
     Caches the response so subsequent calls return the same value or raise the
@@ -505,21 +559,21 @@ let pending_get pr =
   match pr.pr_value with
   | Some v -> result_or_error v
   | None ->
-      let raw =
-        receive_response_raw pr.pr_stream pr.pr_message_id
-          ~timeout:stream_timeout ()
-      in
-      let v = Cbor_helpers.decode raw in
-      pr.pr_value <- Some v;
-      result_or_error v
+    let raw =
+      receive_response_raw pr.pr_stream pr.pr_message_id ~timeout:stream_timeout ()
+    in
+    let v = Cbor_helpers.decode raw in
+    pr.pr_value <- Some v;
+    result_or_error v
+;;
 
 (* --- Handshake --- *)
 
 (** [send_handshake conn] initiates the handshake as a client. Returns the
     server protocol version string (e.g. ["0.1"]). *)
 let send_handshake conn =
-  if not (equal_connection_state conn.connection_state Unresolved) then
-    failwith "Handshake already established";
+  if not (equal_connection_state conn.connection_state Unresolved)
+  then failwith "Handshake already established";
   conn.connection_state <- Client;
   let ch = control_stream conn in
   let message_id = send_request_raw ch handshake_string in
@@ -529,3 +583,4 @@ let send_handshake conn =
     || not (String.equal (String.sub response ~pos:0 ~len:6) "Hegel/")
   then failwith (sprintf "Bad handshake response: %S" response)
   else String.sub response ~pos:6 ~len:(String.length response - 6)
+;;

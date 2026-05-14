@@ -13,16 +13,17 @@ open Hegel.Generators
 let parse_ranges params =
   match List.assoc_opt "ranges" params with
   | Some (`List items) ->
-      List.map
-        (fun item ->
-          match item with
-          | `Assoc r ->
-              let lo = Json_params.get_int r "min_value" 0 in
-              let hi = Json_params.get_int r "max_value" 0 in
-              (lo, hi)
-          | _ -> failwith "ranges: expected object")
-        items
+    List.map
+      (fun item ->
+         match item with
+         | `Assoc r ->
+           let lo = Json_params.get_int r "min_value" 0 in
+           let hi = Json_params.get_int r "max_value" 0 in
+           lo, hi
+         | _ -> failwith "ranges: expected object")
+      items
   | _ -> failwith "ranges: expected list"
+;;
 
 let () =
   let params_str = if Array.length Sys.argv > 1 then Sys.argv.(1) else "{}" in
@@ -40,6 +41,7 @@ let () =
   let branches = List.map make_branch ranges in
   let test_cases = get_test_cases () in
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases ()) (fun tc ->
-      with_metrics (fun () ->
-          let n = Hegel.draw tc (one_of branches) in
-          [ ("value", string_of_int n) ]))
+    with_metrics (fun () ->
+      let n = Hegel.draw tc (one_of branches) in
+      [ "value", string_of_int n ]))
+;;

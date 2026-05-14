@@ -16,13 +16,13 @@ open! Core
 let generate_option tc gen_fn =
   let b = Generators.draw tc (Generators.booleans ()) in
   if b then Some (gen_fn tc) else None
+;;
 
 (** [generate_list tc gen_fn] generates a list of values.
 
     Uses {!Generators.integers} to determine the list length (0-20), then calls
     [gen_fn tc] for each element. *)
 let generate_list tc gen_fn =
-  let len =
-    Generators.draw tc (Generators.integers ~min_value:0 ~max_value:20 ())
-  in
+  let len = Generators.draw tc (Generators.integers ~min_value:0 ~max_value:20 ()) in
   List.init len ~f:(fun _ -> gen_fn tc)
+;;

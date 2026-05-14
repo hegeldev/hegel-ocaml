@@ -8,13 +8,14 @@ license: "MIT"
 homepage: "https://github.com/hegeldev/hegel-ocaml"
 bug-reports: "https://github.com/hegeldev/hegel-ocaml/issues"
 depends: [
-  "ocaml" {>= "5.2"}
   "dune" {>= "3.16"}
+  "ocaml" {>= "5.2"}
   "core" {>= "0.17"}
   "core_unix" {>= "0.17"}
   "alcotest" {with-test & >= "1.7"}
   "ocplib-endian" {>= "1.2"}
   "checkseum" {>= "0.5"}
+  "ppx_js_style" {>= "v0.17"}
   "bisect_ppx" {with-test & >= "2.8"}
   "ocamlformat" {with-test & = "0.28.1"}
   "yojson" {>= "1.7"}

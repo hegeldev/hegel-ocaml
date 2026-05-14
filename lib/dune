@@ -7,5 +7,7 @@
   generators_primitives
   generators_collections
   generators_combinators)
+ (preprocess
+  (pps ppx_js_style))
  (instrumentation
   (backend bisect_ppx)))

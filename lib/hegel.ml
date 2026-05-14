@@ -1,29 +1,29 @@
 (** The current version of Hegel for OCaml. *)
 let version = "0.3.15"
 
-module Protocol = Protocol
 (** Binary wire protocol for packet serialization and deserialization. *)
+module Protocol = Protocol
 
-module Cbor_helpers = Cbor_helpers
 (** CBOR encoding/decoding with type-safe extractor helpers. *)
+module Cbor_helpers = Cbor_helpers
 
-module Connection = Connection
 (** Multiplexed connection and stream abstractions. *)
+module Connection = Connection
 
-module Client = Client
 (** Test runner and lifecycle management. *)
+module Client = Client
 
-module Session = Session
 (** Global session management for running property tests. *)
+module Session = Session
 
-module Generators = Generators
 (** Generator combinators for composable test data generation. *)
+module Generators = Generators
 
-module Conformance = Conformance
 (** Conformance test helpers for writing conformance binaries. *)
+module Conformance = Conformance
 
-module Derive = Derive
 (** Runtime support for [@@deriving generator]. *)
+module Derive = Derive
 
 (** {2 Convenience re-exports} *)
 

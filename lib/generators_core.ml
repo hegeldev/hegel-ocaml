@@ -35,28 +35,36 @@ end
     - [Composite] generators wrap a [generate_fn] thunk inside a span with the
       given [label]. Used for tuples and one_of with non-basic elements. *)
 type 'a generator =
-  | Basic : {
-      schema : Cbor.Simple.t;
-      transform : Cbor.Simple.t -> 'a;
-    }
+  | Basic :
+      { schema : Cbor.Simple.t
+      ; transform : Cbor.Simple.t -> 'a
+      }
       -> 'a generator
-  | Mapped : { source : 'b generator; f : 'b -> 'a } -> 'a generator
-  | FlatMapped : {
-      source : 'b generator;
-      f : 'b -> 'a generator;
-    }
+  | Mapped :
+      { source : 'b generator
+      ; f : 'b -> 'a
+      }
       -> 'a generator
-  | Filtered : { source : 'a generator; predicate : 'a -> bool } -> 'a generator
-  | CompositeList : {
-      elements : 'a generator;
-      min_size : int;
-      max_size : int option;
-    }
+  | FlatMapped :
+      { source : 'b generator
+      ; f : 'b -> 'a generator
+      }
+      -> 'a generator
+  | Filtered :
+      { source : 'a generator
+      ; predicate : 'a -> bool
+      }
+      -> 'a generator
+  | CompositeList :
+      { elements : 'a generator
+      ; min_size : int
+      ; max_size : int option
+      }
       -> 'a list generator
-  | Composite : {
-      label : int;
-      generate_fn : Client.test_case -> 'a;
-    }
+  | Composite :
+      { label : int
+      ; generate_fn : Client.test_case -> 'a
+      }
       -> 'a generator
 
 (** Maximum number of filter attempts before calling [assume false]. *)
@@ -67,6 +75,7 @@ let max_filter_attempts = 3
 let group label data f =
   Client.start_span ~label data;
   Exn.protect ~finally:(fun () -> Client.stop_span data) ~f:(fun () -> f ())
+;;
 
 (** [discardable_group label data f] runs [f ()] inside a span with [label]. If
     [f] raises, the span is stopped with [discard:true]; otherwise
@@ -75,29 +84,31 @@ let discardable_group label data f =
   Client.start_span ~label data;
   match f () with
   | v ->
-      Client.stop_span data;
-      v
+    Client.stop_span data;
+    v
   | exception e ->
-      Client.stop_span ~discard:true data;
-      raise e
+    Client.stop_span ~discard:true data;
+    raise e
+;;
 
-type collection = {
-  mutable finished : bool;
-  mutable collection_id : Cbor.Simple.t option;
-  min_size : int;
-  max_size : int option;
-}
 (** A collection handle for generating variable-length sequences.
 
     Collections communicate with the server to determine when to stop generating
     elements. The [finished] flag short-circuits subsequent {!collection_more}
     calls once the server signals completion. *)
+type collection =
+  { mutable finished : bool
+  ; mutable collection_id : Cbor.Simple.t option
+  ; min_size : int
+  ; max_size : int option
+  }
 
 (** [new_collection ~min_size ?max_size data ()] creates a new collection
     handle. *)
 let new_collection ~min_size ?max_size data () =
   ignore data;
   { finished = false; collection_id = None; min_size; max_size }
+;;
 
 (** [get_collection_id coll data] lazily initializes the server-side collection
     and returns its ID. Raises {!Client.Data_exhausted} on StopTest. *)
@@ -105,116 +116,127 @@ let get_collection_id coll data =
   match coll.collection_id with
   | Some id -> id
   | None ->
-      let stream = data.Client.stream in
-      let max_size_val =
-        match coll.max_size with Some ms -> `Int ms | None -> `Null
-      in
-      let result =
-        try
-          pending_get
-            (request stream
-               (`Map
-                  [
-                    (`Text "command", `Text "new_collection");
-                    (`Text "min_size", `Int coll.min_size);
-                    (`Text "max_size", max_size_val);
-                  ]))
-        with Request_error e when String.equal e.error_type "StopTest" ->
-          data.test_aborted <- true;
-          raise Client.Data_exhausted
-      in
-      coll.collection_id <- Some result;
-      result
+    let stream = data.Client.stream in
+    let max_size_val =
+      match coll.max_size with
+      | Some ms -> `Int ms
+      | None -> `Null
+    in
+    let result =
+      try
+        pending_get
+          (request
+             stream
+             (`Map
+                 [ `Text "command", `Text "new_collection"
+                 ; `Text "min_size", `Int coll.min_size
+                 ; `Text "max_size", max_size_val
+                 ]))
+      with
+      | Request_error e when String.equal e.error_type "StopTest" ->
+        data.test_aborted <- true;
+        raise Client.Data_exhausted
+    in
+    coll.collection_id <- Some result;
+    result
+;;
 
 (** [collection_more coll data] returns [true] if more elements should be
     generated, [false] when the collection is complete. Once it returns [false],
     subsequent calls return [false] immediately. Raises {!Client.Data_exhausted}
     on StopTest. *)
 let collection_more coll data =
-  if coll.finished then false
-  else
+  if coll.finished
+  then false
+  else (
     let collection_id = get_collection_id coll data in
     let stream = data.Client.stream in
     let result =
       try
         pending_get
-          (request stream
+          (request
+             stream
              (`Map
-                [
-                  (`Text "command", `Text "collection_more");
-                  (`Text "collection_id", collection_id);
-                ]))
-      with Request_error e when String.equal e.error_type "StopTest" ->
+                 [ `Text "command", `Text "collection_more"
+                 ; `Text "collection_id", collection_id
+                 ]))
+      with
+      | Request_error e when String.equal e.error_type "StopTest" ->
         data.test_aborted <- true;
         raise Client.Data_exhausted
     in
     let more = Cbor_helpers.extract_bool result in
     if not more then coll.finished <- true;
-    more
+    more)
+;;
 
 (** [collection_reject coll data] rejects the last element of the collection.
     No-op if the collection is already finished. Raises {!Client.Data_exhausted}
     on StopTest. *)
 let collection_reject coll data =
-  if not coll.finished then (
+  if not coll.finished
+  then (
     let collection_id = get_collection_id coll data in
     let stream = data.Client.stream in
     try
       let (_ : Cbor.Simple.t) =
         pending_get
-          (request stream
+          (request
+             stream
              (`Map
-                [
-                  (`Text "command", `Text "collection_reject");
-                  (`Text "collection_id", collection_id);
-                ]))
+                 [ `Text "command", `Text "collection_reject"
+                 ; `Text "collection_id", collection_id
+                 ]))
       in
       ()
-    with Request_error e when String.equal e.error_type "StopTest" ->
+    with
+    | Request_error e when String.equal e.error_type "StopTest" ->
       data.test_aborted <- true;
       raise Client.Data_exhausted)
+;;
 
 (** [do_draw gen data] produces a typed value from generator [gen] using the
     given test case [data]. *)
 let rec do_draw : type a. a generator -> Client.test_case -> a =
- fun gen data ->
+  fun gen data ->
   match gen with
-  | Basic { schema; transform } ->
-      transform (Client.generate_from_schema schema data)
+  | Basic { schema; transform } -> transform (Client.generate_from_schema schema data)
   | Mapped { source; f } ->
-      group Labels.mapped data (fun () ->
-          let value = do_draw source data in
-          f value)
+    group Labels.mapped data (fun () ->
+      let value = do_draw source data in
+      f value)
   | FlatMapped { source; f } ->
-      discardable_group Labels.flat_map data (fun () ->
-          let first = do_draw source data in
-          let second_gen = f first in
-          do_draw second_gen data)
+    discardable_group Labels.flat_map data (fun () ->
+      let first = do_draw source data in
+      let second_gen = f first in
+      do_draw second_gen data)
   | Filtered { source; predicate } ->
-      let rec attempt i =
-        if i > max_filter_attempts then raise Client.Assume_rejected
+    let rec attempt i =
+      if i > max_filter_attempts
+      then raise Client.Assume_rejected
+      else (
+        Client.start_span ~label:Labels.filter data;
+        let value = do_draw source data in
+        if predicate value
+        then (
+          Client.stop_span data;
+          value)
         else (
-          Client.start_span ~label:Labels.filter data;
-          let value = do_draw source data in
-          if predicate value then (
-            Client.stop_span data;
-            value)
-          else (
-            Client.stop_span ~discard:true data;
-            attempt (i + 1)))
-      in
-      attempt 1
+          Client.stop_span ~discard:true data;
+          attempt (i + 1)))
+    in
+    attempt 1
   | CompositeList { elements; min_size; max_size } ->
-      group Labels.list data (fun () ->
-          let coll = new_collection ~min_size ?max_size data () in
-          let rec collect acc =
-            if collection_more coll data then
-              collect (do_draw elements data :: acc)
-            else List.rev acc
-          in
-          collect [])
-  | Composite { label; generate_fn } ->
-      group label data (fun () -> generate_fn data)
+    group Labels.list data (fun () ->
+      let coll = new_collection ~min_size ?max_size data () in
+      let rec collect acc =
+        if collection_more coll data
+        then collect (do_draw elements data :: acc)
+        else List.rev acc
+      in
+      collect [])
+  | Composite { label; generate_fn } -> group label data (fun () -> generate_fn data)
+;;
 
 (** [draw tc gen] produces a typed value from generator [gen] using test case
     [tc]. *)
@@ -225,11 +247,12 @@ let draw tc gen = do_draw gen tc
     When [gen] is a [Basic] generator, the schema is preserved and transforms
     are composed. Otherwise, a [Mapped] generator is created. *)
 let map : type a b. (a -> b) -> a generator -> b generator =
- fun f gen ->
+  fun f gen ->
   match gen with
   | Basic { schema; transform } ->
-      Basic { schema; transform = (fun x -> f (transform x)) }
+    Basic { schema; transform = (fun x -> f (transform x)) }
   | other -> Mapped { source = other; f }
+;;
 
 (** [flat_map f gen] creates a dependent generator. The function [f] receives
     the generated value and returns a new generator whose value is the final
@@ -245,15 +268,18 @@ let filter predicate gen = Filtered { source = gen; predicate }
 let schema : type a. a generator -> Cbor.Simple.t option = function
   | Basic { schema; _ } -> Some schema
   | _ -> None
+;;
 
 (** [is_basic gen] returns [true] if [gen] is a [Basic] generator. *)
 let is_basic : type a. a generator -> bool = function
   | Basic _ -> true
   | _ -> false
+;;
 
 (** [as_basic gen] returns [Some (schema, transform)] if [gen] is [Basic], or
     [None] otherwise. *)
-let as_basic : type a.
-    a generator -> (Cbor.Simple.t * (Cbor.Simple.t -> a)) option = function
+let as_basic : type a. a generator -> (Cbor.Simple.t * (Cbor.Simple.t -> a)) option =
+  function
   | Basic { schema; transform } -> Some (schema, transform)
   | _ -> None
+;;

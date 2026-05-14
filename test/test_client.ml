@@ -11,101 +11,94 @@ let find_cmd = Test_helpers.find_cmd
 (* ---- Unit tests for helpers that don't need a server ---- *)
 
 let test_assume_true () =
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
+  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
-    Client.
-      { stream = control_stream conn; is_final = false; test_aborted = false }
+    Client.{ stream = control_stream conn; is_final = false; test_aborted = false }
   in
   assume tc true;
   close conn;
   Core_unix.close s2
+;;
 
 let test_assume_false_raises () =
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
+  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
-    Client.
-      { stream = control_stream conn; is_final = false; test_aborted = false }
+    Client.{ stream = control_stream conn; is_final = false; test_aborted = false }
   in
   let raised = ref false in
-  (try assume tc false with Assume_rejected -> raised := true);
+  (try assume tc false with
+   | Assume_rejected -> raised := true);
   Alcotest.(check bool) "raised Assume_rejected" true !raised;
   close conn;
   Core_unix.close s2
+;;
 
 let test_note_when_not_final () =
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
+  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
-    Client.
-      { stream = control_stream conn; is_final = false; test_aborted = false }
+    Client.{ stream = control_stream conn; is_final = false; test_aborted = false }
   in
   note tc "should not print";
   close conn;
   Core_unix.close s2
+;;
 
 let test_note_when_final () =
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
+  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
-    Client.
-      { stream = control_stream conn; is_final = true; test_aborted = false }
+    Client.{ stream = control_stream conn; is_final = true; test_aborted = false }
   in
   note tc "test message from note";
   close conn;
   Core_unix.close s2
+;;
 
 let test_extract_origin_no_backtrace () =
   let origin = extract_origin (Failure "test") in
   Alcotest.(check bool) "has Failure" true (contains_substring origin "Failure")
+;;
 
 let test_extract_origin_with_backtrace () =
   Stdlib.Printexc.record_backtrace true;
   let origin =
-    try raise (Failure "test error") with exn -> extract_origin exn
+    try raise (Failure "test error") with
+    | exn -> extract_origin exn
   in
   Stdlib.Printexc.record_backtrace false;
   Alcotest.(check bool) "has Failure" true (contains_substring origin "Failure");
-  Alcotest.(check bool)
-    "has file:line" true
-    (contains_substring origin "test_client.ml")
+  Alcotest.(check bool) "has file:line" true (contains_substring origin "test_client.ml")
+;;
 
 let test_start_span_when_aborted () =
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
+  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let data =
-    Client.
-      { stream = control_stream conn; is_final = false; test_aborted = true }
+    Client.{ stream = control_stream conn; is_final = false; test_aborted = true }
   in
   start_span data;
   stop_span data;
   close conn;
   Core_unix.close s2
+;;
 
 let test_nested_test_raises () =
   let raised = ref false in
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ())
-    (fun _tc ->
-      try
-        Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ())
-          (fun _tc2 -> ())
-      with Failure msg ->
-        raised := true;
-        Alcotest.(check bool)
-          "has 'Cannot nest'" true
-          (contains_substring msg "Cannot nest"));
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ()) (fun _tc ->
+    try
+      Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ()) (fun _tc2 -> ())
+    with
+    | Failure msg ->
+      raised := true;
+      Alcotest.(check bool)
+        "has 'Cannot nest'"
+        true
+        (contains_substring msg "Cannot nest"));
   Alcotest.(check bool) "raised" true !raised
+;;
 
 (* ---- Tests using real hegel binary ---- *)
 
@@ -114,81 +107,81 @@ let test_nested_test_raises () =
 let with_test_mode mode f =
   Core_unix.putenv ~key:"HEGEL_PROTOCOL_TEST_MODE" ~data:mode;
   Exn.protect
-    ~finally:(fun () ->
-      Core_unix.putenv ~key:"HEGEL_PROTOCOL_TEST_MODE" ~data:"")
+    ~finally:(fun () -> Core_unix.putenv ~key:"HEGEL_PROTOCOL_TEST_MODE" ~data:"")
     ~f
+;;
 
 let test_simple_passing_test () =
   Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-      let v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
-      in
-      ignore (Cbor_helpers.extract_bool v))
+    let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
+    ignore (Cbor_helpers.extract_bool v : bool))
+;;
 
 let test_simple_failing_test () =
   let raised = ref false in
   (try
-     Session.run_hegel_test ~settings:(Client.settings ~test_cases:100 ())
-       (fun tc ->
-         let v =
-           generate_from_schema
-             (`Map
-                [
-                  (`Text "type", `Text "integer");
-                  (`Text "min_value", `Int 0);
-                  (`Text "max_value", `Int 100);
-                ])
-             tc
-         in
-         let x = Cbor_helpers.extract_int v in
-         if x >= 50 then failwith "too big")
-   with _ -> raised := true);
+     Session.run_hegel_test ~settings:(Client.settings ~test_cases:100 ()) (fun tc ->
+       let v =
+         generate_from_schema
+           (`Map
+               [ `Text "type", `Text "integer"
+               ; `Text "min_value", `Int 0
+               ; `Text "max_value", `Int 100
+               ])
+           tc
+       in
+       let x = Cbor_helpers.extract_int v in
+       if x >= 50 then failwith "too big")
+   with
+   | _ -> raised := true);
   Alcotest.(check bool) "test failed" true !raised
+;;
 
 let test_single_test_case () =
   Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ()) (fun tc ->
-      let v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
-      in
-      ignore (Cbor_helpers.extract_bool v))
+    let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
+    ignore (Cbor_helpers.extract_bool v : bool))
+;;
 
 let test_assume_true_e2e () =
   Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-      assume tc true)
+    assume tc true)
+;;
 
 let test_assume_false_e2e () =
   Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-      assume tc false)
+    assume tc false)
+;;
 
 let test_note_not_final_e2e () =
   Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-      note tc "should not appear";
-      let v =
-        generate_from_schema
-          (`Map
-             [
-               (`Text "type", `Text "integer");
-               (`Text "min_value", `Int 0);
-               (`Text "max_value", `Int 10);
-             ])
-          tc
-      in
-      ignore (Cbor_helpers.extract_int v))
+    note tc "should not appear";
+    let v =
+      generate_from_schema
+        (`Map
+            [ `Text "type", `Text "integer"
+            ; `Text "min_value", `Int 0
+            ; `Text "max_value", `Int 10
+            ])
+        tc
+    in
+    ignore (Cbor_helpers.extract_int v))
+;;
 
 let test_target_e2e () =
   Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-      let v =
-        generate_from_schema
-          (`Map
-             [
-               (`Text "type", `Text "integer");
-               (`Text "min_value", `Int 0);
-               (`Text "max_value", `Int 100);
-             ])
-          tc
-      in
-      let x = Cbor_helpers.extract_int v in
-      target tc (float_of_int x) "maximize_x")
+    let v =
+      generate_from_schema
+        (`Map
+            [ `Text "type", `Text "integer"
+            ; `Text "min_value", `Int 0
+            ; `Text "max_value", `Int 100
+            ])
+        tc
+    in
+    let x = Cbor_helpers.extract_int v in
+    target tc (float_of_int x) "maximize_x")
+;;
 
 let test_flaky_strategy () =
   let raised = ref false in
@@ -197,95 +190,92 @@ let test_flaky_strategy () =
     Session.run_hegel_test
       ~settings:
         (Client.settings ~test_cases:2 ()
-        |> Client.with_suppress_health_check [ Client.Large_initial_test_case ]
-        )
+         |> Client.with_suppress_health_check [ Client.Large_initial_test_case ])
       (fun tc ->
-        let min_value = !global_min in
-        incr global_min;
-        let gen = Hegel.Generators.integers ~min_value ~max_value:1000 () in
-        let _ = Hegel.draw tc gen in
-        ())
-  with Failure msg ->
+         let min_value = !global_min in
+         incr global_min;
+         let gen = Hegel.Generators.integers ~min_value ~max_value:1000 () in
+         let _ = Hegel.draw tc gen in
+         ())
+  with
+  | Failure msg ->
     raised := true;
     Alcotest.(check bool)
-      "has 'Flaky test detected'" true
-      (contains_substring msg
+      "has 'Flaky test detected'"
+      true
+      (contains_substring
+         msg
          "Flaky test detected: Your data generation is non-deterministic:");
     Alcotest.(check bool) "raised" true !raised
+;;
 
 (* ---- HEGEL_PROTOCOL_TEST_MODE error injection tests ---- *)
 
 let test_stop_test_on_generate () =
   with_test_mode "stop_test_on_generate" (fun () ->
-      Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ())
-        (fun tc ->
-          ignore
-            (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc)))
+    Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
+      ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc)))
+;;
 
 let test_stop_test_on_mark_complete () =
   with_test_mode "stop_test_on_mark_complete" (fun () ->
-      Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ())
-        (fun tc ->
-          ignore
-            (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc)))
+    Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
+      ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc)))
+;;
 
 let test_error_response () =
   with_test_mode "error_response" (fun () ->
-      Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ())
-        (fun tc ->
-          ignore
-            (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc)))
+    Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
+      ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc)))
+;;
 
 let test_empty_test () =
   with_test_mode "empty_test" (fun () ->
-      Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ())
-        (fun tc ->
-          ignore
-            (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc)))
+    Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
+      ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc)))
+;;
 
 (* ---- Mark complete status values ---- *)
 
 let test_mark_complete_valid () =
   Session.run_hegel_test ~settings:(Client.settings ~test_cases:3 ()) (fun tc ->
-      let v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
-      in
-      ignore (Cbor_helpers.extract_bool v))
+    let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
+    ignore (Cbor_helpers.extract_bool v : bool))
+;;
 
 let test_mark_complete_invalid () =
   Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-      let _v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
-      in
-      assume tc false)
+    let _v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
+    assume tc false)
+;;
 
 let test_mark_complete_interesting () =
   let raised = ref false in
   (try
-     Session.run_hegel_test ~settings:(Client.settings ~test_cases:100 ())
-       (fun tc ->
-         let v =
-           generate_from_schema
-             (`Map
-                [
-                  (`Text "type", `Text "integer");
-                  (`Text "min_value", `Int 0);
-                  (`Text "max_value", `Int 100);
-                ])
-             tc
-         in
-         let x = Cbor_helpers.extract_int v in
-         assert (x < 50))
-   with _ -> raised := true);
+     Session.run_hegel_test ~settings:(Client.settings ~test_cases:100 ()) (fun tc ->
+       let v =
+         generate_from_schema
+           (`Map
+               [ `Text "type", `Text "integer"
+               ; `Text "min_value", `Int 0
+               ; `Text "max_value", `Int 100
+               ])
+           tc
+       in
+       let x = Cbor_helpers.extract_int v in
+       assert (x < 50))
+   with
+   | _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised
+;;
 
 (** Test: start_span and stop_span when NOT aborted (live connection). *)
 let test_start_stop_span_live () =
   Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ()) (fun tc ->
-      start_span tc;
-      stop_span tc;
-      ignore
-        (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc))
+    start_span tc;
+    stop_span tc;
+    ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc))
+;;
 
 (** Test: version mismatch in create_client (version too high). *)
 let test_version_mismatch () =
@@ -293,25 +283,25 @@ let test_version_mismatch () =
     Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
   in
   let peer_conn = Test_helpers.make_connection server_socket ~name:"Peer" () in
-  let client_conn =
-    Test_helpers.make_connection client_socket ~name:"Client" ()
-  in
+  let client_conn = Test_helpers.make_connection client_socket ~name:"Client" () in
   let t =
     Thread.create
       (fun () ->
-        (* Receive the handshake and respond with a bad version *)
-        peer_conn.connection_state <- Client;
-        let ch = control_stream peer_conn in
-        let msg_id, _payload = receive_request_raw ch () in
-        send_response_raw ch msg_id "Hegel/9.9")
+         (* Receive the handshake and respond with a bad version *)
+         peer_conn.connection_state <- Client;
+         let ch = control_stream peer_conn in
+         let msg_id, _payload = receive_request_raw ch () in
+         send_response_raw ch msg_id "Hegel/9.9")
       ()
   in
   let raised = ref false in
-  (try ignore (create_client client_conn) with Failure _ -> raised := true);
+  (try ignore (create_client client_conn) with
+   | Failure _ -> raised := true);
   Alcotest.(check bool) "raised version mismatch" true !raised;
   close client_conn;
   close peer_conn;
   Thread.join t
+;;
 
 (** Test: version mismatch in create_client (version too low). *)
 let test_version_mismatch_low () =
@@ -319,24 +309,24 @@ let test_version_mismatch_low () =
     Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
   in
   let peer_conn = Test_helpers.make_connection server_socket ~name:"Peer" () in
-  let client_conn =
-    Test_helpers.make_connection client_socket ~name:"Client" ()
-  in
+  let client_conn = Test_helpers.make_connection client_socket ~name:"Client" () in
   let t =
     Thread.create
       (fun () ->
-        peer_conn.connection_state <- Client;
-        let ch = control_stream peer_conn in
-        let msg_id, _payload = receive_request_raw ch () in
-        send_response_raw ch msg_id "Hegel/0.0")
+         peer_conn.connection_state <- Client;
+         let ch = control_stream peer_conn in
+         let msg_id, _payload = receive_request_raw ch () in
+         send_response_raw ch msg_id "Hegel/0.0")
       ()
   in
   let raised = ref false in
-  (try ignore (create_client client_conn) with Failure _ -> raised := true);
+  (try ignore (create_client client_conn) with
+   | Failure _ -> raised := true);
   Alcotest.(check bool) "raised version mismatch low" true !raised;
   close client_conn;
   close peer_conn;
   Thread.join t
+;;
 
 (** Test: malformed version string in create_client. *)
 let test_version_mismatch_bad_format () =
@@ -344,31 +334,30 @@ let test_version_mismatch_bad_format () =
     Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
   in
   let peer_conn = Test_helpers.make_connection server_socket ~name:"Peer" () in
-  let client_conn =
-    Test_helpers.make_connection client_socket ~name:"Client" ()
-  in
+  let client_conn = Test_helpers.make_connection client_socket ~name:"Client" () in
   let t =
     Thread.create
       (fun () ->
-        peer_conn.connection_state <- Client;
-        let ch = control_stream peer_conn in
-        let msg_id, _payload = receive_request_raw ch () in
-        send_response_raw ch msg_id "Hegel/bad")
+         peer_conn.connection_state <- Client;
+         let ch = control_stream peer_conn in
+         let msg_id, _payload = receive_request_raw ch () in
+         send_response_raw ch msg_id "Hegel/bad")
       ()
   in
   let raised = ref false in
-  (try ignore (create_client client_conn) with Failure _ -> raised := true);
+  (try ignore (create_client client_conn) with
+   | Failure _ -> raised := true);
   Alcotest.(check bool) "raised bad version format" true !raised;
   close client_conn;
   close peer_conn;
   Thread.join t
+;;
 
 (** Test: run_test with explicit seed. *)
 let test_run_test_with_seed () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ~seed:42 ())
-    (fun tc ->
-      ignore
-        (generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc))
+  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ~seed:42 ()) (fun tc ->
+    ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc))
+;;
 
 (** Test: multiple interesting test cases (n_interesting > 1). Uses different
     exception types to produce distinct interesting origins, triggering the
@@ -376,22 +365,22 @@ let test_run_test_with_seed () =
 let test_multiple_interesting () =
   let raised_msg = ref "" in
   (try
-     Session.run_hegel_test ~settings:(Client.settings ~test_cases:200 ())
-       (fun tc ->
-         let v = Hegel.draw tc (Hegel.Generators.booleans ()) in
-         if v then failwith "error from Failure branch" else raise Exit)
-   with e -> raised_msg := Exn.to_string e);
+     Session.run_hegel_test ~settings:(Client.settings ~test_cases:200 ()) (fun tc ->
+       let v = Hegel.draw tc (Hegel.Generators.booleans ()) in
+       if v then failwith "error from Failure branch" else raise Exit)
+   with
+   | e -> raised_msg := Exn.to_string e);
   Alcotest.(check bool)
-    "has Multiple failures" true
+    "has Multiple failures"
+    true
     (contains_substring !raised_msg "Multiple failures")
+;;
 
 (** Helper: set up a fake server using socketpairs, perform handshake, and
     return [(client, client_conn, peer_conn)]. The caller provides a peer
     function that will be run in a thread. *)
 let with_fake_server peer_fn client_fn =
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
+  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let client_conn = Test_helpers.make_connection s1 ~name:"Client" () in
   let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
   let t_hs = Thread.create Test_helpers.handshake_via_stream peer_conn in
@@ -402,6 +391,7 @@ let with_fake_server peer_fn client_fn =
   Thread.join t_peer;
   close client_conn;
   close peer_conn
+;;
 
 (** Helper: accept a run_test command on the control stream, return
     [(ctrl, test_ch)] where test_ch is the test stream. *)
@@ -416,203 +406,222 @@ let accept_run_test peer_conn =
   in
   send_response_value ctrl msg_id `Null;
   let test_ch = connect_stream peer_conn test_ch_id ~role:"Test" () in
-  (ctrl, test_ch)
+  ctrl, test_ch
+;;
 
 (** Helper: send test_done with given results fields. *)
 let send_test_done test_ch results_fields =
   ignore
     (pending_get
-       (request test_ch
-          (`Map
-             [
-               (`Text "event", `Text "test_done");
-               (`Text "results", `Map results_fields);
-             ])))
+       (request
+          test_ch
+          (`Map [ `Text "event", `Text "test_done"; `Text "results", `Map results_fields ])))
+;;
 
 (** Test: unrecognised event sends error response and continues (socketpair). *)
 let test_unrecognised_event () =
   with_fake_server
     (fun peer_conn ->
-      let _ctrl, test_ch = accept_run_test peer_conn in
-      (* Send unrecognised event *)
-      (try
-         ignore
-           (pending_get
-              (request test_ch
-                 (`Map [ (`Text "event", `Text "unknown_foobar") ])))
-       with Request_error _ -> ());
-      (* Send test_done with 0 interesting *)
-      send_test_done test_ch [ (`Text "interesting_test_cases", `Int 0) ])
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       (* Send unrecognised event *)
+       (try
+          ignore
+            (pending_get
+               (request test_ch (`Map [ `Text "event", `Text "unknown_foobar" ])))
+        with
+        | Request_error _ -> ());
+       (* Send test_done with 0 interesting *)
+       send_test_done test_ch [ `Text "interesting_test_cases", `Int 0 ])
     (fun client ->
-      run_test client
-        ~settings:(Client.default_settings () |> Client.with_test_cases 0)
-        (fun _tc -> ()))
+       run_test
+         client
+         ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+         (fun _tc -> ()))
+;;
 
 (** Test: run_test with database=Path and suppress_health_check sends the
     correct fields over the wire. *)
 let test_run_test_database_path_and_suppress () =
   with_fake_server
     (fun peer_conn ->
-      let _ctrl, test_ch = accept_run_test peer_conn in
-      send_test_done test_ch
-        [
-          (`Text "interesting_test_cases", `Int 0); (`Text "passed", `Bool true);
-        ])
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_test_done
+         test_ch
+         [ `Text "interesting_test_cases", `Int 0; `Text "passed", `Bool true ])
     (fun client ->
-      let settings =
-        Client.default_settings () |> Client.with_test_cases 0
-        |> Client.with_database (Client.Path "/tmp/test.db")
-        |> Client.with_suppress_health_check
-             [ Client.Too_slow; Client.Filter_too_much ]
-      in
-      run_test client ~settings (fun _tc -> ()))
+       let settings =
+         Client.default_settings ()
+         |> Client.with_test_cases 0
+         |> Client.with_database (Client.Path "/tmp/test.db")
+         |> Client.with_suppress_health_check [ Client.Too_slow; Client.Filter_too_much ]
+       in
+       run_test client ~settings (fun _tc -> ()))
+;;
 
 (** Test: run_test with database=Unset omits the database field. *)
 let test_run_test_database_unset () =
   with_fake_server
     (fun peer_conn ->
-      let _ctrl, test_ch = accept_run_test peer_conn in
-      send_test_done test_ch [ (`Text "interesting_test_cases", `Int 0) ])
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_test_done test_ch [ `Text "interesting_test_cases", `Int 0 ])
     (fun client ->
-      let settings =
-        Client.default_settings () |> Client.with_test_cases 0
-        |> Client.with_database Client.Unset
-      in
-      run_test client ~settings (fun _tc -> ()))
+       let settings =
+         Client.default_settings ()
+         |> Client.with_test_cases 0
+         |> Client.with_database Client.Unset
+       in
+       run_test client ~settings (fun _tc -> ()))
+;;
 
 (** Test: server error in results raises Failure. *)
 let test_run_test_server_error_in_results () =
   with_fake_server
     (fun peer_conn ->
-      let _ctrl, test_ch = accept_run_test peer_conn in
-      send_test_done test_ch
-        [
-          (`Text "interesting_test_cases", `Int 0);
-          (`Text "error", `Text "some server error");
-        ])
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_test_done
+         test_ch
+         [ `Text "interesting_test_cases", `Int 0
+         ; `Text "error", `Text "some server error"
+         ])
     (fun client ->
-      let raised = ref false in
-      (try
-         run_test client
-           ~settings:(Client.default_settings () |> Client.with_test_cases 0)
-           (fun _tc -> ())
-       with Failure msg ->
-         raised := true;
-         Alcotest.(check bool)
-           "has 'Server error'" true
-           (contains_substring msg "Server error");
-         Alcotest.(check bool)
-           "has error text" true
-           (contains_substring msg "some server error"));
-      Alcotest.(check bool) "raised" true !raised)
+       let raised = ref false in
+       (try
+          run_test
+            client
+            ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+            (fun _tc -> ())
+        with
+        | Failure msg ->
+          raised := true;
+          Alcotest.(check bool)
+            "has 'Server error'"
+            true
+            (contains_substring msg "Server error");
+          Alcotest.(check bool)
+            "has error text"
+            true
+            (contains_substring msg "some server error"));
+       Alcotest.(check bool) "raised" true !raised)
+;;
 
 (** Test: health check failure in results raises Failure. *)
 let test_run_test_health_check_failure () =
   with_fake_server
     (fun peer_conn ->
-      let _ctrl, test_ch = accept_run_test peer_conn in
-      send_test_done test_ch
-        [
-          (`Text "interesting_test_cases", `Int 0);
-          (`Text "health_check_failure", `Text "too slow");
-        ])
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_test_done
+         test_ch
+         [ `Text "interesting_test_cases", `Int 0
+         ; `Text "health_check_failure", `Text "too slow"
+         ])
     (fun client ->
-      let raised = ref false in
-      (try
-         run_test client
-           ~settings:(Client.default_settings () |> Client.with_test_cases 0)
-           (fun _tc -> ())
-       with Failure msg ->
-         raised := true;
-         Alcotest.(check bool)
-           "has 'Health check failure'" true
-           (contains_substring msg "Health check failure");
-         Alcotest.(check bool)
-           "has failure text" true
-           (contains_substring msg "too slow"));
-      Alcotest.(check bool) "raised" true !raised)
+       let raised = ref false in
+       (try
+          run_test
+            client
+            ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+            (fun _tc -> ())
+        with
+        | Failure msg ->
+          raised := true;
+          Alcotest.(check bool)
+            "has 'Health check failure'"
+            true
+            (contains_substring msg "Health check failure");
+          Alcotest.(check bool)
+            "has failure text"
+            true
+            (contains_substring msg "too slow"));
+       Alcotest.(check bool) "raised" true !raised)
+;;
 
 (** Test: flaky test detection in results raises Failure. *)
 let test_run_test_flaky () =
   with_fake_server
     (fun peer_conn ->
-      let _ctrl, test_ch = accept_run_test peer_conn in
-      send_test_done test_ch
-        [
-          (`Text "interesting_test_cases", `Int 0);
-          (`Text "flaky", `Text "flaky message");
-        ])
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_test_done
+         test_ch
+         [ `Text "interesting_test_cases", `Int 0; `Text "flaky", `Text "flaky message" ])
     (fun client ->
-      let raised = ref false in
-      (try
-         run_test client
-           ~settings:(Client.default_settings () |> Client.with_test_cases 0)
-           (fun _tc -> ())
-       with Failure msg ->
-         raised := true;
-         Alcotest.(check bool)
-           "has 'Flaky test detected'" true
-           (contains_substring msg "Flaky test detected");
-         Alcotest.(check bool)
-           "has flaky text" true
-           (contains_substring msg "flaky message"));
-      Alcotest.(check bool) "raised" true !raised)
+       let raised = ref false in
+       (try
+          run_test
+            client
+            ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+            (fun _tc -> ())
+        with
+        | Failure msg ->
+          raised := true;
+          Alcotest.(check bool)
+            "has 'Flaky test detected'"
+            true
+            (contains_substring msg "Flaky test detected");
+          Alcotest.(check bool)
+            "has flaky text"
+            true
+            (contains_substring msg "flaky message"));
+       Alcotest.(check bool) "raised" true !raised)
+;;
 
 (** Test: passed=false with 0 interesting test cases raises Failure. *)
 let test_run_test_passed_false () =
   with_fake_server
     (fun peer_conn ->
-      let _ctrl, test_ch = accept_run_test peer_conn in
-      send_test_done test_ch
-        [
-          (`Text "interesting_test_cases", `Int 0); (`Text "passed", `Bool false);
-        ])
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_test_done
+         test_ch
+         [ `Text "interesting_test_cases", `Int 0; `Text "passed", `Bool false ])
     (fun client ->
-      let raised = ref false in
-      (try
-         run_test client
-           ~settings:(Client.default_settings () |> Client.with_test_cases 0)
-           (fun _tc -> ())
-       with Failure msg ->
-         raised := true;
-         Alcotest.(check bool)
-           "has 'Property test failed'" true
-           (contains_substring msg "Property test failed"));
-      Alcotest.(check bool) "raised" true !raised)
+       let raised = ref false in
+       (try
+          run_test
+            client
+            ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+            (fun _tc -> ())
+        with
+        | Failure msg ->
+          raised := true;
+          Alcotest.(check bool)
+            "has 'Property test failed'"
+            true
+            (contains_substring msg "Property test failed"));
+       Alcotest.(check bool) "raised" true !raised)
+;;
 
 (** Test: server_exited check in pop_inbox_item. Create a connection, set
     server_exited to true, then try to receive. Should raise with
     server_crashed_message. *)
 let test_server_exited_in_pop_inbox () =
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
+  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   conn.server_exited <- true;
   let ch = control_stream conn in
   let raised = ref false in
-  (try ignore (receive_request ch ())
-   with Failure msg ->
+  (try ignore (receive_request ch ()) with
+   | Failure msg ->
      raised := true;
      Alcotest.(check bool)
-       "has server crashed message" true
+       "has server crashed message"
+       true
        (contains_substring msg "hegel server process has exited"));
   Alcotest.(check bool) "raised" true !raised;
   close conn;
   Core_unix.close s2
+;;
 
 (** Test: run_hegel_test with explicit settings parameter (covers the Some s
     branch in session.ml line 257). *)
 let test_run_hegel_test_with_settings () =
   let settings =
-    Client.default_settings () |> Client.with_test_cases 3
+    Client.default_settings ()
+    |> Client.with_test_cases 3
     |> Client.with_database Client.Disabled
   in
   Session.run_hegel_test ~settings (fun tc ->
-      let v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
-      in
-      ignore (Cbor_helpers.extract_bool v))
+    let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
+    ignore (Cbor_helpers.extract_bool v : bool))
+;;
 
 (** Test: find_hegel uses HEGEL_SERVER_COMMAND env var. *)
 let test_find_hegel_via_env () =
@@ -623,6 +632,7 @@ let test_find_hegel_via_env () =
   match orig_cmd with
   | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
   | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:""
+;;
 
 (** Test: session start failure (bad server command). Covers the error path when
     the hegel subprocess exits immediately without completing the handshake. *)
@@ -633,12 +643,14 @@ let test_session_start_failure () =
   let orig_cmd = Sys.getenv "HEGEL_SERVER_COMMAND" in
   Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:"/bin/false";
   let raised = ref false in
-  (try Session.start session with _ -> raised := true);
+  (try Session.start session with
+   | _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised;
   Session.cleanup session;
   match orig_cmd with
   | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
   | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:""
+;;
 
 (** Test: reader thread detects server crash. Start a real session, kill the
     server process, verify server_exited is set (reader gets EOF on pipe). *)
@@ -649,18 +661,17 @@ let test_monitor_thread_detects_crash () =
   Session.start session;
   (* Kill the server process *)
   (match session.process with
-  | Some pid -> (
-      Caml_unix.kill pid Stdlib.Sys.sigkill;
-      (* Wait for the reader thread to detect the crash (EOF on pipe) *)
-      Caml_unix.sleepf 0.5;
-      match session.connection with
+   | Some pid ->
+     Caml_unix.kill pid Stdlib.Sys.sigkill;
+     (* Wait for the reader thread to detect the crash (EOF on pipe) *)
+     Caml_unix.sleepf 0.5;
+     (match session.connection with
       | Some conn ->
-          Alcotest.(check bool)
-            "server_exited" true
-            (Connection.server_has_exited conn)
+        Alcotest.(check bool) "server_exited" true (Connection.server_has_exited conn)
       | None -> Alcotest.fail "no connection")
-  | None -> Alcotest.fail "no process");
+   | None -> Alcotest.fail "no process");
   Session.cleanup session
+;;
 
 (** Test: cleanup with a connection that raises on close (session.ml line 179).
     We close the connection's fds manually first, then mark it as running. When
@@ -669,9 +680,7 @@ let test_monitor_thread_detects_crash () =
     outer try/with, we'd need a non-Unix exception - but we can at least
     exercise the code path by closing the fds first and marking running=true. *)
 let test_cleanup_with_close_error () =
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
+  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   (* Close both fds underneath the connection *)
   Core_unix.close s1;
@@ -679,15 +688,11 @@ let test_cleanup_with_close_error () =
   (* Ensure conn.running is true so close actually tries to close fds *)
   conn.running <- true;
   let session : Session.hegel_session =
-    {
-      process = None;
-      connection = Some conn;
-      client = None;
-      lock = Mutex.create ();
-    }
+    { process = None; connection = Some conn; client = None; lock = Mutex.create () }
   in
   Session.cleanup session;
   Alcotest.(check bool) "cleaned up" true (Option.is_none session.connection)
+;;
 
 (** Test: run_hegel_test when session is None (unreachable in normal usage, but
     covers the branch). *)
@@ -696,285 +701,268 @@ let test_session_not_started () =
     { process = None; connection = None; client = None; lock = Mutex.create () }
   in
   (* Test has_working_client returns false *)
-  Alcotest.(check bool)
-    "no working client" false
-    (Session.has_working_client session)
+  Alcotest.(check bool) "no working client" false (Session.has_working_client session)
+;;
 
 (** Test: cleanup a session with actual resources. *)
 let test_session_cleanup_with_resources () =
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
+  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let session : Session.hegel_session =
-    {
-      process = None;
-      connection = Some conn;
-      client = None;
-      lock = Mutex.create ();
-    }
+    { process = None; connection = Some conn; client = None; lock = Mutex.create () }
   in
   Session.cleanup session;
   Alcotest.(check bool) "conn cleaned" true (Option.is_none session.connection);
   Core_unix.close s2
+;;
 
 (** Test: cleanup with a connection whose socket is already closed (covers error
     catch in close). *)
 let test_session_cleanup_closed_conn () =
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
+  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   (* Close the raw socket fd underneath, so conn.close will error *)
   Core_unix.close s1;
   Core_unix.close s2;
   let session : Session.hegel_session =
-    {
-      process = None;
-      connection = Some conn;
-      client = None;
-      lock = Mutex.create ();
-    }
+    { process = None; connection = Some conn; client = None; lock = Mutex.create () }
   in
   Session.cleanup session;
   Alcotest.(check bool) "cleaned" true (Option.is_none session.connection)
+;;
 
 (** Test: cleanup a session with a process (uses /bin/sleep for a real PID). *)
 let test_session_cleanup_with_process () =
   let sleep_cmd = find_cmd "sleep" in
   let pid =
-    Caml_unix.create_process sleep_cmd [| sleep_cmd; "60" |] Caml_unix.stdin
-      Caml_unix.stderr Caml_unix.stderr
+    Caml_unix.create_process
+      sleep_cmd
+      [| sleep_cmd; "60" |]
+      Caml_unix.stdin
+      Caml_unix.stderr
+      Caml_unix.stderr
   in
   let session : Session.hegel_session =
-    {
-      process = Some pid;
-      connection = None;
-      client = None;
-      lock = Mutex.create ();
-    }
+    { process = Some pid; connection = None; client = None; lock = Mutex.create () }
   in
   Session.cleanup session;
   Alcotest.(check bool) "process cleaned" true (Option.is_none session.process)
+;;
 
 (** Test: cleanup with already-dead process (covers kill error catch). *)
 let test_session_cleanup_dead_process () =
   (* Start a process that exits immediately *)
   let true_cmd = find_cmd "true" in
   let pid =
-    Caml_unix.create_process true_cmd [| true_cmd |] Caml_unix.stdin
-      Caml_unix.stderr Caml_unix.stderr
+    Caml_unix.create_process
+      true_cmd
+      [| true_cmd |]
+      Caml_unix.stdin
+      Caml_unix.stderr
+      Caml_unix.stderr
   in
   (* Wait for it to finish *)
   ignore (Caml_unix.waitpid [] pid);
   let session : Session.hegel_session =
-    {
-      process = Some pid;
-      connection = None;
-      client = None;
-      lock = Mutex.create ();
-    }
+    { process = Some pid; connection = None; client = None; lock = Mutex.create () }
   in
   Session.cleanup session;
   Alcotest.(check bool) "cleaned" true (Option.is_none session.process)
+;;
 
 (** Test: has_working_client with a live connection. *)
 let test_has_working_client_live () =
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
+  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let session : Session.hegel_session =
-    {
-      process = None;
-      connection = Some conn;
-      client =
-        Some
-          {
-            connection = conn;
-            control = control_stream conn;
-            lock = Mutex.create ();
-          };
-      lock = Mutex.create ();
+    { process = None
+    ; connection = Some conn
+    ; client =
+        Some { connection = conn; control = control_stream conn; lock = Mutex.create () }
+    ; lock = Mutex.create ()
     }
   in
-  Alcotest.(check bool)
-    "has working client" true
-    (Session.has_working_client session);
+  Alcotest.(check bool) "has working client" true (Session.has_working_client session);
   close conn;
   Core_unix.close s2
+;;
 
 (** Test: run_hegel_test with default parameters. *)
 let test_run_hegel_test_defaults () =
   Session.run_hegel_test (fun tc ->
-      let v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
-      in
-      ignore (Cbor_helpers.extract_bool v))
+    let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
+    ignore (Cbor_helpers.extract_bool v : bool))
+;;
 
 (* ---- health_check_to_string ---- *)
 
 let test_health_check_to_string () =
   Alcotest.(check string)
-    "filter_too_much" "filter_too_much"
+    "filter_too_much"
+    "filter_too_much"
     (Client.health_check_to_string Client.Filter_too_much);
   Alcotest.(check string)
-    "too_slow" "too_slow"
+    "too_slow"
+    "too_slow"
     (Client.health_check_to_string Client.Too_slow);
   Alcotest.(check string)
-    "test_cases_too_large" "test_cases_too_large"
+    "test_cases_too_large"
+    "test_cases_too_large"
     (Client.health_check_to_string Client.Test_cases_too_large);
   Alcotest.(check string)
-    "large_initial_test_case" "large_initial_test_case"
+    "large_initial_test_case"
+    "large_initial_test_case"
     (Client.health_check_to_string Client.Large_initial_test_case)
+;;
 
 (* ---- is_in_ci ---- *)
 
 (** All CI environment variable names checked by [is_in_ci]. *)
 let all_ci_var_names =
-  [
-    "CI";
-    "TF_BUILD";
-    "BUILDKITE";
-    "CIRCLECI";
-    "CIRRUS_CI";
-    "CODEBUILD_BUILD_ID";
-    "GITHUB_ACTIONS";
-    "GITLAB_CI";
-    "HEROKU_TEST_RUN_ID";
-    "TEAMCITY_VERSION";
+  [ "CI"
+  ; "TF_BUILD"
+  ; "BUILDKITE"
+  ; "CIRCLECI"
+  ; "CIRRUS_CI"
+  ; "CODEBUILD_BUILD_ID"
+  ; "GITHUB_ACTIONS"
+  ; "GITLAB_CI"
+  ; "HEROKU_TEST_RUN_ID"
+  ; "TEAMCITY_VERSION"
   ]
+;;
 
 (** Save all CI env vars, unset them, run [f], then restore originals. Uses the
     [unsetenv] C stub from test_helpers to truly remove variables from the
     environment. *)
 let with_clean_ci_env f =
-  let saved =
-    List.map all_ci_var_names ~f:(fun name -> (name, Sys.getenv name))
-  in
+  let saved = List.map all_ci_var_names ~f:(fun name -> name, Sys.getenv name) in
   List.iter all_ci_var_names ~f:(fun name -> Test_helpers.unsetenv name);
   Exn.protect
     ~finally:(fun () ->
       List.iter saved ~f:(fun (name, v) ->
-          match v with
-          | Some orig -> Core_unix.putenv ~key:name ~data:orig
-          | None -> Test_helpers.unsetenv name))
+        match v with
+        | Some orig -> Core_unix.putenv ~key:name ~data:orig
+        | None -> Test_helpers.unsetenv name))
     ~f
+;;
 
 let test_is_in_ci_some_none_branch () =
   (* Test the (Some _, None) branch: set a var that expects any value *)
   with_clean_ci_env (fun () ->
-      Core_unix.putenv ~key:"HEROKU_TEST_RUN_ID" ~data:"anything";
-      Alcotest.(check bool)
-        "is_in_ci with HEROKU_TEST_RUN_ID" true (Client.is_in_ci ()))
+    Core_unix.putenv ~key:"HEROKU_TEST_RUN_ID" ~data:"anything";
+    Alcotest.(check bool) "is_in_ci with HEROKU_TEST_RUN_ID" true (Client.is_in_ci ()))
+;;
 
 let test_is_in_ci_some_v_some_exp_branch () =
   (* Test the (Some v, Some exp) branch: set a var with matching expected value *)
   with_clean_ci_env (fun () ->
-      Core_unix.putenv ~key:"TF_BUILD" ~data:"true";
-      Alcotest.(check bool)
-        "is_in_ci with TF_BUILD=true" true (Client.is_in_ci ()))
+    Core_unix.putenv ~key:"TF_BUILD" ~data:"true";
+    Alcotest.(check bool) "is_in_ci with TF_BUILD=true" true (Client.is_in_ci ()))
+;;
 
 (* ---- Settings builders ---- *)
 
 let test_with_verbosity () =
   let s = Client.default_settings () |> Client.with_verbosity Client.Debug in
   Alcotest.(check bool)
-    "verbosity is Debug" true
+    "verbosity is Debug"
+    true
     (Poly.( = ) s.Client.verbosity Client.Debug)
+;;
 
 let test_with_derandomize () =
   let s = Client.default_settings () |> Client.with_derandomize true in
   Alcotest.(check bool) "derandomize is true" true s.Client.derandomize
+;;
 
 let test_with_database () =
-  let s =
-    Client.default_settings () |> Client.with_database (Client.Path "/tmp/db")
-  in
+  let s = Client.default_settings () |> Client.with_database (Client.Path "/tmp/db") in
   Alcotest.(check bool)
-    "database is Path" true
+    "database is Path"
+    true
     (Poly.( = ) s.Client.database (Client.Path "/tmp/db"))
+;;
 
 let test_with_suppress_health_check () =
   let s =
     Client.default_settings ()
-    |> Client.with_suppress_health_check
-         [ Client.Too_slow; Client.Filter_too_much ]
+    |> Client.with_suppress_health_check [ Client.Too_slow; Client.Filter_too_much ]
   in
   Alcotest.(check int)
-    "suppress list length" 2
+    "suppress list length"
+    2
     (List.length s.Client.suppress_health_check);
   Alcotest.(check bool)
-    "first is Too_slow" true
+    "first is Too_slow"
+    true
     (Poly.( = ) (List.nth_exn s.Client.suppress_health_check 0) Client.Too_slow);
   Alcotest.(check bool)
-    "second is Filter_too_much" true
-    (Poly.( = )
-       (List.nth_exn s.Client.suppress_health_check 1)
-       Client.Filter_too_much)
+    "second is Filter_too_much"
+    true
+    (Poly.( = ) (List.nth_exn s.Client.suppress_health_check 1) Client.Filter_too_much)
+;;
 
 let test_phase_to_string () =
-  Alcotest.(check string)
-    "explicit" "explicit"
-    (Client.phase_to_string Client.Explicit);
+  Alcotest.(check string) "explicit" "explicit" (Client.phase_to_string Client.Explicit);
   Alcotest.(check string) "reuse" "reuse" (Client.phase_to_string Client.Reuse);
-  Alcotest.(check string)
-    "generate" "generate"
-    (Client.phase_to_string Client.Generate);
-  Alcotest.(check string)
-    "target" "target"
-    (Client.phase_to_string Client.Target);
-  Alcotest.(check string)
-    "shrink" "shrink"
-    (Client.phase_to_string Client.Shrink)
+  Alcotest.(check string) "generate" "generate" (Client.phase_to_string Client.Generate);
+  Alcotest.(check string) "target" "target" (Client.phase_to_string Client.Target);
+  Alcotest.(check string) "shrink" "shrink" (Client.phase_to_string Client.Shrink)
+;;
 
 let test_with_phases () =
   let s =
-    Client.default_settings ()
-    |> Client.with_phases [ Client.Generate; Client.Shrink ]
+    Client.default_settings () |> Client.with_phases [ Client.Generate; Client.Shrink ]
   in
   match s.Client.phases with
   | None -> Alcotest.fail "phases should be Some"
   | Some xs ->
-      Alcotest.(check int) "phases length" 2 (List.length xs);
-      Alcotest.(check bool)
-        "first is Generate" true
-        (Poly.( = ) (List.nth_exn xs 0) Client.Generate);
-      Alcotest.(check bool)
-        "second is Shrink" true
-        (Poly.( = ) (List.nth_exn xs 1) Client.Shrink)
+    Alcotest.(check int) "phases length" 2 (List.length xs);
+    Alcotest.(check bool)
+      "first is Generate"
+      true
+      (Poly.( = ) (List.nth_exn xs 0) Client.Generate);
+    Alcotest.(check bool)
+      "second is Shrink"
+      true
+      (Poly.( = ) (List.nth_exn xs 1) Client.Shrink)
+;;
 
 (** Test: run_test with phases set sends the phases field over the wire. *)
 let test_run_test_phases () =
   with_fake_server
     (fun peer_conn ->
-      let _ctrl, test_ch = accept_run_test peer_conn in
-      send_test_done test_ch [ (`Text "interesting_test_cases", `Int 0) ])
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_test_done test_ch [ `Text "interesting_test_cases", `Int 0 ])
     (fun client ->
-      let settings =
-        Client.default_settings () |> Client.with_test_cases 0
-        |> Client.with_phases [ Client.Generate; Client.Shrink ]
-      in
-      run_test client ~settings (fun _tc -> ()))
+       let settings =
+         Client.default_settings ()
+         |> Client.with_test_cases 0
+         |> Client.with_phases [ Client.Generate; Client.Shrink ]
+       in
+       run_test client ~settings (fun _tc -> ()))
+;;
 
 (** Test: default_settings in CI sets derandomize and disables database. *)
 let test_default_settings_in_ci () =
   with_clean_ci_env (fun () ->
-      Core_unix.putenv ~key:"CI" ~data:"true";
-      let s = Client.default_settings () in
-      Alcotest.(check bool) "derandomize in CI" true s.derandomize;
-      Alcotest.(check bool)
-        "database disabled in CI" true
-        (Poly.( = ) s.database Client.Disabled))
+    Core_unix.putenv ~key:"CI" ~data:"true";
+    let s = Client.default_settings () in
+    Alcotest.(check bool) "derandomize in CI" true s.derandomize;
+    Alcotest.(check bool)
+      "database disabled in CI"
+      true
+      (Poly.( = ) s.database Client.Disabled))
+;;
 
 (** Test: default_settings outside CI sets database to Unset. *)
 let test_default_settings_not_in_ci () =
   with_clean_ci_env (fun () ->
-      let s = Client.default_settings () in
-      Alcotest.(check bool) "derandomize not in CI" false s.derandomize;
-      Alcotest.(check bool)
-        "database is Unset" true
-        (Poly.( = ) s.database Client.Unset))
+    let s = Client.default_settings () in
+    Alcotest.(check bool) "derandomize not in CI" false s.derandomize;
+    Alcotest.(check bool) "database is Unset" true (Poly.( = ) s.database Client.Unset))
+;;
 
 (** Test: settings convenience constructor. *)
 let test_settings_convenience () =
@@ -986,6 +974,7 @@ let test_settings_convenience () =
   let s2 = Client.settings ~test_cases:10 ~seed:42 () in
   Alcotest.(check int) "test_cases" 10 s2.Client.test_cases;
   Alcotest.(check int) "seed" 42 (Option.value_exn s2.Client.seed)
+;;
 
 (** Test: with_seed builder. *)
 let test_with_seed () =
@@ -993,18 +982,21 @@ let test_with_seed () =
   Alcotest.(check int) "seed" 99 (Option.value_exn s.Client.seed);
   let s2 = Client.with_seed None s in
   Alcotest.(check bool) "seed cleared" true (Option.is_none s2.Client.seed)
+;;
 
 (** Test: run_test with database_key. *)
 let test_run_test_with_database_key () =
   with_fake_server
     (fun peer_conn ->
-      let _ctrl, test_ch = accept_run_test peer_conn in
-      send_test_done test_ch [ (`Text "interesting_test_cases", `Int 0) ])
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_test_done test_ch [ `Text "interesting_test_cases", `Int 0 ])
     (fun client ->
-      run_test client
-        ~settings:(Client.default_settings () |> Client.with_test_cases 0)
-        ~database_key:"test-key"
-        (fun _tc -> ()))
+       run_test
+         client
+         ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+         ~database_key:"test-key"
+         (fun _tc -> ()))
+;;
 
 (* ---- find_hegel ---- *)
 
@@ -1019,9 +1011,10 @@ let test_ensure_hegel_installed_cached () =
       Stdlib.Sys.chdir orig_cwd;
       let rec rm_rf path =
         let stat = Core_unix.lstat path in
-        if Poly.( = ) stat.st_kind Core_unix.S_DIR then (
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR
+        then (
           Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
-              rm_rf (Filename.concat path entry));
+            rm_rf (Filename.concat path entry));
           Core_unix.rmdir path)
         else Stdlib.Sys.remove path
       in
@@ -1034,14 +1027,15 @@ let test_ensure_hegel_installed_cached () =
       Core_unix.mkdir ~perm:0o755 ".hegel/venv/bin";
       (* Write the version file with the current version *)
       Out_channel.with_file ".hegel/venv/hegel-version" ~f:(fun oc ->
-          Out_channel.output_string oc Session.hegel_server_version);
+        Out_channel.output_string oc Session.hegel_server_version);
       (* Create a fake hegel binary *)
       Out_channel.with_file ".hegel/venv/bin/hegel" ~f:(fun oc ->
-          Out_channel.output_string oc "#!/bin/sh\nexit 0\n");
+        Out_channel.output_string oc "#!/bin/sh\nexit 0\n");
       Core_unix.chmod ".hegel/venv/bin/hegel" ~perm:0o755;
       (* Call ensure_hegel_installed - should find the cached version *)
       let path = Session.ensure_hegel_installed () in
       Alcotest.(check string) "cached path" ".hegel/venv/bin/hegel" path)
+;;
 
 (** Test: server crash detection. Start a session with a command that exits
     immediately, verify that server_exited is set on the connection. Covers line
@@ -1056,37 +1050,37 @@ let test_server_crash_detection () =
   Exn.protect
     ~finally:(fun () ->
       (match orig_cmd with
-      | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
-      | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:"");
+       | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
+       | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:"");
       Session.cleanup session)
     ~f:(fun () ->
       (* start will fail because /bin/false exits immediately *)
       let raised = ref false in
-      (try Session.start session with _ -> raised := true);
+      (try Session.start session with
+       | _ -> raised := true);
       Alcotest.(check bool) "start raised" true !raised;
       (* After the failed start, if a connection was created before the error,
          the monitor thread should have noticed the process exiting. *)
       match session.connection with
       | Some conn ->
-          (* Give the monitor thread a moment to detect the exit *)
-          Caml_unix.sleepf 0.1;
-          Alcotest.(check bool)
-            "server_exited set" true
-            (Connection.server_has_exited conn)
+        (* Give the monitor thread a moment to detect the exit *)
+        Caml_unix.sleepf 0.1;
+        Alcotest.(check bool) "server_exited set" true (Connection.server_has_exited conn)
       | None ->
-          (* Connection was never established (expected for /bin/false) *)
-          ())
+        (* Connection was never established (expected for /bin/false) *)
+        ())
+;;
 
 (** Test: is_in_ci returns false when a var with expected value has a different
     value (the v <> exp false case of line 70). Clear all CI vars so only
     TF_BUILD matters, then set it to "false". *)
 let test_is_in_ci_value_mismatch () =
   with_clean_ci_env (fun () ->
-      (* Set TF_BUILD to a non-matching value -- all other CI vars are
+    (* Set TF_BUILD to a non-matching value -- all other CI vars are
          already unset by with_clean_ci_env *)
-      Core_unix.putenv ~key:"TF_BUILD" ~data:"false";
-      Alcotest.(check bool)
-        "is_in_ci with TF_BUILD=false" false (Client.is_in_ci ()))
+    Core_unix.putenv ~key:"TF_BUILD" ~data:"false";
+    Alcotest.(check bool) "is_in_ci with TF_BUILD=false" false (Client.is_in_ci ()))
+;;
 
 (** Test: server crash detected in event loop (client.ml line 367). The test
     function raises Data_exhausted so run_test_case skips mark_complete,
@@ -1095,9 +1089,7 @@ let test_is_in_ci_value_mismatch () =
     Data_was_exhausted path, the event loop checks server_has_exited. *)
 let test_server_crash_in_event_loop () =
   let raised_msg = ref "" in
-  let s1, s2 =
-    Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-  in
+  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let client_conn = Test_helpers.make_connection s1 ~name:"Client" () in
   let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
   let t_hs = Thread.create Test_helpers.handshake_via_stream peer_conn in
@@ -1106,40 +1098,46 @@ let test_server_crash_in_event_loop () =
   let t_peer =
     Thread.create
       (fun () ->
-        let _ctrl, test_ch = accept_run_test peer_conn in
-        let data_ch_id = 2l in
-        let _data_ch = connect_stream peer_conn data_ch_id ~role:"Data" () in
-        ignore
-          (pending_get
-             (request test_ch
-                (`Map
-                   [
-                     (`Text "event", `Text "test_case");
-                     (`Text "stream_id", `Int (Int32.to_int_exn data_ch_id));
-                   ])));
-        (* After the client acknowledges the test_case event, set
+         let _ctrl, test_ch = accept_run_test peer_conn in
+         let data_ch_id = 2l in
+         let _data_ch = connect_stream peer_conn data_ch_id ~role:"Data" () in
+         ignore
+           (pending_get
+              (request
+                 test_ch
+                 (`Map
+                     [ `Text "event", `Text "test_case"
+                     ; `Text "stream_id", `Int (Int32.to_int_exn data_ch_id)
+                     ])));
+         (* After the client acknowledges the test_case event, set
            server_exited. The test_fn raises Data_exhausted so
            run_test_case skips mark_complete — no request/response race
            with pop_inbox_item's server_exited check. *)
-        client_conn.server_exited <- true;
-        Caml_unix.sleepf 0.5)
+         client_conn.server_exited <- true;
+         Caml_unix.sleepf 0.5)
       ()
   in
   (try
-     run_test client
+     run_test
+       client
        ~settings:(Client.default_settings () |> Client.with_test_cases 1)
        (fun _tc ->
-         (* Sleep briefly to release the runtime lock, giving the peer
+          (* Sleep briefly to release the runtime lock, giving the peer
             thread time to set server_exited before we return. *)
-         Caml_unix.sleepf 0.05;
-         raise Data_exhausted)
-   with Failure msg -> raised_msg := msg);
+          Caml_unix.sleepf 0.05;
+          raise Data_exhausted)
+   with
+   | Failure msg -> raised_msg := msg);
   Thread.join t_peer;
   Alcotest.(check bool)
-    "raised server crashed" true
+    "raised server crashed"
+    true
     (contains_substring !raised_msg "hegel server process has exited");
-  (try close client_conn with _ -> ());
-  try close peer_conn with _ -> ()
+  (try close client_conn with
+   | _ -> ());
+  try close peer_conn with
+  | _ -> ()
+;;
 
 (** Test: send error reply to non-existent stream fails silently (connection.ml
     line 217). Create a connection using pipes so we can close the write_fd
@@ -1154,23 +1152,18 @@ let test_send_error_reply_fails_silently () =
   Core_unix.close client_write_fd;
   (* Create the client connection with the broken write fd.
      We need a valid write fd for the connection constructor, so use /dev/null *)
-  let devnull =
-    Core_unix.openfile "/dev/null" ~mode:[ Core_unix.O_WRONLY ] ~perm:0o644
-  in
-  let conn =
-    Connection.create_connection ~read_fd:client_read_fd ~write_fd:devnull ()
-  in
+  let devnull = Core_unix.openfile "/dev/null" ~mode:[ Core_unix.O_WRONLY ] ~perm:0o644 in
+  let conn = Connection.create_connection ~read_fd:client_read_fd ~write_fd:devnull () in
   (* Close the devnull fd so writes will fail *)
   Core_unix.close devnull;
   (* From the peer side, send a non-reply packet to stream 99 (non-existent).
      The background reader will try to send an error reply, which will fail
      because devnull is closed. *)
   let pkt =
-    {
-      Protocol.stream_id = 99l;
-      message_id = 1l;
-      is_reply = false;
-      payload = Cbor.Simple.encode (`Map [ (`Text "command", `Text "hello") ]);
+    { Protocol.stream_id = 99l
+    ; message_id = 1l
+    ; is_reply = false
+    ; payload = Cbor.Simple.encode (`Map [ `Text "command", `Text "hello" ])
     }
   in
   Protocol.write_packet peer_write_fd pkt;
@@ -1179,38 +1172,43 @@ let test_send_error_reply_fails_silently () =
   (* Clean up *)
   close conn;
   Core_unix.close peer_write_fd;
-  try Core_unix.close peer_read_fd with Core_unix.Unix_error _ -> ()
+  try Core_unix.close peer_read_fd with
+  | Core_unix.Unix_error _ -> ()
+;;
 
 (** Test: run_command_to_log runs a command and redirects output to a log file.
 *)
 let test_run_command_to_log () =
   let log_path = Stdlib.Filename.temp_file "hegel_test_cmd" ".log" in
   Exn.protect
-    ~finally:(fun () -> try Stdlib.Sys.remove log_path with _ -> ())
+    ~finally:(fun () ->
+      try Stdlib.Sys.remove log_path with
+      | _ -> ())
     ~f:(fun () ->
       let echo_cmd = find_cmd "echo" in
-      let status =
-        Session.run_command_to_log echo_cmd [ "hello world" ] log_path
-      in
-      Alcotest.(check bool)
-        "exit 0" true
-        (Poly.( = ) status (Caml_unix.WEXITED 0));
+      let status = Session.run_command_to_log echo_cmd [ "hello world" ] log_path in
+      Alcotest.(check bool) "exit 0" true (Poly.( = ) status (Caml_unix.WEXITED 0));
       let contents = In_channel.read_all log_path in
-      Alcotest.(check bool)
-        "has output" true
-        (contains_substring contents "hello world"))
+      Alcotest.(check bool) "has output" true (contains_substring contents "hello world"))
+;;
 
 (** Test: run_command_to_log with a failing command. *)
 let test_run_command_to_log_fail () =
   let log_path = Stdlib.Filename.temp_file "hegel_test_cmd" ".log" in
   Exn.protect
-    ~finally:(fun () -> try Stdlib.Sys.remove log_path with _ -> ())
+    ~finally:(fun () ->
+      try Stdlib.Sys.remove log_path with
+      | _ -> ())
     ~f:(fun () ->
       let false_cmd = find_cmd "false" in
       let status = Session.run_command_to_log false_cmd [] log_path in
       Alcotest.(check bool)
-        "non-zero exit" true
-        (match status with Caml_unix.WEXITED 0 -> false | _ -> true))
+        "non-zero exit"
+        true
+        (match status with
+         | Caml_unix.WEXITED 0 -> false
+         | _ -> true))
+;;
 
 (** Test: ensure_hegel_installed version mismatch triggers reinstall. Create a
     cached venv with wrong version; since uv is available it will try to
@@ -1224,9 +1222,10 @@ let test_ensure_hegel_installed_version_mismatch () =
       Stdlib.Sys.chdir orig_cwd;
       let rec rm_rf path =
         let stat = Core_unix.lstat path in
-        if Poly.( = ) stat.st_kind Core_unix.S_DIR then (
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR
+        then (
           Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
-              rm_rf (Filename.concat path entry));
+            rm_rf (Filename.concat path entry));
           Core_unix.rmdir path)
         else Stdlib.Sys.remove path
       in
@@ -1238,9 +1237,9 @@ let test_ensure_hegel_installed_version_mismatch () =
       Core_unix.mkdir ~perm:0o755 ".hegel/venv";
       Core_unix.mkdir ~perm:0o755 ".hegel/venv/bin";
       Out_channel.with_file ".hegel/venv/hegel-version" ~f:(fun oc ->
-          Out_channel.output_string oc "0.0.0-wrong");
+        Out_channel.output_string oc "0.0.0-wrong");
       Out_channel.with_file ".hegel/venv/bin/hegel" ~f:(fun oc ->
-          Out_channel.output_string oc "#!/bin/sh\nexit 0\n");
+        Out_channel.output_string oc "#!/bin/sh\nexit 0\n");
       Core_unix.chmod ".hegel/venv/bin/hegel" ~perm:0o755;
       (* Call ensure_hegel_installed - version won't match, so it will try
          to reinstall via uv. This will fail (wrong package version or
@@ -1249,12 +1248,14 @@ let test_ensure_hegel_installed_version_mismatch () =
         try
           let path = Session.ensure_hegel_installed () in
           Some path
-        with _ -> None
+        with
+        | _ -> None
       in
       (* We don't assert on the result because it depends on whether uv
          can actually install. The important thing is the version mismatch
          path was exercised. *)
       ())
+;;
 
 (** Test: ensure_hegel_installed when uv is not found (ENOENT path). Temporarily
     set PATH to empty so uv can't be found, and ensure no cached version exists.
@@ -1267,13 +1268,14 @@ let test_ensure_hegel_installed_uv_not_found () =
     ~finally:(fun () ->
       Stdlib.Sys.chdir orig_cwd;
       (match orig_path with
-      | Some p -> Core_unix.putenv ~key:"PATH" ~data:p
-      | None -> Core_unix.putenv ~key:"PATH" ~data:"");
+       | Some p -> Core_unix.putenv ~key:"PATH" ~data:p
+       | None -> Core_unix.putenv ~key:"PATH" ~data:"");
       let rec rm_rf path =
         let stat = Core_unix.lstat path in
-        if Poly.( = ) stat.st_kind Core_unix.S_DIR then (
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR
+        then (
           Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
-              rm_rf (Filename.concat path entry));
+            rm_rf (Filename.concat path entry));
           Core_unix.rmdir path)
         else Stdlib.Sys.remove path
       in
@@ -1283,11 +1285,13 @@ let test_ensure_hegel_installed_uv_not_found () =
       (* Set PATH to empty so uv won't be found *)
       Core_unix.putenv ~key:"PATH" ~data:"";
       let raised_msg = ref "" in
-      (try ignore (Session.ensure_hegel_installed ())
-       with Failure msg -> raised_msg := msg);
+      (try ignore (Session.ensure_hegel_installed ()) with
+       | Failure msg -> raised_msg := msg);
       Alcotest.(check bool)
-        "raised uv not found" true
+        "raised uv not found"
+        true
         (contains_substring !raised_msg "uv"))
+;;
 
 (** Helper: create a fake uv script in a directory. The script handles "venv"
     and "pip" subcommands with configurable exit codes. [work_dir] is the
@@ -1296,30 +1300,34 @@ let create_fake_uv dir ~venv_exit ~pip_exit ~work_dir ?(delete_log = false) () =
   let uv_path = Filename.concat dir "uv" in
   let hegel_bin = Printf.sprintf "%s/.hegel/venv/bin/hegel" work_dir in
   let install_log = Printf.sprintf "%s/.hegel/install.log" work_dir in
-  let rm_log =
-    if delete_log then Printf.sprintf "rm -f \"%s\"\n" install_log else ""
-  in
+  let rm_log = if delete_log then Printf.sprintf "rm -f \"%s\"\n" install_log else "" in
   Out_channel.with_file uv_path ~f:(fun oc ->
-      Printf.fprintf oc
-        "#!/bin/sh\n\
-         case \"$1\" in\n\
-         venv)\n\
-         mkdir -p \"$3/bin\"\n\
-         touch \"$3/bin/python\"\n\
-         %sexit %d\n\
-         ;;\n\
-         pip)\n\
-         mkdir -p \"%s\"\n\
-         printf '#!/bin/sh\\nexit 0\\n' > \"%s\"\n\
-         chmod +x \"%s\"\n\
-         %sexit %d\n\
-         ;;\n\
-         esac\n\
-         exit 1\n"
-        rm_log venv_exit
-        (Filename.dirname hegel_bin)
-        hegel_bin hegel_bin rm_log pip_exit);
+    Printf.fprintf
+      oc
+      "#!/bin/sh\n\
+       case \"$1\" in\n\
+       venv)\n\
+       mkdir -p \"$3/bin\"\n\
+       touch \"$3/bin/python\"\n\
+       %sexit %d\n\
+       ;;\n\
+       pip)\n\
+       mkdir -p \"%s\"\n\
+       printf '#!/bin/sh\\nexit 0\\n' > \"%s\"\n\
+       chmod +x \"%s\"\n\
+       %sexit %d\n\
+       ;;\n\
+       esac\n\
+       exit 1\n"
+      rm_log
+      venv_exit
+      (Filename.dirname hegel_bin)
+      hegel_bin
+      hegel_bin
+      rm_log
+      pip_exit);
   Core_unix.chmod uv_path ~perm:0o755
+;;
 
 (** Helper: run ensure_hegel_installed in a temp dir with a fake uv. *)
 let with_fake_uv_env ~venv_exit ~pip_exit ?(delete_log = false) f =
@@ -1335,68 +1343,79 @@ let with_fake_uv_env ~venv_exit ~pip_exit ?(delete_log = false) f =
     ~finally:(fun () ->
       Stdlib.Sys.chdir orig_cwd;
       (match orig_path with
-      | Some p -> Core_unix.putenv ~key:"PATH" ~data:p
-      | None -> Core_unix.putenv ~key:"PATH" ~data:"");
+       | Some p -> Core_unix.putenv ~key:"PATH" ~data:p
+       | None -> Core_unix.putenv ~key:"PATH" ~data:"");
       let rec rm_rf path =
         let stat = Core_unix.lstat path in
-        if Poly.( = ) stat.st_kind Core_unix.S_DIR then (
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR
+        then (
           Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
-              rm_rf (Filename.concat path entry));
+            rm_rf (Filename.concat path entry));
           Core_unix.rmdir path)
         else Stdlib.Sys.remove path
       in
-      try rm_rf tmp_dir with _ -> ())
+      try rm_rf tmp_dir with
+      | _ -> ())
     ~f:(fun () ->
       Stdlib.Sys.chdir work_dir;
-      Core_unix.putenv ~key:"PATH"
-        ~data:(Printf.sprintf "%s:/bin:/usr/bin" fake_bin_dir);
+      Core_unix.putenv ~key:"PATH" ~data:(Printf.sprintf "%s:/bin:/usr/bin" fake_bin_dir);
       f ())
+;;
 
 (** Test: ensure_hegel_installed success path with fake uv. *)
 let test_ensure_installed_success () =
   with_fake_uv_env ~venv_exit:0 ~pip_exit:0 (fun () ->
-      let path = Session.ensure_hegel_installed () in
-      Alcotest.(check bool) "returns path" true (String.length path > 0))
+    let path = Session.ensure_hegel_installed () in
+    Alcotest.(check bool) "returns path" true (String.length path > 0))
+;;
 
 (** Test: ensure_hegel_installed when uv venv fails with log deleted. *)
 let test_ensure_installed_venv_fails () =
   with_fake_uv_env ~venv_exit:1 ~pip_exit:0 ~delete_log:true (fun () ->
-      let raised_msg = ref "" in
-      (try ignore (Session.ensure_hegel_installed ())
-       with Failure msg -> raised_msg := msg);
-      Alcotest.(check bool)
-        "uv venv failed" true
-        (contains_substring !raised_msg "uv venv failed"))
+    let raised_msg = ref "" in
+    (try ignore (Session.ensure_hegel_installed ()) with
+     | Failure msg -> raised_msg := msg);
+    Alcotest.(check bool)
+      "uv venv failed"
+      true
+      (contains_substring !raised_msg "uv venv failed"))
+;;
 
 (** Test: ensure_hegel_installed when uv venv fails with log readable. *)
 let test_ensure_installed_venv_fails_with_log () =
   with_fake_uv_env ~venv_exit:1 ~pip_exit:0 (fun () ->
-      let raised_msg = ref "" in
-      (try ignore (Session.ensure_hegel_installed ())
-       with Failure msg -> raised_msg := msg);
-      Alcotest.(check bool)
-        "uv venv failed" true
-        (contains_substring !raised_msg "uv venv failed"))
+    let raised_msg = ref "" in
+    (try ignore (Session.ensure_hegel_installed ()) with
+     | Failure msg -> raised_msg := msg);
+    Alcotest.(check bool)
+      "uv venv failed"
+      true
+      (contains_substring !raised_msg "uv venv failed"))
+;;
 
 (** Test: ensure_hegel_installed when uv pip install fails. *)
 let test_ensure_installed_pip_fails () =
   with_fake_uv_env ~venv_exit:0 ~pip_exit:1 (fun () ->
-      let raised_msg = ref "" in
-      (try ignore (Session.ensure_hegel_installed ())
-       with Failure msg -> raised_msg := msg);
-      Alcotest.(check bool)
-        "pip install failed" true
-        (contains_substring !raised_msg "Failed to install"))
+    let raised_msg = ref "" in
+    (try ignore (Session.ensure_hegel_installed ()) with
+     | Failure msg -> raised_msg := msg);
+    Alcotest.(check bool)
+      "pip install failed"
+      true
+      (contains_substring !raised_msg "Failed to install"))
+;;
 
 (** Test: ensure_hegel_installed pip fails with unreadable log. *)
 let test_ensure_installed_pip_fails_no_log () =
   with_fake_uv_env ~venv_exit:0 ~pip_exit:1 ~delete_log:true (fun () ->
-      let raised_msg = ref "" in
-      (try ignore (Session.ensure_hegel_installed ())
-       with Failure msg -> raised_msg := msg);
-      Alcotest.(check bool)
-        "pip install failed" true
-        (contains_substring !raised_msg "Failed to install"))
+    let raised_msg = ref "" in
+    (try ignore (Session.ensure_hegel_installed ()) with
+     | Failure msg -> raised_msg := msg);
+    Alcotest.(check bool)
+      "pip install failed"
+      true
+      (contains_substring !raised_msg "Failed to install"))
+;;
 
 (** Test: ensure_hegel_installed when hegel binary not found after install. *)
 let test_ensure_installed_binary_missing () =
@@ -1408,59 +1427,64 @@ let test_ensure_installed_binary_missing () =
   (* Create a fake uv that succeeds but does NOT create the hegel binary *)
   let uv_path = Filename.concat fake_bin_dir "uv" in
   Out_channel.with_file uv_path ~f:(fun oc ->
-      Out_channel.output_string oc
-        "#!/bin/sh\n\
-         if [ \"$1\" = \"venv\" ]; then\n\
-        \  mkdir -p \"$3/bin\"\n\
-        \  touch \"$3/bin/python\"\n\
-        \  exit 0\n\
-         fi\n\
-         if [ \"$1\" = \"pip\" ]; then\n\
-        \  exit 0\n\
-         fi\n\
-         exit 1\n");
+    Out_channel.output_string
+      oc
+      "#!/bin/sh\n\
+       if [ \"$1\" = \"venv\" ]; then\n\
+      \  mkdir -p \"$3/bin\"\n\
+      \  touch \"$3/bin/python\"\n\
+      \  exit 0\n\
+       fi\n\
+       if [ \"$1\" = \"pip\" ]; then\n\
+      \  exit 0\n\
+       fi\n\
+       exit 1\n");
   Core_unix.chmod uv_path ~perm:0o755;
   Exn.protect
     ~finally:(fun () ->
       Stdlib.Sys.chdir orig_cwd;
       (match orig_path with
-      | Some p -> Core_unix.putenv ~key:"PATH" ~data:p
-      | None -> Core_unix.putenv ~key:"PATH" ~data:"");
+       | Some p -> Core_unix.putenv ~key:"PATH" ~data:p
+       | None -> Core_unix.putenv ~key:"PATH" ~data:"");
       let rec rm_rf path =
         let stat = Core_unix.lstat path in
-        if Poly.( = ) stat.st_kind Core_unix.S_DIR then (
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR
+        then (
           Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
-              rm_rf (Filename.concat path entry));
+            rm_rf (Filename.concat path entry));
           Core_unix.rmdir path)
         else Stdlib.Sys.remove path
       in
-      try rm_rf tmp_dir with _ -> ())
+      try rm_rf tmp_dir with
+      | _ -> ())
     ~f:(fun () ->
       let work_dir = Filename.concat tmp_dir "work" in
       Core_unix.mkdir ~perm:0o755 work_dir;
       Stdlib.Sys.chdir work_dir;
-      Core_unix.putenv ~key:"PATH"
-        ~data:(Printf.sprintf "%s:/bin:/usr/bin" fake_bin_dir);
+      Core_unix.putenv ~key:"PATH" ~data:(Printf.sprintf "%s:/bin:/usr/bin" fake_bin_dir);
       let raised_msg = ref "" in
-      (try ignore (Session.ensure_hegel_installed ())
-       with Failure msg -> raised_msg := msg);
+      (try ignore (Session.ensure_hegel_installed ()) with
+       | Failure msg -> raised_msg := msg);
       Alcotest.(check bool)
-        "binary not found" true
+        "binary not found"
+        true
         (contains_substring !raised_msg "not found"))
+;;
 
 (** Test: find_hegel fallthrough to ensure_hegel_installed. *)
 let test_find_hegel_fallthrough_to_install () =
   with_fake_uv_env ~venv_exit:0 ~pip_exit:0 (fun () ->
-      let orig_cmd = Sys.getenv "HEGEL_SERVER_COMMAND" in
-      Test_helpers.unsetenv "HEGEL_SERVER_COMMAND";
-      Exn.protect
-        ~finally:(fun () ->
-          match orig_cmd with
-          | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
-          | None -> Test_helpers.unsetenv "HEGEL_SERVER_COMMAND")
-        ~f:(fun () ->
-          let path = Session.find_hegel () in
-          Alcotest.(check bool) "found hegel" true (String.length path > 0)))
+    let orig_cmd = Sys.getenv "HEGEL_SERVER_COMMAND" in
+    Test_helpers.unsetenv "HEGEL_SERVER_COMMAND";
+    Exn.protect
+      ~finally:(fun () ->
+        match orig_cmd with
+        | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
+        | None -> Test_helpers.unsetenv "HEGEL_SERVER_COMMAND")
+      ~f:(fun () ->
+        let path = Session.find_hegel () in
+        Alcotest.(check bool) "found hegel" true (String.length path > 0)))
+;;
 
 let test_find_hegel_auto_install () =
   let orig_cmd = Sys.getenv "HEGEL_SERVER_COMMAND" in
@@ -1470,6 +1494,7 @@ let test_find_hegel_auto_install () =
   match orig_cmd with
   | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
   | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:""
+;;
 
 (** Test: session start creates .hegel dir for server log when it doesn't exist.
     Covers the mkdir success path in server_log_fd (session.ml). *)
@@ -1481,33 +1506,33 @@ let test_session_start_creates_hegel_dir () =
     ~finally:(fun () ->
       Stdlib.Sys.chdir orig_cwd;
       (match orig_cmd with
-      | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
-      | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:"");
+       | Some v -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:v
+       | None -> Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:"");
       let rec rm_rf path =
         let stat = Core_unix.lstat path in
-        if Poly.( = ) stat.st_kind Core_unix.S_DIR then (
+        if Poly.( = ) stat.st_kind Core_unix.S_DIR
+        then (
           Array.iter (Stdlib.Sys.readdir path) ~f:(fun entry ->
-              rm_rf (Filename.concat path entry));
+            rm_rf (Filename.concat path entry));
           Core_unix.rmdir path)
         else Stdlib.Sys.remove path
       in
-      try rm_rf tmp_dir with _ -> ())
+      try rm_rf tmp_dir with
+      | _ -> ())
     ~f:(fun () ->
       Stdlib.Sys.chdir tmp_dir;
       Core_unix.putenv ~key:"HEGEL_SERVER_COMMAND" ~data:"/bin/false";
       let session : Session.hegel_session =
-        {
-          process = None;
-          connection = None;
-          client = None;
-          lock = Mutex.create ();
-        }
+        { process = None; connection = None; client = None; lock = Mutex.create () }
       in
-      (try Session.start session with _ -> ());
+      (try Session.start session with
+       | _ -> ());
       Session.cleanup session;
       Alcotest.(check bool)
-        ".hegel dir created" true
+        ".hegel dir created"
+        true
         (Stdlib.Sys.file_exists ".hegel" && Stdlib.Sys.is_directory ".hegel"))
+;;
 
 (* ---- Session lifecycle ---- *)
 
@@ -1516,148 +1541,179 @@ let test_session_cleanup () =
     { process = None; connection = None; client = None; lock = Mutex.create () }
   in
   Session.cleanup session
+;;
 
 let test_session_start_and_run () =
   Session.run_hegel_test ~settings:(Client.settings ~test_cases:3 ()) (fun tc ->
-      let v =
-        generate_from_schema (`Map [ (`Text "type", `Text "boolean") ]) tc
-      in
-      ignore (Cbor_helpers.extract_bool v))
+    let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
+    ignore (Cbor_helpers.extract_bool v : bool))
+;;
 
 let tests =
-  [
-    (* Unit tests *)
-    Alcotest.test_case "assume true" `Quick test_assume_true;
-    Alcotest.test_case "assume false raises" `Quick test_assume_false_raises;
-    Alcotest.test_case "note when not final" `Quick test_note_when_not_final;
-    Alcotest.test_case "note when final" `Quick test_note_when_final;
-    Alcotest.test_case "extract_origin no backtrace" `Quick
-      test_extract_origin_no_backtrace;
-    Alcotest.test_case "extract_origin with backtrace" `Quick
-      test_extract_origin_with_backtrace;
-    Alcotest.test_case "start/stop span when aborted" `Quick
-      test_start_span_when_aborted;
-    Alcotest.test_case "nested test raises" `Quick test_nested_test_raises;
-    Alcotest.test_case "health_check_to_string" `Quick
-      test_health_check_to_string;
-    Alcotest.test_case "is_in_ci Some _, None branch" `Quick
-      test_is_in_ci_some_none_branch;
-    Alcotest.test_case "is_in_ci Some v, Some exp branch" `Quick
-      test_is_in_ci_some_v_some_exp_branch;
-    Alcotest.test_case "is_in_ci value mismatch (false)" `Quick
-      test_is_in_ci_value_mismatch;
-    Alcotest.test_case "with_verbosity" `Quick test_with_verbosity;
-    Alcotest.test_case "with_derandomize" `Quick test_with_derandomize;
-    Alcotest.test_case "with_database" `Quick test_with_database;
-    Alcotest.test_case "with_suppress_health_check" `Quick
-      test_with_suppress_health_check;
-    Alcotest.test_case "phase_to_string" `Quick test_phase_to_string;
-    Alcotest.test_case "with_phases" `Quick test_with_phases;
-    Alcotest.test_case "run_test with phases" `Quick test_run_test_phases;
-    Alcotest.test_case "default_settings in CI" `Quick
-      test_default_settings_in_ci;
-    Alcotest.test_case "default_settings not in CI" `Quick
-      test_default_settings_not_in_ci;
-    Alcotest.test_case "settings convenience" `Quick test_settings_convenience;
-    Alcotest.test_case "with_seed" `Quick test_with_seed;
-    Alcotest.test_case "run_test with database_key" `Quick
-      test_run_test_with_database_key;
-    (* Real-server converted tests *)
-    Alcotest.test_case "start/stop span live" `Quick test_start_stop_span_live;
-    Alcotest.test_case "version mismatch" `Quick test_version_mismatch;
-    Alcotest.test_case "version mismatch low" `Quick test_version_mismatch_low;
-    Alcotest.test_case "version mismatch bad format" `Quick
-      test_version_mismatch_bad_format;
-    Alcotest.test_case "run_test with seed" `Quick test_run_test_with_seed;
-    Alcotest.test_case "multiple interesting" `Quick test_multiple_interesting;
-    Alcotest.test_case "unrecognised event" `Quick test_unrecognised_event;
-    Alcotest.test_case "run_test database path + suppress" `Quick
-      test_run_test_database_path_and_suppress;
-    Alcotest.test_case "run_test database unset" `Quick
-      test_run_test_database_unset;
-    Alcotest.test_case "run_test server error in results" `Quick
-      test_run_test_server_error_in_results;
-    Alcotest.test_case "run_test health check failure" `Quick
-      test_run_test_health_check_failure;
-    Alcotest.test_case "run_test flaky" `Quick test_run_test_flaky;
-    Alcotest.test_case "run_test passed=false" `Quick test_run_test_passed_false;
-    Alcotest.test_case "server_exited in pop_inbox" `Quick
-      test_server_exited_in_pop_inbox;
-    Alcotest.test_case "server crash in event loop" `Quick
-      test_server_crash_in_event_loop;
-    Alcotest.test_case "send error reply fails silently" `Quick
-      test_send_error_reply_fails_silently;
-    (* find_hegel *)
-    Alcotest.test_case "find_hegel via env" `Quick test_find_hegel_via_env;
-    Alcotest.test_case "ensure_hegel_installed cached" `Quick
-      test_ensure_hegel_installed_cached;
-    Alcotest.test_case "ensure_hegel_installed version mismatch" `Quick
-      test_ensure_hegel_installed_version_mismatch;
-    Alcotest.test_case "ensure_hegel_installed uv not found" `Quick
-      test_ensure_hegel_installed_uv_not_found;
-    Alcotest.test_case "ensure_installed success" `Quick
-      test_ensure_installed_success;
-    Alcotest.test_case "ensure_installed venv fails" `Quick
-      test_ensure_installed_venv_fails;
-    Alcotest.test_case "ensure_installed venv fails with log" `Quick
-      test_ensure_installed_venv_fails_with_log;
-    Alcotest.test_case "ensure_installed pip fails" `Quick
-      test_ensure_installed_pip_fails;
-    Alcotest.test_case "ensure_installed pip fails no log" `Quick
-      test_ensure_installed_pip_fails_no_log;
-    Alcotest.test_case "ensure_installed binary missing" `Quick
-      test_ensure_installed_binary_missing;
-    Alcotest.test_case "find_hegel fallthrough to install" `Quick
-      test_find_hegel_fallthrough_to_install;
-    Alcotest.test_case "run_command_to_log" `Quick test_run_command_to_log;
-    Alcotest.test_case "run_command_to_log fail" `Quick
-      test_run_command_to_log_fail;
-    Alcotest.test_case "server crash detection" `Quick
-      test_server_crash_detection;
-    Alcotest.test_case "find_hegel auto install" `Quick
-      test_find_hegel_auto_install;
-    Alcotest.test_case "start creates .hegel dir" `Quick
-      test_session_start_creates_hegel_dir;
-    (* Session *)
-    Alcotest.test_case "session cleanup" `Quick test_session_cleanup;
-    Alcotest.test_case "session cleanup with resources" `Quick
-      test_session_cleanup_with_resources;
-    Alcotest.test_case "session cleanup closed conn" `Quick
-      test_session_cleanup_closed_conn;
-    Alcotest.test_case "session cleanup with process" `Quick
-      test_session_cleanup_with_process;
-    Alcotest.test_case "session cleanup dead process" `Quick
-      test_session_cleanup_dead_process;
-    Alcotest.test_case "has working client live" `Quick
-      test_has_working_client_live;
-    Alcotest.test_case "session not started" `Quick test_session_not_started;
-    Alcotest.test_case "session start failure" `Quick test_session_start_failure;
-    Alcotest.test_case "monitor thread detects crash" `Quick
-      test_monitor_thread_detects_crash;
-    Alcotest.test_case "cleanup with close error" `Quick
-      test_cleanup_with_close_error;
-    (* E2E tests with real hegel *)
-    Alcotest.test_case "simple passing test" `Quick test_simple_passing_test;
-    Alcotest.test_case "simple failing test" `Quick test_simple_failing_test;
-    Alcotest.test_case "single test case" `Quick test_single_test_case;
-    Alcotest.test_case "assume true e2e" `Quick test_assume_true_e2e;
-    Alcotest.test_case "assume false e2e" `Quick test_assume_false_e2e;
-    Alcotest.test_case "note not final e2e" `Quick test_note_not_final_e2e;
-    Alcotest.test_case "target e2e" `Quick test_target_e2e;
-    Alcotest.test_case "flaky strategy" `Quick test_flaky_strategy;
-    Alcotest.test_case "mark_complete VALID" `Quick test_mark_complete_valid;
-    Alcotest.test_case "mark_complete INVALID" `Quick test_mark_complete_invalid;
-    Alcotest.test_case "mark_complete INTERESTING" `Quick
-      test_mark_complete_interesting;
-    Alcotest.test_case "session start and run" `Quick test_session_start_and_run;
-    Alcotest.test_case "run_hegel_test defaults" `Quick
-      test_run_hegel_test_defaults;
-    Alcotest.test_case "run_hegel_test with settings" `Quick
-      test_run_hegel_test_with_settings;
-    (* HEGEL_PROTOCOL_TEST_MODE error injection - these restart the session *)
-    Alcotest.test_case "stop test on generate" `Quick test_stop_test_on_generate;
-    Alcotest.test_case "stop test on mark complete" `Quick
-      test_stop_test_on_mark_complete;
-    Alcotest.test_case "error response" `Quick test_error_response;
-    Alcotest.test_case "empty test" `Quick test_empty_test;
+  [ (* Unit tests *)
+    Alcotest.test_case "assume true" `Quick test_assume_true
+  ; Alcotest.test_case "assume false raises" `Quick test_assume_false_raises
+  ; Alcotest.test_case "note when not final" `Quick test_note_when_not_final
+  ; Alcotest.test_case "note when final" `Quick test_note_when_final
+  ; Alcotest.test_case
+      "extract_origin no backtrace"
+      `Quick
+      test_extract_origin_no_backtrace
+  ; Alcotest.test_case
+      "extract_origin with backtrace"
+      `Quick
+      test_extract_origin_with_backtrace
+  ; Alcotest.test_case "start/stop span when aborted" `Quick test_start_span_when_aborted
+  ; Alcotest.test_case "nested test raises" `Quick test_nested_test_raises
+  ; Alcotest.test_case "health_check_to_string" `Quick test_health_check_to_string
+  ; Alcotest.test_case
+      "is_in_ci Some _, None branch"
+      `Quick
+      test_is_in_ci_some_none_branch
+  ; Alcotest.test_case
+      "is_in_ci Some v, Some exp branch"
+      `Quick
+      test_is_in_ci_some_v_some_exp_branch
+  ; Alcotest.test_case
+      "is_in_ci value mismatch (false)"
+      `Quick
+      test_is_in_ci_value_mismatch
+  ; Alcotest.test_case "with_verbosity" `Quick test_with_verbosity
+  ; Alcotest.test_case "with_derandomize" `Quick test_with_derandomize
+  ; Alcotest.test_case "with_database" `Quick test_with_database
+  ; Alcotest.test_case "with_suppress_health_check" `Quick test_with_suppress_health_check
+  ; Alcotest.test_case "phase_to_string" `Quick test_phase_to_string
+  ; Alcotest.test_case "with_phases" `Quick test_with_phases
+  ; Alcotest.test_case "run_test with phases" `Quick test_run_test_phases
+  ; Alcotest.test_case "default_settings in CI" `Quick test_default_settings_in_ci
+  ; Alcotest.test_case "default_settings not in CI" `Quick test_default_settings_not_in_ci
+  ; Alcotest.test_case "settings convenience" `Quick test_settings_convenience
+  ; Alcotest.test_case "with_seed" `Quick test_with_seed
+  ; Alcotest.test_case "run_test with database_key" `Quick test_run_test_with_database_key
+  ; (* Real-server converted tests *)
+    Alcotest.test_case "start/stop span live" `Quick test_start_stop_span_live
+  ; Alcotest.test_case "version mismatch" `Quick test_version_mismatch
+  ; Alcotest.test_case "version mismatch low" `Quick test_version_mismatch_low
+  ; Alcotest.test_case
+      "version mismatch bad format"
+      `Quick
+      test_version_mismatch_bad_format
+  ; Alcotest.test_case "run_test with seed" `Quick test_run_test_with_seed
+  ; Alcotest.test_case "multiple interesting" `Quick test_multiple_interesting
+  ; Alcotest.test_case "unrecognised event" `Quick test_unrecognised_event
+  ; Alcotest.test_case
+      "run_test database path + suppress"
+      `Quick
+      test_run_test_database_path_and_suppress
+  ; Alcotest.test_case "run_test database unset" `Quick test_run_test_database_unset
+  ; Alcotest.test_case
+      "run_test server error in results"
+      `Quick
+      test_run_test_server_error_in_results
+  ; Alcotest.test_case
+      "run_test health check failure"
+      `Quick
+      test_run_test_health_check_failure
+  ; Alcotest.test_case "run_test flaky" `Quick test_run_test_flaky
+  ; Alcotest.test_case "run_test passed=false" `Quick test_run_test_passed_false
+  ; Alcotest.test_case "server_exited in pop_inbox" `Quick test_server_exited_in_pop_inbox
+  ; Alcotest.test_case "server crash in event loop" `Quick test_server_crash_in_event_loop
+  ; Alcotest.test_case
+      "send error reply fails silently"
+      `Quick
+      test_send_error_reply_fails_silently
+  ; (* find_hegel *)
+    Alcotest.test_case "find_hegel via env" `Quick test_find_hegel_via_env
+  ; Alcotest.test_case
+      "ensure_hegel_installed cached"
+      `Quick
+      test_ensure_hegel_installed_cached
+  ; Alcotest.test_case
+      "ensure_hegel_installed version mismatch"
+      `Quick
+      test_ensure_hegel_installed_version_mismatch
+  ; Alcotest.test_case
+      "ensure_hegel_installed uv not found"
+      `Quick
+      test_ensure_hegel_installed_uv_not_found
+  ; Alcotest.test_case "ensure_installed success" `Quick test_ensure_installed_success
+  ; Alcotest.test_case
+      "ensure_installed venv fails"
+      `Quick
+      test_ensure_installed_venv_fails
+  ; Alcotest.test_case
+      "ensure_installed venv fails with log"
+      `Quick
+      test_ensure_installed_venv_fails_with_log
+  ; Alcotest.test_case "ensure_installed pip fails" `Quick test_ensure_installed_pip_fails
+  ; Alcotest.test_case
+      "ensure_installed pip fails no log"
+      `Quick
+      test_ensure_installed_pip_fails_no_log
+  ; Alcotest.test_case
+      "ensure_installed binary missing"
+      `Quick
+      test_ensure_installed_binary_missing
+  ; Alcotest.test_case
+      "find_hegel fallthrough to install"
+      `Quick
+      test_find_hegel_fallthrough_to_install
+  ; Alcotest.test_case "run_command_to_log" `Quick test_run_command_to_log
+  ; Alcotest.test_case "run_command_to_log fail" `Quick test_run_command_to_log_fail
+  ; Alcotest.test_case "server crash detection" `Quick test_server_crash_detection
+  ; Alcotest.test_case "find_hegel auto install" `Quick test_find_hegel_auto_install
+  ; Alcotest.test_case
+      "start creates .hegel dir"
+      `Quick
+      test_session_start_creates_hegel_dir
+  ; (* Session *)
+    Alcotest.test_case "session cleanup" `Quick test_session_cleanup
+  ; Alcotest.test_case
+      "session cleanup with resources"
+      `Quick
+      test_session_cleanup_with_resources
+  ; Alcotest.test_case
+      "session cleanup closed conn"
+      `Quick
+      test_session_cleanup_closed_conn
+  ; Alcotest.test_case
+      "session cleanup with process"
+      `Quick
+      test_session_cleanup_with_process
+  ; Alcotest.test_case
+      "session cleanup dead process"
+      `Quick
+      test_session_cleanup_dead_process
+  ; Alcotest.test_case "has working client live" `Quick test_has_working_client_live
+  ; Alcotest.test_case "session not started" `Quick test_session_not_started
+  ; Alcotest.test_case "session start failure" `Quick test_session_start_failure
+  ; Alcotest.test_case
+      "monitor thread detects crash"
+      `Quick
+      test_monitor_thread_detects_crash
+  ; Alcotest.test_case "cleanup with close error" `Quick test_cleanup_with_close_error
+  ; (* E2E tests with real hegel *)
+    Alcotest.test_case "simple passing test" `Quick test_simple_passing_test
+  ; Alcotest.test_case "simple failing test" `Quick test_simple_failing_test
+  ; Alcotest.test_case "single test case" `Quick test_single_test_case
+  ; Alcotest.test_case "assume true e2e" `Quick test_assume_true_e2e
+  ; Alcotest.test_case "assume false e2e" `Quick test_assume_false_e2e
+  ; Alcotest.test_case "note not final e2e" `Quick test_note_not_final_e2e
+  ; Alcotest.test_case "target e2e" `Quick test_target_e2e
+  ; Alcotest.test_case "flaky strategy" `Quick test_flaky_strategy
+  ; Alcotest.test_case "mark_complete VALID" `Quick test_mark_complete_valid
+  ; Alcotest.test_case "mark_complete INVALID" `Quick test_mark_complete_invalid
+  ; Alcotest.test_case "mark_complete INTERESTING" `Quick test_mark_complete_interesting
+  ; Alcotest.test_case "session start and run" `Quick test_session_start_and_run
+  ; Alcotest.test_case "run_hegel_test defaults" `Quick test_run_hegel_test_defaults
+  ; Alcotest.test_case
+      "run_hegel_test with settings"
+      `Quick
+      test_run_hegel_test_with_settings
+  ; (* HEGEL_PROTOCOL_TEST_MODE error injection - these restart the session *)
+    Alcotest.test_case "stop test on generate" `Quick test_stop_test_on_generate
+  ; Alcotest.test_case "stop test on mark complete" `Quick test_stop_test_on_mark_complete
+  ; Alcotest.test_case "error response" `Quick test_error_response
+  ; Alcotest.test_case "empty test" `Quick test_empty_test
   ]
+;;

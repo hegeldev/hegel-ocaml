@@ -6,8 +6,8 @@
 
 open! Core
 
-type t = Cbor.Simple.t
 (** The type of CBOR values, re-exported from [Cbor.Simple]. *)
+type t = Cbor.Simple.t
 
 (** [encode v] serializes the CBOR value [v] to a binary string. *)
 let encode = Cbor.Simple.encode
@@ -21,10 +21,11 @@ let rec convert_tagged_strings = function
   | `Tag (tag, `Bytes s) when tag = hegel_string_tag -> `Text s
   | `Array items -> `Array (List.map items ~f:convert_tagged_strings)
   | `Map pairs ->
-      `Map
-        (List.map pairs ~f:(fun (k, v) ->
-             (convert_tagged_strings k, convert_tagged_strings v)))
+    `Map
+      (List.map pairs ~f:(fun (k, v) ->
+         convert_tagged_strings k, convert_tagged_strings v))
   | other -> other
+;;
 
 (** [decode s] deserializes a CBOR value from the binary string [s], converting
     Hegel's tag-91 encoded strings to plain text values. *)
@@ -43,6 +44,7 @@ let type_name = function
   | `Array _ -> "array"
   | `Map _ -> "map"
   | `Tag _ -> "tag"
+;;
 
 (** [extract_int v] extracts an integer from a CBOR value.
 
@@ -50,6 +52,7 @@ let type_name = function
 let extract_int = function
   | `Int i -> i
   | other -> failwith (sprintf "Expected CBOR int, got %s" (type_name other))
+;;
 
 (** [extract_float v] extracts a float from a CBOR value.
 
@@ -57,6 +60,7 @@ let extract_int = function
 let extract_float = function
   | `Float f -> f
   | other -> failwith (sprintf "Expected CBOR float, got %s" (type_name other))
+;;
 
 (** [extract_string v] extracts a text string from a CBOR value.
 
@@ -64,6 +68,7 @@ let extract_float = function
 let extract_string = function
   | `Text s -> s
   | other -> failwith (sprintf "Expected CBOR text, got %s" (type_name other))
+;;
 
 (** [extract_bool v] extracts a boolean from a CBOR value.
 
@@ -71,6 +76,7 @@ let extract_string = function
 let extract_bool = function
   | `Bool b -> b
   | other -> failwith (sprintf "Expected CBOR bool, got %s" (type_name other))
+;;
 
 (** [extract_bytes v] extracts a byte string from a CBOR value.
 
@@ -78,6 +84,7 @@ let extract_bool = function
 let extract_bytes = function
   | `Bytes b -> b
   | other -> failwith (sprintf "Expected CBOR bytes, got %s" (type_name other))
+;;
 
 (** [extract_list v] extracts a list of CBOR values from a CBOR value.
 
@@ -85,6 +92,7 @@ let extract_bytes = function
 let extract_list = function
   | `Array l -> l
   | other -> failwith (sprintf "Expected CBOR array, got %s" (type_name other))
+;;
 
 (** [extract_dict v] extracts a key-value map from a CBOR value. Keys and values
     remain as CBOR values.
@@ -93,6 +101,10 @@ let extract_list = function
 let extract_dict = function
   | `Map m -> m
   | other -> failwith (sprintf "Expected CBOR map, got %s" (type_name other))
+;;
 
 (** [is_null v] returns [true] if [v] is [`Null]. *)
-let is_null = function `Null -> true | _ -> false
+let is_null = function
+  | `Null -> true
+  | _ -> false
+;;

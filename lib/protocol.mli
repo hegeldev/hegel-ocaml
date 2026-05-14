@@ -5,72 +5,72 @@
 
 module Unix = Core_unix
 
-val magic : int32
 (** Magic number identifying Hegel packets ("HEGL" in hex). *)
+val magic : int32
 
-val header_size : int
 (** Size of the packet header in bytes (5 big-endian uint32 fields). *)
+val header_size : int
 
-val terminator : int
 (** Terminator byte appended after the payload. *)
+val terminator : int
 
-val reply_bit : int32
 (** Bit flag indicating a reply message. *)
+val reply_bit : int32
 
-val close_stream_message_id : int32
 (** Special message ID used when closing a stream. *)
+val close_stream_message_id : int32
 
-val close_stream_payload : string
 (** Special payload byte sent when closing a stream. *)
+val close_stream_payload : string
 
-type packet = {
-  stream_id : int32;  (** The logical stream this packet belongs to. *)
-  message_id : int32;  (** Identifier for request/response correlation. *)
-  is_reply : bool;  (** Whether this is a reply to a previous request. *)
-  payload : string;  (** The raw payload bytes (typically CBOR-encoded). *)
-}
 (** A single message in the wire protocol. *)
+type packet =
+  { stream_id : int32 (** The logical stream this packet belongs to. *)
+  ; message_id : int32 (** Identifier for request/response correlation. *)
+  ; is_reply : bool (** Whether this is a reply to a previous request. *)
+  ; payload : string (** The raw payload bytes (typically CBOR-encoded). *)
+  }
 
-exception Partial_packet of string
 (** Exception raised when the connection is closed partway through reading a
     packet. *)
+exception Partial_packet of string
 
-exception Connection_closed of string
 (** Exception raised when the connection is closed while reading data and some
     bytes have already been received. *)
+exception Connection_closed of string
 
-val equal_packet : packet -> packet -> bool
 (** [equal_packet a b] returns [true] if packets [a] and [b] have identical
     fields. *)
+val equal_packet : packet -> packet -> bool
 
-val pp_packet : Format.formatter -> packet -> unit
 (** [pp_packet fmt p] pretty-prints packet [p] to formatter [fmt]. *)
+val pp_packet : Format.formatter -> packet -> unit
 
-val compute_crc32 : string -> int32
 (** [compute_crc32 data] computes the CRC32 checksum of [data] and returns it as
     an [int32]. *)
+val compute_crc32 : string -> int32
 
-val compute_crc32_parts : string -> string -> int32
 (** [compute_crc32_parts a b] computes the CRC32 checksum over the concatenation
     of strings [a] and [b] without allocating the concatenated string. *)
+val compute_crc32_parts : string -> string -> int32
 
-val pack_uint32_be : bytes -> int -> int32 -> unit
 (** [pack_uint32_be buf offset value] writes [value] as a big-endian unsigned
     32-bit integer at [offset] in [buf]. *)
+val pack_uint32_be : bytes -> int -> int32 -> unit
 
-val unpack_uint32_be : bytes -> int -> int32
 (** [unpack_uint32_be data offset] reads a big-endian unsigned 32-bit integer
     from [data] at [offset]. *)
+val unpack_uint32_be : bytes -> int -> int32
 
-val recv_exact : Core_unix.File_descr.t -> int -> bytes
 (** [recv_exact sock n] reads exactly [n] bytes from Unix file descriptor
     [sock]. Raises {!Partial_packet} if the connection closes with no data read,
     or {!Connection_closed} if it closes after partial data. *)
+val recv_exact : Core_unix.File_descr.t -> int -> bytes
 
-val read_packet : Core_unix.File_descr.t -> packet
 (** [read_packet sock] reads and parses a single packet from Unix file
     descriptor [sock]. *)
+val read_packet : Core_unix.File_descr.t -> packet
 
-val write_packet : Core_unix.File_descr.t -> packet -> unit
 (** [write_packet sock packet] serializes and writes [packet] to Unix file
     descriptor [sock]. *)
+val write_packet : Core_unix.File_descr.t -> packet -> unit
