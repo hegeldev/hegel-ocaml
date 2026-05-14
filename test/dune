@@ -5,6 +5,7 @@
   test_helpers
   test_protocol
   test_cbor_helpers
+  test_cbor_vectors
   test_connection
   test_client
   test_generators_core
@@ -14,7 +15,8 @@
   test_conformance_helpers
   test_derive
   test_stateful)
- (libraries hegel alcotest core core_unix threads.posix)
+ (libraries hegel alcotest core core_unix threads.posix yojson cbor)
+ (deps cbor_appendix_a.json)
  (preprocess
   (pps ppx_js_style -- -allow-unannotated-ignores))
  (foreign_stubs
