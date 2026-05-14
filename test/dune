@@ -4,6 +4,7 @@
   test_hegel
   test_helpers
   test_protocol
+  test_crc32
   test_cbor_helpers
   test_connection
   test_client
@@ -14,7 +15,7 @@
   test_conformance_helpers
   test_derive
   test_stateful)
- (libraries hegel alcotest core core_unix threads.posix)
+ (libraries hegel alcotest core core_unix threads.posix crc32)
  (preprocess
   (pps ppx_js_style -- -allow-unannotated-ignores))
  (foreign_stubs

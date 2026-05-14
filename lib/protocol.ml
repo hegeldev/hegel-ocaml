@@ -64,19 +64,13 @@ let pp_packet fmt p =
 
 (** [compute_crc32 data] computes the CRC32 checksum of [data] and returns it as
     an [int32]. *)
-let compute_crc32 data =
-  let crc =
-    Checkseum.Crc32.digest_string data 0 (String.length data) Checkseum.Crc32.default
-  in
-  Optint.to_int32 crc
-;;
+let compute_crc32 data = Crc32.digest_string data 0 (String.length data) Crc32.default
 
 (** [compute_crc32_parts a b] computes the CRC32 checksum over the concatenation
     of strings [a] and [b] without allocating the concatenated string. *)
 let compute_crc32_parts a b =
-  let crc = Checkseum.Crc32.digest_string a 0 (String.length a) Checkseum.Crc32.default in
-  let crc = Checkseum.Crc32.digest_string b 0 (String.length b) crc in
-  Optint.to_int32 crc
+  let crc = Crc32.digest_string a 0 (String.length a) Crc32.default in
+  Crc32.digest_string b 0 (String.length b) crc
 ;;
 
 (** [pack_uint32_be buf offset value] writes [value] as a big-endian unsigned
