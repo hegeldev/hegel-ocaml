@@ -1,5 +1,5 @@
 (** The current version of Hegel for OCaml. *)
-let version = "0.3.16"
+let version = "0.3.17"
 
 (** Binary wire protocol for packet serialization and deserialization. *)
 module Protocol = Protocol
