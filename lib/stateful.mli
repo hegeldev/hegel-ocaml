@@ -25,11 +25,7 @@
           List.tl stack)
 
     let test_integer_stack () =
-      run_hegel_test (fun tc ->
-          let machine =
-            Stateful.make_machine ~init:[] ~rules:[ push; pop ] ()
-          in
-          Stateful.run machine tc)
+      run_hegel_test (fun tc -> Stateful.run ~init:[] ~rules:[ push; pop ] tc)
     ]} *)
 
 module Variables : sig
@@ -79,22 +75,12 @@ module Settings : sig
   val default : t
 end
 
-type 'state machine = {
-  init : 'state;
-  rules : 'state Rule.t list;
-  invariants : ('state -> unit) list;
-}
-(** Record describing the state machine. *)
-
-val make_machine :
+val run :
+  ?settings:Settings.t ->
   init:'state ->
   rules:'state Rule.t list ->
   ?invariants:('state -> unit) list ->
-  unit ->
-  'state machine
-(** Creates a new state machine with the given initial state, rules, and
-    invariants. *)
-
-val run : ?settings:Settings.t -> 'state machine -> Client.test_case -> unit
+  Client.test_case ->
+  unit
 (** Executes a stateful test by repeatedly applying random rules and checking
     invariants. *)

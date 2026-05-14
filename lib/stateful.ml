@@ -52,17 +52,7 @@ module Settings = struct
   let default = { max_steps = 50 }
 end
 
-type 'state machine = {
-  init : 'state;
-  rules : 'state Rule.t list;
-  invariants : ('state -> unit) list;
-}
-
-let make_machine ~init ~rules ?(invariants = []) () =
-  { init; rules; invariants }
-
-let run ?(settings = Settings.default) state_machine tc =
-  let { init; rules; invariants } = state_machine in
+let run ?(settings = Settings.default) ~init ~rules ?(invariants = []) tc =
   match rules with
   | [] -> invalid_arg "Cannot run a state machine with no rules."
   | _ ->
@@ -87,13 +77,14 @@ let run ?(settings = Settings.default) state_machine tc =
           let rule = Generators.draw tc rule_generator in
           if tc.Client.is_final then
             Client.note tc
-              (Printf.sprintf "step %d: %s" (num_steps + 1) rule.Rule.name);
+              (Printf.sprintf "    Step %d: %s" (num_steps + 1) rule.Rule.name);
           let new_state = rule.Rule.step tc state in
           run_invariants new_state;
           Client.stop_span tc;
           `Stepped new_state
         with
         | Client.Assume_rejected ->
+            Client.note tc "Rule stopped early due to violated assumption.";
             Client.stop_span ~discard:true tc;
             `Rejected
         | e ->
