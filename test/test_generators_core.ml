@@ -68,10 +68,7 @@ let test_double_map_on_basic () =
   (* Verify schema is preserved through both maps *)
   match schema gen, schema m2 with
   | Some s1, Some s2 ->
-    Alcotest.(check bool)
-      "schema unchanged"
-      true
-      (Cbor.Simple.encode s1 = Cbor.Simple.encode s2)
+    Alcotest.(check bool) "schema unchanged" true (Cbor.encode s1 = Cbor.encode s2)
   | _ -> Alcotest.fail "expected both schemas"
 ;;
 
@@ -203,7 +200,7 @@ let test_collection_more_stoptest () =
          send_response_raw
            peer_ch
            msg_id
-           (Cbor.Simple.encode
+           (Cbor.encode
               (`Map
                   [ `Text "error", `Text "Test case is being abandoned"
                   ; `Text "type", `Text "StopTest"

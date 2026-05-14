@@ -100,226 +100,223 @@ let is_indefinite byte1 = get_additional byte1 = 31
 let int64_max_int = Int64.of_int max_int
 let two_min_int32 = 2 * Int32.to_int Int32.min_int
 
-module Simple = struct
-  type t =
-    [ `Null
-    | `Undefined
-    | `Simple of int
-    | `Bool of bool
-    | `Int of int
-    | `Float of float
-    | `Bytes of string
-    | `Text of string
-    | `Array of t list
-    | `Map of (t * t) list
-    | `Tag of int * t
-    ]
+type t =
+  [ `Null
+  | `Undefined
+  | `Simple of int
+  | `Bool of bool
+  | `Int of int
+  | `Float of float
+  | `Bytes of string
+  | `Text of string
+  | `Array of t list
+  | `Map of (t * t) list
+  | `Tag of int * t
+  ]
 
-  let encode item =
-    let open Encode in
-    let b = start () in
-    let rec write = function
-      | `Null -> put b ~maj:7 22
-      | `Undefined -> put b ~maj:7 23
-      | `Bool false -> put b ~maj:7 20
-      | `Bool true -> put b ~maj:7 21
-      | `Simple n when (n >= 0 && n <= 23) || (n >= 32 && n <= 255) -> put b ~maj:7 n
-      | `Simple n -> fail "encode: simple(%d)" n
-      | `Int n -> int b n
-      | `Float f ->
-        init b ~maj:7 27;
-        put_n b 8 BE.set_double f
-      | `Bytes s ->
-        put b ~maj:2 (String.length s);
-        Buffer.add_string b s
-      | `Text s ->
-        put b ~maj:3 (String.length s);
-        Buffer.add_string b s
-      | `Array l ->
-        put b ~maj:4 (List.length l);
-        List.iter write l
-      | `Map m ->
-        put b ~maj:5 (List.length m);
-        List.iter
-          (fun (a, b) ->
-             write a;
-             write b)
-          m
-      | `Tag (t, v) ->
-        put b ~maj:6 t;
-        write v
-    in
-    write item;
-    Buffer.contents b
-  ;;
-
-  let extract_number byte1 r =
-    match get_additional byte1 with
-    | n when n < 24 -> n
-    | 24 -> get_byte r
-    | 25 -> get_n r 2 SE.get_uint16
-    | 26 ->
-      let n = Int32.to_int @@ get_n r 4 SE.get_int32 in
-      if n < 0 then n - two_min_int32 else n
-    | 27 ->
-      let n = get_n r 8 SE.get_int64 in
-      if n > int64_max_int || n < 0L then fail "extract_number: %Lu" n;
-      Int64.to_int n
-    | n -> fail "bad additional %d" n
-  ;;
-
-  let get_float16 s i =
-    let half = (Char.code s.[i] lsl 8) + Char.code s.[i + 1] in
-    let mant = half land 0x3ff in
-    let value =
-      match (half lsr 10) land 0x1f with
-      (* exp *)
-      | 31 when mant = 0 -> infinity
-      | 31 -> nan
-      | 0 -> ldexp (float mant) ~-24
-      | exp -> ldexp (float @@ (mant + 1024)) (exp - 25)
-    in
-    if half land 0x8000 = 0 then value else ~-.value
-  ;;
-
-  exception Break
-
-  let extract_list byte1 r f =
-    if is_indefinite byte1
-    then (
-      let l = ref [] in
-      try
-        while true do
-          l := f r :: !l
-        done;
-        assert false
-      with
-      | Break -> List.rev !l)
-    else (
-      let n = extract_number byte1 r in
-      Array.to_list @@ Array.init n (fun _ -> f r))
-  ;;
-
-  let rec extract_pair r =
-    let a = extract r in
-    let b =
-      try extract r with
-      | Break -> fail "extract_pair: unexpected break"
-    in
-    a, b
-
-  and extract_string byte1 r f =
-    if is_indefinite byte1
-    then (
-      let b = Buffer.create 10 in
-      try
-        while true do
-          Buffer.add_string b (f @@ extract r)
-        done;
-        assert false
-      with
-      | Break -> Buffer.contents b)
-    else (
-      let n = extract_number byte1 r in
-      get_s r n)
-
-  and extract r =
-    let byte1 = get_byte r in
-    match byte1 lsr 5 with
-    | 0 -> `Int (extract_number byte1 r)
-    | 1 -> `Int (-1 - extract_number byte1 r)
-    | 2 ->
-      `Bytes
-        (extract_string byte1 r (function
-           | `Bytes s -> s
-           | _ -> fail "extract: not a bytes chunk"))
-    | 3 ->
-      `Text
-        (extract_string byte1 r (function
-           | `Text s -> s
-           | _ -> fail "extract: not a text chunk"))
-    | 4 -> `Array (extract_list byte1 r extract)
-    | 5 -> `Map (extract_list byte1 r extract_pair)
-    | 6 ->
-      let tag = extract_number byte1 r in
-      let v = extract r in
-      `Tag (tag, v)
-    | 7 ->
-      (match get_additional byte1 with
-       | n when n < 20 -> `Simple n
-       | 20 -> `Bool false
-       | 21 -> `Bool true
-       | 22 -> `Null
-       | 23 -> `Undefined
-       | 24 -> `Simple (get_byte r)
-       | 25 -> `Float (get_n r 2 get_float16)
-       | 26 -> `Float (get_n r 4 SE.get_float)
-       | 27 -> `Float (get_n r 8 SE.get_double)
-       | 31 -> raise Break
-       | a -> fail "extract: (7,%d)" a)
-    | _ -> assert false
-  ;;
-
-  let decode_partial s =
-    let i = ref 0 in
-    let x =
-      try extract (s, i) with
-      | Break -> fail "decode: unexpected break"
-    in
-    x, String.sub s !i (String.length s - !i)
-  ;;
-
-  let decode s : t =
-    let x, rest = decode_partial s in
-    if rest = ""
-    then x
-    else
-      fail
-        "decode: extra data: len %d pos %d"
-        (String.length s)
-        (String.length s - String.length rest)
-  ;;
-
-  let to_diagnostic item =
-    let b = Buffer.create 10 in
-    let put s = Buffer.add_string b s in
-    let rec write = function
-      | `Null -> put "null"
-      | `Bool false -> put "false"
-      | `Bool true -> put "true"
-      | `Simple n -> bprintf b "simple(%d)" n
-      | `Undefined -> put "undefined"
-      | `Int n -> bprintf b "%d" n
-      | `Float f ->
-        (match classify_float f with
-         | FP_nan -> put "NaN"
-         | FP_infinite -> put (if f < 0. then "-Infinity" else "Infinity")
-         | FP_zero | FP_normal | FP_subnormal -> put (string_of_float f))
-      | `Bytes s -> bprintf b "h'%s'" (Encode.to_hex s)
-      | `Text s -> bprintf b "\"%s\"" s
-      | `Array l ->
-        put "[";
-        l
-        |> list_iteri (fun i x ->
-          if i <> 0 then put ", ";
-          write x);
-        put "]"
-      | `Map m ->
-        put "{";
+let encode item =
+  let open Encode in
+  let b = start () in
+  let rec write = function
+    | `Null -> put b ~maj:7 22
+    | `Undefined -> put b ~maj:7 23
+    | `Bool false -> put b ~maj:7 20
+    | `Bool true -> put b ~maj:7 21
+    | `Simple n when (n >= 0 && n <= 23) || (n >= 32 && n <= 255) -> put b ~maj:7 n
+    | `Simple n -> fail "encode: simple(%d)" n
+    | `Int n -> int b n
+    | `Float f ->
+      init b ~maj:7 27;
+      put_n b 8 BE.set_double f
+    | `Bytes s ->
+      put b ~maj:2 (String.length s);
+      Buffer.add_string b s
+    | `Text s ->
+      put b ~maj:3 (String.length s);
+      Buffer.add_string b s
+    | `Array l ->
+      put b ~maj:4 (List.length l);
+      List.iter write l
+    | `Map m ->
+      put b ~maj:5 (List.length m);
+      List.iter
+        (fun (a, b) ->
+           write a;
+           write b)
         m
-        |> list_iteri (fun i (k, v) ->
-          if i <> 0 then put ", ";
-          write k;
-          put ": ";
-          write v);
-        put "}"
-      | `Tag (t, v) ->
-        bprintf b "%i(" t;
-        write v;
-        put ")"
-    in
-    write item;
-    Buffer.contents b
-  ;;
-end
-(* Simple *)
+    | `Tag (t, v) ->
+      put b ~maj:6 t;
+      write v
+  in
+  write item;
+  Buffer.contents b
+;;
+
+let extract_number byte1 r =
+  match get_additional byte1 with
+  | n when n < 24 -> n
+  | 24 -> get_byte r
+  | 25 -> get_n r 2 SE.get_uint16
+  | 26 ->
+    let n = Int32.to_int @@ get_n r 4 SE.get_int32 in
+    if n < 0 then n - two_min_int32 else n
+  | 27 ->
+    let n = get_n r 8 SE.get_int64 in
+    if n > int64_max_int || n < 0L then fail "extract_number: %Lu" n;
+    Int64.to_int n
+  | n -> fail "bad additional %d" n
+;;
+
+let get_float16 s i =
+  let half = (Char.code s.[i] lsl 8) + Char.code s.[i + 1] in
+  let mant = half land 0x3ff in
+  let value =
+    match (half lsr 10) land 0x1f with
+    (* exp *)
+    | 31 when mant = 0 -> infinity
+    | 31 -> nan
+    | 0 -> ldexp (float mant) ~-24
+    | exp -> ldexp (float @@ (mant + 1024)) (exp - 25)
+  in
+  if half land 0x8000 = 0 then value else ~-.value
+;;
+
+exception Break
+
+let extract_list byte1 r f =
+  if is_indefinite byte1
+  then (
+    let l = ref [] in
+    try
+      while true do
+        l := f r :: !l
+      done;
+      assert false
+    with
+    | Break -> List.rev !l)
+  else (
+    let n = extract_number byte1 r in
+    Array.to_list @@ Array.init n (fun _ -> f r))
+;;
+
+let rec extract_pair r =
+  let a = extract r in
+  let b =
+    try extract r with
+    | Break -> fail "extract_pair: unexpected break"
+  in
+  a, b
+
+and extract_string byte1 r f =
+  if is_indefinite byte1
+  then (
+    let b = Buffer.create 10 in
+    try
+      while true do
+        Buffer.add_string b (f @@ extract r)
+      done;
+      assert false
+    with
+    | Break -> Buffer.contents b)
+  else (
+    let n = extract_number byte1 r in
+    get_s r n)
+
+and extract r =
+  let byte1 = get_byte r in
+  match byte1 lsr 5 with
+  | 0 -> `Int (extract_number byte1 r)
+  | 1 -> `Int (-1 - extract_number byte1 r)
+  | 2 ->
+    `Bytes
+      (extract_string byte1 r (function
+         | `Bytes s -> s
+         | _ -> fail "extract: not a bytes chunk"))
+  | 3 ->
+    `Text
+      (extract_string byte1 r (function
+         | `Text s -> s
+         | _ -> fail "extract: not a text chunk"))
+  | 4 -> `Array (extract_list byte1 r extract)
+  | 5 -> `Map (extract_list byte1 r extract_pair)
+  | 6 ->
+    let tag = extract_number byte1 r in
+    let v = extract r in
+    `Tag (tag, v)
+  | 7 ->
+    (match get_additional byte1 with
+     | n when n < 20 -> `Simple n
+     | 20 -> `Bool false
+     | 21 -> `Bool true
+     | 22 -> `Null
+     | 23 -> `Undefined
+     | 24 -> `Simple (get_byte r)
+     | 25 -> `Float (get_n r 2 get_float16)
+     | 26 -> `Float (get_n r 4 SE.get_float)
+     | 27 -> `Float (get_n r 8 SE.get_double)
+     | 31 -> raise Break
+     | a -> fail "extract: (7,%d)" a)
+  | _ -> assert false
+;;
+
+let decode_partial s =
+  let i = ref 0 in
+  let x =
+    try extract (s, i) with
+    | Break -> fail "decode: unexpected break"
+  in
+  x, String.sub s !i (String.length s - !i)
+;;
+
+let decode s : t =
+  let x, rest = decode_partial s in
+  if rest = ""
+  then x
+  else
+    fail
+      "decode: extra data: len %d pos %d"
+      (String.length s)
+      (String.length s - String.length rest)
+;;
+
+let to_diagnostic item =
+  let b = Buffer.create 10 in
+  let put s = Buffer.add_string b s in
+  let rec write = function
+    | `Null -> put "null"
+    | `Bool false -> put "false"
+    | `Bool true -> put "true"
+    | `Simple n -> bprintf b "simple(%d)" n
+    | `Undefined -> put "undefined"
+    | `Int n -> bprintf b "%d" n
+    | `Float f ->
+      (match classify_float f with
+       | FP_nan -> put "NaN"
+       | FP_infinite -> put (if f < 0. then "-Infinity" else "Infinity")
+       | FP_zero | FP_normal | FP_subnormal -> put (string_of_float f))
+    | `Bytes s -> bprintf b "h'%s'" (Encode.to_hex s)
+    | `Text s -> bprintf b "\"%s\"" s
+    | `Array l ->
+      put "[";
+      l
+      |> list_iteri (fun i x ->
+        if i <> 0 then put ", ";
+        write x);
+      put "]"
+    | `Map m ->
+      put "{";
+      m
+      |> list_iteri (fun i (k, v) ->
+        if i <> 0 then put ", ";
+        write k;
+        put ": ";
+        write v);
+      put "}"
+    | `Tag (t, v) ->
+      bprintf b "%i(" t;
+      write v;
+      put ")"
+  in
+  write item;
+  Buffer.contents b
+;;

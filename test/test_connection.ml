@@ -509,7 +509,7 @@ let test_message_to_nonexistent_stream () =
     { stream_id = 999l
     ; message_id = 1l
     ; is_reply = false
-    ; payload = Cbor.Simple.encode (`Map [ `Text "command", `Text "test" ])
+    ; payload = Cbor.encode (`Map [ `Text "command", `Text "test" ])
     };
   (* Also send a control stream message so the peer processes packets *)
   ignore (send_request_raw (control_stream client_conn) "ping");
@@ -859,7 +859,7 @@ let test_message_to_dead_stream_in_reader () =
     { stream_id = ch_id
     ; message_id = 1l
     ; is_reply = false
-    ; payload = Cbor.Simple.encode (`Map [ `Text "test", `Text "data" ])
+    ; payload = Cbor.encode (`Map [ `Text "test", `Text "data" ])
     };
   (* Also send something to control so we can synchronize *)
   ignore (send_request_raw (control_stream client_conn) "sync");

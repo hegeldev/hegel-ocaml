@@ -37,8 +37,8 @@ end
       given [label]. Used for tuples and one_of with non-basic elements. *)
 type 'a generator =
   | Basic :
-      { schema : Cbor.Simple.t
-      ; transform : Cbor.Simple.t -> 'a
+      { schema : Cbor.t
+      ; transform : Cbor.t -> 'a
       }
       -> 'a generator
   | Mapped :
@@ -99,7 +99,7 @@ let discardable_group label data f =
     calls once the server signals completion. *)
 type collection =
   { mutable finished : bool
-  ; mutable collection_id : Cbor.Simple.t option
+  ; mutable collection_id : Cbor.t option
   ; min_size : int
   ; max_size : int option
   }
@@ -180,7 +180,7 @@ let collection_reject coll data =
     let collection_id = get_collection_id coll data in
     let stream = data.Client.stream in
     try
-      let (_ : Cbor.Simple.t) =
+      let (_ : Cbor.t) =
         pending_get
           (request
              stream
@@ -266,7 +266,7 @@ let flat_map f gen = FlatMapped { source = gen; f }
 let filter predicate gen = Filtered { source = gen; predicate }
 
 (** [schema gen] returns the schema for a [Basic] generator, or [None]. *)
-let schema : type a. a generator -> Cbor.Simple.t option = function
+let schema : type a. a generator -> Cbor.t option = function
   | Basic { schema; _ } -> Some schema
   | _ -> None
 ;;
@@ -279,8 +279,7 @@ let is_basic : type a. a generator -> bool = function
 
 (** [as_basic gen] returns [Some (schema, transform)] if [gen] is [Basic], or
     [None] otherwise. *)
-let as_basic : type a. a generator -> (Cbor.Simple.t * (Cbor.Simple.t -> a)) option =
-  function
+let as_basic : type a. a generator -> (Cbor.t * (Cbor.t -> a)) option = function
   | Basic { schema; transform } -> Some (schema, transform)
   | _ -> None
 ;;
