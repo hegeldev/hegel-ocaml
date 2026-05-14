@@ -14,7 +14,8 @@ module Simple : sig
     | `Text of string
     | `Array of t list
     | `Map of (t * t) list
-    | `Tag of int * t ]
+    | `Tag of int * t
+    ]
 
   val encode : t -> string
   val decode : string -> t

@@ -15,6 +15,8 @@
   test_derive
   test_stateful)
  (libraries hegel alcotest core core_unix threads.posix)
+ (preprocess
+  (pps ppx_js_style -- -allow-unannotated-ignores))
  (foreign_stubs
   (language c)
   (names unsetenv_stubs)))
@@ -24,4 +26,4 @@
  (modules test_ppx_derive)
  (libraries hegel alcotest core core_unix threads.posix)
  (preprocess
-  (pps ppx_hegel_generator)))
+  (pps ppx_js_style ppx_hegel_generator -- -allow-unannotated-ignores)))

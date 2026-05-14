@@ -1,59 +1,58 @@
-val version : string
 (** The current version of Hegel for OCaml. *)
+val version : string
 
-module Protocol = Protocol
 (** Binary wire protocol for packet serialization and deserialization. *)
+module Protocol = Protocol
 
-module Cbor_helpers = Cbor_helpers
 (** CBOR encoding/decoding with type-safe extractor helpers. *)
+module Cbor_helpers = Cbor_helpers
 
-module Connection = Connection
 (** Multiplexed connection and stream abstractions. *)
+module Connection = Connection
 
-module Client = Client
 (** Test runner and lifecycle management. *)
+module Client = Client
 
-module Session = Session
 (** Global session management for running property tests. *)
+module Session = Session
 
-module Generators = Generators
 (** Generator combinators for composable test data generation. *)
+module Generators = Generators
 
-module Conformance = Conformance
 (** Conformance test helpers for writing conformance binaries. *)
+module Conformance = Conformance
 
-module Derive = Derive
 (** Runtime support for [@@deriving generator]. *)
+module Derive = Derive
 
-module Stateful = Stateful
 (** Stateful property-based testing on top of {!Generators}. *)
+module Stateful = Stateful
 
 (** {2 Convenience re-exports} *)
 
-val assume : Client.test_case -> bool -> unit
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)
+val assume : Client.test_case -> bool -> unit
 
-val note : Client.test_case -> string -> unit
 (** [note tc message] records a message that will be printed on the final
     (failing) run. *)
+val note : Client.test_case -> string -> unit
 
-val target : Client.test_case -> float -> string -> unit
 (** [target tc value label] sends a target command to guide the search engine
     toward higher values. *)
+val target : Client.test_case -> float -> string -> unit
 
-val draw : Client.test_case -> 'a Generators.generator -> 'a
 (** [draw tc gen] produces a typed value from generator [gen] using test case
     [tc]. *)
+val draw : Client.test_case -> 'a Generators.generator -> 'a
 
-val run_hegel_test :
-  ?settings:Client.settings -> (Client.test_case -> unit) -> unit
 (** [run_hegel_test ?settings test_fn] runs a property test. *)
+val run_hegel_test : ?settings:Client.settings -> (Client.test_case -> unit) -> unit
 
-val default_settings : unit -> Client.settings
 (** [default_settings ()] creates default test settings with CI auto-detection.
 *)
+val default_settings : unit -> Client.settings
 
-val settings : ?test_cases:int -> ?seed:int -> unit -> Client.settings
 (** [settings ?test_cases ?seed ()] creates settings with the given overrides
     applied to {!default_settings}. Convenience constructor for common cases. *)
+val settings : ?test_cases:int -> ?seed:int -> unit -> Client.settings

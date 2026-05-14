@@ -11,14 +11,14 @@ open! Core
 module Mutex = Caml_threads.Mutex
 open Connection
 
-exception Assume_rejected
 (** Raised when {!assume} condition is [false]. *)
+exception Assume_rejected
 
-exception Data_exhausted
 (** Raised when the server runs out of test data (StopTest). *)
+exception Data_exhausted
 
-exception Flaky_strategy
 (** Raised when the server detects a flaky strategy definition. *)
+exception Flaky_strategy
 
 (** Health checks that can be suppressed during test execution. *)
 type health_check =
@@ -33,15 +33,28 @@ let health_check_to_string = function
   | Too_slow -> "too_slow"
   | Test_cases_too_large -> "test_cases_too_large"
   | Large_initial_test_case -> "large_initial_test_case"
+;;
 
 (** Controls how much output Hegel produces during test runs. *)
-type verbosity = Quiet | Normal | Verbose | Debug
+type verbosity =
+  | Quiet
+  | Normal
+  | Verbose
+  | Debug
 
 (** The database setting: unset, disabled, or a path. *)
-type database = Unset | Disabled | Path of string
+type database =
+  | Unset
+  | Disabled
+  | Path of string
 
 (** Phases of the test lifecycle. Mirrors [hypothesis.Phase]. *)
-type phase = Explicit | Reuse | Generate | Target | Shrink
+type phase =
+  | Explicit
+  | Reuse
+  | Generate
+  | Target
+  | Shrink
 
 (** [phase_to_string p] returns the lowercase wire-protocol name for [p]. *)
 let phase_to_string = function
@@ -50,62 +63,67 @@ let phase_to_string = function
   | Generate -> "generate"
   | Target -> "target"
   | Shrink -> "shrink"
+;;
 
-type settings = {
-  test_cases : int;
-  verbosity : verbosity;
-  seed : int option;
-  derandomize : bool;
-  database : database;
-  suppress_health_check : health_check list;
-  phases : phase list option;
-}
 (** Configuration for a Hegel test run. *)
+type settings =
+  { test_cases : int
+  ; verbosity : verbosity
+  ; seed : int option
+  ; derandomize : bool
+  ; database : database
+  ; suppress_health_check : health_check list
+  ; phases : phase list option
+  }
 
 (** CI environment variables to check for auto-detection. Each entry is
     [(var_name, expected_value)] where [None] means "any value". *)
 let ci_vars =
-  [
-    ("CI", None);
-    ("TF_BUILD", Some "true");
-    ("BUILDKITE", Some "true");
-    ("CIRCLECI", Some "true");
-    ("CIRRUS_CI", Some "true");
-    ("CODEBUILD_BUILD_ID", None);
-    ("GITHUB_ACTIONS", Some "true");
-    ("GITLAB_CI", None);
-    ("HEROKU_TEST_RUN_ID", None);
-    ("TEAMCITY_VERSION", None);
+  [ "CI", None
+  ; "TF_BUILD", Some "true"
+  ; "BUILDKITE", Some "true"
+  ; "CIRCLECI", Some "true"
+  ; "CIRRUS_CI", Some "true"
+  ; "CODEBUILD_BUILD_ID", None
+  ; "GITHUB_ACTIONS", Some "true"
+  ; "GITLAB_CI", None
+  ; "HEROKU_TEST_RUN_ID", None
+  ; "TEAMCITY_VERSION", None
   ]
+;;
 
 (** [is_in_ci ()] returns [true] if a CI environment is detected. *)
 let is_in_ci () =
   List.exists ci_vars ~f:(fun (key, expected) ->
-      match (Sys.getenv key, expected) with
-      | Some _, None -> true
-      | Some v, Some exp -> String.equal v exp
-      | None, _ -> false)
+    match Sys.getenv key, expected with
+    | Some _, None -> true
+    | Some v, Some exp -> String.equal v exp
+    | None, _ -> false)
+;;
 
 (** [default_settings ()] creates settings with defaults. Detects CI
     environments automatically. *)
 let default_settings () =
   let in_ci = is_in_ci () in
-  {
-    test_cases = 100;
-    verbosity = Normal;
-    seed = None;
-    derandomize = in_ci;
-    database = (if in_ci then Disabled else Unset);
-    suppress_health_check = [];
-    phases = None;
+  { test_cases = 100
+  ; verbosity = Normal
+  ; seed = None
+  ; derandomize = in_ci
+  ; database = (if in_ci then Disabled else Unset)
+  ; suppress_health_check = []
+  ; phases = None
   }
+;;
 
 (** [settings ?test_cases ?seed ()] creates settings with the given overrides
     applied to {!default_settings}. *)
 let settings ?(test_cases = 100) ?seed () =
   let s = default_settings () in
   let s = { s with test_cases } in
-  match seed with Some v -> { s with seed = Some v } | None -> s
+  match seed with
+  | Some v -> { s with seed = Some v }
+  | None -> s
+;;
 
 (** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
 let with_test_cases n s = { s with test_cases = n }
@@ -127,21 +145,23 @@ let with_database db s = { s with database = db }
     health checks suppressed. *)
 let with_suppress_health_check checks s =
   { s with suppress_health_check = s.suppress_health_check @ checks }
+;;
 
 (** [with_phases phases s] returns settings [s] with [phases] set. *)
 let with_phases phases s = { s with phases = Some phases }
 
-type test_case = {
-  stream : stream;
-  is_final : bool;
-  mutable test_aborted : bool;
-}
 (** Per-test-case state passed explicitly to the test function. Holds the data
     stream, final-run flag, and abort state. *)
+type test_case =
+  { stream : stream
+  ; is_final : bool
+  ; mutable test_aborted : bool
+  }
 
 (** Domain-local flag to detect nested test cases. *)
 let in_test_context : bool Stdlib.Domain.DLS.key =
   Stdlib.Domain.DLS.new_key (fun () -> false)
+;;
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available. *)
@@ -151,16 +171,17 @@ let extract_origin exn =
     match Stdlib.Printexc.backtrace_slots bt with
     | None -> None
     | Some slots ->
-        Array.fold slots ~init:None ~f:(fun acc slot ->
-            Option.value_map (Stdlib.Printexc.Slot.location slot) ~default:acc
-              ~f:(fun loc -> Some loc))
-        |> Option.map ~f:(fun (loc : Stdlib.Printexc.location) ->
-            (loc.filename, loc.line_number))
+      Array.fold slots ~init:None ~f:(fun acc slot ->
+        Option.value_map (Stdlib.Printexc.Slot.location slot) ~default:acc ~f:(fun loc ->
+          Some loc))
+      |> Option.map ~f:(fun (loc : Stdlib.Printexc.location) ->
+        loc.filename, loc.line_number)
   in
   match file_line with
   | None -> sprintf "%s at :0" (Stdlib.Printexc.exn_slot_name exn)
   | Some (file, line) ->
-      sprintf "%s at %s:%d" (Stdlib.Printexc.exn_slot_name exn) file line
+    sprintf "%s at %s:%d" (Stdlib.Printexc.exn_slot_name exn) file line
+;;
 
 (** [generate_from_schema schema tc] generates a value from a schema by sending
     a generate command to the server. Raises {!Data_exhausted} if the server
@@ -169,15 +190,17 @@ let generate_from_schema schema tc =
   let stream = tc.stream in
   try
     pending_get
-      (request stream
-         (`Map [ (`Text "command", `Text "generate"); (`Text "schema", schema) ]))
+      (request
+         stream
+         (`Map [ `Text "command", `Text "generate"; `Text "schema", schema ]))
   with
   | Request_error e when String.equal e.error_type "StopTest" ->
-      tc.test_aborted <- true;
-      raise Data_exhausted
+    tc.test_aborted <- true;
+    raise Data_exhausted
   | Request_error e when String.equal e.error_type "FlakyStrategyDefinition" ->
-      tc.test_aborted <- true;
-      raise Flaky_strategy
+    tc.test_aborted <- true;
+    raise Flaky_strategy
+;;
 
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)
@@ -193,80 +216,81 @@ let target tc value label =
   let stream = tc.stream in
   let (_ : Cbor.Simple.t) =
     pending_get
-      (request stream
+      (request
+         stream
          (`Map
-            [
-              (`Text "command", `Text "target");
-              (`Text "value", `Float value);
-              (`Text "label", `Text label);
-            ]))
+             [ `Text "command", `Text "target"
+             ; `Text "value", `Float value
+             ; `Text "label", `Text label
+             ]))
   in
   ()
+;;
 
 (** [start_span ?label tc] starts a generation span for better shrinking. *)
 let start_span ?(label = 0) tc =
-  if tc.test_aborted then ()
-  else
+  if tc.test_aborted
+  then ()
+  else (
     let stream = tc.stream in
     let (_ : Cbor.Simple.t) =
       pending_get
-        (request stream
-           (`Map
-              [
-                (`Text "command", `Text "start_span");
-                (`Text "label", `Int label);
-              ]))
+        (request
+           stream
+           (`Map [ `Text "command", `Text "start_span"; `Text "label", `Int label ]))
     in
-    ()
+    ())
+;;
 
 (** [stop_span ?discard tc] ends the current generation span. *)
 let stop_span ?(discard = false) tc =
-  if tc.test_aborted then ()
-  else
+  if tc.test_aborted
+  then ()
+  else (
     let stream = tc.stream in
     let (_ : Cbor.Simple.t) =
       pending_get
-        (request stream
-           (`Map
-              [
-                (`Text "command", `Text "stop_span");
-                (`Text "discard", `Bool discard);
-              ]))
+        (request
+           stream
+           (`Map [ `Text "command", `Text "stop_span"; `Text "discard", `Bool discard ]))
     in
-    ()
+    ())
+;;
 
 (** Helper: send a pool-related request and translate StopTest into
     [Data_exhausted]. *)
 let pool_request tc fields =
   let stream = tc.stream in
-  try pending_get (request stream (`Map fields))
-  with Request_error e when String.equal e.error_type "StopTest" ->
+  try pending_get (request stream (`Map fields)) with
+  | Request_error e when String.equal e.error_type "StopTest" ->
     tc.test_aborted <- true;
     raise Data_exhausted
+;;
 
 (** [new_pool tc] creates a new server-side variable pool and returns its id. *)
 let new_pool tc =
-  Cbor_helpers.extract_int
-    (pool_request tc [ (`Text "command", `Text "new_pool") ])
+  Cbor_helpers.extract_int (pool_request tc [ `Text "command", `Text "new_pool" ])
+;;
 
 (** [pool_add tc ~pool_id] adds a fresh variable to [pool_id] and returns the
     new variable id. *)
 let pool_add tc ~pool_id =
   Cbor_helpers.extract_int
-    (pool_request tc
-       [ (`Text "command", `Text "pool_add"); (`Text "pool_id", `Int pool_id) ])
+    (pool_request tc [ `Text "command", `Text "pool_add"; `Text "pool_id", `Int pool_id ])
+;;
 
 (** [pool_generate tc ~pool_id ?consume ()] draws a variable id from [pool_id].
     When [consume] is [true], the variable is also removed from the pool
     server-side. Drawing from an empty pool marks the test case invalid. *)
 let pool_generate tc ~pool_id ?(consume = false) () =
   Cbor_helpers.extract_int
-    (pool_request tc
-       [
-         (`Text "command", `Text "pool_generate");
-         (`Text "pool_id", `Int pool_id);
-         (`Text "consume", `Bool consume);
+    (pool_request
+       tc
+       [ `Text "command", `Text "pool_generate"
+       ; `Text "pool_id", `Int pool_id
+       ; `Text "consume", `Bool consume
        ])
+;;
 
 (** Supported protocol version range. *)
 let supported_protocol_lo = "0.14"
@@ -278,19 +302,23 @@ let supported_protocol_hi = "0.14"
 let compare_versions a b =
   let parse s =
     match String.split s ~on:'.' with
-    | [ major; minor ] -> (int_of_string major, int_of_string minor)
+    | [ major; minor ] -> int_of_string major, int_of_string minor
     | _ ->
-        failwith
-          (Printf.sprintf
-             "invalid version string '%s': expected 'major.minor' format" s)
+      failwith
+        (Printf.sprintf "invalid version string '%s': expected 'major.minor' format" s)
   in
   let a_major, a_minor = parse a in
   let b_major, b_minor = parse b in
   let c = Int.compare a_major b_major in
   if c <> 0 then c else Int.compare a_minor b_minor
+;;
 
-type client = { connection : connection; control : stream; lock : Mutex.t }
 (** Hegel client for running property-based tests. *)
+type client =
+  { connection : connection
+  ; control : stream
+  ; lock : Mutex.t
+  }
 
 (** [create_client connection] creates a new client from a connection. The
     connection must not yet have had its handshake performed. *)
@@ -302,11 +330,14 @@ let create_client connection =
   then
     failwith
       (sprintf
-         "hegel-ocaml supports protocol versions %s through %s, but the \
-          connected server is using protocol version %s. Upgrading hegel-ocaml \
-          or downgrading hegel-core might help."
-         supported_protocol_lo supported_protocol_hi server_version);
+         "hegel-ocaml supports protocol versions %s through %s, but the connected server \
+          is using protocol version %s. Upgrading hegel-ocaml or downgrading hegel-core \
+          might help."
+         supported_protocol_lo
+         supported_protocol_hi
+         server_version);
   { connection; control = control_stream connection; lock = Mutex.create () }
+;;
 
 (** [run_test_case client stream test_fn ~is_final] runs a single test case.
     Sets up thread-local state and calls [test_fn]. Reports status via
@@ -316,7 +347,10 @@ type test_outcome =
   | Invalid
   | Data_was_exhausted
   | Flaky_strategy_definition
-  | Interesting of { origin_text : string; exn : exn option }
+  | Interesting of
+      { origin_text : string
+      ; exn : exn option
+      }
 
 let run_test_case _client stream test_fn ~is_final =
   let tc = { stream; is_final; test_aborted = false } in
@@ -330,38 +364,39 @@ let run_test_case _client stream test_fn ~is_final =
     | Data_exhausted -> Data_was_exhausted
     | Flaky_strategy -> Flaky_strategy_definition
     | exn ->
-        Interesting
-          {
-            origin_text = extract_origin exn;
-            exn = (if is_final then Some exn else None);
-          }
+      Interesting
+        { origin_text = extract_origin exn; exn = (if is_final then Some exn else None) }
   in
   Stdlib.Domain.DLS.set in_test_context false;
   (match outcome with
-  | Data_was_exhausted | Flaky_strategy_definition -> ()
-  | Valid | Invalid | Interesting _ -> (
-      let status, origin =
-        match outcome with
-        | Valid -> ("VALID", `Null)
-        | Invalid -> ("INVALID", `Null)
-        | Interesting { origin_text; _ } -> ("INTERESTING", `Text origin_text)
-        | Data_was_exhausted | Flaky_strategy_definition -> assert false
-      in
-      try
+   | Data_was_exhausted | Flaky_strategy_definition -> ()
+   | Valid | Invalid | Interesting _ ->
+     let status, origin =
+       match outcome with
+       | Valid -> "VALID", `Null
+       | Invalid -> "INVALID", `Null
+       | Interesting { origin_text; _ } -> "INTERESTING", `Text origin_text
+       | Data_was_exhausted | Flaky_strategy_definition -> assert false
+     in
+     (try
         let (_ : Cbor.Simple.t) =
           pending_get
-            (request stream
+            (request
+               stream
                (`Map
-                  [
-                    (`Text "command", `Text "mark_complete");
-                    (`Text "status", `Text status);
-                    (`Text "origin", origin);
-                  ]))
+                   [ `Text "command", `Text "mark_complete"
+                   ; `Text "status", `Text status
+                   ; `Text "origin", origin
+                   ]))
         in
         ()
-      with Request_error e when String.equal e.error_type "StopTest" -> ()));
+      with
+      | Request_error e when String.equal e.error_type "StopTest" -> ()));
   close_stream stream;
-  match outcome with Interesting { exn = Some e; _ } -> raise e | _ -> ()
+  match outcome with
+  | Interesting { exn = Some e; _ } -> raise e
+  | _ -> ()
+;;
 
 (** [run_test client ~settings ?database_key test_fn] runs a property test using
     the given settings.
@@ -369,62 +404,56 @@ let run_test_case _client stream test_fn ~is_final =
     @param database_key
       optional key for persistent failure storage (internal use). *)
 let run_test client ~settings ?database_key test_fn =
-  if Stdlib.Domain.DLS.get in_test_context then
-    failwith "Cannot nest test cases - already inside a test case";
+  if Stdlib.Domain.DLS.get in_test_context
+  then failwith "Cannot nest test cases - already inside a test case";
   let test_stream = new_stream client.connection ~role:"Test" () in
   Mutex.lock client.lock;
   Exn.protect
     ~finally:(fun () -> Mutex.unlock client.lock)
     ~f:(fun () ->
       let seed_value =
-        match settings.seed with Some s -> `Int s | None -> `Null
+        match settings.seed with
+        | Some s -> `Int s
+        | None -> `Null
       in
       let database_key_value =
-        match database_key with Some k -> `Bytes k | None -> `Null
+        match database_key with
+        | Some k -> `Bytes k
+        | None -> `Null
       in
       let base_fields =
-        [
-          (`Text "command", `Text "run_test");
-          (`Text "test_cases", `Int settings.test_cases);
-          (`Text "seed", seed_value);
-          (`Text "stream_id", `Int (Int32.to_int_exn (stream_id test_stream)));
-          (`Text "database_key", database_key_value);
-          (`Text "derandomize", `Bool settings.derandomize);
+        [ `Text "command", `Text "run_test"
+        ; `Text "test_cases", `Int settings.test_cases
+        ; `Text "seed", seed_value
+        ; `Text "stream_id", `Int (Int32.to_int_exn (stream_id test_stream))
+        ; `Text "database_key", database_key_value
+        ; `Text "derandomize", `Bool settings.derandomize
         ]
       in
       let database_field =
         match settings.database with
         | Unset -> []
-        | Disabled -> [ (`Text "database", `Null) ]
-        | Path p -> [ (`Text "database", `Text p) ]
+        | Disabled -> [ `Text "database", `Null ]
+        | Path p -> [ `Text "database", `Text p ]
       in
       let suppress_field =
         match settings.suppress_health_check with
         | [] -> []
         | checks ->
-            [
-              ( `Text "suppress_health_check",
-                `Array
-                  (List.map checks ~f:(fun hc ->
-                       `Text (health_check_to_string hc))) );
-            ]
+          [ ( `Text "suppress_health_check"
+            , `Array (List.map checks ~f:(fun hc -> `Text (health_check_to_string hc))) )
+          ]
       in
       let phases_field =
         match settings.phases with
         | None -> []
         | Some phases ->
-            [
-              ( `Text "phases",
-                `Array (List.map phases ~f:(fun p -> `Text (phase_to_string p)))
-              );
-            ]
+          [ ( `Text "phases"
+            , `Array (List.map phases ~f:(fun p -> `Text (phase_to_string p))) )
+          ]
       in
-      let fields =
-        base_fields @ database_field @ suppress_field @ phases_field
-      in
-      let (_ : Cbor.Simple.t) =
-        pending_get (request client.control (`Map fields))
-      in
+      let fields = base_fields @ database_field @ suppress_field @ phases_field in
+      let (_ : Cbor.Simple.t) = pending_get (request client.control (`Map fields)) in
       ());
   let receive_and_run_test_case ~is_final =
     let message_id, message = receive_request test_stream () in
@@ -435,9 +464,7 @@ let run_test client ~settings ?database_key test_fn =
            (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "stream_id")))
     in
     send_response_value test_stream message_id `Null;
-    let test_case_stream =
-      connect_stream client.connection ch_id ~role:"Test Case" ()
-    in
+    let test_case_stream = connect_stream client.connection ch_id ~role:"Test Case" () in
     run_test_case client test_case_stream test_fn ~is_final
   in
   let rec receive_events () =
@@ -447,7 +474,8 @@ let run_test client ~settings ?database_key test_fn =
       Cbor_helpers.extract_string
         (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "event"))
     in
-    if String.equal event "test_case" then (
+    if String.equal event "test_case"
+    then (
       let ch_id =
         Int32.of_int_exn
           (Cbor_helpers.extract_int
@@ -458,44 +486,43 @@ let run_test client ~settings ?database_key test_fn =
         connect_stream client.connection ch_id ~role:"Test Case" ()
       in
       run_test_case client test_case_stream test_fn ~is_final:false;
-      if server_has_exited client.connection then
-        failwith server_crashed_message;
+      if server_has_exited client.connection then failwith server_crashed_message;
       receive_events ())
-    else if String.equal event "test_done" then (
+    else if String.equal event "test_done"
+    then (
       send_response_value test_stream message_id (`Bool true);
       Cbor_helpers.extract_dict
         (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "results")))
     else (
-      send_response_raw test_stream message_id
+      send_response_raw
+        test_stream
+        message_id
         (Cbor.Simple.encode
            (`Map
-              [
-                (`Text "error", `Text (sprintf "Unrecognised event %s" event));
-                (`Text "type", `Text "InvalidMessage");
-              ]));
+               [ `Text "error", `Text (sprintf "Unrecognised event %s" event)
+               ; `Text "type", `Text "InvalidMessage"
+               ]));
       receive_events ())
   in
   let results = receive_events () in
   (* Check for server-side errors *)
   (match List.Assoc.find results ~equal:Poly.( = ) (`Text "error") with
-  | Some error_val ->
-      let error_msg = Cbor_helpers.extract_string error_val in
-      failwith (sprintf "Server error: %s" error_msg)
-  | None -> ());
+   | Some error_val ->
+     let error_msg = Cbor_helpers.extract_string error_val in
+     failwith (sprintf "Server error: %s" error_msg)
+   | None -> ());
   (* Check for health check failure *)
-  (match
-     List.Assoc.find results ~equal:Poly.( = ) (`Text "health_check_failure")
-   with
-  | Some failure_val ->
-      let failure_msg = Cbor_helpers.extract_string failure_val in
-      failwith (sprintf "Health check failure:\n%s" failure_msg)
-  | None -> ());
+  (match List.Assoc.find results ~equal:Poly.( = ) (`Text "health_check_failure") with
+   | Some failure_val ->
+     let failure_msg = Cbor_helpers.extract_string failure_val in
+     failwith (sprintf "Health check failure:\n%s" failure_msg)
+   | None -> ());
   (* Check for flaky test detection *)
   (match List.Assoc.find results ~equal:Poly.( = ) (`Text "flaky") with
-  | Some flaky_val ->
-      let flaky_msg = Cbor_helpers.extract_string flaky_val in
-      failwith (sprintf "Flaky test detected: %s" flaky_msg)
-  | None -> ());
+   | Some flaky_val ->
+     let flaky_msg = Cbor_helpers.extract_string flaky_val in
+     failwith (sprintf "Flaky test detected: %s" flaky_msg)
+   | None -> ());
   (* Check passed flag *)
   let passed =
     match List.Assoc.find results ~equal:Poly.( = ) (`Text "passed") with
@@ -504,33 +531,38 @@ let run_test client ~settings ?database_key test_fn =
   in
   let n_interesting =
     Cbor_helpers.extract_int
-      (List.Assoc.find_exn results ~equal:Poly.( = )
-         (`Text "interesting_test_cases"))
+      (List.Assoc.find_exn results ~equal:Poly.( = ) (`Text "interesting_test_cases"))
   in
-  if n_interesting = 0 && passed then ()
-  else if n_interesting <= 1 then (
+  if n_interesting = 0 && passed
+  then ()
+  else if n_interesting <= 1
+  then (
     if n_interesting = 1 then receive_and_run_test_case ~is_final:true;
     if not passed then failwith "Property test failed")
-  else
+  else (
     let rec replay_interesting remaining acc =
-      if remaining = 0 then List.rev acc
-      else
+      if remaining = 0
+      then List.rev acc
+      else (
         let msg =
-          sprintf "Expected test case %d to fail but it didn't"
-            (List.length acc)
+          sprintf "Expected test case %d to fail but it didn't" (List.length acc)
         in
         let exn =
           try
             receive_and_run_test_case ~is_final:true;
             Failure msg
-          with e -> e
+          with
+          | e -> e
         in
-        replay_interesting (remaining - 1) (exn :: acc)
+        replay_interesting (remaining - 1) (exn :: acc))
     in
     let exns = replay_interesting n_interesting [] in
     raise
       (Failure
-         (sprintf "Multiple failures (%d):\n%s" (List.length exns)
-            (String.concat ~sep:"\n"
-               (List.mapi exns ~f:(fun i e ->
-                    sprintf "  %d: %s" i (Exn.to_string e))))))
+         (sprintf
+            "Multiple failures (%d):\n%s"
+            (List.length exns)
+            (String.concat
+               ~sep:"\n"
+               (List.mapi exns ~f:(fun i e -> sprintf "  %d: %s" i (Exn.to_string e)))))))
+;;

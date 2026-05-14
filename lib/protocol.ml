@@ -34,13 +34,13 @@ let close_stream_message_id = Int32.(shift_left 1l 31 - 1l)
     per RFC 8949 (reserved tag byte 0xFE). *)
 let close_stream_payload = Bytes.make 1 '\xFE' |> Bytes.to_string
 
-type packet = {
-  stream_id : int32;  (** The logical stream this packet belongs to. *)
-  message_id : int32;  (** Identifier for request/response correlation. *)
-  is_reply : bool;  (** Whether this is a reply to a previous request. *)
-  payload : string;  (** The raw payload bytes (typically CBOR-encoded). *)
-}
 (** A single message in the wire protocol. *)
+type packet =
+  { stream_id : int32 (** The logical stream this packet belongs to. *)
+  ; message_id : int32 (** Identifier for request/response correlation. *)
+  ; is_reply : bool (** Whether this is a reply to a previous request. *)
+  ; payload : string (** The raw payload bytes (typically CBOR-encoded). *)
+  }
 
 (** [equal_packet a b] returns [true] if packets [a] and [b] have identical
     fields. *)
@@ -49,42 +49,50 @@ let equal_packet a b =
   && Int32.equal a.message_id b.message_id
   && Bool.equal a.is_reply b.is_reply
   && String.equal a.payload b.payload
+;;
 
 (** [pp_packet fmt p] pretty-prints packet [p] to formatter [fmt]. *)
 let pp_packet fmt p =
-  Format.fprintf fmt
+  Format.fprintf
+    fmt
     "{stream_id=%ld; message_id=%ld; is_reply=%b; payload=<%d bytes>}"
-    p.stream_id p.message_id p.is_reply (String.length p.payload)
+    p.stream_id
+    p.message_id
+    p.is_reply
+    (String.length p.payload)
+;;
 
 (** [compute_crc32 data] computes the CRC32 checksum of [data] and returns it as
     an [int32]. *)
 let compute_crc32 data =
   let crc =
-    Checkseum.Crc32.digest_string data 0 (String.length data)
-      Checkseum.Crc32.default
+    Checkseum.Crc32.digest_string data 0 (String.length data) Checkseum.Crc32.default
   in
   Optint.to_int32 crc
+;;
 
 (** [compute_crc32_parts a b] computes the CRC32 checksum over the concatenation
     of strings [a] and [b] without allocating the concatenated string. *)
 let compute_crc32_parts a b =
-  let crc =
-    Checkseum.Crc32.digest_string a 0 (String.length a) Checkseum.Crc32.default
-  in
+  let crc = Checkseum.Crc32.digest_string a 0 (String.length a) Checkseum.Crc32.default in
   let crc = Checkseum.Crc32.digest_string b 0 (String.length b) crc in
   Optint.to_int32 crc
+;;
 
 (** [pack_uint32_be buf offset value] writes [value] as a big-endian unsigned
     32-bit integer at [offset] in [buf]. *)
 let pack_uint32_be buf offset value =
-  Bytes.set buf offset
-    (Char.of_int_exn (Int32.to_int_exn Int32.(value lsr 24) land 0xFF));
-  Bytes.set buf (offset + 1)
+  Bytes.set buf offset (Char.of_int_exn (Int32.to_int_exn Int32.(value lsr 24) land 0xFF));
+  Bytes.set
+    buf
+    (offset + 1)
     (Char.of_int_exn (Int32.to_int_exn Int32.(value lsr 16) land 0xFF));
-  Bytes.set buf (offset + 2)
+  Bytes.set
+    buf
+    (offset + 2)
     (Char.of_int_exn (Int32.to_int_exn Int32.(value lsr 8) land 0xFF));
-  Bytes.set buf (offset + 3)
-    (Char.of_int_exn (Int32.to_int_exn value land 0xFF))
+  Bytes.set buf (offset + 3) (Char.of_int_exn (Int32.to_int_exn value land 0xFF))
+;;
 
 (** [unpack_uint32_be data offset] reads a big-endian unsigned 32-bit integer
     from [data] at [offset]. *)
@@ -94,36 +102,38 @@ let unpack_uint32_be data offset =
   let b2 = Int32.of_int_exn (Char.to_int (Bytes.get data (offset + 2))) in
   let b3 = Int32.of_int_exn (Char.to_int (Bytes.get data (offset + 3))) in
   Int32.((b0 lsl 24) lor (b1 lsl 16) lor (b2 lsl 8) lor b3)
+;;
 
-exception Partial_packet of string
 (** Exception raised when the connection is closed partway through reading a
     packet. *)
+exception Partial_packet of string
 
-exception Connection_closed of string
 (** Exception raised when the connection is closed while reading data and some
     bytes have already been received. *)
+exception Connection_closed of string
 
 (** [recv_exact sock n] reads exactly [n] bytes from Unix file descriptor
     [sock]. Raises {!Partial_packet} if the connection closes with no data read,
     or {!Connection_closed} if it closes after partial data. *)
 let recv_exact sock n =
-  if n = 0 then Bytes.create 0
-  else
+  if n = 0
+  then Bytes.create 0
+  else (
     let buf = Bytes.create n in
     let rec read_all pos =
-      if pos < n then (
+      if pos < n
+      then (
         let chunk = Unix.read sock ~buf ~pos ~len:(n - pos) in
-        if chunk = 0 then
-          if pos > 0 then
-            raise (Connection_closed "Connection closed while reading data")
-          else
-            raise
-              (Partial_packet
-                 "Connection closed partway through reading packet.");
+        if chunk = 0
+        then
+          if pos > 0
+          then raise (Connection_closed "Connection closed while reading data")
+          else raise (Partial_packet "Connection closed partway through reading packet.");
         read_all (pos + chunk))
     in
     read_all 0;
-    buf
+    buf)
+;;
 
 (** [read_packet sock] reads and parses a single packet from Unix file
     descriptor [sock].
@@ -141,37 +151,35 @@ let read_packet sock =
   let message_id =
     if is_reply then Int32.(raw_message_id lxor reply_bit) else raw_message_id
   in
-  if Int32.( <> ) pkt_magic magic then
+  if Int32.( <> ) pkt_magic magic
+  then
     failwith
-      (sprintf "Invalid magic number: expected 0x%08lX, got 0x%08lX" magic
-         pkt_magic);
+      (sprintf "Invalid magic number: expected 0x%08lX, got 0x%08lX" magic pkt_magic);
   let payload_buf = recv_exact sock (Int32.to_int_exn length) in
   let term_buf = recv_exact sock 1 in
   let term_byte = Char.to_int (Bytes.get term_buf 0) in
-  if term_byte <> terminator then
+  if term_byte <> terminator
+  then
     failwith
-      (sprintf "Invalid terminator: expected 0x%02X, got 0x%02X" terminator
-         term_byte);
+      (sprintf "Invalid terminator: expected 0x%02X, got 0x%02X" terminator term_byte);
   (* Verify checksum: CRC32 over header with checksum field zeroed + payload *)
   let header_for_check = Bytes.copy header_buf in
   pack_uint32_be header_for_check 4 0l;
   let computed_crc =
-    compute_crc32_parts
-      (Bytes.to_string header_for_check)
-      (Bytes.to_string payload_buf)
+    compute_crc32_parts (Bytes.to_string header_for_check) (Bytes.to_string payload_buf)
   in
-  if Int32.( <> ) computed_crc checksum then
+  if Int32.( <> ) computed_crc checksum
+  then
     failwith
-      (sprintf "Checksum mismatch: expected 0x%08lX, got 0x%08lX" checksum
-         computed_crc);
+      (sprintf "Checksum mismatch: expected 0x%08lX, got 0x%08lX" checksum computed_crc);
   { stream_id; message_id; is_reply; payload = Bytes.to_string payload_buf }
+;;
 
 (** [write_packet sock packet] serializes and writes [packet] to Unix file
     descriptor [sock]. *)
 let write_packet sock packet =
   let wire_message_id =
-    if packet.is_reply then Int32.(packet.message_id lor reply_bit)
-    else packet.message_id
+    if packet.is_reply then Int32.(packet.message_id lor reply_bit) else packet.message_id
   in
   let payload_len = String.length packet.payload in
   (* Build header with zeroed checksum for CRC computation *)
@@ -181,20 +189,24 @@ let write_packet sock packet =
   pack_uint32_be header_buf 8 packet.stream_id;
   pack_uint32_be header_buf 12 wire_message_id;
   pack_uint32_be header_buf 16 (Int32.of_int_exn payload_len);
-  let checksum =
-    compute_crc32_parts (Bytes.to_string header_buf) packet.payload
-  in
+  let checksum = compute_crc32_parts (Bytes.to_string header_buf) packet.payload in
   pack_uint32_be header_buf 4 checksum;
   (* Assemble into a single buffer: header + payload + terminator *)
   let total_len = header_size + payload_len + 1 in
   let buf = Bytes.create total_len in
   Bytes.blit ~src:header_buf ~src_pos:0 ~dst:buf ~dst_pos:0 ~len:header_size;
-  Bytes.From_string.blit ~src:packet.payload ~src_pos:0 ~dst:buf
-    ~dst_pos:header_size ~len:payload_len;
+  Bytes.From_string.blit
+    ~src:packet.payload
+    ~src_pos:0
+    ~dst:buf
+    ~dst_pos:header_size
+    ~len:payload_len;
   Bytes.set buf (header_size + payload_len) (Char.of_int_exn terminator);
   let rec write_all pos =
-    if pos < total_len then
+    if pos < total_len
+    then (
       let written = Unix.write sock ~buf ~pos ~len:(total_len - pos) in
-      write_all (pos + written)
+      write_all (pos + written))
   in
   write_all 0
+;;

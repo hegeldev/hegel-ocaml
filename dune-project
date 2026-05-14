@@ -19,8 +19,6 @@
  (depends
   (ocaml
    (>= 5.2))
-  (dune
-   (>= 3.16))
   (core
    (>= 0.17))
   (core_unix
@@ -33,6 +31,8 @@
    (>= 1.2))
   (checkseum
    (>= 0.5))
+  (ppx_js_style
+   (>= v0.17))
   (bisect_ppx
    (and
     :with-test
@@ -53,9 +53,9 @@
  (depends
   (ocaml
    (>= 5.2))
-  (dune
-   (>= 3.16))
   (ppxlib
    (>= 0.28))
+  (ppx_js_style
+   (>= v0.17))
   (hegel
    (= :version))))

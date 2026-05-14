@@ -5,7 +5,7 @@
  (libraries ppxlib)
  (modules ppx_hegel_generator ppx_compat)
  (preprocess
-  (pps ppxlib.metaquot)))
+  (pps ppx_js_style ppxlib.metaquot)))
 
 ; Select the ppx_compat implementation based on whether we are building on
 ; OxCaml (ppxlib AST has labeled tuples and constructor modalities) or
