@@ -1,5 +1,5 @@
 (** The current version of Hegel for OCaml. *)
-let version = "0.3.15"
+let version = "0.3.16"
 
 (** Binary wire protocol for packet serialization and deserialization. *)
 module Protocol = Protocol
@@ -24,6 +24,9 @@ module Conformance = Conformance
 
 (** Runtime support for [@@deriving generator]. *)
 module Derive = Derive
+
+(** Stateful property-based testing on top of {!Generators}. *)
+module Stateful = Stateful
 
 (** {2 Convenience re-exports} *)
 

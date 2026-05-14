@@ -18,6 +18,7 @@ module Labels = struct
   let mapped = 13
   let sampled_from = 14
   let enum_variant = 15
+  let stateful_rule = 16
 end
 
 (** The type of generators. Generators produce typed OCaml values and can be

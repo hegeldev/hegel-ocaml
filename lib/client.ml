@@ -257,6 +257,41 @@ let stop_span ?(discard = false) tc =
     ())
 ;;
 
+(** Helper: send a pool-related request and translate StopTest into
+    [Data_exhausted]. *)
+let pool_request tc fields =
+  let stream = tc.stream in
+  try pending_get (request stream (`Map fields)) with
+  | Request_error e when String.equal e.error_type "StopTest" ->
+    tc.test_aborted <- true;
+    raise Data_exhausted
+;;
+
+(** [new_pool tc] creates a new server-side variable pool and returns its id. *)
+let new_pool tc =
+  Cbor_helpers.extract_int (pool_request tc [ `Text "command", `Text "new_pool" ])
+;;
+
+(** [pool_add tc ~pool_id] adds a fresh variable to [pool_id] and returns the
+    new variable id. *)
+let pool_add tc ~pool_id =
+  Cbor_helpers.extract_int
+    (pool_request tc [ `Text "command", `Text "pool_add"; `Text "pool_id", `Int pool_id ])
+;;
+
+(** [pool_generate tc ~pool_id ?consume ()] draws a variable id from [pool_id].
+    When [consume] is [true], the variable is also removed from the pool
+    server-side. Drawing from an empty pool marks the test case invalid. *)
+let pool_generate tc ~pool_id ?(consume = false) () =
+  Cbor_helpers.extract_int
+    (pool_request
+       tc
+       [ `Text "command", `Text "pool_generate"
+       ; `Text "pool_id", `Int pool_id
+       ; `Text "consume", `Bool consume
+       ])
+;;
+
 (** Supported protocol version range. *)
 let supported_protocol_lo = "0.14"
 

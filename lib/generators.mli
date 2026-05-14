@@ -21,6 +21,7 @@ module Labels : sig
   val mapped : int
   val sampled_from : int
   val enum_variant : int
+  val stateful_rule : int
 end
 
 type 'a generator =

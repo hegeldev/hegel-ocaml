@@ -134,6 +134,25 @@ val start_span : ?label:int -> test_case -> unit
 (** [stop_span ?discard tc] ends the current generation span. *)
 val stop_span : ?discard:bool -> test_case -> unit
 
+(** {2 Variable pools}
+
+    Pools are the server-side primitive backing variables in stateful testing
+    (see {!Stateful.Variables}). A pool is a list of integer "variable ids" that
+    the engine can sample from *)
+
+(** [new_pool tc] creates a new server-side variable pool and returns its id. *)
+val new_pool : test_case -> int
+
+(** [pool_add tc ~pool_id] adds a fresh variable to [pool_id] and returns the
+    new variable id. *)
+val pool_add : test_case -> pool_id:int -> int
+
+(** [pool_generate tc ~pool_id ?consume ()] draws a variable id from [pool_id].
+    When [consume] is [true] (default [false]), the variable is also removed
+    from the pool server-side. Drawing from an empty pool raises
+    {!Data_exhausted}. *)
+val pool_generate : test_case -> pool_id:int -> ?consume:bool -> unit -> int
+
 (** Lowest supported protocol version. *)
 val supported_protocol_lo : string
 

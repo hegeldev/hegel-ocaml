@@ -794,6 +794,113 @@ let test_run_hegel_test_defaults () =
     ignore (Cbor_helpers.extract_bool v : bool))
 ;;
 
+(* ---- pool helpers ---- *)
+
+(** Helper: emit a [test_case] event with a freshly connected data stream, run
+    [handle_data_ch] on it, then send [test_done] on the test stream.
+    [reads_mark_complete] should be [true] when the client-side test function
+    returns normally (Valid/Invalid/Interesting) so the helper reads and
+    responds to the [mark_complete] request; pass [false] when the test function
+    raises [Data_exhausted] or [Flaky_strategy], since the client skips
+    [mark_complete] in those cases. *)
+let with_single_test_case ?(reads_mark_complete = true) peer_conn handle_data_ch =
+  let _ctrl, test_ch = accept_run_test peer_conn in
+  let data_ch_id = 2l in
+  let data_ch = connect_stream peer_conn data_ch_id ~role:"Data" () in
+  ignore
+    (pending_get
+       (request
+          test_ch
+          (`Map
+              [ `Text "event", `Text "test_case"
+              ; `Text "stream_id", `Int (Int32.to_int_exn data_ch_id)
+              ])));
+  handle_data_ch data_ch;
+  if reads_mark_complete
+  then (
+    let msg_id, _ = receive_request data_ch () in
+    send_response_value data_ch msg_id `Null);
+  send_test_done test_ch [ `Text "interesting_test_cases", `Int 0 ]
+;;
+
+(** Test: pool_generate with default [consume] (omitted). Server receives the
+    pool_generate command and we verify consume=false in the payload. *)
+let test_pool_generate_default_consume () =
+  with_fake_server
+    (fun peer_conn ->
+       with_single_test_case peer_conn (fun data_ch ->
+         let msg_id, req = receive_request data_ch () in
+         let pairs = Cbor_helpers.extract_dict req in
+         let consume =
+           Cbor_helpers.extract_bool
+             (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "consume"))
+         in
+         Alcotest.(check bool) "consume is false by default" false consume;
+         send_response_value data_ch msg_id (`Int 7)))
+    (fun client ->
+       run_test
+         client
+         ~settings:(Client.default_settings () |> Client.with_test_cases 1)
+         (fun tc ->
+            let v = pool_generate tc ~pool_id:42 () in
+            Alcotest.(check int) "generated id" 7 v))
+;;
+
+(** Test: pool_request handles a StopTest reply by raising Data_exhausted and
+    setting test_aborted. Triggered via [new_pool]. *)
+let test_pool_request_stop_test () =
+  with_fake_server
+    (fun peer_conn ->
+       with_single_test_case ~reads_mark_complete:false peer_conn (fun data_ch ->
+         let msg_id, _req = receive_request data_ch () in
+         send_response_raw
+           data_ch
+           msg_id
+           (Cbor.Simple.encode
+              (`Map
+                  [ `Text "error", `Text "data exhausted"
+                  ; `Text "type", `Text "StopTest"
+                  ]))))
+    (fun client ->
+       let raised = ref false in
+       run_test
+         client
+         ~settings:(Client.default_settings () |> Client.with_test_cases 1)
+         (fun tc ->
+            try ignore (new_pool tc) with
+            | Data_exhausted ->
+              raised := true;
+              Alcotest.(check bool) "test_aborted set" true tc.test_aborted;
+              raise Data_exhausted);
+       Alcotest.(check bool) "raised Data_exhausted" true !raised)
+;;
+
+(** Test: [Stateful.Variables.draw] raises [Flaky_strategy] when the server
+    returns a variable id the variables's local hashtable doesn't contain.
+    Covers the [None] arm in [stateful.ml]'s [pick]. *)
+let test_variables_flaky_strategy () =
+  with_fake_server
+    (fun peer_conn ->
+       with_single_test_case ~reads_mark_complete:false peer_conn (fun data_ch ->
+         (* new_pool *)
+         let msg_id, _ = receive_request data_ch () in
+         send_response_value data_ch msg_id (`Int 1);
+         (* pool_add → variable_id 100 *)
+         let msg_id, _ = receive_request data_ch () in
+         send_response_value data_ch msg_id (`Int 100);
+         (* pool_generate → 999, an id the variables never recorded *)
+         let msg_id, _ = receive_request data_ch () in
+         send_response_value data_ch msg_id (`Int 999)))
+    (fun client ->
+       run_test
+         client
+         ~settings:(Client.default_settings () |> Client.with_test_cases 1)
+         (fun tc ->
+            let variables = Hegel.Stateful.Variables.create tc in
+            Hegel.Stateful.Variables.add variables "v";
+            ignore (Hegel.Stateful.Variables.draw variables)))
+;;
+
 (* ---- health_check_to_string ---- *)
 
 let test_health_check_to_string () =
@@ -1590,6 +1697,12 @@ let tests =
   ; Alcotest.test_case "settings convenience" `Quick test_settings_convenience
   ; Alcotest.test_case "with_seed" `Quick test_with_seed
   ; Alcotest.test_case "run_test with database_key" `Quick test_run_test_with_database_key
+  ; Alcotest.test_case
+      "pool_generate default consume"
+      `Quick
+      test_pool_generate_default_consume
+  ; Alcotest.test_case "pool_request StopTest" `Quick test_pool_request_stop_test
+  ; Alcotest.test_case "variables flaky strategy" `Quick test_variables_flaky_strategy
   ; (* Real-server converted tests *)
     Alcotest.test_case "start/stop span live" `Quick test_start_stop_span_live
   ; Alcotest.test_case "version mismatch" `Quick test_version_mismatch
