@@ -27,8 +27,8 @@ let of_hex s =
   Bytes.to_string r
 ;;
 
-let read_entries file =
-  Yojson.Safe.from_file file
+let parse_entries json =
+  Yojson.Safe.from_string json
   |> Yojson.Safe.Util.to_list
   |> List.map (function
     | `Assoc a ->
@@ -84,31 +84,30 @@ let run_entry path idx entry =
         (Yojson.Safe.to_string actual)
 ;;
 
-let cases_of_file path ignored =
-  let entries = read_entries path in
+let cases_of label entries ignored =
   List.mapi
     (fun idx entry ->
-       let name = Printf.sprintf "%s [%d] %s" (Filename.basename path) idx entry.hex in
+       let name = Printf.sprintf "%s [%d] %s" label idx entry.hex in
        let test () =
          if List.mem idx ignored
          then ()
          else (
-           try run_entry path idx entry with
+           try run_entry label idx entry with
            | exn ->
              let msg =
                match exn with
                | Failure s -> s
                | _ -> Printexc.to_string exn
              in
-             Alcotest.failf "%s[%d]: %s" path idx msg)
+             Alcotest.failf "%s[%d]: %s" label idx msg)
        in
        Alcotest.test_case name `Quick test)
     entries
 ;;
 
-(** Resolve [filename] alongside the test executable. Dune's [(deps ...)]
-    stanza places the JSON vectors there for both [dune runtest] and direct
-    invocations via [just test]. *)
-let resolve filename = Filename.concat (Filename.dirname Sys.executable_name) filename
-
-let tests = cases_of_file (resolve "cbor_appendix_a.json") appendix_a_ignored
+let tests =
+  cases_of
+    "cbor_appendix_a.json"
+    (parse_entries Cbor_appendix_a_data.json)
+    appendix_a_ignored
+;;
