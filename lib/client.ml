@@ -559,7 +559,11 @@ let run_test client ~settings ?database_key test_fn =
       let test_case_stream =
         connect_stream client.connection ch_id ~role:"Test Case" ()
       in
-      run_test_case client test_case_stream test_fn ~is_final ~mode:settings.mode
+      match
+        run_test_case client test_case_stream test_fn ~is_final ~mode:settings.mode
+      with
+      | Interesting { exn = Some e; _ } -> Some e
+      | _ -> None
     in
     let rec receive_events () =
       let message_id, message = receive_request test_stream () in
@@ -639,10 +643,7 @@ let run_test client ~settings ?database_key test_fn =
     else if n_interesting <= 1
     then (
       if n_interesting = 1
-      then (
-        match receive_and_run_test_case ~is_final:true with
-        | Interesting { exn = Some e; _ } -> raise e
-        | _ -> ());
+      then Option.iter (receive_and_run_test_case ~is_final:true) ~f:raise;
       if not passed then failwith "Property test failed")
     else (
       let rec replay_interesting remaining acc =
@@ -653,12 +654,9 @@ let run_test client ~settings ?database_key test_fn =
             sprintf "Expected test case %d to fail but it didn't" (List.length acc)
           in
           let exn =
-            try
-              match receive_and_run_test_case ~is_final:true with
-              | Interesting { exn = Some e; _ } -> e
-              | _ -> Failure msg
-            with
-            | e -> e
+            match receive_and_run_test_case ~is_final:true with
+            | Some e | (exception e) -> e
+            | None -> Failure msg
           in
           replay_interesting (remaining - 1) (exn :: acc))
       in
