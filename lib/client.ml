@@ -164,6 +164,7 @@ let with_mode mode s = { s with mode }
     stream, final-run flag, and abort state. *)
 type test_case =
   { stream : stream
+  ; mode : mode
   ; is_final : bool
   ; mutable test_aborted : bool
   }
@@ -365,8 +366,8 @@ type test_outcome =
 (** [run_test_case client stream test_fn ~is_final] runs a single test case.
     Sets up thread-local state, calls [test_fn], reports status via
     mark_complete, and returns the outcome. *)
-let run_test_case _client stream test_fn ~is_final =
-  let tc = { stream; is_final; test_aborted = false } in
+let run_test_case _client stream test_fn ~is_final ~mode =
+  let tc = { stream; mode; is_final; test_aborted = false } in
   Stdlib.Domain.DLS.set in_test_context true;
   let outcome =
     try
@@ -454,7 +455,14 @@ let run_test client ~settings ?database_key test_fn =
         let test_case_stream =
           connect_stream client.connection ch_id ~role:"Test Case" ()
         in
-        (match run_test_case client test_case_stream test_fn ~is_final:true with
+        (match
+           run_test_case
+             client
+             test_case_stream
+             test_fn
+             ~is_final:true
+             ~mode:settings.mode
+         with
          | Interesting { exn = Some e; _ } -> failures := e :: !failures
          | _ -> ());
         loop ())
@@ -543,7 +551,7 @@ let run_test client ~settings ?database_key test_fn =
       let test_case_stream =
         connect_stream client.connection ch_id ~role:"Test Case" ()
       in
-      run_test_case client test_case_stream test_fn ~is_final
+      run_test_case client test_case_stream test_fn ~is_final ~mode:settings.mode
     in
     let rec receive_events () =
       let message_id, message = receive_request test_stream () in
@@ -564,7 +572,12 @@ let run_test client ~settings ?database_key test_fn =
           connect_stream client.connection ch_id ~role:"Test Case" ()
         in
         let (_ : test_outcome) =
-          run_test_case client test_case_stream test_fn ~is_final:false
+          run_test_case
+            client
+            test_case_stream
+            test_fn
+            ~is_final:false
+            ~mode:settings.mode
         in
         if server_has_exited client.connection then failwith server_crashed_message;
         receive_events ())

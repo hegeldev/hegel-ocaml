@@ -129,7 +129,12 @@ let dummy_data () =
   let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Dummy" () in
   let data =
-    Client.{ stream = control_stream conn; is_final = false; test_aborted = false }
+    Client.
+      { stream = control_stream conn
+      ; mode = Test_run
+      ; is_final = false
+      ; test_aborted = false
+      }
   in
   data, conn, s2
 ;;
@@ -193,7 +198,9 @@ let test_collection_more_stoptest () =
   ignore (send_handshake conn);
   Thread.join t_hs;
   let ch = new_stream conn ~role:"Data" () in
-  let data = Client.{ stream = ch; is_final = false; test_aborted = false } in
+  let data =
+    Client.{ stream = ch; mode = Test_run; is_final = false; test_aborted = false }
+  in
   let coll = new_collection ~min_size:0 data () in
   let peer_ch = connect_stream peer_conn (stream_id ch) ~role:"Peer" () in
   let t_peer =
@@ -229,7 +236,9 @@ let test_collection_reject_live () =
   ignore (send_handshake conn);
   Thread.join t_hs;
   let ch = new_stream conn ~role:"Data" () in
-  let data = Client.{ stream = ch; is_final = false; test_aborted = false } in
+  let data =
+    Client.{ stream = ch; mode = Test_run; is_final = false; test_aborted = false }
+  in
   let coll = new_collection ~min_size:0 data () in
   coll.collection_id <- Some (`Int 0);
   let peer_ch = connect_stream peer_conn (stream_id ch) ~role:"Peer" () in

@@ -111,6 +111,7 @@ val with_mode : mode -> settings -> settings
     stream, final-run flag, and abort state. *)
 type test_case =
   { stream : Connection.stream
+  ; mode : mode
   ; is_final : bool
   ; mutable test_aborted : bool
   }
@@ -201,6 +202,7 @@ val run_test_case
   -> Connection.stream
   -> (test_case -> unit)
   -> is_final:bool
+  -> mode:mode
   -> test_outcome
 
 (** [run_test client ~settings ?database_key test_fn] runs a property test using

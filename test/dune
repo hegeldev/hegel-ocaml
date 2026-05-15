@@ -26,7 +26,8 @@
   test_generators_combinators
   test_conformance_helpers
   test_derive
-  test_stateful)
+  test_stateful
+  test_single_test_case)
  (libraries hegel alcotest core core_unix threads.posix yojson cbor)
  (preprocess
   (pps ppx_js_style -- -allow-unannotated-ignores))

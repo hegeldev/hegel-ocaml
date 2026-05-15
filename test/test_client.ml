@@ -14,7 +14,12 @@ let test_assume_true () =
   let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
-    Client.{ stream = control_stream conn; is_final = false; test_aborted = false }
+    Client.
+      { stream = control_stream conn
+      ; mode = Test_run
+      ; is_final = false
+      ; test_aborted = false
+      }
   in
   assume tc true;
   close conn;
@@ -25,7 +30,12 @@ let test_assume_false_raises () =
   let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
-    Client.{ stream = control_stream conn; is_final = false; test_aborted = false }
+    Client.
+      { stream = control_stream conn
+      ; mode = Test_run
+      ; is_final = false
+      ; test_aborted = false
+      }
   in
   let raised = ref false in
   (try assume tc false with
@@ -39,7 +49,12 @@ let test_note_when_not_final () =
   let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
-    Client.{ stream = control_stream conn; is_final = false; test_aborted = false }
+    Client.
+      { stream = control_stream conn
+      ; mode = Test_run
+      ; is_final = false
+      ; test_aborted = false
+      }
   in
   note tc "should not print";
   close conn;
@@ -50,7 +65,12 @@ let test_note_when_final () =
   let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
-    Client.{ stream = control_stream conn; is_final = true; test_aborted = false }
+    Client.
+      { stream = control_stream conn
+      ; mode = Test_run
+      ; is_final = true
+      ; test_aborted = false
+      }
   in
   note tc "test message from note";
   close conn;
@@ -77,7 +97,12 @@ let test_start_span_when_aborted () =
   let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let data =
-    Client.{ stream = control_stream conn; is_final = false; test_aborted = true }
+    Client.
+      { stream = control_stream conn
+      ; mode = Test_run
+      ; is_final = false
+      ; test_aborted = true
+      }
   in
   start_span data;
   stop_span data;

@@ -50,6 +50,12 @@ module Rule = struct
   let name t = t.name
 end
 
+let is_single tc =
+  match tc.Client.mode with
+  | Client.Single_test_case -> true
+  | Test_run -> false
+;;
+
 let run ~init ~rules ?(invariants = []) tc =
   match rules with
   | [] -> invalid_arg "Cannot run a state machine with no rules."
@@ -58,11 +64,15 @@ let run ~init ~rules ?(invariants = []) tc =
     let run_invariants state = List.iter invariants ~f:(fun inv -> inv state) in
     run_invariants init;
     let step_cap =
-      Generators.draw tc (Generators.integers ~min_value:1 ~max_value:50 ())
+      if is_single tc
+      then Int.max_value
+      else Generators.draw tc (Generators.integers ~min_value:1 ~max_value:50 ())
     in
     let should_continue ~num_steps_succeeded ~num_steps =
-      num_steps_succeeded < step_cap
-      && (num_steps < 10 * step_cap || (num_steps_succeeded = 0 && num_steps < 1000))
+      is_single tc
+      || (num_steps_succeeded < step_cap
+          && (num_steps < 10 * step_cap || (num_steps_succeeded = 0 && num_steps < 1000))
+         )
     in
     let try_step ~state ~num_steps =
       Client.start_span ~label:Generators.Labels.stateful_rule tc;

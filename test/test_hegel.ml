@@ -18,5 +18,6 @@ let () =
     ; "conformance_helpers", Test_conformance_helpers.tests
     ; "derive", Test_derive.tests
     ; "stateful", Test_stateful.tests
+    ; "single_test_case", Test_single_test_case.tests
     ]
 ;;
