@@ -225,7 +225,7 @@ let note tc message = if tc.is_final then eprintf "%s\n%!" message
     toward higher values. *)
 let target tc value label =
   let stream = tc.stream in
-  let (_ : Cbor.Simple.t) =
+  let (_ : Cbor.t) =
     pending_get
       (request
          stream
@@ -244,7 +244,7 @@ let start_span ?(label = 0) tc =
   then ()
   else (
     let stream = tc.stream in
-    let (_ : Cbor.Simple.t) =
+    let (_ : Cbor.t) =
       pending_get
         (request
            stream
@@ -259,7 +259,7 @@ let stop_span ?(discard = false) tc =
   then ()
   else (
     let stream = tc.stream in
-    let (_ : Cbor.Simple.t) =
+    let (_ : Cbor.t) =
       pending_get
         (request
            stream
@@ -393,7 +393,7 @@ let run_test_case _client stream test_fn ~is_final ~mode =
        | Data_was_exhausted | Flaky_strategy_definition -> assert false
      in
      (try
-        let (_ : Cbor.Simple.t) =
+        let (_ : Cbor.t) =
           pending_get
             (request
                stream
@@ -434,7 +434,7 @@ let run_test client ~settings ?database_key test_fn =
             ; `Text "seed", seed_value
             ]
         in
-        let (_ : Cbor.Simple.t) = pending_get (request client.control msg) in
+        let (_ : Cbor.t) = pending_get (request client.control msg) in
         ());
     let failures = ref [] in
     let rec loop () =
@@ -468,7 +468,15 @@ let run_test client ~settings ?database_key test_fn =
         loop ())
       else if String.equal event "test_done"
       then send_response_value test_stream message_id (`Bool true)
-      else failwith (sprintf "Unexpected event '%s' in single_test_case mode" event)
+      else
+        send_response_raw
+          test_stream
+          message_id
+          (Cbor.encode
+             (`Map
+                 [ `Text "error", `Text (sprintf "Unrecognised event %s" event)
+                 ; `Text "type", `Text "InvalidMessage"
+                 ]))
     in
     loop ();
     match List.rev !failures with
@@ -537,7 +545,7 @@ let run_test client ~settings ?database_key test_fn =
             ]
         in
         let fields = base_fields @ database_field @ suppress_field @ phases_field in
-        let (_ : Cbor.Simple.t) = pending_get (request client.control (`Map fields)) in
+        let (_ : Cbor.t) = pending_get (request client.control (`Map fields)) in
         ());
     let receive_and_run_test_case ~is_final =
       let message_id, message = receive_request test_stream () in
@@ -590,7 +598,7 @@ let run_test client ~settings ?database_key test_fn =
         send_response_raw
           test_stream
           message_id
-          (Cbor.Simple.encode
+          (Cbor.encode
              (`Map
                  [ `Text "error", `Text (sprintf "Unrecognised event %s" event)
                  ; `Text "type", `Text "InvalidMessage"

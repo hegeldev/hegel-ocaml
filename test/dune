@@ -15,6 +15,7 @@
   test_hegel
   test_helpers
   test_protocol
+  test_crc32
   test_cbor_helpers
   test_cbor_vectors
   cbor_appendix_a_data
@@ -28,7 +29,7 @@
   test_derive
   test_stateful
   test_single_test_case)
- (libraries hegel alcotest core core_unix threads.posix yojson cbor)
+ (libraries hegel alcotest core core_unix threads.posix crc32 yojson cbor)
  (preprocess
   (pps ppx_js_style -- -allow-unannotated-ignores))
  (foreign_stubs

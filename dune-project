@@ -2,7 +2,7 @@
 
 (name hegel)
 
-(version 0.3.16)
+(version 0.3.17)
 
 (generate_opam_files true)
 
@@ -29,8 +29,6 @@
     (>= 1.7)))
   (ocplib-endian
    (>= 1.2))
-  (checkseum
-   (>= 0.5))
   (ppx_js_style
    (>= v0.17))
   (bisect_ppx
@@ -40,7 +38,7 @@
   (ocamlformat
    (and
     :with-test
-    (= 0.28.1)))
+    (= 0.29.0)))
   (yojson
    (>= 1.7))
   (odoc :with-doc)))

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.17 - 2026-05-14
+
+Internal checksum refactor.
+
 ## 0.3.16 - 2026-05-14
 
 Add `Hegel.Stateful` module for rule based stateful testing.

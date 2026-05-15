@@ -7,6 +7,7 @@ let () =
   Alcotest.run
     "hegel"
     [ "protocol", Test_protocol.tests
+    ; "crc32", Test_crc32.tests
     ; "cbor_helpers", Test_cbor_helpers.tests
     ; "cbor_vectors", Test_cbor_vectors.tests
     ; "connection", Test_connection.tests

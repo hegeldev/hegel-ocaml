@@ -1,6 +1,7 @@
 .venv/
 .hegel/
 .hypothesis/
+.vscode/
 __pycache__/
 *.pyc
 # whitelist .claude files, rather than blacklist. Some local claude files

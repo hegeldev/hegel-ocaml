@@ -881,7 +881,7 @@ let test_pool_request_stop_test () =
          send_response_raw
            data_ch
            msg_id
-           (Cbor.Simple.encode
+           (Cbor.encode
               (`Map
                   [ `Text "error", `Text "data exhausted"
                   ; `Text "type", `Text "StopTest"
@@ -1295,7 +1295,7 @@ let test_send_error_reply_fails_silently () =
     { Protocol.stream_id = 99l
     ; message_id = 1l
     ; is_reply = false
-    ; payload = Cbor.Simple.encode (`Map [ `Text "command", `Text "hello" ])
+    ; payload = Cbor.encode (`Map [ `Text "command", `Text "hello" ])
     }
   in
   Protocol.write_packet peer_write_fd pkt;

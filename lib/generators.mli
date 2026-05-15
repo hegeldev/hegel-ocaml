@@ -26,8 +26,8 @@ end
 
 type 'a generator =
   | Basic :
-      { schema : Cbor.Simple.t
-      ; transform : Cbor.Simple.t -> 'a
+      { schema : Cbor.t
+      ; transform : Cbor.t -> 'a
       }
       -> 'a generator
   | Mapped :
@@ -89,7 +89,7 @@ val discardable_group : int -> Client.test_case -> (unit -> 'a) -> 'a
 (** A collection handle for generating variable-length sequences. *)
 type collection =
   { mutable finished : bool
-  ; mutable collection_id : Cbor.Simple.t option
+  ; mutable collection_id : Cbor.t option
   ; min_size : int
   ; max_size : int option
   }
@@ -135,14 +135,14 @@ val flat_map : ('a -> 'b generator) -> 'a generator -> 'b generator
 val filter : ('a -> bool) -> 'a generator -> 'a generator
 
 (** [schema gen] returns the schema for a [Basic] generator, or [None]. *)
-val schema : 'a generator -> Cbor.Simple.t option
+val schema : 'a generator -> Cbor.t option
 
 (** [is_basic gen] returns [true] if [gen] is a [Basic] generator. *)
 val is_basic : 'a generator -> bool
 
 (** [as_basic gen] returns [Some (schema, transform)] if [gen] is [Basic], or
     [None] otherwise. *)
-val as_basic : 'a generator -> (Cbor.Simple.t * (Cbor.Simple.t -> 'a)) option
+val as_basic : 'a generator -> (Cbor.t * (Cbor.t -> 'a)) option
 
 (** {2 Primitive generators} *)
 

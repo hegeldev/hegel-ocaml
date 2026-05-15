@@ -1,12 +1,12 @@
 (** Each JSON entry becomes one Alcotest case that:
 
     1. Hex-decodes the [hex] field to obtain the wire-format CBOR.
-    2. Decodes with [Cbor.Simple.decode] and checks the diagnostic string
+    2. Decodes with [Cbor.decode] and checks the diagnostic string
        against the expected [diagnostic], or the JSON-converted value against
        the expected [decoded] JSON.
 *)
 
-module Simple = Cbor.Simple
+module Simple = Cbor
 
 type result =
   | Decoded of Yojson.Safe.t
@@ -60,7 +60,7 @@ let rec json_of_cbor : Simple.t -> Yojson.Safe.t = function
     `String (Printf.sprintf "%d(%s)" t (Yojson.Safe.to_string (json_of_cbor v)))
 ;;
 
-(** Vectors whose [decoded] value falls outside what [Cbor.Simple] can
+(** Vectors whose [decoded] value falls outside what [Cbor] can
     represent — 64-bit unsigned literals and bignum tags. The upstream test
     has the same exclusion list. *)
 let appendix_a_ignored = [ 10; 11; 12; 13; 71 ]

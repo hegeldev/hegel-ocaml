@@ -124,7 +124,7 @@ val extract_origin : exn -> string
     a generate command to the server. Raises {!Data_exhausted} if the server
     signals StopTest or {!Flaky_strategy} if it signals FlakyStrategyDefinition.
 *)
-val generate_from_schema : Cbor.Simple.t -> test_case -> Cbor.Simple.t
+val generate_from_schema : Cbor.t -> test_case -> Cbor.t
 
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)
