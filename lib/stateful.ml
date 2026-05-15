@@ -50,13 +50,7 @@ module Rule = struct
   let name t = t.name
 end
 
-module Settings = struct
-  type t = { max_steps : int }
-
-  let default = { max_steps = 50 }
-end
-
-let run ?(settings = Settings.default) ~init ~rules ?(invariants = []) tc =
+let run ~init ~rules ?(invariants = []) tc =
   match rules with
   | [] -> invalid_arg "Cannot run a state machine with no rules."
   | _ ->
@@ -64,9 +58,7 @@ let run ?(settings = Settings.default) ~init ~rules ?(invariants = []) tc =
     let run_invariants state = List.iter invariants ~f:(fun inv -> inv state) in
     run_invariants init;
     let step_cap =
-      Generators.draw
-        tc
-        (Generators.integers ~min_value:1 ~max_value:settings.Settings.max_steps ())
+      Generators.draw tc (Generators.integers ~min_value:1 ~max_value:50 ())
     in
     let should_continue ~num_steps_succeeded ~num_steps =
       num_steps_succeeded < step_cap

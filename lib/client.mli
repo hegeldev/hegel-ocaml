@@ -37,6 +37,11 @@ type database =
   | Disabled
   | Path of string
 
+(** Controls test execution mode *)
+type mode =
+  | Test_run
+  | Single_test_case
+
 (** Phases of the test that can be enabled or disabled. *)
 type phase =
   | Explicit
@@ -51,7 +56,8 @@ val phase_to_string : phase -> string
 
 (** Configuration for a Hegel test run. *)
 type settings =
-  { test_cases : int
+  { mode : mode
+  ; test_cases : int
   ; verbosity : verbosity
   ; seed : int option
   ; derandomize : bool
@@ -97,6 +103,9 @@ val with_suppress_health_check : health_check list -> settings -> settings
 (** [with_phases phases s] returns settings [s] with [phases] set to restrict
     test execution to those phases. *)
 val with_phases : phase list -> settings -> settings
+
+(** [with_mode mode s] returns settings [s] with test [mode] set to [mode]. *)
+val with_mode : mode -> settings -> settings
 
 (** Per-test-case state passed explicitly to the test function. Holds the data
     stream, final-run flag, and abort state. *)
@@ -170,14 +179,29 @@ type client =
     connection must not yet have had its handshake performed. *)
 val create_client : Connection.connection -> client
 
+(** Outcome of running one test case. [Interesting] carries the captured
+    exception when [is_final] was true so the caller can re-raise it once
+    protocol I/O is complete. *)
+type test_outcome =
+  | Valid
+  | Invalid
+  | Data_was_exhausted
+  | Flaky_strategy_definition
+  | Interesting of
+      { origin_text : string
+      ; exn : exn option
+      }
+
 (** [run_test_case client stream test_fn ~is_final] runs a single test case.
-    Passes the test case to [test_fn]. Reports status via mark_complete. *)
+    Passes the test case to [test_fn]. Reports status via mark_complete.
+    Returns the outcome instead of raising — the caller decides whether and
+    when to surface a captured exception. *)
 val run_test_case
   :  client
   -> Connection.stream
   -> (test_case -> unit)
   -> is_final:bool
-  -> unit
+  -> test_outcome
 
 (** [run_test client ~settings ?database_key test_fn] runs a property test using
     the given settings. *)

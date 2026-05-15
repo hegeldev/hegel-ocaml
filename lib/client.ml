@@ -48,6 +48,11 @@ type database =
   | Disabled
   | Path of string
 
+(** Controls test execution mode *)
+type mode =
+  | Test_run
+  | Single_test_case
+
 (** Phases of the test lifecycle. Mirrors [hypothesis.Phase]. *)
 type phase =
   | Explicit
@@ -67,7 +72,8 @@ let phase_to_string = function
 
 (** Configuration for a Hegel test run. *)
 type settings =
-  { test_cases : int
+  { mode : mode
+  ; test_cases : int
   ; verbosity : verbosity
   ; seed : int option
   ; derandomize : bool
@@ -105,7 +111,8 @@ let is_in_ci () =
     environments automatically. *)
 let default_settings () =
   let in_ci = is_in_ci () in
-  { test_cases = 100
+  { mode = Test_run
+  ; test_cases = 100
   ; verbosity = Normal
   ; seed = None
   ; derandomize = in_ci
@@ -149,6 +156,9 @@ let with_suppress_health_check checks s =
 
 (** [with_phases phases s] returns settings [s] with [phases] set. *)
 let with_phases phases s = { s with phases = Some phases }
+
+(** [with_mode mode s] returns settings [s] with test [mode] set to [mode]. *)
+let with_mode mode s = { s with mode }
 
 (** Per-test-case state passed explicitly to the test function. Holds the data
     stream, final-run flag, and abort state. *)
@@ -339,9 +349,9 @@ let create_client connection =
   { connection; control = control_stream connection; lock = Mutex.create () }
 ;;
 
-(** [run_test_case client stream test_fn ~is_final] runs a single test case.
-    Sets up thread-local state and calls [test_fn]. Reports status via
-    mark_complete. *)
+(** Outcome of running one test case. [Interesting] carries the captured
+    exception when [is_final] was true so the caller can re-raise it once
+    protocol I/O is complete. *)
 type test_outcome =
   | Valid
   | Invalid
@@ -352,6 +362,9 @@ type test_outcome =
       ; exn : exn option
       }
 
+(** [run_test_case client stream test_fn ~is_final] runs a single test case.
+    Sets up thread-local state, calls [test_fn], reports status via
+    mark_complete, and returns the outcome. *)
 let run_test_case _client stream test_fn ~is_final =
   let tc = { stream; is_final; test_aborted = false } in
   Stdlib.Domain.DLS.set in_test_context true;
@@ -393,9 +406,7 @@ let run_test_case _client stream test_fn ~is_final =
       with
       | Request_error e when String.equal e.error_type "StopTest" -> ()));
   close_stream stream;
-  match outcome with
-  | Interesting { exn = Some e; _ } -> raise e
-  | _ -> ()
+  outcome
 ;;
 
 (** [run_test client ~settings ?database_key test_fn] runs a property test using
@@ -404,78 +415,125 @@ let run_test_case _client stream test_fn ~is_final =
     @param database_key
       optional key for persistent failure storage (internal use). *)
 let run_test client ~settings ?database_key test_fn =
+  let run_single_test_case () =
+    let test_stream = new_stream client.connection ~role:"Test" () in
+    Mutex.lock client.lock;
+    Exn.protect
+      ~finally:(fun () -> Mutex.unlock client.lock)
+      ~f:(fun () ->
+        let seed_value =
+          match settings.seed with
+          | Some s -> `Int s
+          | None -> `Null
+        in
+        let msg =
+          `Map
+            [ `Text "command", `Text "single_test_case"
+            ; `Text "stream_id", `Int (Int32.to_int_exn (stream_id test_stream))
+            ; `Text "seed", seed_value
+            ]
+        in
+        let (_ : Cbor.Simple.t) = pending_get (request client.control msg) in
+        ());
+    let failures = ref [] in
+    let rec loop () =
+      let message_id, message = receive_request test_stream () in
+      let pairs = Cbor_helpers.extract_dict message in
+      let event =
+        Cbor_helpers.extract_string
+          (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "event"))
+      in
+      if String.equal event "test_case"
+      then (
+        let ch_id =
+          Int32.of_int_exn
+            (Cbor_helpers.extract_int
+               (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "stream_id")))
+        in
+        send_response_value test_stream message_id `Null;
+        let test_case_stream =
+          connect_stream client.connection ch_id ~role:"Test Case" ()
+        in
+        (match run_test_case client test_case_stream test_fn ~is_final:true with
+         | Interesting { exn = Some e; _ } -> failures := e :: !failures
+         | _ -> ());
+        loop ())
+      else if String.equal event "test_done"
+      then send_response_value test_stream message_id (`Bool true)
+      else failwith (sprintf "Unexpected event '%s' in single_test_case mode" event)
+    in
+    loop ();
+    match List.rev !failures with
+    | [] -> ()
+    | [ e ] -> raise e
+    | exns ->
+      raise
+        (Failure
+           (sprintf
+              "Multiple failures (%d):\n%s"
+              (List.length exns)
+              (String.concat
+                 ~sep:"\n"
+                 (List.mapi exns ~f:(fun i e -> sprintf "  %d: %s" i (Exn.to_string e))))))
+  in
   if Stdlib.Domain.DLS.get in_test_context
   then failwith "Cannot nest test cases - already inside a test case";
-  let test_stream = new_stream client.connection ~role:"Test" () in
-  Mutex.lock client.lock;
-  Exn.protect
-    ~finally:(fun () -> Mutex.unlock client.lock)
-    ~f:(fun () ->
-      let seed_value =
-        match settings.seed with
-        | Some s -> `Int s
-        | None -> `Null
-      in
-      let database_key_value =
-        match database_key with
-        | Some k -> `Bytes k
-        | None -> `Null
-      in
-      let base_fields =
-        [ `Text "command", `Text "run_test"
-        ; `Text "test_cases", `Int settings.test_cases
-        ; `Text "seed", seed_value
-        ; `Text "stream_id", `Int (Int32.to_int_exn (stream_id test_stream))
-        ; `Text "database_key", database_key_value
-        ; `Text "derandomize", `Bool settings.derandomize
-        ]
-      in
-      let database_field =
-        match settings.database with
-        | Unset -> []
-        | Disabled -> [ `Text "database", `Null ]
-        | Path p -> [ `Text "database", `Text p ]
-      in
-      let suppress_field =
-        match settings.suppress_health_check with
-        | [] -> []
-        | checks ->
-          [ ( `Text "suppress_health_check"
-            , `Array (List.map checks ~f:(fun hc -> `Text (health_check_to_string hc))) )
+  match settings.mode with
+  | Single_test_case -> run_single_test_case ()
+  | Test_run ->
+    let test_stream = new_stream client.connection ~role:"Test" () in
+    Mutex.lock client.lock;
+    Exn.protect
+      ~finally:(fun () -> Mutex.unlock client.lock)
+      ~f:(fun () ->
+        let seed_value =
+          match settings.seed with
+          | Some s -> `Int s
+          | None -> `Null
+        in
+        let database_key_value =
+          match database_key with
+          | Some k -> `Bytes k
+          | None -> `Null
+        in
+        let base_fields =
+          [ `Text "command", `Text "run_test"
+          ; `Text "test_cases", `Int settings.test_cases
+          ; `Text "seed", seed_value
+          ; `Text "stream_id", `Int (Int32.to_int_exn (stream_id test_stream))
+          ; `Text "database_key", database_key_value
+          ; `Text "derandomize", `Bool settings.derandomize
           ]
-      in
-      let phases_field =
-        match settings.phases with
-        | None -> []
-        | Some phases ->
-          [ ( `Text "phases"
-            , `Array (List.map phases ~f:(fun p -> `Text (phase_to_string p))) )
-          ]
-      in
-      let fields = base_fields @ database_field @ suppress_field @ phases_field in
-      let (_ : Cbor.Simple.t) = pending_get (request client.control (`Map fields)) in
-      ());
-  let receive_and_run_test_case ~is_final =
-    let message_id, message = receive_request test_stream () in
-    let pairs = Cbor_helpers.extract_dict message in
-    let ch_id =
-      Int32.of_int_exn
-        (Cbor_helpers.extract_int
-           (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "stream_id")))
-    in
-    send_response_value test_stream message_id `Null;
-    let test_case_stream = connect_stream client.connection ch_id ~role:"Test Case" () in
-    run_test_case client test_case_stream test_fn ~is_final
-  in
-  let rec receive_events () =
-    let message_id, message = receive_request test_stream () in
-    let pairs = Cbor_helpers.extract_dict message in
-    let event =
-      Cbor_helpers.extract_string
-        (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "event"))
-    in
-    if String.equal event "test_case"
-    then (
+        in
+        let database_field =
+          match settings.database with
+          | Unset -> []
+          | Disabled -> [ `Text "database", `Null ]
+          | Path p -> [ `Text "database", `Text p ]
+        in
+        let suppress_field =
+          match settings.suppress_health_check with
+          | [] -> []
+          | checks ->
+            [ ( `Text "suppress_health_check"
+              , `Array (List.map checks ~f:(fun hc -> `Text (health_check_to_string hc)))
+              )
+            ]
+        in
+        let phases_field =
+          match settings.phases with
+          | None -> []
+          | Some phases ->
+            [ ( `Text "phases"
+              , `Array (List.map phases ~f:(fun p -> `Text (phase_to_string p))) )
+            ]
+        in
+        let fields = base_fields @ database_field @ suppress_field @ phases_field in
+        let (_ : Cbor.Simple.t) = pending_get (request client.control (`Map fields)) in
+        ());
+    let receive_and_run_test_case ~is_final =
+      let message_id, message = receive_request test_stream () in
+      let pairs = Cbor_helpers.extract_dict message in
       let ch_id =
         Int32.of_int_exn
           (Cbor_helpers.extract_int
@@ -485,84 +543,111 @@ let run_test client ~settings ?database_key test_fn =
       let test_case_stream =
         connect_stream client.connection ch_id ~role:"Test Case" ()
       in
-      run_test_case client test_case_stream test_fn ~is_final:false;
-      if server_has_exited client.connection then failwith server_crashed_message;
-      receive_events ())
-    else if String.equal event "test_done"
-    then (
-      send_response_value test_stream message_id (`Bool true);
-      Cbor_helpers.extract_dict
-        (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "results")))
-    else (
-      send_response_raw
-        test_stream
-        message_id
-        (Cbor.Simple.encode
-           (`Map
-               [ `Text "error", `Text (sprintf "Unrecognised event %s" event)
-               ; `Text "type", `Text "InvalidMessage"
-               ]));
-      receive_events ())
-  in
-  let results = receive_events () in
-  (* Check for server-side errors *)
-  (match List.Assoc.find results ~equal:Poly.( = ) (`Text "error") with
-   | Some error_val ->
-     let error_msg = Cbor_helpers.extract_string error_val in
-     failwith (sprintf "Server error: %s" error_msg)
-   | None -> ());
-  (* Check for health check failure *)
-  (match List.Assoc.find results ~equal:Poly.( = ) (`Text "health_check_failure") with
-   | Some failure_val ->
-     let failure_msg = Cbor_helpers.extract_string failure_val in
-     failwith (sprintf "Health check failure:\n%s" failure_msg)
-   | None -> ());
-  (* Check for flaky test detection *)
-  (match List.Assoc.find results ~equal:Poly.( = ) (`Text "flaky") with
-   | Some flaky_val ->
-     let flaky_msg = Cbor_helpers.extract_string flaky_val in
-     failwith (sprintf "Flaky test detected: %s" flaky_msg)
-   | None -> ());
-  (* Check passed flag *)
-  let passed =
-    match List.Assoc.find results ~equal:Poly.( = ) (`Text "passed") with
-    | Some (`Bool b) -> b
-    | _ -> true
-  in
-  let n_interesting =
-    Cbor_helpers.extract_int
-      (List.Assoc.find_exn results ~equal:Poly.( = ) (`Text "interesting_test_cases"))
-  in
-  if n_interesting = 0 && passed
-  then ()
-  else if n_interesting <= 1
-  then (
-    if n_interesting = 1 then receive_and_run_test_case ~is_final:true;
-    if not passed then failwith "Property test failed")
-  else (
-    let rec replay_interesting remaining acc =
-      if remaining = 0
-      then List.rev acc
-      else (
-        let msg =
-          sprintf "Expected test case %d to fail but it didn't" (List.length acc)
-        in
-        let exn =
-          try
-            receive_and_run_test_case ~is_final:true;
-            Failure msg
-          with
-          | e -> e
-        in
-        replay_interesting (remaining - 1) (exn :: acc))
+      run_test_case client test_case_stream test_fn ~is_final
     in
-    let exns = replay_interesting n_interesting [] in
-    raise
-      (Failure
-         (sprintf
-            "Multiple failures (%d):\n%s"
-            (List.length exns)
-            (String.concat
-               ~sep:"\n"
-               (List.mapi exns ~f:(fun i e -> sprintf "  %d: %s" i (Exn.to_string e)))))))
+    let rec receive_events () =
+      let message_id, message = receive_request test_stream () in
+      let pairs = Cbor_helpers.extract_dict message in
+      let event =
+        Cbor_helpers.extract_string
+          (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "event"))
+      in
+      if String.equal event "test_case"
+      then (
+        let ch_id =
+          Int32.of_int_exn
+            (Cbor_helpers.extract_int
+               (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "stream_id")))
+        in
+        send_response_value test_stream message_id `Null;
+        let test_case_stream =
+          connect_stream client.connection ch_id ~role:"Test Case" ()
+        in
+        let (_ : test_outcome) =
+          run_test_case client test_case_stream test_fn ~is_final:false
+        in
+        if server_has_exited client.connection then failwith server_crashed_message;
+        receive_events ())
+      else if String.equal event "test_done"
+      then (
+        send_response_value test_stream message_id (`Bool true);
+        Cbor_helpers.extract_dict
+          (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "results")))
+      else (
+        send_response_raw
+          test_stream
+          message_id
+          (Cbor.Simple.encode
+             (`Map
+                 [ `Text "error", `Text (sprintf "Unrecognised event %s" event)
+                 ; `Text "type", `Text "InvalidMessage"
+                 ]));
+        receive_events ())
+    in
+    let results = receive_events () in
+    (* Check for server-side errors *)
+    (match List.Assoc.find results ~equal:Poly.( = ) (`Text "error") with
+     | Some error_val ->
+       let error_msg = Cbor_helpers.extract_string error_val in
+       failwith (sprintf "Server error: %s" error_msg)
+     | None -> ());
+    (* Check for health check failure *)
+    (match List.Assoc.find results ~equal:Poly.( = ) (`Text "health_check_failure") with
+     | Some failure_val ->
+       let failure_msg = Cbor_helpers.extract_string failure_val in
+       failwith (sprintf "Health check failure:\n%s" failure_msg)
+     | None -> ());
+    (* Check for flaky test detection *)
+    (match List.Assoc.find results ~equal:Poly.( = ) (`Text "flaky") with
+     | Some flaky_val ->
+       let flaky_msg = Cbor_helpers.extract_string flaky_val in
+       failwith (sprintf "Flaky test detected: %s" flaky_msg)
+     | None -> ());
+    (* Check passed flag *)
+    let passed =
+      match List.Assoc.find results ~equal:Poly.( = ) (`Text "passed") with
+      | Some (`Bool b) -> b
+      | _ -> true
+    in
+    let n_interesting =
+      Cbor_helpers.extract_int
+        (List.Assoc.find_exn results ~equal:Poly.( = ) (`Text "interesting_test_cases"))
+    in
+    if n_interesting = 0 && passed
+    then ()
+    else if n_interesting <= 1
+    then (
+      if n_interesting = 1
+      then (
+        match receive_and_run_test_case ~is_final:true with
+        | Interesting { exn = Some e; _ } -> raise e
+        | _ -> ());
+      if not passed then failwith "Property test failed")
+    else (
+      let rec replay_interesting remaining acc =
+        if remaining = 0
+        then List.rev acc
+        else (
+          let msg =
+            sprintf "Expected test case %d to fail but it didn't" (List.length acc)
+          in
+          let exn =
+            try
+              match receive_and_run_test_case ~is_final:true with
+              | Interesting { exn = Some e; _ } -> e
+              | _ -> Failure msg
+            with
+            | e -> e
+          in
+          replay_interesting (remaining - 1) (exn :: acc))
+      in
+      let exns = replay_interesting n_interesting [] in
+      raise
+        (Failure
+           (sprintf
+              "Multiple failures (%d):\n%s"
+              (List.length exns)
+              (String.concat
+                 ~sep:"\n"
+                 (List.mapi exns ~f:(fun i e -> sprintf "  %d: %s" i (Exn.to_string e)))))))
 ;;
