@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.18 - 2026-05-18
+
+This patch bumps our pinned hegel-core from [0.8.0](https://github.com/hegeldev/hegel-core/releases/tag/v0.8.0) to [0.9.1](https://github.com/hegeldev/hegel-core/releases/tag/v0.9.1).
+
 ## 0.3.17 - 2026-05-14
 
 Internal checksum refactor.
