@@ -115,7 +115,7 @@ let test_debug_verbosity () =
        ())
 ;;
 
-let test_stateful_runs_forever () =
+let test_stateful_single_mode_unbounded_steps () =
   let module S = Hegel.Stateful in
   let step_count = ref 0 in
   let step_rule =
@@ -147,6 +147,9 @@ let tests =
   ; test_case "assume produces invalid" `Quick test_assume_produces_invalid
   ; test_case "generation works" `Quick test_generation_works
   ; test_case "debug verbosity" `Quick test_debug_verbosity
-  ; test_case "stateful runs forever" `Quick test_stateful_runs_forever
+  ; test_case
+      "stateful single mode unbounded steps"
+      `Quick
+      test_stateful_single_mode_unbounded_steps
   ]
 ;;

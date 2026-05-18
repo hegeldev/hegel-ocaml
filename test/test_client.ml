@@ -444,9 +444,8 @@ let send_test_done test_ch results_fields =
 ;;
 
 (** Test: unrecognised event sends error response and continues (socketpair).
-    In [Test_run] mode the receive loop recurses after replying with an error,
-    so we follow up with [test_done]. In [Single_test_case] mode the loop
-    terminates after the error reply, so we send nothing further. *)
+    Both modes recurse on unknown events after replying with an error reply,
+    so we follow up with [test_done] in both. *)
 let test_unrecognised_event mode () =
   with_fake_server
     (fun peer_conn ->
@@ -458,10 +457,7 @@ let test_unrecognised_event mode () =
                (request test_ch (`Map [ `Text "event", `Text "unknown_foobar" ])))
         with
         | Request_error _ -> ());
-       match mode with
-       | Client.Test_run ->
-         send_test_done test_ch [ `Text "interesting_test_cases", `Int 0 ]
-       | Client.Single_test_case -> ())
+       send_test_done test_ch [ `Text "interesting_test_cases", `Int 0 ])
     (fun client ->
        run_test
          client
@@ -623,7 +619,7 @@ let test_run_test_passed_false () =
 ;;
 
 (** Test: Single_test_case mode with multiple failing test_case events triggers
-    the [Multiple failures] branch in [run_single_test_case]. *)
+    the [Multiple failures] branch. *)
 let test_single_test_case_multiple_failures () =
   let send_failing_case peer_conn test_ch data_ch_id =
     let data_ch = connect_stream peer_conn data_ch_id ~role:"Data" () in
@@ -638,12 +634,15 @@ let test_single_test_case_multiple_failures () =
     let msg_id, _ = receive_request data_ch () in
     send_response_value data_ch msg_id `Null
   in
+  let send_test_done_no_results test_ch =
+    ignore (pending_get (request test_ch (`Map [ `Text "event", `Text "test_done" ])))
+  in
   with_fake_server
     (fun peer_conn ->
        let _ctrl, test_ch = accept_run_test peer_conn in
        send_failing_case peer_conn test_ch 2l;
        send_failing_case peer_conn test_ch 4l;
-       send_test_done test_ch [ `Text "interesting_test_cases", `Int 0 ])
+       send_test_done_no_results test_ch)
     (fun client ->
        let settings =
          Client.default_settings () |> Client.with_mode Client.Single_test_case

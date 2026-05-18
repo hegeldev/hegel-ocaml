@@ -37,10 +37,15 @@ type database =
   | Disabled
   | Path of string
 
-(** Controls test execution mode *)
+(** Controls the test execution mode. *)
 type mode =
   | Test_run
+  (** Run a full property test: many test cases, shrinking, database
+        replay, all other phases. This is the default. *)
   | Single_test_case
+  (** Run the test body exactly once, with no shrinking, replay, or
+        database. Useful when you want pure data generation without
+        property-testing overhead. *)
 
 (** Phases of the test that can be enabled or disabled. *)
 type phase =
