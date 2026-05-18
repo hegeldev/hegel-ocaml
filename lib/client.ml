@@ -350,72 +350,57 @@ let create_client connection =
   { connection; control = control_stream connection; lock = Mutex.create () }
 ;;
 
-(** Outcome of running one test case. [Interesting] carries the captured
-    exception when [is_final] was true so the caller can re-raise it once
-    protocol I/O is complete. *)
-type test_outcome =
-  | Valid
-  | Invalid
-  | Data_was_exhausted
-  | Flaky_strategy_definition
-  | Interesting of
-      { origin_text : string
-      ; exn : exn option
-      }
-
-(** [run_test_case client stream test_fn ~is_final] runs a single test case.
-    Sets up thread-local state, calls [test_fn], reports status via
-    mark_complete, and returns the outcome. *)
-let run_test_case _client stream test_fn ~is_final ~mode =
-  let tc = { stream; mode; is_final; test_aborted = false } in
-  Stdlib.Domain.DLS.set in_test_context true;
-  let outcome =
-    try
-      test_fn tc;
-      Valid
-    with
-    | Assume_rejected -> Invalid
-    | Data_exhausted -> Data_was_exhausted
-    | Flaky_strategy -> Flaky_strategy_definition
-    | exn ->
-      Interesting
-        { origin_text = extract_origin exn; exn = (if is_final then Some exn else None) }
-  in
-  Stdlib.Domain.DLS.set in_test_context false;
-  (match outcome with
-   | Data_was_exhausted | Flaky_strategy_definition -> ()
-   | Valid | Invalid | Interesting _ ->
-     let status, origin =
-       match outcome with
-       | Valid -> "VALID", `Null
-       | Invalid -> "INVALID", `Null
-       | Interesting { origin_text; _ } -> "INTERESTING", `Text origin_text
-       | Data_was_exhausted | Flaky_strategy_definition -> assert false
-     in
-     (try
-        let (_ : Cbor.t) =
-          pending_get
-            (request
-               stream
-               (`Map
-                   [ `Text "command", `Text "mark_complete"
-                   ; `Text "status", `Text status
-                   ; `Text "origin", origin
-                   ]))
-        in
-        ()
-      with
-      | Request_error e when String.equal e.error_type "StopTest" -> ()));
-  close_stream stream;
-  outcome
-;;
-
 (** [run_test client ~settings ?database_key test_fn] runs a property test using
     the given settings.
 
     @param database_key
       optional key for persistent failure storage (internal use). *)
-let run_test client ~settings ?database_key test_fn =
+let run_test client ~(settings : settings) ?database_key test_fn =
+  (* Runs a single test case on [stream]. Sets up thread-local state, calls
+     [test_fn], reports status via mark_complete, and returns the captured
+     exception (when [is_final] and the test raised) or [None]. *)
+  let run_test_case stream ~is_final =
+    let tc = { stream; mode = settings.mode; is_final; test_aborted = false } in
+    Stdlib.Domain.DLS.set in_test_context true;
+    let outcome =
+      try
+        test_fn tc;
+        `Valid
+      with
+      | Assume_rejected -> `Invalid
+      | Data_exhausted -> `Data_exhausted
+      | Flaky_strategy -> `Flaky_strategy
+      | exn -> `Interesting (extract_origin exn, if is_final then Some exn else None)
+    in
+    Stdlib.Domain.DLS.set in_test_context false;
+    (match outcome with
+     | `Data_exhausted | `Flaky_strategy -> ()
+     | (`Valid | `Invalid | `Interesting _) as o ->
+       let status, origin =
+         match o with
+         | `Valid -> "VALID", `Null
+         | `Invalid -> "INVALID", `Null
+         | `Interesting (origin_text, _) -> "INTERESTING", `Text origin_text
+       in
+       (try
+          let (_ : Cbor.t) =
+            pending_get
+              (request
+                 stream
+                 (`Map
+                     [ `Text "command", `Text "mark_complete"
+                     ; `Text "status", `Text status
+                     ; `Text "origin", origin
+                     ]))
+          in
+          ()
+        with
+        | Request_error e when String.equal e.error_type "StopTest" -> ()));
+    close_stream stream;
+    match outcome with
+    | `Interesting (_, Some e) -> Some e
+    | _ -> None
+  in
   let run_single_test_case () =
     let test_stream = new_stream client.connection ~role:"Test" () in
     Mutex.lock client.lock;
@@ -455,16 +440,9 @@ let run_test client ~settings ?database_key test_fn =
         let test_case_stream =
           connect_stream client.connection ch_id ~role:"Test Case" ()
         in
-        (match
-           run_test_case
-             client
-             test_case_stream
-             test_fn
-             ~is_final:true
-             ~mode:settings.mode
-         with
-         | Interesting { exn = Some e; _ } -> failures := e :: !failures
-         | _ -> ());
+        (match run_test_case test_case_stream ~is_final:true with
+         | Some e -> failures := e :: !failures
+         | None -> ());
         loop ())
       else if String.equal event "test_done"
       then send_response_value test_stream message_id (`Bool true)
@@ -559,11 +537,7 @@ let run_test client ~settings ?database_key test_fn =
       let test_case_stream =
         connect_stream client.connection ch_id ~role:"Test Case" ()
       in
-      match
-        run_test_case client test_case_stream test_fn ~is_final ~mode:settings.mode
-      with
-      | Interesting { exn = Some e; _ } -> Some e
-      | _ -> None
+      run_test_case test_case_stream ~is_final
     in
     let rec receive_events () =
       let message_id, message = receive_request test_stream () in
@@ -583,14 +557,7 @@ let run_test client ~settings ?database_key test_fn =
         let test_case_stream =
           connect_stream client.connection ch_id ~role:"Test Case" ()
         in
-        let (_ : test_outcome) =
-          run_test_case
-            client
-            test_case_stream
-            test_fn
-            ~is_final:false
-            ~mode:settings.mode
-        in
+        let (_ : exn option) = run_test_case test_case_stream ~is_final:false in
         if server_has_exited client.connection then failwith server_crashed_message;
         receive_events ())
       else if String.equal event "test_done"

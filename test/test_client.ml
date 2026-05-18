@@ -1331,7 +1331,7 @@ let test_is_in_ci_value_mismatch () =
     function raises Data_exhausted so run_test_case skips mark_complete,
     avoiding a race where pop_inbox_item detects server_exited before the
     mark_complete response arrives. After run_test_case returns normally via the
-    Data_was_exhausted path, the event loop checks server_has_exited. *)
+    Data_exhausted path, the event loop checks server_has_exited. *)
 let test_server_crash_in_event_loop () =
   let raised_msg = ref "" in
   let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
