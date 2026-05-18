@@ -469,9 +469,6 @@ let run_test client ~(settings : settings) ?database_key test_fn =
   let stream_id_field =
     `Text "stream_id", `Int (Int32.to_int_exn (stream_id test_stream))
   in
-  let check_server_alive () =
-    if server_has_exited client.connection then failwith server_crashed_message
-  in
   match settings.mode with
   | Single_test_case ->
     send_run_command
@@ -485,7 +482,7 @@ let run_test client ~(settings : settings) ?database_key test_fn =
       (match run_test_case stream ~is_final:true with
        | Some e -> failures := e :: !failures
        | None -> ());
-      check_server_alive ()
+      if server_has_exited client.connection then failwith server_crashed_message
     in
     let (_ : (Cbor.t * Cbor.t) list) = receive_events ~on_test_case in
     (match List.rev !failures with
@@ -539,7 +536,7 @@ let run_test client ~(settings : settings) ?database_key test_fn =
     send_run_command (`Map (base_fields @ database_field @ suppress_field @ phases_field));
     let on_test_case stream =
       let (_ : exn option) = run_test_case stream ~is_final:false in
-      check_server_alive ()
+      if server_has_exited client.connection then failwith server_crashed_message
     in
     let results = receive_events ~on_test_case in
     (* Check for server-side errors *)
@@ -589,13 +586,12 @@ let run_test client ~(settings : settings) ?database_key test_fn =
         if remaining = 0
         then List.rev acc
         else (
-          let msg =
-            sprintf "Expected test case %d to fail but it didn't" (List.length acc)
-          in
           let exn =
             match replay_test_case () with
             | Some e | (exception e) -> e
-            | None -> Failure msg
+            | None ->
+              Failure
+                (sprintf "Expected test case %d to fail but it didn't" (List.length acc))
           in
           replay_interesting (remaining - 1) (exn :: acc))
       in
