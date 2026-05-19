@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.19 - 2026-05-19
+
+Add `Single_test_case` mode setting for running exactly one test case with no shrinking or replay. 
+This mode is mostly intended for long-running workloads. Stateful testing will keep running rules indefinitely when in this mode.
+
 ## 0.3.18 - 2026-05-18
 
 This patch bumps our pinned hegel-core from [0.8.0](https://github.com/hegeldev/hegel-core/releases/tag/v0.8.0) to [0.9.1](https://github.com/hegeldev/hegel-core/releases/tag/v0.9.1).
