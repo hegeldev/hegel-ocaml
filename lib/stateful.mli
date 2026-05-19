@@ -68,17 +68,10 @@ module Rule : sig
   val name : _ t -> string
 end
 
-module Settings : sig
-  type t = { max_steps : int (** default: 50 *) }
-
-  val default : t
-end
-
 (** Executes a stateful test by repeatedly applying random rules and checking
     invariants. *)
 val run
-  :  ?settings:Settings.t
-  -> init:'state
+  :  init:'state
   -> rules:'state Rule.t list
   -> ?invariants:('state -> unit) list
   -> Client.test_case

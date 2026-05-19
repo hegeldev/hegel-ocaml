@@ -37,6 +37,16 @@ type database =
   | Disabled
   | Path of string
 
+(** Controls the test execution mode. *)
+type mode =
+  | Test_run
+  (** Run a full property test: many test cases, shrinking, database
+        replay, all other phases. This is the default. *)
+  | Single_test_case
+  (** Run the test body exactly once, with no shrinking, replay, or
+        database. Useful when you want pure data generation without
+        property-testing overhead. *)
+
 (** Phases of the test that can be enabled or disabled. *)
 type phase =
   | Explicit
@@ -51,7 +61,8 @@ val phase_to_string : phase -> string
 
 (** Configuration for a Hegel test run. *)
 type settings =
-  { test_cases : int
+  { mode : mode
+  ; test_cases : int
   ; verbosity : verbosity
   ; seed : int option
   ; derandomize : bool
@@ -98,10 +109,14 @@ val with_suppress_health_check : health_check list -> settings -> settings
     test execution to those phases. *)
 val with_phases : phase list -> settings -> settings
 
+(** [with_mode mode s] returns settings [s] with test [mode] set to [mode]. *)
+val with_mode : mode -> settings -> settings
+
 (** Per-test-case state passed explicitly to the test function. Holds the data
     stream, final-run flag, and abort state. *)
 type test_case =
   { stream : Connection.stream
+  ; mode : mode
   ; is_final : bool
   ; mutable test_aborted : bool
   }
@@ -169,15 +184,6 @@ type client =
 (** [create_client connection] creates a new client from a connection. The
     connection must not yet have had its handshake performed. *)
 val create_client : Connection.connection -> client
-
-(** [run_test_case client stream test_fn ~is_final] runs a single test case.
-    Passes the test case to [test_fn]. Reports status via mark_complete. *)
-val run_test_case
-  :  client
-  -> Connection.stream
-  -> (test_case -> unit)
-  -> is_final:bool
-  -> unit
 
 (** [run_test client ~settings ?database_key test_fn] runs a property test using
     the given settings. *)

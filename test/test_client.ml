@@ -14,7 +14,12 @@ let test_assume_true () =
   let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
-    Client.{ stream = control_stream conn; is_final = false; test_aborted = false }
+    Client.
+      { stream = control_stream conn
+      ; mode = Test_run
+      ; is_final = false
+      ; test_aborted = false
+      }
   in
   assume tc true;
   close conn;
@@ -25,7 +30,12 @@ let test_assume_false_raises () =
   let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
-    Client.{ stream = control_stream conn; is_final = false; test_aborted = false }
+    Client.
+      { stream = control_stream conn
+      ; mode = Test_run
+      ; is_final = false
+      ; test_aborted = false
+      }
   in
   let raised = ref false in
   (try assume tc false with
@@ -39,7 +49,12 @@ let test_note_when_not_final () =
   let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
-    Client.{ stream = control_stream conn; is_final = false; test_aborted = false }
+    Client.
+      { stream = control_stream conn
+      ; mode = Test_run
+      ; is_final = false
+      ; test_aborted = false
+      }
   in
   note tc "should not print";
   close conn;
@@ -50,7 +65,12 @@ let test_note_when_final () =
   let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let tc =
-    Client.{ stream = control_stream conn; is_final = true; test_aborted = false }
+    Client.
+      { stream = control_stream conn
+      ; mode = Test_run
+      ; is_final = true
+      ; test_aborted = false
+      }
   in
   note tc "test message from note";
   close conn;
@@ -77,7 +97,12 @@ let test_start_span_when_aborted () =
   let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   let conn = Test_helpers.make_connection s1 ~name:"Test" () in
   let data =
-    Client.{ stream = control_stream conn; is_final = false; test_aborted = true }
+    Client.
+      { stream = control_stream conn
+      ; mode = Test_run
+      ; is_final = false
+      ; test_aborted = true
+      }
   in
   start_span data;
   stop_span data;
@@ -418,8 +443,10 @@ let send_test_done test_ch results_fields =
           (`Map [ `Text "event", `Text "test_done"; `Text "results", `Map results_fields ])))
 ;;
 
-(** Test: unrecognised event sends error response and continues (socketpair). *)
-let test_unrecognised_event () =
+(** Test: unrecognised event sends error response and continues (socketpair).
+    Both modes recurse on unknown events after replying with an error reply,
+    so we follow up with [test_done] in both. *)
+let test_unrecognised_event mode () =
   with_fake_server
     (fun peer_conn ->
        let _ctrl, test_ch = accept_run_test peer_conn in
@@ -430,12 +457,14 @@ let test_unrecognised_event () =
                (request test_ch (`Map [ `Text "event", `Text "unknown_foobar" ])))
         with
         | Request_error _ -> ());
-       (* Send test_done with 0 interesting *)
        send_test_done test_ch [ `Text "interesting_test_cases", `Int 0 ])
     (fun client ->
        run_test
          client
-         ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+         ~settings:
+           (Client.default_settings ()
+            |> Client.with_test_cases 0
+            |> Client.with_mode mode)
          (fun _tc -> ()))
 ;;
 
@@ -587,6 +616,114 @@ let test_run_test_passed_false () =
             true
             (contains_substring msg "Property test failed"));
        Alcotest.(check bool) "raised" true !raised)
+;;
+
+(** Test: Single_test_case mode with multiple failing test_case events triggers
+    the [Multiple failures] branch. *)
+let test_single_test_case_multiple_failures () =
+  let send_failing_case peer_conn test_ch data_ch_id =
+    let data_ch = connect_stream peer_conn data_ch_id ~role:"Data" () in
+    ignore
+      (pending_get
+         (request
+            test_ch
+            (`Map
+                [ `Text "event", `Text "test_case"
+                ; `Text "stream_id", `Int (Int32.to_int_exn data_ch_id)
+                ])));
+    let msg_id, _ = receive_request data_ch () in
+    send_response_value data_ch msg_id `Null
+  in
+  let send_test_done_no_results test_ch =
+    ignore (pending_get (request test_ch (`Map [ `Text "event", `Text "test_done" ])))
+  in
+  with_fake_server
+    (fun peer_conn ->
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_failing_case peer_conn test_ch 2l;
+       send_failing_case peer_conn test_ch 4l;
+       send_test_done_no_results test_ch)
+    (fun client ->
+       let settings =
+         Client.default_settings () |> Client.with_mode Client.Single_test_case
+       in
+       let raised_msg = ref "" in
+       (try run_test client ~settings (fun _tc -> failwith "boom") with
+        | e -> raised_msg := Exn.to_string e);
+       Alcotest.(check bool)
+         "has 'Multiple failures (2)'"
+         true
+         (contains_substring !raised_msg "Multiple failures (2)"))
+;;
+
+(** Test: Test_run mode with n_interesting=1 and a replay that doesn't raise. *)
+let test_run_test_n_interesting_one_replay_passes () =
+  with_fake_server
+    (fun peer_conn ->
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_test_done
+         test_ch
+         [ `Text "interesting_test_cases", `Int 1; `Text "passed", `Bool true ];
+       let data_ch_id = 2l in
+       let data_ch = connect_stream peer_conn data_ch_id ~role:"Data" () in
+       ignore
+         (pending_get
+            (request
+               test_ch
+               (`Map
+                   [ `Text "event", `Text "test_case"
+                   ; `Text "stream_id", `Int (Int32.to_int_exn data_ch_id)
+                   ])));
+       let msg_id, _ = receive_request data_ch () in
+       send_response_value data_ch msg_id `Null)
+    (fun client ->
+       run_test
+         client
+         ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+         (fun _tc -> ()))
+;;
+
+(** Test: multi-interesting replay where one replay raises during receive (covers
+    the [exception e] arm) and another replay doesn't raise. *)
+let test_run_test_multi_interesting_replay_errors () =
+  with_fake_server
+    (fun peer_conn ->
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_test_done
+         test_ch
+         [ `Text "interesting_test_cases", `Int 2; `Text "passed", `Bool false ];
+       (* Replay 1: malformed test_case event (missing stream_id). Fire and
+          forget — the client will raise before sending a response. *)
+       let (_ : int32) =
+         Connection.send_request test_ch (`Map [ `Text "event", `Text "test_case" ])
+       in
+       (* Replay 2: well-formed test_case event; test_fn does not raise so the
+          outcome is Valid, yielding [None] from receive_and_run_test_case. *)
+       let data_ch_id = 4l in
+       let data_ch = connect_stream peer_conn data_ch_id ~role:"Data" () in
+       ignore
+         (pending_get
+            (request
+               test_ch
+               (`Map
+                   [ `Text "event", `Text "test_case"
+                   ; `Text "stream_id", `Int (Int32.to_int_exn data_ch_id)
+                   ])));
+       let msg_id, _ = receive_request data_ch () in
+       send_response_value data_ch msg_id `Null)
+    (fun client ->
+       let raised_msg = ref "" in
+       (try
+          run_test
+            client
+            ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+            (fun _tc -> ())
+        with
+        | e -> raised_msg := Exn.to_string e);
+       Alcotest.(check bool)
+         "has 'Multiple failures (2)'"
+         true
+         (contains_substring !raised_msg "Multiple failures (2)"))
 ;;
 
 (** Test: server_exited check in pop_inbox_item. Create a connection, set
@@ -1193,7 +1330,7 @@ let test_is_in_ci_value_mismatch () =
     function raises Data_exhausted so run_test_case skips mark_complete,
     avoiding a race where pop_inbox_item detects server_exited before the
     mark_complete response arrives. After run_test_case returns normally via the
-    Data_was_exhausted path, the event loop checks server_has_exited. *)
+    Data_exhausted path, the event loop checks server_has_exited. *)
 let test_server_crash_in_event_loop () =
   let raised_msg = ref "" in
   let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
@@ -1713,7 +1850,14 @@ let tests =
       test_version_mismatch_bad_format
   ; Alcotest.test_case "run_test with seed" `Quick test_run_test_with_seed
   ; Alcotest.test_case "multiple interesting" `Quick test_multiple_interesting
-  ; Alcotest.test_case "unrecognised event" `Quick test_unrecognised_event
+  ; Alcotest.test_case
+      "unrecognised event (Test_run)"
+      `Quick
+      (test_unrecognised_event Client.Test_run)
+  ; Alcotest.test_case
+      "unrecognised event (Single_test_case)"
+      `Quick
+      (test_unrecognised_event Client.Single_test_case)
   ; Alcotest.test_case
       "run_test database path + suppress"
       `Quick
@@ -1729,6 +1873,18 @@ let tests =
       test_run_test_health_check_failure
   ; Alcotest.test_case "run_test flaky" `Quick test_run_test_flaky
   ; Alcotest.test_case "run_test passed=false" `Quick test_run_test_passed_false
+  ; Alcotest.test_case
+      "single_test_case multiple failures"
+      `Quick
+      test_single_test_case_multiple_failures
+  ; Alcotest.test_case
+      "n_interesting=1 replay passes"
+      `Quick
+      test_run_test_n_interesting_one_replay_passes
+  ; Alcotest.test_case
+      "multi-interesting replay errors"
+      `Quick
+      test_run_test_multi_interesting_replay_errors
   ; Alcotest.test_case "server_exited in pop_inbox" `Quick test_server_exited_in_pop_inbox
   ; Alcotest.test_case "server crash in event loop" `Quick test_server_crash_in_event_loop
   ; Alcotest.test_case
