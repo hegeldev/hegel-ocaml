@@ -1,17 +1,12 @@
 (** E2E tests for the [ppx_hegel_test] PPX.
 
     These tests exercise the full expansion of [let%hegel_test] including
-    the [@@settings ...] attribute. They run against the real hegel-core
-    server, so they live in their own executable (separate from
-    [test_hegel]). *)
+    the [@@settings ...] attribute. *)
 
 open! Core
 
 let env_var = "ANTITHESIS_OUTPUT_DIR"
 
-(** These tests always run with [ANTITHESIS_OUTPUT_DIR] set to a fresh
-    tempdir, so we don't need to unset the env var. The "env unset" case
-    is covered by the unit tests in [test_antithesis.ml]. *)
 let with_env_dir dir ~f =
   let prev = Sys.getenv env_var in
   Core_unix.putenv ~key:env_var ~data:dir;
@@ -19,11 +14,7 @@ let with_env_dir dir ~f =
     ~finally:(fun () ->
       match prev with
       | Some v -> Core_unix.putenv ~key:env_var ~data:v
-      | None ->
-        (* Best effort: set to empty so subsequent code treats it as unset
-           via the dir-exists check failing. The unit tests use the C
-           unsetenv stub for true removal. *)
-        Core_unix.putenv ~key:env_var ~data:"")
+      | None -> Core_unix.putenv ~key:env_var ~data:"")
     ~f
 ;;
 
@@ -128,9 +119,6 @@ let test_failing_writes_condition_false () =
          (List.Assoc.find_exn eval_assoc ~equal:String.equal "condition")))
 ;;
 
-(** When no [@@settings] is supplied, the PPX must omit [~settings] from the
-    call so [Hegel.run_hegel_test] uses its default. We verify that the
-    generated wrapper runs to completion. *)
 let test_no_settings_runs_with_defaults () =
   let dir = make_tempdir () in
   with_env_dir dir ~f:(fun () ->

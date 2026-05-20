@@ -189,10 +189,8 @@ val create_client : Connection.connection -> client
     property test using the given settings.
 
     @param test_location
-      source location of the test, used by the Antithesis fallback-SDK
-      integration. When [ANTITHESIS_OUTPUT_DIR] is set, this must be [Some _]
-      or the call panics. Provided automatically by the [let%hegel_test]
-      PPX. *)
+      source location of the test, used by the Antithesis integration. 
+      Provided automatically by the [let%hegel_test] PPX. *)
 val run_test
   :  client
   -> settings:settings

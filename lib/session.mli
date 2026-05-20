@@ -65,8 +65,8 @@ val start : hegel_session -> unit
     is not provided.
     
     @param test_location
-      forwarded to {!Client.run_test} for the Antithesis fallback-SDK
-      integration. Supplied automatically by the [let%hegel_test] PPX. *)
+      forwarded to {!Client.run_test} for the Antithesis integration. 
+      Supplied automatically by the [let%hegel_test] PPX. *)
 val run_hegel_test
   :  ?settings:Client.settings
   -> ?test_location:Antithesis.test_location
