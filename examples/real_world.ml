@@ -30,53 +30,53 @@ let rec is_sorted = function
 let multiset_equal a b = List.sort compare a = List.sort compare b
 
 (** Property: merging two sorted lists gives a sorted list. *)
-let test_merge_sorted_is_sorted () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:200 ()) (fun tc ->
-    let int_gen = integers ~min_value:(-1000) ~max_value:1000 () in
-    let list_gen = lists int_gen ~min_size:0 ~max_size:20 () in
-    let a = sorted (Hegel.draw tc list_gen) in
-    let b = sorted (Hegel.draw tc list_gen) in
-    let merged = merge_sorted a b in
-    assert (is_sorted merged))
+let%hegel_test test_merge_sorted_is_sorted tc =
+  let int_gen = integers ~min_value:(-1000) ~max_value:1000 () in
+  let list_gen = lists int_gen ~min_size:0 ~max_size:20 () in
+  let a = sorted (Hegel.draw tc list_gen) in
+  let b = sorted (Hegel.draw tc list_gen) in
+  let merged = merge_sorted a b in
+  assert (is_sorted merged)
+[@@settings Hegel.settings ~test_cases:200 ()]
 ;;
 
 (** Property: merging two sorted lists preserves all elements (multiset equality
     between [a @ b] and the merged result). *)
-let test_merge_preserves_elements () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:200 ()) (fun tc ->
-    let int_gen = integers ~min_value:(-100) ~max_value:100 () in
-    let list_gen = lists int_gen ~min_size:0 ~max_size:15 () in
-    let a = sorted (Hegel.draw tc list_gen) in
-    let b = sorted (Hegel.draw tc list_gen) in
-    let merged = merge_sorted a b in
-    assert (multiset_equal merged (a @ b)))
+let%hegel_test test_merge_preserves_elements tc =
+  let int_gen = integers ~min_value:(-100) ~max_value:100 () in
+  let list_gen = lists int_gen ~min_size:0 ~max_size:15 () in
+  let a = sorted (Hegel.draw tc list_gen) in
+  let b = sorted (Hegel.draw tc list_gen) in
+  let merged = merge_sorted a b in
+  assert (multiset_equal merged (a @ b))
+[@@settings Hegel.settings ~test_cases:200 ()]
 ;;
 
 (** Property: merging a list with itself preserves sorted order and doubles
     every element's count. *)
-let test_merge_with_self () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
-    let int_gen = integers ~min_value:(-500) ~max_value:500 () in
-    let list_gen = lists int_gen ~min_size:0 ~max_size:10 () in
-    let a = sorted (Hegel.draw tc list_gen) in
-    let merged = merge_sorted a a in
-    assert (is_sorted merged);
-    assert (List.length merged = 2 * List.length a))
+let%hegel_test test_merge_with_self tc =
+  let int_gen = integers ~min_value:(-500) ~max_value:500 () in
+  let list_gen = lists int_gen ~min_size:0 ~max_size:10 () in
+  let a = sorted (Hegel.draw tc list_gen) in
+  let merged = merge_sorted a a in
+  assert (is_sorted merged);
+  assert (List.length merged = 2 * List.length a)
+[@@settings Hegel.settings ~test_cases:100 ()]
 ;;
 
 (** Property: merge is commutative up to element equality (same multiset). *)
-let test_merge_commutative () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
-    let int_gen = integers ~min_value:(-200) ~max_value:200 () in
-    let list_gen = lists int_gen ~min_size:0 ~max_size:10 () in
-    let a = sorted (Hegel.draw tc list_gen) in
-    let b = sorted (Hegel.draw tc list_gen) in
-    let ab = merge_sorted a b in
-    let ba = merge_sorted b a in
-    (* Both results should be the same sorted multiset *)
-    assert (multiset_equal ab ba);
-    assert (is_sorted ab);
-    assert (is_sorted ba))
+let%hegel_test test_merge_commutative tc =
+  let int_gen = integers ~min_value:(-200) ~max_value:200 () in
+  let list_gen = lists int_gen ~min_size:0 ~max_size:10 () in
+  let a = sorted (Hegel.draw tc list_gen) in
+  let b = sorted (Hegel.draw tc list_gen) in
+  let ab = merge_sorted a b in
+  let ba = merge_sorted b a in
+  (* Both results should be the same sorted multiset *)
+  assert (multiset_equal ab ba);
+  assert (is_sorted ab);
+  assert (is_sorted ba)
+[@@settings Hegel.settings ~test_cases:100 ()]
 ;;
 
 let () =

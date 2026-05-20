@@ -28,7 +28,8 @@
   test_conformance_helpers
   test_derive
   test_stateful
-  test_single_test_case)
+  test_single_test_case
+  test_antithesis)
  (libraries hegel alcotest core core_unix threads.posix crc32 yojson cbor)
  (preprocess
   (pps ppx_js_style -- -allow-unannotated-ignores))
@@ -42,3 +43,10 @@
  (libraries hegel alcotest core core_unix threads.posix)
  (preprocess
   (pps ppx_js_style ppx_hegel_generator -- -allow-unannotated-ignores)))
+
+(test
+ (name test_ppx_hegel_test)
+ (modules test_ppx_hegel_test)
+ (libraries hegel alcotest core core_unix threads.posix yojson)
+ (preprocess
+  (pps ppx_js_style ppx_hegel_test -- -allow-unannotated-ignores)))

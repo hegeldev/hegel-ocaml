@@ -3,11 +3,16 @@
  (modules basic_properties collections real_world)
  (libraries hegel core)
  (preprocess
-  (pps ppx_js_style -- -allow-unannotated-ignores)))
+  (pps ppx_js_style ppx_hegel_test -- -allow-unannotated-ignores)))
 
 (executable
  (name derived_types)
  (modules derived_types)
  (libraries hegel core)
  (preprocess
-  (pps ppx_js_style ppx_hegel_generator -- -allow-unannotated-ignores)))
+  (pps
+   ppx_js_style
+   ppx_hegel_generator
+   ppx_hegel_test
+   --
+   -allow-unannotated-ignores)))

@@ -20,5 +20,6 @@ let () =
     ; "derive", Test_derive.tests
     ; "stateful", Test_stateful.tests
     ; "single_test_case", Test_single_test_case.tests
+    ; "antithesis", Test_antithesis.tests
     ]
 ;;

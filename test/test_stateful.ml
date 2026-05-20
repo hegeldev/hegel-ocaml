@@ -21,7 +21,7 @@ let stateful_failure_test () =
         rest)
   in
   (try
-     Hegel.run_hegel_test ~settings:(Hegel.settings ~seed:0 ()) (fun tc ->
+     Hegel.Session.run_hegel_test ~settings:(Hegel.settings ~seed:0 ()) (fun tc ->
        S.run ~init:[] ~rules:[ push_rule; pop_rule ] tc);
      failwith "expected property to fail"
    with
@@ -58,16 +58,19 @@ let stateful_variables_test () =
       assert (Set.mem state.State.live id);
       { state with State.live = Set.remove state.State.live id })
   in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ~seed:0 ()) (fun tc ->
-    next_id := 0;
-    S.run
-      ~init:{ State.live = Int.Set.empty; variables = S.Variables.create tc }
-      ~rules:[ alloc_rule; free_rule ]
-      ~invariants:
-        [ (fun state ->
-            assert (S.Variables.size state.State.variables = Set.length state.State.live))
-        ]
-      tc)
+  Hegel.Session.run_hegel_test
+    ~settings:(Hegel.settings ~test_cases:10 ~seed:0 ())
+    (fun tc ->
+       next_id := 0;
+       S.run
+         ~init:{ State.live = Int.Set.empty; variables = S.Variables.create tc }
+         ~rules:[ alloc_rule; free_rule ]
+         ~invariants:
+           [ (fun state ->
+               assert (
+                 S.Variables.size state.State.variables = Set.length state.State.live))
+           ]
+         tc)
 ;;
 
 let stateful_variables_draw_test () =
@@ -93,12 +96,14 @@ let stateful_variables_draw_test () =
       assert (Set.mem state.State.live id);
       state)
   in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ~seed:0 ()) (fun tc ->
-    next_id := 0;
-    S.run
-      ~init:{ State.live = Int.Set.empty; variables = S.Variables.create tc }
-      ~rules:[ alloc_rule; use_rule ]
-      tc)
+  Hegel.Session.run_hegel_test
+    ~settings:(Hegel.settings ~test_cases:5 ~seed:0 ())
+    (fun tc ->
+       next_id := 0;
+       S.run
+         ~init:{ State.live = Int.Set.empty; variables = S.Variables.create tc }
+         ~rules:[ alloc_rule; use_rule ]
+         tc)
 ;;
 
 let stateful_rule_name_test () =
@@ -109,7 +114,7 @@ let stateful_rule_name_test () =
 
 let stateful_no_rules_test () =
   let raised_msg = ref "" in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
+  Hegel.Session.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
     try Hegel.Stateful.run ~init:() ~rules:[] tc with
     | Invalid_argument msg -> raised_msg := msg);
   Alcotest.(check bool)
@@ -125,8 +130,9 @@ let stateful_retry_budget_floor_test () =
       Hegel.assume tc false;
       s)
   in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ~seed:0 ()) (fun tc ->
-    S.run ~init:() ~rules:[ always_reject ] tc)
+  Hegel.Session.run_hegel_test
+    ~settings:(Hegel.settings ~test_cases:1 ~seed:0 ())
+    (fun tc -> S.run ~init:() ~rules:[ always_reject ] tc)
 ;;
 
 let tests =
