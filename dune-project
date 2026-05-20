@@ -57,3 +57,18 @@
    (>= v0.17))
   (hegel
    (= :version))))
+
+(package
+ (name ppx_hegel_test)
+ (synopsis "PPX expander for Hegel test definitions with Antithesis support")
+ (description
+  "Provides the [let%hegel_test] extension.")
+ (depends
+  (ocaml
+   (>= 5.2))
+  (ppxlib
+   (>= 0.28))
+  (ppx_js_style
+   (>= v0.17))
+  (hegel
+   (= :version))))

@@ -263,11 +263,16 @@ let start session =
             Printf.eprintf "[hegel-debug] at_exit handler done\n%!"))))
 ;;
 
-(** [run_hegel_test ?settings test_fn] runs a property test using the shared
-    hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is set, creates a disposable
-    session so the test server gets a fresh subprocess with the right env var.
-    Uses {!Client.default_settings} when [settings] is not provided. *)
-let run_hegel_test ?(settings = Client.default_settings ()) test_fn =
+(** [run_hegel_test ?settings ?test_location test_fn] runs a property test
+    using the shared hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is set,
+    creates a disposable session so the test server gets a fresh subprocess
+    with the right env var. Uses {!Client.default_settings} when [settings]
+    is not provided.
+
+    @param test_location
+      forwarded to {!Client.run_test} for the Antithesis integration.
+      Supplied automatically by the [let%hegel_test] PPX. *)
+let run_hegel_test ?(settings = Client.default_settings ()) ?test_location test_fn =
   match Sys.getenv "HEGEL_PROTOCOL_TEST_MODE" with
   | Some mode when not (String.is_empty mode) ->
     Printf.eprintf "[hegel-debug] disposable session: creating (mode=%s)\n%!" mode;
@@ -280,8 +285,13 @@ let run_hegel_test ?(settings = Client.default_settings ()) test_fn =
         Printf.eprintf "[hegel-debug] disposable session: cleanup\n%!";
         cleanup session;
         Printf.eprintf "[hegel-debug] disposable session: cleanup done\n%!")
-      ~f:(fun () -> Client.run_test (Option.value_exn session.client) ~settings test_fn)
+      ~f:(fun () ->
+        Client.run_test (Option.value_exn session.client) ~settings ?test_location test_fn)
   | _ ->
     start global_session;
-    Client.run_test (Option.value_exn global_session.client) ~settings test_fn
+    Client.run_test
+      (Option.value_exn global_session.client)
+      ~settings
+      ?test_location
+      test_fn
 ;;
