@@ -1,0 +1,6 @@
+(library
+ (name hegel_test_runtime)
+ (package hegel)
+ (wrapped false)
+ (instrumentation
+  (backend bisect_ppx)))

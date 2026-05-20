@@ -1,0 +1,7 @@
+; Tiny binary used by Test_hegel_test_runtime to exercise
+; Hegel_test_runtime.exit through a subprocess. argv[1] selects "pass" or
+; "fail"; exit code is asserted on the caller side.
+
+(executable
+ (name runtime_exit_demo)
+ (libraries hegel_test_runtime))

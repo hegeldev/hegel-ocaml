@@ -21,5 +21,6 @@ let () =
     ; "stateful", Test_stateful.tests
     ; "single_test_case", Test_single_test_case.tests
     ; "antithesis", Test_antithesis.tests
+    ; "hegel_test_runtime", Test_hegel_test_runtime.tests
     ]
 ;;

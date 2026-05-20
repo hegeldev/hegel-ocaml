@@ -19,9 +19,11 @@ opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
 You're now ready to write your first test. Add `hegel` to your dune library dependencies:
 
 ```
-(executable
+(library
  (name my_tests)
- (libraries hegel))
+ (libraries hegel)
+ (inline_tests (backend ppx_hegel_test))
+ (preprocess (pps ppx_hegel_test)))
 ```
 
 Then create a test file:
@@ -30,43 +32,46 @@ Then create a test file:
 open Hegel
 open Hegel.Generators
 
-let () =
-  run_hegel_test (fun tc ->
-    let n = draw tc (integers ()) in
-    assert (n = n))  (* integers are always equal to themselves *)
+let%hegel_test integer_self_equality tc =
+  let n = draw tc (integers ()) in
+  assert (n = n)  (* integers are always equal to themselves *)
+;;
 ```
 
-Run it with `dune exec ./my_tests.exe`. You should see that this test passes.
+Run it with `dune runtest`. You should see a `PASS` line for the test.
 
-Let's look at what's happening in more detail. `run_hegel_test` runs your test
-many times (100, by default). The test function takes a `test_case` parameter,
-which is passed to `draw` to draw different values. This test draws a random
-integer and checks that it should be equal to itself.
+Let's look at what's happening in more detail. The `let%hegel_test name tc =
+body` extension defines `name` as a `unit -> unit` function that runs `body`
+many times (100, by default) and *also* registers it with Hegel's runtime so
+`dune runtest` finds it. The `tc` parameter is a test case, which is passed
+to `draw` to draw different values each iteration. The example above draws a
+random integer and checks that it is equal to itself.
 
 Next, try a test that fails:
 
 ```ocaml
-let () =
-  run_hegel_test (fun tc ->
-    let n = draw tc (integers ()) in
-    assert (n < 50))  (* this will fail! *)
+let%hegel_test integer_under_fifty tc =
+  let n = draw tc (integers ()) in
+  assert (n < 50)  (* this will fail! *)
+;;
 ```
 
 This test asserts that any integer is less than 50, which is obviously incorrect.
 Hegel will find a test case that makes this assertion fail, and then shrink it
-to find the smallest counterexample — in this case, `n = 50`.
+to find the smallest counterexample — in this case, `n = 50`. `dune runtest`
+will print a `FAIL` line and exit non-zero.
 
 To fix this test, you can constrain the integers you generate with `min_value`
 and `max_value`:
 
 ```ocaml
-let () =
-  run_hegel_test (fun tc ->
-    let n = draw tc (integers ~min_value:0 ~max_value:49 ()) in
-    assert (n < 50))
+let%hegel_test integer_under_fifty tc =
+  let n = draw tc (integers ~min_value:0 ~max_value:49 ()) in
+  assert (n < 50)
+;;
 ```
 
-Run the test again. It should now pass.
+Run `dune runtest` again. It should now pass.
 
 ## Use generators
 
@@ -78,12 +83,12 @@ combinators that allow you to make generators out of other generators, such as
 For example, you can use `lists` to generate a list of integers:
 
 ```ocaml
-let () =
-  run_hegel_test (fun tc ->
-    let lst = draw tc (lists (integers ()) ()) in
-    let initial_length = List.length lst in
-    let extended = draw tc (integers ()) :: lst in
-    assert (List.length extended > initial_length))
+let%hegel_test prepend_increases_length tc =
+  let lst = draw tc (lists (integers ()) ()) in
+  let initial_length = List.length lst in
+  let extended = draw tc (integers ()) :: lst in
+  assert (List.length extended > initial_length)
+;;
 ```
 
 This test checks that prepending an element to a random list of integers should
@@ -121,25 +126,27 @@ let generate_person tc =
 Use `note` to attach debug information:
 
 ```ocaml
-let () =
-  run_hegel_test (fun tc ->
-    let x = draw tc (integers ()) in
-    let y = draw tc (integers ()) in
-    note tc (Printf.sprintf "x + y = %d, y + x = %d" (x + y) (y + x));
-    assert (x + y = y + x))
+let%hegel_test addition_commutes tc =
+  let x = draw tc (integers ()) in
+  let y = draw tc (integers ()) in
+  note tc (Printf.sprintf "x + y = %d, y + x = %d" (x + y) (y + x));
+  assert (x + y = y + x)
+;;
 ```
 
 Notes only appear when Hegel replays the minimal failing example.
 
 ## Change the number of test cases
 
-By default Hegel runs 100 test cases. To override this, pass `~settings`:
+By default Hegel runs 100 test cases. To override this, attach a
+`[@@settings ...]` attribute to the test:
 
 ```ocaml
-let () =
-  run_hegel_test ~settings:(Client.settings ~test_cases:500 ()) (fun tc ->
-    let n = draw tc (integers ()) in
-    assert (n = n))
+let%hegel_test integer_self_equality tc =
+  let n = draw tc (integers ()) in
+  assert (n = n)
+[@@settings Hegel.settings ~test_cases:500 ()]
+;;
 ```
 
 ## Learning more

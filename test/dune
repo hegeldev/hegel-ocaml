@@ -29,10 +29,21 @@
   test_derive
   test_stateful
   test_single_test_case
-  test_antithesis)
- (libraries hegel alcotest core core_unix threads.posix crc32 yojson cbor)
+  test_antithesis
+  test_hegel_test_runtime)
+ (libraries
+  hegel
+  hegel_test_runtime
+  alcotest
+  core
+  core_unix
+  threads.posix
+  crc32
+  yojson
+  cbor)
  (preprocess
   (pps ppx_js_style -- -allow-unannotated-ignores))
+ (deps runtime_exit_demo/runtime_exit_demo.exe)
  (foreign_stubs
   (language c)
   (names unsetenv_stubs)))

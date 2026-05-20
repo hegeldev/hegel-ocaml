@@ -12,7 +12,19 @@
           ~settings:expr
           ~test_location:{ function_name; file; begin_line }
           (fun tc -> body)
+      ;;
+
+      let () =
+        Hegel_test_runtime.register
+          ~name:"my_test"
+          ~file:"…"
+          ~line:…
+          my_test
     ]}
+
+    The generated function remains directly callable, but is also auto-registered
+    with [Hegel_test_runtime] so that [dune runtest] (via the [ppx_hegel_test]
+    inline-tests backend) discovers and runs it.
 
     The [@@settings ...] attribute is optional. When omitted, the [~settings]
     argument is also omitted and [Hegel.Session.run_hegel_test] uses its default. *)
@@ -60,10 +72,18 @@ let build_location_record ~loc ~function_name : expression =
     }]
 ;;
 
-(** [build_runner ~loc ~function_name ~settings_expr ~body_fn] returns
-    [let function_name () = Hegel.Session.run_hegel_test [?settings] ~test_location:..
-     body_fn]. *)
-let build_runner ~loc ~function_name ~settings_expr ~body_fn : structure_item =
+(** [build_items ~loc ~function_name ~settings_expr ~body_fn] returns the
+    pair of structure items the expander splices in:
+
+    {[
+      let function_name () =
+        Hegel.Session.run_hegel_test [?settings] ~test_location:.. body_fn
+      ;;
+
+      let () =
+        Hegel_test_runtime.register ~name:.. ~file:.. ~line:.. function_name
+    ]} *)
+let build_items ~loc ~function_name ~settings_expr ~body_fn : structure_item list =
   let location_record = build_location_record ~loc ~function_name in
   let call =
     match settings_expr with
@@ -78,24 +98,42 @@ let build_runner ~loc ~function_name ~settings_expr ~body_fn : structure_item =
         Hegel.Session.run_hegel_test ~test_location:[%e location_record] [%e body_fn]]
   in
   let pat = Ast_builder.Default.pvar ~loc function_name in
-  [%stri let [%p pat] = fun () -> [%e call]]
+  let definition = [%stri let [%p pat] = fun () -> [%e call]] in
+  let name_e = Ast_builder.Default.estring ~loc function_name in
+  let file_e = Ast_builder.Default.estring ~loc loc.loc_start.pos_fname in
+  let line_e = Ast_builder.Default.eint ~loc loc.loc_start.pos_lnum in
+  let ident = Ast_builder.Default.evar ~loc function_name in
+  let registration =
+    [%stri
+      let () =
+        Hegel_test_runtime.register
+          ~name:[%e name_e]
+          ~file:[%e file_e]
+          ~line:[%e line_e]
+          [%e ident]
+      ;;]
+  in
+  [ definition; registration ]
 ;;
 
 (** Expander for a single [let%hegel_test ...] structure item. *)
-let expand_value_binding ~loc (vb : value_binding) : structure_item =
+let expand_value_binding ~loc (vb : value_binding) : structure_item list =
   let function_name = extract_function_name vb.pvb_pat in
   let settings_expr = extract_settings_attr vb.pvb_attributes in
   (* The body of [let%hegel_test name <args> = expr] is parsed as
      [let name = <args -> expr>]. We pass that lambda as the [test_fn] to
      [Hegel.Session.run_hegel_test]. *)
-  build_runner ~loc ~function_name ~settings_expr ~body_fn:vb.pvb_expr
+  build_items ~loc ~function_name ~settings_expr ~body_fn:vb.pvb_expr
 ;;
 
 (** The [hegel_test] extension is attached to [structure_item] (top-level
     [let%hegel_test]). It supports only the non-recursive single-binding
-    form. *)
+    form. The expander splices in two top-level items: the test function
+    itself and a [Hegel_test_runtime.register] side effect so that
+    [dune runtest] (via the [ppx_hegel_test] inline-tests backend) discovers
+    and runs the test. *)
 let extension =
-  Extension.declare
+  Extension.declare_inline
     "hegel_test"
     Extension.Context.structure_item
     Ast_pattern.(pstr (pstr_value nonrecursive (__ ^:: nil) ^:: nil))

@@ -13,8 +13,13 @@
  (kind ppx_rewriter)
  (libraries ppxlib)
  (modules ppx_hegel_test)
+ (ppx_runtime_libraries hegel_test_runtime)
  (preprocess
-  (pps ppx_js_style ppxlib.metaquot)))
+  (pps ppx_js_style ppxlib.metaquot))
+ (inline_tests.backend
+  (runner_libraries hegel_test_runtime)
+  (generate_runner
+   (echo "let () = Hegel_test_runtime.test_main ();;"))))
 
 ; Select the ppx_compat implementation based on whether we are building on
 ; OxCaml (ppxlib AST has labeled tuples and constructor modalities) or
