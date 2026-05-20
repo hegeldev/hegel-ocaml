@@ -19,6 +19,37 @@
       forAllSystems = nixpkgs.lib.genAttrs nixpkgs.lib.systems.flakeExposed;
     in
     {
+      lib.mkHegelOcamlProject =
+        {
+          pkgs,
+          stdenv ? pkgs.stdenv,
+        }:
+        pkgs.ocamlPackages.buildDunePackage {
+          pname = "hegel";
+          src = ../.;
+          duneVersion = "3";
+          propagatedBuildInputs = with pkgs.ocamlPackages; [
+            core
+            core_unix
+            ocplib-endian
+            ppx_js_style
+            ppxlib
+            yojson
+          ];
+          buildPhase = ''
+            runHook preBuild
+            dune build -p hegel,ppx_hegel_test,ppx_hegel_generator -j $NIX_BUILD_CORES
+            runHook postBuild
+          '';
+          installPhase = ''
+            runHook preInstall
+            dune install --prefix $out --libdir $OCAMLFIND_DESTDIR \
+              hegel ppx_hegel_test ppx_hegel_generator
+            runHook postInstall
+          '';
+          doCheck = false;
+        };
+
       devShells = forAllSystems (
         system:
         let
