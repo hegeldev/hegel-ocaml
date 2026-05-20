@@ -74,14 +74,13 @@ let test_passing_writes_sdk_jsonl () =
       "true"
       (Yojson.Safe.to_string
          (List.Assoc.find_exn eval_assoc ~equal:String.equal "condition"));
-    (* The id encodes <file_without_ext>.<function> passes properties. *)
     let id =
       Yojson.Safe.to_string (List.Assoc.find_exn eval_assoc ~equal:String.equal "id")
     in
     Alcotest.(check bool)
       "id mentions test_ppx_hegel_test"
       true
-      (String.is_substring id ~substring:"test_ppx_hegel_test.simple_pass");
+      (String.is_substring id ~substring:"simple_pass in test_ppx_hegel_test");
     (* location.file should mention the test file. *)
     let loc = List.Assoc.find_exn eval_assoc ~equal:String.equal "location" in
     let loc_assoc =

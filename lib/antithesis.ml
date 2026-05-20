@@ -35,7 +35,10 @@ let extract_file_base path =
 
 let assertion_json loc ~hit ~condition =
   let id =
-    Printf.sprintf "%s.%s passes properties" (extract_file_base loc.file) loc.function_name
+    Printf.sprintf
+      "test %s in %s passes properties"
+      loc.function_name
+      (extract_file_base loc.file)
   in
   let location_obj : Yojson.Safe.t =
     `Assoc

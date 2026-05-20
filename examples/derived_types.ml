@@ -39,11 +39,10 @@ type entity =
     derived [point_generator] yields valid records). We do not square the
     coordinates here because the derived [int] generator uses the full OCaml
     range, which can overflow. *)
-let%hegel_test test_point_smoke tc =
+let%hegel_test test_point_distance_nonnegative tc =
   let p = point_generator tc in
-  (* Reflexivity: trivially true, but exercises the generator. *)
-  assert (p.x = p.x);
-  assert (p.y = p.y)
+  let dist_sq = (p.x * p.x) + (p.y * p.y) in
+  assert (dist_sq >= 0)
 [@@settings Hegel.settings ~test_cases:100 ()]
 ;;
 
@@ -69,18 +68,17 @@ let saw_dot = ref false
 
 let%hegel_test test_shape_all_variants tc =
   let s = shape_generator tc in
-  (match s with
-   | Circle r ->
-     assert (Float.is_finite r);
-     saw_circle := true
-   | Rect (w, h) ->
-     ignore (w + h);
-     saw_rect := true
-   | Labeled s ->
-     ignore (String.length s);
-     saw_labeled := true
-   | Dot -> saw_dot := true);
-  assert true
+  match s with
+  | Circle r ->
+    assert (Float.is_finite r);
+    saw_circle := true
+  | Rect (w, h) ->
+    ignore (w + h);
+    saw_rect := true
+  | Labeled s ->
+    ignore (String.length s);
+    saw_labeled := true
+  | Dot -> saw_dot := true
 [@@settings Hegel.settings ~test_cases:100 ()]
 ;;
 
@@ -91,17 +89,16 @@ let%hegel_test test_entity_valid tc =
   let e = entity_generator tc in
   ignore (String.length e.name);
   ignore e.active;
-  (match e.tag with
-   | Some _ -> saw_tagged := true
-   | None -> saw_untagged := true);
-  assert true
+  match e.tag with
+  | Some _ -> saw_tagged := true
+  | None -> saw_untagged := true
 [@@settings Hegel.settings ~test_cases:50 ()]
 ;;
 
 let () =
   Printf.printf "Running derived-type property tests...\n%!";
-  test_point_smoke ();
-  Printf.printf "  point_smoke: OK\n%!";
+  test_point_distance_nonnegative ();
+  Printf.printf "  point_distance_nonnegative: OK\n%!";
   test_color_all_variants ();
   assert (Hashtbl.length saw_colors = 3);
   Printf.printf "  color_all_variants: OK\n%!";

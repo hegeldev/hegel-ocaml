@@ -57,7 +57,7 @@ let test_extract_file_base_bare_filename () =
     (A.extract_file_base "foo.ml")
 ;;
 
-let expected_id = "test_basic.my_test passes properties"
+let expected_id = "test my_test in test_basic passes properties"
 
 let expected_location_json : Yojson.Safe.t =
   `Assoc
@@ -186,7 +186,10 @@ let tests =
       "extract_file_base strips extension"
       `Quick
       test_extract_file_base_strips_extension
-  ; Alcotest.test_case "extract_file_base no extension" `Quick test_extract_file_base_no_extension
+  ; Alcotest.test_case
+      "extract_file_base no extension"
+      `Quick
+      test_extract_file_base_no_extension
   ; Alcotest.test_case
       "extract_file_base bare filename"
       `Quick

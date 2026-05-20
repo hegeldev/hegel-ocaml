@@ -361,9 +361,8 @@ let create_client connection =
     @param database_key
       optional key for persistent failure storage (internal use).
     @param test_location
-      source location of the test, used by the Antithesis integration. When
-      [ANTITHESIS_OUTPUT_DIR] is set, this must be [Some _] or the call
-      panics. Provided automatically by the [let%hegel_test] PPX. *)
+      source location of the test, used by the Antithesis integration.
+      Provided automatically by the [let%hegel_test] PPX. *)
 let run_test client ~(settings : settings) ?database_key ?test_location test_fn =
   if Stdlib.Domain.DLS.get in_test_context
   then failwith "Cannot nest test cases - already inside a test case";
@@ -482,7 +481,7 @@ let run_test client ~(settings : settings) ?database_key ?test_location test_fn 
   let check_server_alive () =
     if server_has_exited client.connection then failwith server_crashed_message
   in
-  let body () =
+  let run_test_body () =
     match settings.mode with
     | Single_test_case ->
       send_run_command
@@ -623,7 +622,7 @@ let run_test client ~(settings : settings) ?database_key ?test_location test_fn 
                    ~sep:"\n"
                    (List.mapi exns ~f:(fun i e -> sprintf "  %d: %s" i (Exn.to_string e)))))))
   in
-  match body () with
+  match run_test_body () with
   | () -> emit_antithesis ~passed:true
   | exception e ->
     emit_antithesis ~passed:false;

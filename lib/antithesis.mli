@@ -32,7 +32,7 @@ val extract_file_base : string -> string
 
 (** [assertion_json loc ~hit ~condition] builds the
     [{ "antithesis_assert": { ... } }] JSON object. Both ID and message are
-    [file.function passes properties]; [must_hit] is always [true];
+    [test test_function in test_file passes properties]; [must_hit] is always [true];
     [assert_type] is ["always"]; [display_type] is ["Always"]. *)
 val assertion_json : test_location -> hit:bool -> condition:bool -> Yojson.Safe.t
 
