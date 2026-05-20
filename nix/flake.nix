@@ -24,8 +24,18 @@
           pkgs,
           stdenv ? pkgs.stdenv,
         }:
+        let
+          duneProjectLines = builtins.filter builtins.isString (
+            builtins.split "\n" (builtins.readFile ../dune-project)
+          );
+          versionLine = builtins.head (
+            builtins.filter (l: builtins.match "\\(version .*\\)" l != null) duneProjectLines
+          );
+          duneProjectVersion = builtins.elemAt (builtins.match "\\(version ([^)]+)\\)" versionLine) 0;
+        in
         pkgs.ocamlPackages.buildDunePackage {
           pname = "hegel";
+          version = duneProjectVersion;
           src = ../.;
           duneVersion = "3";
           propagatedBuildInputs = with pkgs.ocamlPackages; [
