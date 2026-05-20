@@ -27,7 +27,7 @@ let is_running_in_antithesis () =
         ()
 ;;
 
-let chop_file_ext path =
+let extract_file_base path =
   let base = Filename.basename path in
   try Filename.chop_extension base with
   | Invalid_argument _ -> base
@@ -35,7 +35,7 @@ let chop_file_ext path =
 
 let assertion_json loc ~hit ~condition =
   let id =
-    Printf.sprintf "%s.%s passes properties" (chop_file_ext loc.file) loc.function_name
+    Printf.sprintf "%s.%s passes properties" (extract_file_base loc.file) loc.function_name
   in
   let location_obj : Yojson.Safe.t =
     `Assoc

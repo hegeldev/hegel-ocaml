@@ -26,9 +26,9 @@ type test_location =
     is set in the environment and points to an existing directory. *)
 val is_running_in_antithesis : unit -> bool
 
-(** [chop_file_ext path] returns the basename of [path] with the extension
+(** [extract_file_base path] returns the basename of [path] with the extension
     removed (e.g. ["tests/test_basic.ml"] -> ["test_basic"]). *)
-val chop_file_ext : string -> string
+val extract_file_base : string -> string
 
 (** [assertion_json loc ~hit ~condition] builds the
     [{ "antithesis_assert": { ... } }] JSON object. Both ID and message are

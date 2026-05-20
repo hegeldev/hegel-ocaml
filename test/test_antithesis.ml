@@ -36,25 +36,25 @@ let sample_location =
   { A.function_name = "my_test"; file = "tests/test_basic.ml"; begin_line = 42 }
 ;;
 
-let test_chop_file_ext_strips_extension () =
+let test_extract_file_base_strips_extension () =
   Alcotest.(check string)
     "basename without extension"
     "test_basic"
-    (A.chop_file_ext "tests/test_basic.ml")
+    (A.extract_file_base "tests/test_basic.ml")
 ;;
 
-let test_chop_file_ext_no_extension () =
+let test_extract_file_base_no_extension () =
   Alcotest.(check string)
     "basename with no extension is unchanged"
     "README"
-    (A.chop_file_ext "docs/README")
+    (A.extract_file_base "docs/README")
 ;;
 
-let test_chop_file_ext_bare_filename () =
+let test_extract_file_base_bare_filename () =
   Alcotest.(check string)
     "bare filename without directory"
     "foo"
-    (A.chop_file_ext "foo.ml")
+    (A.extract_file_base "foo.ml")
 ;;
 
 let expected_id = "test_basic.my_test passes properties"
@@ -183,14 +183,14 @@ let test_is_running_raises_when_dir_missing () =
 
 let tests =
   [ Alcotest.test_case
-      "chop_file_ext strips extension"
+      "extract_file_base strips extension"
       `Quick
-      test_chop_file_ext_strips_extension
-  ; Alcotest.test_case "chop_file_ext no extension" `Quick test_chop_file_ext_no_extension
+      test_extract_file_base_strips_extension
+  ; Alcotest.test_case "extract_file_base no extension" `Quick test_extract_file_base_no_extension
   ; Alcotest.test_case
-      "chop_file_ext bare filename"
+      "extract_file_base bare filename"
       `Quick
-      test_chop_file_ext_bare_filename
+      test_extract_file_base_bare_filename
   ; Alcotest.test_case
       "assertion_json declaration shape"
       `Quick
