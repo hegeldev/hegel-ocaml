@@ -30,7 +30,7 @@ let with_env_unset ~f =
     ~f
 ;;
 
-let make_tempdir () = Core_unix.mkdtemp "/tmp/hegel-antithesis-test-"
+let with_tempdir ~f = Test_helpers.with_tempdir ~prefix:"/tmp/hegel-antithesis-test-" ~f
 
 let sample_location =
   { A.function_name = "my_test"; file = "tests/test_basic.ml"; begin_line = 42 }
@@ -115,49 +115,49 @@ let test_assertion_json_evaluation_passed () =
 ;;
 
 let test_write_jsonl_line_appends () =
-  let dir = make_tempdir () in
-  let path = Filename.concat dir "out.jsonl" in
-  A.write_jsonl_line path (`Assoc [ "x", `Int 1 ]);
-  A.write_jsonl_line path (`Assoc [ "y", `Int 2 ]);
-  let contents = In_channel.read_all path in
-  Alcotest.(check string) "two appended lines" "{\"x\":1}\n{\"y\":2}\n" contents
+  with_tempdir ~f:(fun dir ->
+    let path = Filename.concat dir "out.jsonl" in
+    A.write_jsonl_line path (`Assoc [ "x", `Int 1 ]);
+    A.write_jsonl_line path (`Assoc [ "y", `Int 2 ]);
+    let contents = In_channel.read_all path in
+    Alcotest.(check string) "two appended lines" "{\"x\":1}\n{\"y\":2}\n" contents)
 ;;
 
 let test_emit_assertion_round_trips () =
-  let dir = make_tempdir () in
-  with_env_dir dir ~f:(fun () ->
-    A.emit_assertion sample_location ~passed:true;
-    let lines =
-      In_channel.read_all (Filename.concat dir "sdk.jsonl") |> String.split_lines
-    in
-    Alcotest.(check int) "exactly two lines" 2 (List.length lines);
-    let decl = Yojson.Safe.from_string (List.nth_exn lines 0) in
-    let eval = Yojson.Safe.from_string (List.nth_exn lines 1) in
-    let expected_decl = A.assertion_json sample_location ~hit:false ~condition:false in
-    let expected_eval = A.assertion_json sample_location ~hit:true ~condition:true in
-    Alcotest.(check string)
-      "declaration line"
-      (Yojson.Safe.to_string expected_decl)
-      (Yojson.Safe.to_string decl);
-    Alcotest.(check string)
-      "evaluation line"
-      (Yojson.Safe.to_string expected_eval)
-      (Yojson.Safe.to_string eval))
+  with_tempdir ~f:(fun dir ->
+    with_env_dir dir ~f:(fun () ->
+      A.emit_assertion sample_location ~passed:true;
+      let lines =
+        In_channel.read_all (Filename.concat dir "sdk.jsonl") |> String.split_lines
+      in
+      Alcotest.(check int) "exactly two lines" 2 (List.length lines);
+      let decl = Yojson.Safe.from_string (List.nth_exn lines 0) in
+      let eval = Yojson.Safe.from_string (List.nth_exn lines 1) in
+      let expected_decl = A.assertion_json sample_location ~hit:false ~condition:false in
+      let expected_eval = A.assertion_json sample_location ~hit:true ~condition:true in
+      Alcotest.(check string)
+        "declaration line"
+        (Yojson.Safe.to_string expected_decl)
+        (Yojson.Safe.to_string decl);
+      Alcotest.(check string)
+        "evaluation line"
+        (Yojson.Safe.to_string expected_eval)
+        (Yojson.Safe.to_string eval)))
 ;;
 
 let test_emit_assertion_failed () =
-  let dir = make_tempdir () in
-  with_env_dir dir ~f:(fun () ->
-    A.emit_assertion sample_location ~passed:false;
-    let lines =
-      In_channel.read_all (Filename.concat dir "sdk.jsonl") |> String.split_lines
-    in
-    let eval = Yojson.Safe.from_string (List.nth_exn lines 1) in
-    let expected_eval = A.assertion_json sample_location ~hit:true ~condition:false in
-    Alcotest.(check string)
-      "evaluation has condition:false"
-      (Yojson.Safe.to_string expected_eval)
-      (Yojson.Safe.to_string eval))
+  with_tempdir ~f:(fun dir ->
+    with_env_dir dir ~f:(fun () ->
+      A.emit_assertion sample_location ~passed:false;
+      let lines =
+        In_channel.read_all (Filename.concat dir "sdk.jsonl") |> String.split_lines
+      in
+      let eval = Yojson.Safe.from_string (List.nth_exn lines 1) in
+      let expected_eval = A.assertion_json sample_location ~hit:true ~condition:false in
+      Alcotest.(check string)
+        "evaluation has condition:false"
+        (Yojson.Safe.to_string expected_eval)
+        (Yojson.Safe.to_string eval)))
 ;;
 
 let test_is_running_false_when_unset () =
@@ -166,12 +166,12 @@ let test_is_running_false_when_unset () =
 ;;
 
 let test_is_running_true_when_set_and_exists () =
-  let dir = make_tempdir () in
-  with_env_dir dir ~f:(fun () ->
-    Alcotest.(check bool)
-      "true when env set and dir exists"
-      true
-      (A.is_running_in_antithesis ()))
+  with_tempdir ~f:(fun dir ->
+    with_env_dir dir ~f:(fun () ->
+      Alcotest.(check bool)
+        "true when env set and dir exists"
+        true
+        (A.is_running_in_antithesis ())))
 ;;
 
 let test_is_running_raises_when_dir_missing () =

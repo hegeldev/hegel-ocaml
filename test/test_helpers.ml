@@ -19,6 +19,26 @@ let dummy_test_location : Hegel.Antithesis.test_location =
   { function_name = "unit_test"; file = "test_helpers.ml"; begin_line = 0 }
 ;;
 
+(** [with_tempdir ~prefix ~f] creates a tempdir via [mkdtemp prefix], passes
+    its path to [f], and removes the directory (and any flat files inside it)
+    on exit — including on exception. Intended for tests whose tempdirs only
+    contain top-level files; subdirectories are not recursively removed. *)
+let with_tempdir ~prefix ~f =
+  let dir = Core_unix.mkdtemp prefix in
+  Exn.protect
+    ~finally:(fun () ->
+      (try
+         Stdlib.Sys.readdir dir
+         |> Array.iter ~f:(fun name ->
+           try Stdlib.Sys.remove (Filename.concat dir name) with
+           | _ -> ())
+       with
+       | _ -> ());
+      try Core_unix.rmdir dir with
+      | _ -> ())
+    ~f:(fun () -> f dir)
+;;
+
 (** [contains_substring s sub] returns [true] if [sub] appears anywhere in [s].
 *)
 let contains_substring s sub =
@@ -84,13 +104,9 @@ let handshake_via_stream peer_conn =
     client connections. Uses the stream API for the peer side (compatible with
     the background reader thread). *)
 let handshake_pair peer_conn client_conn =
-  Printf.eprintf "[hegel-debug] handshake_pair: creating peer thread\n%!";
   let t = Thread.create handshake_via_stream peer_conn in
-  Printf.eprintf "[hegel-debug] handshake_pair: send_handshake\n%!";
   let _version = Connection.send_handshake client_conn in
-  Printf.eprintf "[hegel-debug] handshake_pair: joining peer thread\n%!";
-  Thread.join t;
-  Printf.eprintf "[hegel-debug] handshake_pair: done\n%!"
+  Thread.join t
 ;;
 
 (** Helper: check where a given command is *)

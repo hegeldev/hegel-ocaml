@@ -32,9 +32,9 @@ Per-test settings can be supplied with the `[@@settings ...]` attribute:
 
 ```ocaml
 let%hegel_test my_invariant tc = ...
-[@@settings { (Hegel.default_settings ()) with max_examples = 1000 }]
+[@@settings Hegel.settings ~test_cases:1000 ()]
 ```
 
 This release also adds integration with Antithesis. Each `let%hegel_test` emits an 
-always assertion to recording whether the property test passed or failed. 
+always assertion recording whether the property test passed or failed. 
 Outside Antithesis, the integration is a no-op.

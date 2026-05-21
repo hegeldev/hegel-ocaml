@@ -135,5 +135,8 @@ let extension =
     (fun ~loc ~path:_ vb -> expand_value_binding ~loc vb)
 ;;
 
-let _rule = Context_free.Rule.extension extension
-let () = Driver.register_transformation "ppx_hegel_test" ~rules:[ _rule ]
+let () =
+  Driver.register_transformation
+    "ppx_hegel_test"
+    ~rules:[ Context_free.Rule.extension extension ]
+;;
