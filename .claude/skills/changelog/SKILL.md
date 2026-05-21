@@ -5,11 +5,11 @@ description: "Changelog style guide for writing RELEASE.md files. Use when creat
 
 # Changelog Style Guide
 
-This guide describes the style for writing `RELEASE.md` files for hegel-rust. The style is modeled on the [Hypothesis changelog](https://hypothesis.readthedocs.io/en/latest/changes.html).
+This guide describes the style for writing `RELEASE.md` files for hegel-ocaml. The style is modeled on the [Hypothesis changelog](https://hypothesis.readthedocs.io/en/latest/changes.html).
 
 ## Choosing `RELEASE_TYPE`
 
-hegel-rust is currently zerover (`0.x.y`), so the usual semver mapping does **not** apply. While we are pre-1.0:
+hegel-ocaml is currently zerover (`0.x.y`), so the usual semver mapping does **not** apply. While we are pre-1.0:
 
 - **`patch`** — Bug fixes, internal changes, **and new features / non-breaking API additions**. The default choice.
 - **`minor`** — **Breaking changes only.** Any change that requires users to update their code (renamed/removed APIs, changed signatures, behavior changes that could break downstream tests) is a minor bump.
