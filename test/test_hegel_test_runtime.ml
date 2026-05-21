@@ -1,8 +1,4 @@
-(** Tests for [Hegel_test_runtime]. Covers [register]/[registered]/[run_all]
-    directly; covers [test_main] by re-spawning the running [test_hegel.exe]
-    with a magic [--__hegel_test_runtime_demo MODE] argv that registers a
-    single passing or failing test and calls [test_main]. See [test_hegel.ml]
-    for the argv handler. *)
+(** Tests for [Hegel_test_runtime]. *)
 
 (** Marker substring used to identify the tests registered by this test
     file. Other tests in the same process also register entries (e.g. via
