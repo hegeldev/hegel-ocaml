@@ -12,6 +12,8 @@ __pycache__/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/changelog/
+!.claude/skills/self-review/
+!.claude/skills/coverage/
 CLAUDE.local.md
 _build/
 _coverage/

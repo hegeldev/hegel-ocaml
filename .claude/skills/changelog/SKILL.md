@@ -5,33 +5,43 @@ description: "Changelog style guide for writing RELEASE.md files. Use when creat
 
 # Changelog Style Guide
 
-This guide describes the style for writing `RELEASE.md` files for hegel-ocaml. The style is modeled on the [Hypothesis changelog](https://hypothesis.readthedocs.io/en/latest/changes.html).
+This guide describes the style for writing `RELEASE.md` files for hegel-rust. The style is modeled on the [Hypothesis changelog](https://hypothesis.readthedocs.io/en/latest/changes.html).
+
+## Choosing `RELEASE_TYPE`
+
+hegel-rust is currently zerover (`0.x.y`), so the usual semver mapping does **not** apply. While we are pre-1.0:
+
+- **`patch`** — Bug fixes, internal changes, **and new features / non-breaking API additions**. The default choice.
+- **`minor`** — **Breaking changes only.** Any change that requires users to update their code (renamed/removed APIs, changed signatures, behavior changes that could break downstream tests) is a minor bump.
+- **`major`** — Not used while we are zerover. Reserve for the eventual 1.0 and beyond.
+
+If you find yourself reaching for `minor` because the change feels "big," check whether it actually breaks any caller. A large new feature that adds API surface without removing or changing existing behavior is still a `patch`.
 
 ## Opening sentence pattern
 
 Every entry should open with a sentence that signals the scope and nature of the change:
 
-- **Small fixes/improvements (patch):** Start with `"This patch ..."`
-- **Larger changes (minor):** Start with `"This release ..."`
+- **Patch (fixes, improvements, new features):** Start with `"This patch ..."`
+- **Minor (breaking changes):** Start with `"This release ..."` and explain migration
 - **Tiny internal-only changes:** A bare sentence is fine — `"Internal refactoring."` or `"Clean up some internal code."`
 
 The opening verb should tell the reader what *kind* of change this is:
 
-| Change type | Opening pattern |
-|---|---|
-| Bug fix | `"This patch fixes ..."` or `"Fix ..."` |
-| New feature | `"This release adds ..."` |
-| Improvement | `"This patch improves ..."` or `"This release makes ... more ..."` |
-| Deprecation | `"This release deprecates ..."` |
-| Breaking change | `"This release changes ..."` (then explain migration) |
-| Performance | `"This patch improves the performance of ..."` or `"Optimize ..."` |
-| Internal-only | `"Internal refactoring."` / `"Refactor some internals."` / `"Clean up some internal code."` |
+| Change type | RELEASE_TYPE | Opening pattern |
+|---|---|---|
+| Bug fix | `patch` | `"This patch fixes ..."` or `"Fix ..."` |
+| New feature | `patch` | `"This patch adds ..."` |
+| Improvement | `patch` | `"This patch improves ..."` |
+| Performance | `patch` | `"This patch improves the performance of ..."` or `"Optimize ..."` |
+| Deprecation | `minor` | `"This release deprecates ..."` |
+| Breaking change | `minor` | `"This release changes ..."` (then explain migration) |
+| Internal-only | `patch` | `"Internal refactoring."` / `"Refactor some internals."` / `"Clean up some internal code."` |
 
 ## Describe the user impact, not the implementation
 
 Bad: `"Refactored the socket handling code to use a shared connection pool."`
 
-Good: `"This release changes the way the client manages the server to run a single persistent process for the whole test run. This should improve the performance of running many hegel tests."`
+Good: `"This patch changes the way the client manages the server to run a single persistent process for the whole test run. This should improve the performance of running many hegel tests."`
 
 For **bug fixes**, describe the bug (what went wrong from the user's perspective), not just "fixed a bug":
 
@@ -59,7 +69,7 @@ Don't include code blocks for bug fixes or internal changes.
 
 ## References
 
-- Reference GitHub issues when relevant: `([#32](https://github.com/hegeldev/hegel-ocaml/pull/32))`
+- Reference GitHub issues when relevant: `([#24](https://github.com/hegeldev/hegel-ocaml/issues/24))`
 - Reference previous versions when building on prior work
 - Reference related libraries/specs when relevant
 
@@ -95,26 +105,29 @@ RELEASE_TYPE: patch
 Internal refactoring of the protocol handling code.
 ```
 
-**Good minor (new feature):**
+**Good patch (new feature):**
+```
+RELEASE_TYPE: patch
+
+Add support for building and running on the OxCaml compiler (ocaml-variants.5.2.0+ox). 
+The ppx_hegel_generator PPX deriver now works on both standard OCaml and OxCaml by 
+abstracting over ppxlib AST differences (labeled tuples, constructor modalities) 
+via a platform-selected compatibility module.
+```
+
+**Good minor (breaking change):**
 ```
 RELEASE_TYPE: minor
 
-This release adds support for `HealthCheck`. A health check is a proactive error raised by Hegel when we detect your test is likely to have degraded testing power or performance. For example, `FilterTooMuch` is raised when too many test cases are filtered out by the rejection sampling of `filter()` or `assume()`.
+This release changes the public API for running Hegel tests to a new `let%hegel_test` PPX extension.
+\```ocaml
+# before
+let my_invariant = Hegel.run_hegel_test (fun tc -> ...)
 
-Health checks can be suppressed with the new `suppress_health_check` setting.
-```
+# after
+let%hegel_test my_invariant tc = ...
+\```
 
-**Good major (breaking change):**
-```
-RELEASE_TYPE: major
-
-This release brings the OCaml library in line with hegel-rust, including a **breaking API change**: test functions now receive an explicit `test_case` parameter.
-
-* **Breaking**: `draw`, `assume`, `note`, and `target` now take a `test_case` first argument. Test functions change from `unit -> unit` to `test_case -> unit`. PPX-derived generators change from `unit -> 'a` to `test_case -> 'a`.
-* Switch from Unix socket to `--stdio` pipe-based transport, eliminating temp directories and socket polling.
-* Add a background reader thread for packet dispatch, replacing the demand-driven reader model.
-* Add `Settings` API with `health_check`, `verbosity`, `database`, `derandomize`, and `suppress_health_check` support.
-* Auto-install `hegel-core` via `uv` when not found on PATH.
-* Add server crash detection via a monitor thread.
-* Bump supported protocol versions to 0.1–0.7.
+This will require updating your test declarations, but will enable integration with 
+Antithesis and `dune runtest` and automatically register tests with the new test runner.
 ```
