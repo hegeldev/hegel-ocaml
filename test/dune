@@ -43,7 +43,6 @@
   cbor)
  (preprocess
   (pps ppx_js_style -- -allow-unannotated-ignores))
- (deps runtime_exit_demo/runtime_exit_demo.exe)
  (foreign_stubs
   (language c)
   (names unsetenv_stubs)))

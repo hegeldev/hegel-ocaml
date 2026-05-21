@@ -1,6 +1,8 @@
 (** Tests for [Hegel_test_runtime]. Covers [register]/[registered]/[run_all]
-    directly; covers [test_main] by spawning [runtime_exit_demo.exe] and
-    inspecting its exit code. *)
+    directly; covers [test_main] by re-spawning the running [test_hegel.exe]
+    with a magic [--__hegel_test_runtime_demo MODE] argv that registers a
+    single passing or failing test and calls [test_main]. See [test_hegel.ml]
+    for the argv handler. *)
 
 (** Marker substring used to identify the tests registered by this test
     file. Other tests in the same process also register entries (e.g. via
@@ -66,39 +68,31 @@ let test_run_all_counts_failures () =
   Alcotest.(check bool) "exactly one failure counted" true (failures = 1)
 ;;
 
-(** Locate the [runtime_exit_demo.exe] binary produced by dune. The test
-    executable lives at [_build/default/test/test_hegel.exe], so the demo
-    binary sits at a sibling path. *)
-let demo_exe () =
-  let here = Filename.dirname Sys.executable_name in
-  let path = Filename.concat here "runtime_exit_demo/runtime_exit_demo.exe" in
-  if Sys.file_exists path
-  then path
-  else Alcotest.fail ("runtime_exit_demo.exe not found at " ^ path)
-;;
-
-let spawn_and_wait exe arg =
+(** Re-spawn the currently running [test_hegel.exe] with the magic
+    [--__hegel_test_runtime_demo MODE] argv. [test_hegel.ml]'s argv handler
+    registers a single test (passing or failing based on [mode]) and calls
+    [Hegel_test_runtime.test_main]. We return its exit code. *)
+let spawn_and_wait mode =
+  let exe = Sys.executable_name in
   let pid =
     Unix.create_process
       exe
-      [| exe; arg |]
+      [| exe; "--__hegel_test_runtime_demo"; mode |]
       Unix.stdin
       (Unix.openfile "/dev/null" [ O_WRONLY ] 0)
       Unix.stderr
   in
   match Unix.waitpid [] pid with
   | _, WEXITED code -> code
-  | _, _ -> Alcotest.fail "runtime_exit_demo did not exit normally"
+  | _, _ -> Alcotest.fail "test_main subprocess did not exit normally"
 ;;
 
 let test_exit_zero_on_pass () =
-  let exe = demo_exe () in
-  Alcotest.(check int) "exit 0 on all-pass" 0 (spawn_and_wait exe "pass")
+  Alcotest.(check int) "exit 0 on all-pass" 0 (spawn_and_wait "pass")
 ;;
 
 let test_exit_one_on_fail () =
-  let exe = demo_exe () in
-  Alcotest.(check int) "exit 1 on any-fail" 1 (spawn_and_wait exe "fail")
+  Alcotest.(check int) "exit 1 on any-fail" 1 (spawn_and_wait "fail")
 ;;
 
 let tests =

@@ -36,7 +36,7 @@ let extract_file_base path =
 let assertion_json loc ~hit ~condition =
   let id =
     Printf.sprintf
-      "test %s in %s passes properties"
+      "%s in %s passes properties"
       loc.function_name
       (extract_file_base loc.file)
   in

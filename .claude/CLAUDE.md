@@ -138,9 +138,13 @@ Libraries that don't opt in still get the registration side effect (the
 PPX always emits it) — entries just sit unused. That's harmless and lets
 tests built around alternative harnesses (Alcotest, raw `let () = name ()`)
 keep working unchanged. The runner's behavior is verified in
-`test/test_hegel_test_runtime.ml`, which spawns `test/runtime_exit_demo/` as
-a subprocess and asserts the expected exit codes for passing and failing
-registries.
+`test/test_hegel_test_runtime.ml`, which re-spawns the running
+`test_hegel.exe` with a magic `--__hegel_test_runtime_demo MODE` argv that
+the top of `test_hegel.ml` intercepts to register a single test and call
+`Hegel_test_runtime.test_main`; the subprocess's exit code is then
+asserted. Folding the demo into `test_hegel.exe` itself sidesteps the
+build-ordering trap that would otherwise hit any recipe invoking the test
+binary directly.
 
 ### Type-Directed Derivation (ppx/ + lib/derive.ml)
 

@@ -1,3 +1,19 @@
+(* When invoked with the [--__hegel_test_runtime_demo MODE] argv, this binary
+   reuses itself as the subprocess for [Test_hegel_test_runtime]'s exit-code
+   assertions. *)
+let () =
+  match Sys.argv with
+  | [| _; "--__hegel_test_runtime_demo"; mode |] ->
+    let run =
+      match mode with
+      | "fail" -> fun () -> failwith "deliberate"
+      | _ -> fun () -> ()
+    in
+    Hegel_test_runtime.register ~name:"demo" ~file:__FILE__ ~line:__LINE__ run;
+    Hegel_test_runtime.test_main ()
+  | _ -> ()
+;;
+
 let () =
   (* Register first so it runs LAST (LIFO) — after all session at_exit
      handlers. If this message never appears, process exit is hanging before
