@@ -1,6 +1,6 @@
 (library
  (name hegel_test_runtime)
- (package hegel)
+ (public_name hegel.test_runtime)
  (wrapped false)
  (instrumentation
   (backend bisect_ppx)))
