@@ -1,5 +1,7 @@
 open Core
 
+let dummy_test_location = Test_helpers.dummy_test_location
+
 (* Stateful failure test: the [push] rule pushes an int in [0, 100] onto a
    stack; the [pop] rule fails when the popped value is >= 50. Should shrink to [push 50; pop]. *)
 let stateful_failure_test () =
@@ -21,8 +23,10 @@ let stateful_failure_test () =
         rest)
   in
   (try
-     Hegel.Session.run_hegel_test ~settings:(Hegel.settings ~seed:0 ()) (fun tc ->
-       S.run ~init:[] ~rules:[ push_rule; pop_rule ] tc);
+     Hegel.Session.run_hegel_test
+       ~settings:(Hegel.settings ~seed:0 ())
+       dummy_test_location
+       (fun tc -> S.run ~init:[] ~rules:[ push_rule; pop_rule ] tc);
      failwith "expected property to fail"
    with
    | Assert_failure _ -> ());
@@ -60,6 +64,7 @@ let stateful_variables_test () =
   in
   Hegel.Session.run_hegel_test
     ~settings:(Hegel.settings ~test_cases:10 ~seed:0 ())
+    dummy_test_location
     (fun tc ->
        next_id := 0;
        S.run
@@ -98,6 +103,7 @@ let stateful_variables_draw_test () =
   in
   Hegel.Session.run_hegel_test
     ~settings:(Hegel.settings ~test_cases:5 ~seed:0 ())
+    dummy_test_location
     (fun tc ->
        next_id := 0;
        S.run
@@ -114,9 +120,12 @@ let stateful_rule_name_test () =
 
 let stateful_no_rules_test () =
   let raised_msg = ref "" in
-  Hegel.Session.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
-    try Hegel.Stateful.run ~init:() ~rules:[] tc with
-    | Invalid_argument msg -> raised_msg := msg);
+  Hegel.Session.run_hegel_test
+    ~settings:(Hegel.settings ~test_cases:1 ())
+    dummy_test_location
+    (fun tc ->
+       try Hegel.Stateful.run ~init:() ~rules:[] tc with
+       | Invalid_argument msg -> raised_msg := msg);
   Alcotest.(check bool)
     "has 'no rules' message"
     true
@@ -132,6 +141,7 @@ let stateful_retry_budget_floor_test () =
   in
   Hegel.Session.run_hegel_test
     ~settings:(Hegel.settings ~test_cases:1 ~seed:0 ())
+    dummy_test_location
     (fun tc -> S.run ~init:() ~rules:[ always_reject ] tc)
 ;;
 

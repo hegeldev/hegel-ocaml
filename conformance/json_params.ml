@@ -112,3 +112,11 @@ let make_non_basic gen = Hegel.Generators.filter (fun _ -> true) gen
 (** [get_mode params] extracts the ["mode"] field from parsed params, defaulting
     to ["basic"]. *)
 let get_mode params = get_string params "mode" "basic"
+
+(** A placeholder {!Hegel.Antithesis.test_location} used by conformance
+    binaries when calling [Hegel.Session.run_hegel_test] directly. The
+    Antithesis integration is a no-op outside [ANTITHESIS_OUTPUT_DIR], so
+    these values are only structural fillers. *)
+let dummy_test_location : Hegel.Antithesis.test_location =
+  { function_name = "conformance"; file = "conformance.ml"; begin_line = 0 }
+;;

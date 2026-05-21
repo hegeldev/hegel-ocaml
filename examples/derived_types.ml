@@ -35,10 +35,7 @@ type entity =
   }
 [@@deriving generator]
 
-(** Property: a derived point has integer coordinates (smoke test that the
-    derived [point_generator] yields valid records). We do not square the
-    coordinates here because the derived [int] generator uses the full OCaml
-    range, which can overflow. *)
+(** Property: the distance from any point to the origin is non-negative. *)
 let%hegel_test test_point_distance_nonnegative tc =
   let p = point_generator tc in
   let dist_sq = (p.x * p.x) + (p.y * p.y) in
@@ -46,9 +43,7 @@ let%hegel_test test_point_distance_nonnegative tc =
 [@@settings Hegel.settings ~test_cases:100 ()]
 ;;
 
-(* The [saw_*] tables/refs accumulate observations across test cases.
-   They sit at module level because [let%hegel_test] generates a top-level
-   wrapper, so the test body can only close over module-level state. *)
+(** Property: color_generator covers all three constructors. *)
 let saw_colors = Hashtbl.create 3
 
 let%hegel_test test_color_all_variants tc =

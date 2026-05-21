@@ -7,6 +7,8 @@
 open Hegel.Conformance
 open Hegel.Generators
 
+let dummy_test_location = Json_params.dummy_test_location
+
 let () =
   let params_str = if Array.length Sys.argv > 1 then Sys.argv.(1) else "{}" in
   let params = Json_params.parse params_str in
@@ -17,23 +19,28 @@ let () =
   let unique = Json_params.get_bool params "unique" false in
   let mode = Json_params.get_mode params in
   let test_cases = get_test_cases () in
-  Hegel.Session.run_hegel_test ~settings:(Hegel.settings ~test_cases ()) (fun tc ->
-    with_metrics (fun () ->
-      let test_mode =
-        try Sys.getenv "HEGEL_PROTOCOL_TEST_MODE" with
-        | Not_found -> ""
-      in
-      let needs_non_basic =
-        mode = "non_basic"
-        || test_mode = "stop_test_on_collection_more"
-        || test_mode = "stop_test_on_new_collection"
-      in
-      let base_elem = integers ?min_value ?max_value () in
-      let elem_gen =
-        if needs_non_basic then Json_params.make_non_basic base_elem else base_elem
-      in
-      let list_gen = lists elem_gen ~min_size ?max_size ~unique () in
-      let items = Hegel.draw tc list_gen in
-      let elements_json = "[" ^ String.concat "," (List.map string_of_int items) ^ "]" in
-      [ "elements", elements_json ]))
+  Hegel.Session.run_hegel_test
+    ~settings:(Hegel.settings ~test_cases ())
+    dummy_test_location
+    (fun tc ->
+       with_metrics (fun () ->
+         let test_mode =
+           try Sys.getenv "HEGEL_PROTOCOL_TEST_MODE" with
+           | Not_found -> ""
+         in
+         let needs_non_basic =
+           mode = "non_basic"
+           || test_mode = "stop_test_on_collection_more"
+           || test_mode = "stop_test_on_new_collection"
+         in
+         let base_elem = integers ?min_value ?max_value () in
+         let elem_gen =
+           if needs_non_basic then Json_params.make_non_basic base_elem else base_elem
+         in
+         let list_gen = lists elem_gen ~min_size ?max_size ~unique () in
+         let items = Hegel.draw tc list_gen in
+         let elements_json =
+           "[" ^ String.concat "," (List.map string_of_int items) ^ "]"
+         in
+         [ "elements", elements_json ]))
 ;;

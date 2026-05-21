@@ -185,7 +185,7 @@ type client =
     connection must not yet have had its handshake performed. *)
 val create_client : Connection.connection -> client
 
-(** [run_test client ~settings ?database_key ?test_location test_fn] runs a
+(** [run_test client ~settings test_location ?database_key test_fn] runs a
     property test using the given settings.
 
     @param test_location
@@ -194,7 +194,7 @@ val create_client : Connection.connection -> client
 val run_test
   :  client
   -> settings:settings
+  -> Antithesis.test_location
   -> ?database_key:string
-  -> ?test_location:Antithesis.test_location
   -> (test_case -> unit)
   -> unit

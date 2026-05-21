@@ -1,15 +1,11 @@
 (** Antithesis integration for Hegel.
 
-    When a workload runs inside Antithesis, the platform injects
-    [ANTITHESIS_OUTPUT_DIR] into the environment and reads
-    [$ANTITHESIS_OUTPUT_DIR/sdk.jsonl] to discover assertion outcomes. This
-    module emits a single [always]-typed assertion per Hegel test whose
-    [condition] is [true] iff the property test passed.
+    This module emits a single [always]-typed assertion per Hegel test whose
+    [condition] is [true] iff the property test passed. Each Hegel test pass/fail 
+    appears in the triage report.
 
-    Outside Antithesis (env var unset), all functions in this module are
-    no-ops. The integration is opt-in at the test-site via the
-    [let%hegel_test] extension from [ppx_hegel_test], which supplies the
-    {!test_location}.
+    Outside of Antithesis, all functions in this module are
+    no-ops. 
 
     See <https://antithesis.com/docs/using_antithesis/sdk/fallback/assert/>
     for the assertion schema. *)
@@ -32,7 +28,7 @@ val extract_file_base : string -> string
 
 (** [assertion_json loc ~hit ~condition] builds the
     [{ "antithesis_assert": { ... } }] JSON object. Both ID and message are
-    [test test_function in test_file passes properties]; [must_hit] is always [true];
+    [test_function in test_file passes properties]; [must_hit] is always [true];
     [assert_type] is ["always"]; [display_type] is ["Always"]. *)
 val assertion_json : test_location -> hit:bool -> condition:bool -> Yojson.Safe.t
 

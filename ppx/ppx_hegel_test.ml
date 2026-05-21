@@ -10,7 +10,7 @@
       let my_test () =
         Hegel.Session.run_hegel_test
           ~settings:expr
-          ~test_location:{ function_name; file; begin_line }
+          { function_name; file; begin_line }
           (fun tc -> body)
       ;;
 
@@ -77,7 +77,7 @@ let build_location_record ~loc ~function_name : expression =
 
     {[
       let function_name () =
-        Hegel.Session.run_hegel_test [?settings] ~test_location:.. body_fn
+        Hegel.Session.run_hegel_test [?settings] location body_fn
       ;;
 
       let () =
@@ -89,13 +89,8 @@ let build_items ~loc ~function_name ~settings_expr ~body_fn : structure_item lis
     match settings_expr with
     | Some s ->
       [%expr
-        Hegel.Session.run_hegel_test
-          ~settings:[%e s]
-          ~test_location:[%e location_record]
-          [%e body_fn]]
-    | None ->
-      [%expr
-        Hegel.Session.run_hegel_test ~test_location:[%e location_record] [%e body_fn]]
+        Hegel.Session.run_hegel_test ~settings:[%e s] [%e location_record] [%e body_fn]]
+    | None -> [%expr Hegel.Session.run_hegel_test [%e location_record] [%e body_fn]]
   in
   let pat = Ast_builder.Default.pvar ~loc function_name in
   let definition = [%stri let [%p pat] = fun () -> [%e call]] in

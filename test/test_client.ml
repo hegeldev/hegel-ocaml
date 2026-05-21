@@ -7,6 +7,7 @@ open Client
 
 let contains_substring = Test_helpers.contains_substring
 let find_cmd = Test_helpers.find_cmd
+let dummy_test_location = Test_helpers.dummy_test_location
 
 (* ---- Unit tests for helpers that don't need a server ---- *)
 
@@ -112,16 +113,22 @@ let test_start_span_when_aborted () =
 
 let test_nested_test_raises () =
   let raised = ref false in
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ()) (fun _tc ->
-    try
-      Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ()) (fun _tc2 -> ())
-    with
-    | Failure msg ->
-      raised := true;
-      Alcotest.(check bool)
-        "has 'Cannot nest'"
-        true
-        (contains_substring msg "Cannot nest"));
+  Session.run_hegel_test
+    ~settings:(Client.settings ~test_cases:1 ())
+    dummy_test_location
+    (fun _tc ->
+       try
+         Session.run_hegel_test
+           ~settings:(Client.settings ~test_cases:1 ())
+           dummy_test_location
+           (fun _tc2 -> ())
+       with
+       | Failure msg ->
+         raised := true;
+         Alcotest.(check bool)
+           "has 'Cannot nest'"
+           true
+           (contains_substring msg "Cannot nest"));
   Alcotest.(check bool) "raised" true !raised
 ;;
 
@@ -137,15 +144,83 @@ let with_test_mode mode f =
 ;;
 
 let test_simple_passing_test () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-    let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
-    ignore (Cbor_helpers.extract_bool v : bool))
+  Session.run_hegel_test
+    ~settings:(Client.settings ~test_cases:5 ())
+    dummy_test_location
+    (fun tc ->
+       let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
+       ignore (Cbor_helpers.extract_bool v : bool))
 ;;
 
 let test_simple_failing_test () =
   let raised = ref false in
   (try
-     Session.run_hegel_test ~settings:(Client.settings ~test_cases:100 ()) (fun tc ->
+     Session.run_hegel_test
+       ~settings:(Client.settings ~test_cases:100 ())
+       dummy_test_location
+       (fun tc ->
+          let v =
+            generate_from_schema
+              (`Map
+                  [ `Text "type", `Text "integer"
+                  ; `Text "min_value", `Int 0
+                  ; `Text "max_value", `Int 100
+                  ])
+              tc
+          in
+          let x = Cbor_helpers.extract_int v in
+          if x >= 50 then failwith "too big")
+   with
+   | _ -> raised := true);
+  Alcotest.(check bool) "test failed" true !raised
+;;
+
+let test_single_test_case () =
+  Session.run_hegel_test
+    ~settings:(Client.settings ~test_cases:1 ())
+    dummy_test_location
+    (fun tc ->
+       let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
+       ignore (Cbor_helpers.extract_bool v : bool))
+;;
+
+let test_assume_true_e2e () =
+  Session.run_hegel_test
+    ~settings:(Client.settings ~test_cases:5 ())
+    dummy_test_location
+    (fun tc -> assume tc true)
+;;
+
+let test_assume_false_e2e () =
+  Session.run_hegel_test
+    ~settings:(Client.settings ~test_cases:5 ())
+    dummy_test_location
+    (fun tc -> assume tc false)
+;;
+
+let test_note_not_final_e2e () =
+  Session.run_hegel_test
+    ~settings:(Client.settings ~test_cases:5 ())
+    dummy_test_location
+    (fun tc ->
+       note tc "should not appear";
+       let v =
+         generate_from_schema
+           (`Map
+               [ `Text "type", `Text "integer"
+               ; `Text "min_value", `Int 0
+               ; `Text "max_value", `Int 10
+               ])
+           tc
+       in
+       ignore (Cbor_helpers.extract_int v))
+;;
+
+let test_target_e2e () =
+  Session.run_hegel_test
+    ~settings:(Client.settings ~test_cases:5 ())
+    dummy_test_location
+    (fun tc ->
        let v =
          generate_from_schema
            (`Map
@@ -156,56 +231,7 @@ let test_simple_failing_test () =
            tc
        in
        let x = Cbor_helpers.extract_int v in
-       if x >= 50 then failwith "too big")
-   with
-   | _ -> raised := true);
-  Alcotest.(check bool) "test failed" true !raised
-;;
-
-let test_single_test_case () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ()) (fun tc ->
-    let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
-    ignore (Cbor_helpers.extract_bool v : bool))
-;;
-
-let test_assume_true_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-    assume tc true)
-;;
-
-let test_assume_false_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-    assume tc false)
-;;
-
-let test_note_not_final_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-    note tc "should not appear";
-    let v =
-      generate_from_schema
-        (`Map
-            [ `Text "type", `Text "integer"
-            ; `Text "min_value", `Int 0
-            ; `Text "max_value", `Int 10
-            ])
-        tc
-    in
-    ignore (Cbor_helpers.extract_int v))
-;;
-
-let test_target_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-    let v =
-      generate_from_schema
-        (`Map
-            [ `Text "type", `Text "integer"
-            ; `Text "min_value", `Int 0
-            ; `Text "max_value", `Int 100
-            ])
-        tc
-    in
-    let x = Cbor_helpers.extract_int v in
-    target tc (float_of_int x) "maximize_x")
+       target tc (float_of_int x) "maximize_x")
 ;;
 
 let test_flaky_strategy () =
@@ -216,6 +242,7 @@ let test_flaky_strategy () =
       ~settings:
         (Client.settings ~test_cases:2 ()
          |> Client.with_suppress_health_check [ Client.Large_initial_test_case ])
+      dummy_test_location
       (fun tc ->
          let min_value = !global_min in
          incr global_min;
@@ -238,57 +265,78 @@ let test_flaky_strategy () =
 
 let test_stop_test_on_generate () =
   with_test_mode "stop_test_on_generate" (fun () ->
-    Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-      ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc)))
+    Session.run_hegel_test
+      ~settings:(Client.settings ~test_cases:5 ())
+      dummy_test_location
+      (fun tc ->
+         ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc)))
 ;;
 
 let test_stop_test_on_mark_complete () =
   with_test_mode "stop_test_on_mark_complete" (fun () ->
-    Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-      ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc)))
+    Session.run_hegel_test
+      ~settings:(Client.settings ~test_cases:5 ())
+      dummy_test_location
+      (fun tc ->
+         ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc)))
 ;;
 
 let test_error_response () =
   with_test_mode "error_response" (fun () ->
-    Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-      ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc)))
+    Session.run_hegel_test
+      ~settings:(Client.settings ~test_cases:5 ())
+      dummy_test_location
+      (fun tc ->
+         ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc)))
 ;;
 
 let test_empty_test () =
   with_test_mode "empty_test" (fun () ->
-    Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-      ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc)))
+    Session.run_hegel_test
+      ~settings:(Client.settings ~test_cases:5 ())
+      dummy_test_location
+      (fun tc ->
+         ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc)))
 ;;
 
 (* ---- Mark complete status values ---- *)
 
 let test_mark_complete_valid () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:3 ()) (fun tc ->
-    let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
-    ignore (Cbor_helpers.extract_bool v : bool))
+  Session.run_hegel_test
+    ~settings:(Client.settings ~test_cases:3 ())
+    dummy_test_location
+    (fun tc ->
+       let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
+       ignore (Cbor_helpers.extract_bool v : bool))
 ;;
 
 let test_mark_complete_invalid () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
-    let _v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
-    assume tc false)
+  Session.run_hegel_test
+    ~settings:(Client.settings ~test_cases:5 ())
+    dummy_test_location
+    (fun tc ->
+       let _v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
+       assume tc false)
 ;;
 
 let test_mark_complete_interesting () =
   let raised = ref false in
   (try
-     Session.run_hegel_test ~settings:(Client.settings ~test_cases:100 ()) (fun tc ->
-       let v =
-         generate_from_schema
-           (`Map
-               [ `Text "type", `Text "integer"
-               ; `Text "min_value", `Int 0
-               ; `Text "max_value", `Int 100
-               ])
-           tc
-       in
-       let x = Cbor_helpers.extract_int v in
-       assert (x < 50))
+     Session.run_hegel_test
+       ~settings:(Client.settings ~test_cases:100 ())
+       dummy_test_location
+       (fun tc ->
+          let v =
+            generate_from_schema
+              (`Map
+                  [ `Text "type", `Text "integer"
+                  ; `Text "min_value", `Int 0
+                  ; `Text "max_value", `Int 100
+                  ])
+              tc
+          in
+          let x = Cbor_helpers.extract_int v in
+          assert (x < 50))
    with
    | _ -> raised := true);
   Alcotest.(check bool) "raised" true !raised
@@ -296,10 +344,13 @@ let test_mark_complete_interesting () =
 
 (** Test: start_span and stop_span when NOT aborted (live connection). *)
 let test_start_stop_span_live () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:1 ()) (fun tc ->
-    start_span tc;
-    stop_span tc;
-    ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc))
+  Session.run_hegel_test
+    ~settings:(Client.settings ~test_cases:1 ())
+    dummy_test_location
+    (fun tc ->
+       start_span tc;
+       stop_span tc;
+       ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc))
 ;;
 
 (** Test: version mismatch in create_client (version too high). *)
@@ -380,8 +431,10 @@ let test_version_mismatch_bad_format () =
 
 (** Test: run_test with explicit seed. *)
 let test_run_test_with_seed () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ~seed:42 ()) (fun tc ->
-    ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc))
+  Session.run_hegel_test
+    ~settings:(Client.settings ~test_cases:5 ~seed:42 ())
+    dummy_test_location
+    (fun tc -> ignore (generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc))
 ;;
 
 (** Test: multiple interesting test cases (n_interesting > 1). Uses different
@@ -390,9 +443,12 @@ let test_run_test_with_seed () =
 let test_multiple_interesting () =
   let raised_msg = ref "" in
   (try
-     Session.run_hegel_test ~settings:(Client.settings ~test_cases:200 ()) (fun tc ->
-       let v = Hegel.draw tc (Hegel.Generators.booleans ()) in
-       if v then failwith "error from Failure branch" else raise Exit)
+     Session.run_hegel_test
+       ~settings:(Client.settings ~test_cases:200 ())
+       dummy_test_location
+       (fun tc ->
+          let v = Hegel.draw tc (Hegel.Generators.booleans ()) in
+          if v then failwith "error from Failure branch" else raise Exit)
    with
    | e -> raised_msg := Exn.to_string e);
   Alcotest.(check bool)
@@ -465,6 +521,7 @@ let test_unrecognised_event mode () =
            (Client.default_settings ()
             |> Client.with_test_cases 0
             |> Client.with_mode mode)
+         dummy_test_location
          (fun _tc -> ()))
 ;;
 
@@ -484,7 +541,7 @@ let test_run_test_database_path_and_suppress () =
          |> Client.with_database (Client.Path "/tmp/test.db")
          |> Client.with_suppress_health_check [ Client.Too_slow; Client.Filter_too_much ]
        in
-       run_test client ~settings (fun _tc -> ()))
+       run_test client ~settings dummy_test_location (fun _tc -> ()))
 ;;
 
 (** Test: run_test with database=Unset omits the database field. *)
@@ -499,7 +556,7 @@ let test_run_test_database_unset () =
          |> Client.with_test_cases 0
          |> Client.with_database Client.Unset
        in
-       run_test client ~settings (fun _tc -> ()))
+       run_test client ~settings dummy_test_location (fun _tc -> ()))
 ;;
 
 (** Test: server error in results raises Failure. *)
@@ -518,6 +575,7 @@ let test_run_test_server_error_in_results () =
           run_test
             client
             ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+            dummy_test_location
             (fun _tc -> ())
         with
         | Failure msg ->
@@ -549,6 +607,7 @@ let test_run_test_health_check_failure () =
           run_test
             client
             ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+            dummy_test_location
             (fun _tc -> ())
         with
         | Failure msg ->
@@ -578,6 +637,7 @@ let test_run_test_flaky () =
           run_test
             client
             ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+            dummy_test_location
             (fun _tc -> ())
         with
         | Failure msg ->
@@ -607,6 +667,7 @@ let test_run_test_passed_false () =
           run_test
             client
             ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+            dummy_test_location
             (fun _tc -> ())
         with
         | Failure msg ->
@@ -648,7 +709,9 @@ let test_single_test_case_multiple_failures () =
          Client.default_settings () |> Client.with_mode Client.Single_test_case
        in
        let raised_msg = ref "" in
-       (try run_test client ~settings (fun _tc -> failwith "boom") with
+       (try
+          run_test client ~settings dummy_test_location (fun _tc -> failwith "boom")
+        with
         | e -> raised_msg := Exn.to_string e);
        Alcotest.(check bool)
          "has 'Multiple failures (2)'"
@@ -680,6 +743,7 @@ let test_run_test_n_interesting_one_replay_passes () =
        run_test
          client
          ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+         dummy_test_location
          (fun _tc -> ()))
 ;;
 
@@ -717,6 +781,7 @@ let test_run_test_multi_interesting_replay_errors () =
           run_test
             client
             ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+            dummy_test_location
             (fun _tc -> ())
         with
         | e -> raised_msg := Exn.to_string e);
@@ -755,7 +820,7 @@ let test_run_hegel_test_with_settings () =
     |> Client.with_test_cases 3
     |> Client.with_database Client.Disabled
   in
-  Session.run_hegel_test ~settings (fun tc ->
+  Session.run_hegel_test ~settings dummy_test_location (fun tc ->
     let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
     ignore (Cbor_helpers.extract_bool v : bool))
 ;;
@@ -926,7 +991,7 @@ let test_has_working_client_live () =
 
 (** Test: run_hegel_test with default parameters. *)
 let test_run_hegel_test_defaults () =
-  Session.run_hegel_test (fun tc ->
+  Session.run_hegel_test dummy_test_location (fun tc ->
     let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
     ignore (Cbor_helpers.extract_bool v : bool))
 ;;
@@ -978,6 +1043,7 @@ let test_pool_generate_default_consume () =
        run_test
          client
          ~settings:(Client.default_settings () |> Client.with_test_cases 1)
+         dummy_test_location
          (fun tc ->
             let v = pool_generate tc ~pool_id:42 () in
             Alcotest.(check int) "generated id" 7 v))
@@ -1003,6 +1069,7 @@ let test_pool_request_stop_test () =
        run_test
          client
          ~settings:(Client.default_settings () |> Client.with_test_cases 1)
+         dummy_test_location
          (fun tc ->
             try ignore (new_pool tc) with
             | Data_exhausted ->
@@ -1032,6 +1099,7 @@ let test_variables_flaky_strategy () =
        run_test
          client
          ~settings:(Client.default_settings () |> Client.with_test_cases 1)
+         dummy_test_location
          (fun tc ->
             let variables = Hegel.Stateful.Variables.create tc in
             Hegel.Stateful.Variables.add variables "v";
@@ -1185,7 +1253,7 @@ let test_run_test_phases () =
          |> Client.with_test_cases 0
          |> Client.with_phases [ Client.Generate; Client.Shrink ]
        in
-       run_test client ~settings (fun _tc -> ()))
+       run_test client ~settings dummy_test_location (fun _tc -> ()))
 ;;
 
 (** Test: default_settings in CI sets derandomize and disables database. *)
@@ -1239,6 +1307,7 @@ let test_run_test_with_database_key () =
          client
          ~settings:(Client.default_settings () |> Client.with_test_cases 0)
          ~database_key:"test-key"
+         dummy_test_location
          (fun _tc -> ()))
 ;;
 
@@ -1365,6 +1434,7 @@ let test_server_crash_in_event_loop () =
      run_test
        client
        ~settings:(Client.default_settings () |> Client.with_test_cases 1)
+       dummy_test_location
        (fun _tc ->
           (* Sleep briefly to release the runtime lock, giving the peer
             thread time to set server_exited before we return. *)
@@ -1788,9 +1858,12 @@ let test_session_cleanup () =
 ;;
 
 let test_session_start_and_run () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:3 ()) (fun tc ->
-    let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
-    ignore (Cbor_helpers.extract_bool v : bool))
+  Session.run_hegel_test
+    ~settings:(Client.settings ~test_cases:3 ())
+    dummy_test_location
+    (fun tc ->
+       let v = generate_from_schema (`Map [ `Text "type", `Text "boolean" ]) tc in
+       ignore (Cbor_helpers.extract_bool v : bool))
 ;;
 
 let tests =

@@ -3,13 +3,15 @@ open Hegel
 open Client
 module G = Hegel.Generators
 
+let dummy_test_location = Test_helpers.dummy_test_location
+
 let single_settings () =
   Client.default_settings () |> Client.with_mode Client.Single_test_case
 ;;
 
 let test_runs_exactly_one_case () =
   let count = ref 0 in
-  Session.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+  Session.run_hegel_test ~settings:(single_settings ()) dummy_test_location (fun tc ->
     let (_ : int) =
       Hegel.draw
         tc
@@ -23,7 +25,7 @@ let test_runs_exactly_one_case () =
 ;;
 
 let test_passing () =
-  Session.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+  Session.run_hegel_test ~settings:(single_settings ()) dummy_test_location (fun tc ->
     let (_ : bool) = Hegel.draw tc (G.booleans ()) in
     ())
 ;;
@@ -31,7 +33,7 @@ let test_passing () =
 let test_failing_propagates () =
   let raised_msg = ref "" in
   (try
-     Session.run_hegel_test ~settings:(single_settings ()) (fun _tc ->
+     Session.run_hegel_test ~settings:(single_settings ()) dummy_test_location (fun _tc ->
        failwith "deliberate failure")
    with
    | e -> raised_msg := Exn.to_string e);
@@ -45,7 +47,7 @@ let test_no_shrinking () =
   let count = ref 0 in
   let raised = ref false in
   (try
-     Session.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+     Session.run_hegel_test ~settings:(single_settings ()) dummy_test_location (fun tc ->
        let (_ : int) =
          Hegel.draw
            tc
@@ -68,6 +70,7 @@ let test_with_seed_is_deterministic () =
     let value = ref 0 in
     Session.run_hegel_test
       ~settings:(single_settings () |> Client.with_seed (Some 42))
+      dummy_test_location
       (fun tc ->
          value
          := Hegel.draw
@@ -86,13 +89,13 @@ let test_with_seed_is_deterministic () =
 ;;
 
 let test_assume_produces_invalid () =
-  Session.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+  Session.run_hegel_test ~settings:(single_settings ()) dummy_test_location (fun tc ->
     let n = Hegel.draw tc (G.integers ~min_value:(-100) ~max_value:100 ()) in
     assume tc (n > 0))
 ;;
 
 let test_generation_works () =
-  Session.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+  Session.run_hegel_test ~settings:(single_settings ()) dummy_test_location (fun tc ->
     let v =
       Hegel.draw
         tc
@@ -110,6 +113,7 @@ let test_generation_works () =
 let test_debug_verbosity () =
   Session.run_hegel_test
     ~settings:(single_settings () |> Client.with_verbosity Client.Debug)
+    dummy_test_location
     (fun tc ->
        let (_ : bool) = Hegel.draw tc (G.booleans ()) in
        ())
@@ -126,7 +130,7 @@ let test_stateful_single_mode_unbounded_steps () =
   in
   let raised_msg = ref "" in
   (try
-     Session.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+     Session.run_hegel_test ~settings:(single_settings ()) dummy_test_location (fun tc ->
        S.run ~init:() ~rules:[ step_rule ] tc)
    with
    | e -> raised_msg := Exn.to_string e);

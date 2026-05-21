@@ -10,6 +10,8 @@
 open Hegel.Conformance
 open Hegel.Generators
 
+let dummy_test_location = Json_params.dummy_test_location
+
 let parse_ranges params =
   match List.assoc_opt "ranges" params with
   | Some (`List items) ->
@@ -40,8 +42,11 @@ let () =
   in
   let branches = List.map make_branch ranges in
   let test_cases = get_test_cases () in
-  Hegel.Session.run_hegel_test ~settings:(Hegel.settings ~test_cases ()) (fun tc ->
-    with_metrics (fun () ->
-      let n = Hegel.draw tc (one_of branches) in
-      [ "value", string_of_int n ]))
+  Hegel.Session.run_hegel_test
+    ~settings:(Hegel.settings ~test_cases ())
+    dummy_test_location
+    (fun tc ->
+       with_metrics (fun () ->
+         let n = Hegel.draw tc (one_of branches) in
+         [ "value", string_of_int n ]))
 ;;

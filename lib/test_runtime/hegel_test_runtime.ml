@@ -49,5 +49,7 @@ let test_main () =
   then (
     Printf.eprintf "\n%d test(s) failed\n%!" failures;
     Stdlib.exit 1)
-  else Stdlib.exit 0
+  else (
+    Printf.printf "\nAll tests passed\n%!";
+    Stdlib.exit 0)
 ;;

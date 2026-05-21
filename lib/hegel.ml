@@ -28,8 +28,7 @@ module Derive = Derive
 (** Stateful property-based testing on top of {!Generators}. *)
 module Stateful = Stateful
 
-(** Antithesis integration. When [ANTITHESIS_OUTPUT_DIR] is set,
-    each [let%hegel_test] reports pass/fail to [sdk.jsonl]. *)
+(** Antithesis integration. *)
 module Antithesis = Antithesis
 
 (** {2 Convenience re-exports} *)

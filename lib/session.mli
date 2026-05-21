@@ -58,7 +58,7 @@ val cleanup : hegel_session -> unit
 *)
 val start : hegel_session -> unit
 
-(** [run_hegel_test ?settings ?test_location test_fn] runs a property test
+(** [run_hegel_test ?settings test_location test_fn] runs a property test
     using the shared hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is set,
     creates a disposable session so the test server gets a fresh subprocess
     with the right env var. Uses {!Client.default_settings} when [settings]
@@ -69,6 +69,6 @@ val start : hegel_session -> unit
       Supplied automatically by the [let%hegel_test] PPX. *)
 val run_hegel_test
   :  ?settings:Client.settings
-  -> ?test_location:Antithesis.test_location
+  -> Antithesis.test_location
   -> (Client.test_case -> unit)
   -> unit

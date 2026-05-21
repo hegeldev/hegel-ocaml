@@ -74,8 +74,10 @@ let write_jsonl_line path json =
 ;;
 
 let emit_assertion loc ~passed =
-  let dir = Sys.getenv_exn antithesis_output_dir_env in
-  let path = Filename.concat dir "sdk.jsonl" in
-  write_jsonl_line path (assertion_json loc ~hit:false ~condition:false);
-  write_jsonl_line path (assertion_json loc ~hit:true ~condition:passed)
+  if is_running_in_antithesis ()
+  then (
+    let dir = Sys.getenv_exn antithesis_output_dir_env in
+    let path = Filename.concat dir "sdk.jsonl" in
+    write_jsonl_line path (assertion_json loc ~hit:false ~condition:false);
+    write_jsonl_line path (assertion_json loc ~hit:true ~condition:passed))
 ;;

@@ -10,6 +10,15 @@ module Mutex = Caml_threads.Mutex
 module Thread = Caml_threads.Thread
 open Hegel
 
+(** A dummy {!Hegel.Antithesis.test_location} for unit tests that call
+    [Session.run_hegel_test] or [Client.run_test] directly (i.e. without going
+    through the [let%hegel_test] PPX). The Antithesis integration is a no-op
+    unless [ANTITHESIS_OUTPUT_DIR] is set, so the values here are only used as
+    placeholders. *)
+let dummy_test_location : Hegel.Antithesis.test_location =
+  { function_name = "unit_test"; file = "test_helpers.ml"; begin_line = 0 }
+;;
+
 (** [contains_substring s sub] returns [true] if [sub] appears anywhere in [s].
 *)
 let contains_substring s sub =
