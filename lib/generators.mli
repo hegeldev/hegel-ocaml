@@ -28,6 +28,7 @@ type 'a generator =
   | Basic :
       { schema : Cbor.t
       ; transform : Cbor.t -> 'a
+      ; unique_safe : bool
       }
       -> 'a generator
   | Mapped :
@@ -143,6 +144,12 @@ val is_basic : 'a generator -> bool
 (** [as_basic gen] returns [Some (schema, transform)] if [gen] is [Basic], or
     [None] otherwise. *)
 val as_basic : 'a generator -> (Cbor.t * (Cbor.t -> 'a)) option
+
+(** [basic_unique_safe gen] returns [true] iff [gen] is a [Basic] generator
+    whose transform is known to preserve distinctness over the schema's value
+    space. Used to decide whether [lists ~unique:true] can take the
+    server-side fast path or must fall back to client-side dedup. *)
+val basic_unique_safe : 'a generator -> bool
 
 (** {2 Primitive generators} *)
 

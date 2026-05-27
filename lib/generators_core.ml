@@ -26,7 +26,10 @@ end
 
     - [Basic] generators hold a raw schema and a mandatory client-side
       transform. Calling {!map} on a [Basic] generator preserves the schema and
-      composes transforms.
+      composes transforms. The [unique_safe] flag tracks whether [transform] is
+      known to preserve distinctness over the schema's value space (i.e. is
+      injective); leaf generators set it to [true], and [map] sets it to
+      [false] since the user's function may collapse distinct inputs.
     - [Mapped] generators wrap a source generator and a transform function.
     - [FlatMapped] generators wrap a source and a function returning a
       generator.
@@ -39,6 +42,7 @@ type 'a generator =
   | Basic :
       { schema : Cbor.t
       ; transform : Cbor.t -> 'a
+      ; unique_safe : bool
       }
       -> 'a generator
   | Mapped :
@@ -201,7 +205,7 @@ let collection_reject coll data =
 let rec do_draw : type a. a generator -> Client.test_case -> a =
   fun gen data ->
   match gen with
-  | Basic { schema; transform } -> transform (Client.generate_from_schema schema data)
+  | Basic { schema; transform; _ } -> transform (Client.generate_from_schema schema data)
   | Mapped { source; f } ->
     group Labels.mapped data (fun () ->
       let value = do_draw source data in
@@ -250,8 +254,12 @@ let draw tc gen = do_draw gen tc
 let map : type a b. (a -> b) -> a generator -> b generator =
   fun f gen ->
   match gen with
-  | Basic { schema; transform } ->
-    Basic { schema; transform = (fun x -> f (transform x)) }
+  | Basic { schema; transform; _ } ->
+    (* The user's [f] may collapse distinct inputs, so the composed transform
+       is no longer known to preserve uniqueness. Consumers that rely on this
+       (e.g. [lists ~unique:true]) must fall back to a post-transform dedup
+       path when [unique_safe] is [false]. *)
+    Basic { schema; transform = (fun x -> f (transform x)); unique_safe = false }
   | other -> Mapped { source = other; f }
 ;;
 
@@ -280,6 +288,15 @@ let is_basic : type a. a generator -> bool = function
 (** [as_basic gen] returns [Some (schema, transform)] if [gen] is [Basic], or
     [None] otherwise. *)
 let as_basic : type a. a generator -> (Cbor.t * (Cbor.t -> a)) option = function
-  | Basic { schema; transform } -> Some (schema, transform)
+  | Basic { schema; transform; _ } -> Some (schema, transform)
   | _ -> None
+;;
+
+(** [basic_unique_safe gen] returns [true] iff [gen] is a [Basic] generator
+    whose transform is known to preserve distinctness (i.e. is injective over
+    the schema's value space). Used by [lists ~unique:true] to decide between
+    the server-side fast path and the client-side dedup fallback. *)
+let basic_unique_safe : type a. a generator -> bool = function
+  | Basic { unique_safe; _ } -> unique_safe
+  | _ -> false
 ;;

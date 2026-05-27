@@ -62,6 +62,12 @@ let one_of (generators : 'a generator list) =
       { schema =
           `Map [ `Text "type", `Text "one_of"; `Text "generators", `Array child_schemas ]
       ; transform = dispatch
+      ; (* Distinct raw [index, value] pairs from the server can map to the
+           same OCaml value when two branches produce overlapping outputs
+           (e.g. [one_of [integers 0..10; integers 5..15]] can yield 7 from
+           either branch). We can't prove disjointness, so the dispatch
+           transform is not known to preserve uniqueness. *)
+        unique_safe = false
       })
 ;;
 
@@ -82,11 +88,13 @@ let rec ip_addresses ?version () =
     Basic
       { schema = `Map [ `Text "type", `Text "ip_address"; `Text "version", `Int 4 ]
       ; transform = Cbor_helpers.extract_string
+      ; unique_safe = true
       }
   | Some 6 ->
     Basic
       { schema = `Map [ `Text "type", `Text "ip_address"; `Text "version", `Int 6 ]
       ; transform = Cbor_helpers.extract_string
+      ; unique_safe = true
       }
   | None -> one_of [ ip_addresses ~version:4 (); ip_addresses ~version:6 () ]
   | Some v -> failwith (sprintf "ip_addresses: invalid version %d" v)
@@ -110,6 +118,7 @@ let tuples2 (type a b) (g1 : a generator) (g2 : b generator) : (a * b) generator
             match raw with
             | `Array [ v1; v2 ] -> t1 v1, t2 v2
             | _ -> failwith "tuples2: expected 2-element array from server")
+      ; unique_safe = basic_unique_safe g1 && basic_unique_safe g2
       }
   | _ ->
     Composite
@@ -141,6 +150,7 @@ let tuples3 (type a b c) (g1 : a generator) (g2 : b generator) (g3 : c generator
             match raw with
             | `Array [ v1; v2; v3 ] -> t1 v1, t2 v2, t3 v3
             | _ -> failwith "tuples3: expected 3-element array from server")
+      ; unique_safe = basic_unique_safe g1 && basic_unique_safe g2 && basic_unique_safe g3
       }
   | _ ->
     Composite
@@ -178,6 +188,11 @@ let tuples4
             match raw with
             | `Array [ v1; v2; v3; v4 ] -> t1 v1, t2 v2, t3 v3, t4 v4
             | _ -> failwith "tuples4: expected 4-element array from server")
+      ; unique_safe =
+          basic_unique_safe g1
+          && basic_unique_safe g2
+          && basic_unique_safe g3
+          && basic_unique_safe g4
       }
   | _ ->
     Composite

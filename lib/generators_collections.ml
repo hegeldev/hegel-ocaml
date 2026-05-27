@@ -36,8 +36,14 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
           | _ -> failwith "hashmaps: expected [k, v] pair from server")
       | _ -> failwith "hashmaps: expected array from server"
     in
-    Basic { schema = `Map pairs; transform }
+    Basic
+      { schema = `Map pairs
+      ; transform
+      ; unique_safe = basic_unique_safe keys && basic_unique_safe values
+      }
   | _ ->
+    (* dict semantics require unique keys, so we dedup client-side here just
+       like [lists ~unique:true] does *)
     Composite
       { label = Labels.map
       ; generate_fn =
@@ -47,8 +53,13 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
               if collection_more coll data
               then (
                 let k = do_draw keys data in
-                let v = do_draw values data in
-                collect ((k, v) :: acc))
+                if List.exists acc ~f:(fun (k', _) -> Poly.equal k' k)
+                then (
+                  collection_reject coll data;
+                  collect acc)
+                else (
+                  let v = do_draw values data in
+                  collect ((k, v) :: acc)))
               else List.rev acc
             in
             collect [])
@@ -80,7 +91,12 @@ let lists elements ?(min_size = 0) ?max_size ?(unique = false) () =
        (Invalid_argument (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
    | _ -> ());
   match as_basic elements with
-  | Some (elem_schema, elem_transform) ->
+  | Some (elem_schema, elem_transform) when (not unique) || basic_unique_safe elements ->
+    (* Server-side uniqueness is only safe when the element transform
+       preserves distinctness (i.e. is injective). Otherwise distinct raw
+       values from the server can collapse to the same OCaml value, leaving
+       the post-transform list with duplicates. When that happens we fall
+       through to the [unique]-aware dedup path below. *)
     let pairs =
       List.filter_opt
         [ Some (`Text "type", `Text "list")
@@ -96,8 +112,12 @@ let lists elements ?(min_size = 0) ?max_size ?(unique = false) () =
       | `Array items -> List.map items ~f:elem_transform
       | _ -> failwith "Internal error: server returned non-array for list schema"
     in
-    Basic { schema = raw_schema; transform = list_transform }
-  | None ->
+    Basic
+      { schema = raw_schema
+      ; transform = list_transform
+      ; unique_safe = basic_unique_safe elements
+      }
+  | _ ->
     if not unique
     then
       (* Non-basic element without uniqueness: use CompositeList. *)

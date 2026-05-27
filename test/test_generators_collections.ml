@@ -257,6 +257,50 @@ let%hegel_test test_hashmaps_non_basic_values_e2e tc =
 [@@settings Client.settings ~test_cases:10 ()]
 ;;
 
+(** Regression: [lists ~unique:true] over a [map] that collapses distinct raw
+    values must not return duplicates post-transform. The server enforces
+    uniqueness on raw values, so a non-injective [map] would yield duplicate
+    OCaml values if we took the fast path. The fix routes [unique=true] to
+    the dedup path when the element transform isn't known to preserve
+    distinctness. *)
+let%hegel_test test_lists_unique_under_map_e2e tc =
+  let gen =
+    lists
+      (map (fun _ -> 0) (integers ~min_value:0 ~max_value:1 ()))
+      ~min_size:2
+      ~max_size:2
+      ~unique:true
+      ()
+  in
+  Alcotest.(check bool) "elem is_basic" true (is_basic (map (fun _ -> 0) (integers ())));
+  Alcotest.(check bool) "list not basic" false (is_basic gen);
+  let xs = Hegel.draw tc gen in
+  let n = List.length xs in
+  let uniq = List.sort_uniq compare xs |> List.length in
+  Alcotest.(check int) "all unique" n uniq
+[@@settings Client.settings ~test_cases:5 ()]
+;;
+
+(** Regression: [hashmaps] with a non-basic key generator must still enforce
+    key uniqueness. With keys constrained to a single value, the dedup loop
+    rejects every duplicate; the server's reject limit eventually fires
+    StopTest, which is caught by the test runner and skips the case.*)
+let%hegel_test test_hashmaps_unique_keys_under_filter_e2e tc =
+  let gen =
+    hashmaps
+      (filter (fun _ -> true) (integers ~min_value:0 ~max_value:0 ()))
+      (booleans ())
+      ~min_size:2
+      ~max_size:2
+      ()
+  in
+  let pairs = Hegel.draw tc gen in
+  let keys = List.map fst pairs in
+  let uniq = List.sort_uniq compare keys |> List.length in
+  Alcotest.(check int) "keys all unique" (List.length keys) uniq
+[@@settings Client.settings ~test_cases:5 ()]
+;;
+
 let tests =
   [ Alcotest.test_case "lists basic schema" `Quick test_lists_basic_schema
   ; Alcotest.test_case "lists basic no max schema" `Quick test_lists_basic_no_max_schema
@@ -299,5 +343,13 @@ let tests =
       "hashmaps non-basic values e2e"
       `Quick
       test_hashmaps_non_basic_values_e2e
+  ; Alcotest.test_case
+      "lists unique under non-injective map e2e (regression)"
+      `Quick
+      test_lists_unique_under_map_e2e
+  ; Alcotest.test_case
+      "hashmaps unique keys under filter e2e (regression)"
+      `Quick
+      test_hashmaps_unique_keys_under_filter_e2e
   ]
 ;;

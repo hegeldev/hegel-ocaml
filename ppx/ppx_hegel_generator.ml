@@ -35,7 +35,10 @@ let rec generate_expr_of_core_type (ct : core_type) : expression =
       fun _hegel_tc ->
         Hegel.draw
           _hegel_tc
-          (Hegel.Generators.integers ~min_value:Int.min_int ~max_value:Int.max_int ())]
+          (Hegel.Generators.integers
+             ~min_value:Stdlib.Int.min_int
+             ~max_value:Stdlib.Int.max_int
+             ())]
   | Ptyp_constr ({ txt = Lident "bool"; _ }, []) ->
     [%expr fun _hegel_tc -> Hegel.draw _hegel_tc (Hegel.Generators.booleans ())]
   | Ptyp_constr ({ txt = Lident "float"; _ }, []) ->
