@@ -118,6 +118,27 @@ let test_as_basic_on_non_basic () =
   Alcotest.(check bool) "as_basic is None" true (as_basic gen = None)
 ;;
 
+let test_basic_unique_safe_on_leaf () =
+  Alcotest.(check bool)
+    "leaf integers is unique-safe"
+    true
+    (basic_unique_safe (integers ()))
+;;
+
+let test_basic_unique_safe_on_mapped_basic () =
+  (* [map] over [Basic] still returns [Basic], but the user's function may
+     collapse distinct inputs, so the flag is cleared. *)
+  Alcotest.(check bool)
+    "mapped basic is not unique-safe"
+    false
+    (basic_unique_safe (map (fun x -> x) (integers ())))
+;;
+
+let test_basic_unique_safe_on_non_basic () =
+  let gen = filter (fun _ -> true) (integers ()) in
+  Alcotest.(check bool) "non-basic is not unique-safe" false (basic_unique_safe gen)
+;;
+
 let test_max_filter_attempts () =
   Alcotest.(check int) "max attempts" 3 max_filter_attempts
 ;;
@@ -384,6 +405,15 @@ let tests =
       `Quick
       test_as_basic_on_basic_with_transform
   ; Alcotest.test_case "as_basic on non-basic" `Quick test_as_basic_on_non_basic
+  ; Alcotest.test_case "basic_unique_safe on leaf" `Quick test_basic_unique_safe_on_leaf
+  ; Alcotest.test_case
+      "basic_unique_safe on mapped basic"
+      `Quick
+      test_basic_unique_safe_on_mapped_basic
+  ; Alcotest.test_case
+      "basic_unique_safe on non-basic"
+      `Quick
+      test_basic_unique_safe_on_non_basic
   ; Alcotest.test_case "max_filter_attempts" `Quick test_max_filter_attempts
   ; Alcotest.test_case "collection new" `Quick test_collection_new
   ; Alcotest.test_case "collection new no max" `Quick test_collection_new_no_max
