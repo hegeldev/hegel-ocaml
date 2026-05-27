@@ -3,8 +3,6 @@
 open Hegel.Conformance
 open Hegel.Generators
 
-let dummy_test_location = Json_params.dummy_test_location
-
 (** [utf8_codepoints s] returns the list of Unicode codepoint values from a
     UTF-8 encoded string. Each multi-byte sequence is decoded into its codepoint
     integer value. *)
@@ -64,28 +62,25 @@ let () =
   let include_characters = Json_params.get_string_opt params "include_characters" in
   let exclude_characters = Json_params.get_string_opt params "exclude_characters" in
   let test_cases = get_test_cases () in
-  Hegel.Session.run_hegel_test
-    ~settings:(Hegel.settings ~test_cases ())
-    dummy_test_location
-    (fun tc ->
-       let s =
-         Hegel.draw
-           tc
-           (text
-              ~min_size
-              ?max_size
-              ?codec
-              ?min_codepoint
-              ?max_codepoint
-              ?categories
-              ?exclude_categories
-              ?include_characters
-              ?exclude_characters
-              ())
-       in
-       let codepoints = utf8_codepoints s in
-       let codepoints_json =
-         "[" ^ String.concat ", " (List.map string_of_int codepoints) ^ "]"
-       in
-       write_metrics [ "codepoints", codepoints_json ])
+  Hegel.Session.run_hegel_test ~settings:(Hegel.settings ~test_cases ()) (fun tc ->
+    let s =
+      Hegel.draw
+        tc
+        (text
+           ~min_size
+           ?max_size
+           ?codec
+           ?min_codepoint
+           ?max_codepoint
+           ?categories
+           ?exclude_categories
+           ?include_characters
+           ?exclude_characters
+           ())
+    in
+    let codepoints = utf8_codepoints s in
+    let codepoints_json =
+      "[" ^ String.concat ", " (List.map string_of_int codepoints) ^ "]"
+    in
+    write_metrics [ "codepoints", codepoints_json ])
 ;;

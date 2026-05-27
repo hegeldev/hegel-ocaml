@@ -11,10 +11,26 @@ let my_invariant =
 let%hegel_test my_invariant tc = ...
 ```
 
-The top-level `Hegel.run_hegel_test` has been removed from the public API. 
-Existing callers should migrate to `let%hegel_test`
+The top-level `Hegel.run_hegel_test` has been removed from the public API.
+Existing callers should migrate to `let%hegel_test`. The generated function
+remains directly callable as an ordinary `unit -> unit`, so it works with any
+test runner.
 
-Add the PPX to your library's dune stanza:
+Per-test settings can be supplied with the `[@@settings ...]` attribute:
+
+```ocaml
+let%hegel_test my_invariant tc = ...
+[@@settings Hegel.settings ~test_cases:1000 ()]
+```
+
+This release also adds integration with Antithesis. Each `let%hegel_test`
+emits an always assertion recording whether the property test passed or
+failed. Outside Antithesis, the integration is a no-op.
+
+### Discovering tests with `dune runtest`
+
+If you use dune, add the PPX as an `inline_tests` backend so `dune runtest`
+discovers every `let%hegel_test` automatically:
 
 ```
 (library
@@ -24,17 +40,5 @@ Add the PPX to your library's dune stanza:
  (preprocess (pps ppx_hegel_test)))
 ```
 
-After that, `dune runtest` discovers and runs every `let%hegel_test` in the library. 
-Tests remain directly callable as ordinary `unit -> unit` functions, so they continue 
-to work with Alcotest or other harnesses.
-
-Per-test settings can be supplied with the `[@@settings ...]` attribute:
-
-```ocaml
-let%hegel_test my_invariant tc = ...
-[@@settings Hegel.settings ~test_cases:1000 ()]
-```
-
-This release also adds integration with Antithesis. Each `let%hegel_test` emits an 
-always assertion recording whether the property test passed or failed. 
-Outside Antithesis, the integration is a no-op.
+After that, `dune runtest` finds and runs every `let%hegel_test` in the
+library.

@@ -3,8 +3,6 @@
 open Hegel.Conformance
 open Hegel.Generators
 
-let dummy_test_location = Json_params.dummy_test_location
-
 (** [json_float f] serializes a float to JSON, handling NaN and Infinity. *)
 let json_float f =
   if Float.is_nan f
@@ -24,27 +22,24 @@ let () =
   let allow_nan = Json_params.get_bool_opt params "allow_nan" in
   let allow_infinity = Json_params.get_bool_opt params "allow_infinity" in
   let test_cases = get_test_cases () in
-  Hegel.Session.run_hegel_test
-    ~settings:(Hegel.settings ~test_cases ())
-    dummy_test_location
-    (fun tc ->
-       let f =
-         Hegel.draw
-           tc
-           (floats
-              ?min_value
-              ?max_value
-              ~exclude_min
-              ~exclude_max
-              ?allow_nan
-              ?allow_infinity
-              ())
-       in
-       let is_nan = Float.is_nan f in
-       let is_infinite = Float.is_infinite f in
-       write_metrics
-         [ "value", json_float f
-         ; ("is_nan", if is_nan then "true" else "false")
-         ; ("is_infinite", if is_infinite then "true" else "false")
-         ])
+  Hegel.Session.run_hegel_test ~settings:(Hegel.settings ~test_cases ()) (fun tc ->
+    let f =
+      Hegel.draw
+        tc
+        (floats
+           ?min_value
+           ?max_value
+           ~exclude_min
+           ~exclude_max
+           ?allow_nan
+           ?allow_infinity
+           ())
+    in
+    let is_nan = Float.is_nan f in
+    let is_infinite = Float.is_infinite f in
+    write_metrics
+      [ "value", json_float f
+      ; ("is_nan", if is_nan then "true" else "false")
+      ; ("is_infinite", if is_infinite then "true" else "false")
+      ])
 ;;

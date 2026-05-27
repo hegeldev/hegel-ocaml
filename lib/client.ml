@@ -355,15 +355,16 @@ let create_client connection =
   { connection; control = control_stream connection; lock = Mutex.create () }
 ;;
 
-(** [run_test client ~settings test_location ?database_key test_fn] runs a
+(** [run_test client ~settings ?test_location ?database_key test_fn] runs a
     property test using the given settings.
 
     @param database_key
       optional key for persistent failure storage (internal use).
     @param test_location
       source location of the test, used by the Antithesis integration.
-      Provided automatically by the [let%hegel_test] PPX. *)
-let run_test client ~(settings : settings) test_location ?database_key test_fn =
+      Provided automatically by the [let%hegel_test] PPX. When omitted, no
+      Antithesis assertion is emitted. *)
+let run_test client ~(settings : settings) ?test_location ?database_key test_fn =
   if Stdlib.Domain.DLS.get in_test_context
   then failwith "Cannot nest test cases - already inside a test case";
   let test_stream = new_stream client.connection ~role:"Test" () in
@@ -616,9 +617,12 @@ let run_test client ~(settings : settings) test_location ?database_key test_fn =
                    ~sep:"\n"
                    (List.mapi exns ~f:(fun i e -> sprintf "  %d: %s" i (Exn.to_string e)))))))
   in
+  let emit ~passed =
+    Option.iter test_location ~f:(fun loc -> Antithesis.emit_assertion loc ~passed)
+  in
   match run_test_body () with
-  | () -> Antithesis.emit_assertion test_location ~passed:true
+  | () -> emit ~passed:true
   | exception e ->
-    Antithesis.emit_assertion test_location ~passed:false;
+    emit ~passed:false;
     raise e
 ;;

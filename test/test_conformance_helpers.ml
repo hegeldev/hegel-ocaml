@@ -3,8 +3,6 @@
 open Hegel
 open Generators
 
-let dummy_test_location = Test_helpers.dummy_test_location
-
 (* ==== Conformance helper tests ==== *)
 
 (** Test: parse_test_cases with None returns 50. *)
@@ -443,76 +441,53 @@ let test_hashmaps_non_basic_values_composite () =
 (* ==== E2E tests for new generators ==== *)
 
 (** Test: floats() E2E — values are floats. *)
-let test_floats_e2e () =
-  Session.run_hegel_test
-    ~settings:(Client.settings ~test_cases:10 ())
-    dummy_test_location
-    (fun tc ->
-       let f = Hegel.draw tc (floats ~allow_nan:false ~allow_infinity:false ()) in
-       assert (Float.is_finite f))
+let%hegel_test test_floats_e2e tc =
+  let f = Hegel.draw tc (floats ~allow_nan:false ~allow_infinity:false ()) in
+  assert (Float.is_finite f)
+[@@settings Client.settings ~test_cases:10 ()]
 ;;
 
 (** Test: floats() with bounds E2E — values within range. *)
-let test_floats_bounds_e2e () =
-  Session.run_hegel_test
-    ~settings:(Client.settings ~test_cases:10 ())
-    dummy_test_location
-    (fun tc ->
-       let f =
-         Hegel.draw
-           tc
-           (floats
-              ~min_value:0.0
-              ~max_value:1.0
-              ~allow_nan:false
-              ~allow_infinity:false
-              ())
-       in
-       assert (f >= 0.0 && f <= 1.0))
+let%hegel_test test_floats_bounds_e2e tc =
+  let f =
+    Hegel.draw
+      tc
+      (floats ~min_value:0.0 ~max_value:1.0 ~allow_nan:false ~allow_infinity:false ())
+  in
+  assert (f >= 0.0 && f <= 1.0)
+[@@settings Client.settings ~test_cases:10 ()]
 ;;
 
 (** Test: text() E2E — values are text strings. *)
-let test_text_e2e () =
-  Session.run_hegel_test
-    ~settings:(Client.settings ~test_cases:10 ())
-    dummy_test_location
-    (fun tc ->
-       let s = Hegel.draw tc (text ~min_size:1 ~max_size:10 ()) in
-       assert (String.length s >= 1))
+let%hegel_test test_text_e2e tc =
+  let s = Hegel.draw tc (text ~min_size:1 ~max_size:10 ()) in
+  assert (String.length s >= 1)
+[@@settings Client.settings ~test_cases:10 ()]
 ;;
 
 (** Test: binary() E2E — values are byte strings. *)
-let test_binary_e2e () =
-  Session.run_hegel_test
-    ~settings:(Client.settings ~test_cases:10 ())
-    dummy_test_location
-    (fun tc ->
-       let b = Hegel.draw tc (binary ~min_size:0 ~max_size:10 ()) in
-       assert (String.length b >= 0))
+let%hegel_test test_binary_e2e tc =
+  let b = Hegel.draw tc (binary ~min_size:0 ~max_size:10 ()) in
+  assert (String.length b >= 0)
+[@@settings Client.settings ~test_cases:10 ()]
 ;;
 
 (** Test: sampled_from() E2E — values come from the options list. *)
-let test_sampled_from_e2e () =
+let%hegel_test test_sampled_from_e2e tc =
   let options = [ 10; 20; 30 ] in
-  Session.run_hegel_test
-    ~settings:(Client.settings ~test_cases:10 ())
-    dummy_test_location
-    (fun tc ->
-       let n = Hegel.draw tc (sampled_from options) in
-       assert (List.mem n [ 10; 20; 30 ]))
+  let n = Hegel.draw tc (sampled_from options) in
+  assert (List.mem n [ 10; 20; 30 ])
+[@@settings Client.settings ~test_cases:10 ()]
 ;;
 
 (** Test: hashmaps() E2E — values are maps. *)
-let test_hashmaps_e2e () =
-  Session.run_hegel_test
-    ~settings:(Client.settings ~test_cases:10 ())
-    dummy_test_location
-    (fun tc ->
-       let key_gen = integers ~min_value:0 ~max_value:100 () in
-       let val_gen = integers ~min_value:0 ~max_value:100 () in
-       let gen = hashmaps key_gen val_gen ~min_size:0 ~max_size:5 () in
-       let pairs = Hegel.draw tc gen in
-       assert (List.length pairs <= 5))
+let%hegel_test test_hashmaps_e2e tc =
+  let key_gen = integers ~min_value:0 ~max_value:100 () in
+  let val_gen = integers ~min_value:0 ~max_value:100 () in
+  let gen = hashmaps key_gen val_gen ~min_size:0 ~max_size:5 () in
+  let pairs = Hegel.draw tc gen in
+  assert (List.length pairs <= 5)
+[@@settings Client.settings ~test_cases:10 ()]
 ;;
 
 let tests =

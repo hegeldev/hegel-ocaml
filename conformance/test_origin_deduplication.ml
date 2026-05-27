@@ -12,8 +12,6 @@
 open Hegel.Conformance
 open Hegel.Generators
 
-let dummy_test_location = Json_params.dummy_test_location
-
 exception Bug of int
 
 let buggy_function x = if x > 10 then raise (Bug x) [@@inline never]
@@ -26,20 +24,16 @@ let () =
   let mode = Json_params.get_mode params in
   let test_cases = get_test_cases () in
   try
-    Hegel.Session.run_hegel_test
-      ~settings:(Hegel.settings ~test_cases ())
-      dummy_test_location
-      (fun tc ->
-         with_metrics (fun () ->
-           let x = Hegel.draw tc (integers ~min_value:0 ~max_value:100 ()) in
-           (match mode with
-            | "value_in_error_message" ->
-              if x > 10
-              then failwith (Printf.sprintf "Generated value %d exceeded threshold 10" x)
-            | "multiple_call_sites" ->
-              if x mod 2 = 0 then call_path_a x else call_path_b x
-            | _ -> failwith ("unknown mode: " ^ mode));
-           []))
+    Hegel.Session.run_hegel_test ~settings:(Hegel.settings ~test_cases ()) (fun tc ->
+      with_metrics (fun () ->
+        let x = Hegel.draw tc (integers ~min_value:0 ~max_value:100 ()) in
+        (match mode with
+         | "value_in_error_message" ->
+           if x > 10
+           then failwith (Printf.sprintf "Generated value %d exceeded threshold 10" x)
+         | "multiple_call_sites" -> if x mod 2 = 0 then call_path_a x else call_path_b x
+         | _ -> failwith ("unknown mode: " ^ mode));
+        []))
   with
   | Failure _ | Bug _ -> ()
 ;;

@@ -245,7 +245,7 @@ let start session =
           Stdlib.at_exit (fun () -> cleanup session))))
 ;;
 
-(** [run_hegel_test ?settings test_location test_fn] runs a property test
+(** [run_hegel_test ?settings ?test_location test_fn] runs a property test
     using the shared hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is set,
     creates a disposable session so the test server gets a fresh subprocess
     with the right env var. Uses {!Client.default_settings} when [settings]
@@ -253,8 +253,9 @@ let start session =
 
     @param test_location
       forwarded to {!Client.run_test} for the Antithesis integration.
-      Supplied automatically by the [let%hegel_test] PPX. *)
-let run_hegel_test ?(settings = Client.default_settings ()) test_location test_fn =
+      Supplied automatically by the [let%hegel_test] PPX. When omitted, no
+      Antithesis assertion is emitted. *)
+let run_hegel_test ?(settings = Client.default_settings ()) ?test_location test_fn =
   match Sys.getenv "HEGEL_PROTOCOL_TEST_MODE" with
   | Some mode when not (String.is_empty mode) ->
     let session =
@@ -264,12 +265,12 @@ let run_hegel_test ?(settings = Client.default_settings ()) test_location test_f
     Exn.protect
       ~finally:(fun () -> cleanup session)
       ~f:(fun () ->
-        Client.run_test (Option.value_exn session.client) test_location ~settings test_fn)
+        Client.run_test (Option.value_exn session.client) ~settings ?test_location test_fn)
   | _ ->
     start global_session;
     Client.run_test
       (Option.value_exn global_session.client)
-      test_location
       ~settings
+      ?test_location
       test_fn
 ;;

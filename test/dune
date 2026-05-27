@@ -42,7 +42,7 @@
   yojson
   cbor)
  (preprocess
-  (pps ppx_js_style -- -allow-unannotated-ignores))
+  (pps ppx_js_style ppx_hegel_test -- -allow-unannotated-ignores))
  (foreign_stubs
   (language c)
   (names unsetenv_stubs)))
@@ -50,9 +50,14 @@
 (test
  (name test_ppx_derive)
  (modules test_ppx_derive)
- (libraries hegel alcotest core core_unix threads.posix)
+ (libraries hegel hegel_test_runtime alcotest core core_unix threads.posix)
  (preprocess
-  (pps ppx_js_style ppx_hegel_generator -- -allow-unannotated-ignores)))
+  (pps
+   ppx_js_style
+   ppx_hegel_generator
+   ppx_hegel_test
+   --
+   -allow-unannotated-ignores)))
 
 (test
  (name test_ppx_hegel_test)

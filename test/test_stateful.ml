@@ -1,7 +1,5 @@
 open Core
 
-let dummy_test_location = Test_helpers.dummy_test_location
-
 (* Stateful failure test: the [push] rule pushes an int in [0, 100] onto a
    stack; the [pop] rule fails when the popped value is >= 50. Should shrink to [push 50; pop]. *)
 let stateful_failure_test () =
@@ -23,10 +21,8 @@ let stateful_failure_test () =
         rest)
   in
   (try
-     Hegel.Session.run_hegel_test
-       ~settings:(Hegel.settings ~seed:0 ())
-       dummy_test_location
-       (fun tc -> S.run ~init:[] ~rules:[ push_rule; pop_rule ] tc);
+     Hegel.Session.run_hegel_test ~settings:(Hegel.settings ~seed:0 ()) (fun tc ->
+       S.run ~init:[] ~rules:[ push_rule; pop_rule ] tc);
      failwith "expected property to fail"
    with
    | Assert_failure _ -> ());
@@ -39,77 +35,65 @@ let stateful_failure_test () =
    the set. Variables size must match the size of the live set. Empty-variables
    draws are rejected by [Variables.consume]'s internal [assume] call. *)
 
-let stateful_variables_test () =
+module Var_state = struct
+  module S = Hegel.Stateful
+
+  type t =
+    { live : Int.Set.t
+    ; variables : int S.Variables.t
+    }
+end
+
+let var_next_id = ref 0
+
+let var_alloc_rule =
   let module S = Hegel.Stateful in
-  let next_id = ref 0 in
-  let module State = struct
-    type t =
-      { live : Int.Set.t
-      ; variables : int S.Variables.t
-      }
-  end
-  in
-  let alloc_rule =
-    S.Rule.create ~name:"alloc" ~step:(fun _tc state ->
-      let id = !next_id in
-      incr next_id;
-      S.Variables.add state.State.variables id;
-      { state with State.live = Set.add state.State.live id })
-  in
-  let free_rule =
-    S.Rule.create ~name:"free" ~step:(fun _tc state ->
-      let id = S.Variables.consume state.State.variables in
-      assert (Set.mem state.State.live id);
-      { state with State.live = Set.remove state.State.live id })
-  in
-  Hegel.Session.run_hegel_test
-    ~settings:(Hegel.settings ~test_cases:10 ~seed:0 ())
-    dummy_test_location
-    (fun tc ->
-       next_id := 0;
-       S.run
-         ~init:{ State.live = Int.Set.empty; variables = S.Variables.create tc }
-         ~rules:[ alloc_rule; free_rule ]
-         ~invariants:
-           [ (fun state ->
-               assert (
-                 S.Variables.size state.State.variables = Set.length state.State.live))
-           ]
-         tc)
+  S.Rule.create ~name:"alloc" ~step:(fun _tc state ->
+    let id = !var_next_id in
+    incr var_next_id;
+    S.Variables.add state.Var_state.variables id;
+    { state with Var_state.live = Set.add state.Var_state.live id })
 ;;
 
-let stateful_variables_draw_test () =
+let var_free_rule =
   let module S = Hegel.Stateful in
-  let next_id = ref 0 in
-  let module State = struct
-    type t =
-      { live : Int.Set.t
-      ; variables : int S.Variables.t
-      }
-  end
-  in
-  let alloc_rule =
-    S.Rule.create ~name:"alloc" ~step:(fun _tc state ->
-      let id = !next_id in
-      incr next_id;
-      S.Variables.add state.State.variables id;
-      { state with State.live = Set.add state.State.live id })
-  in
-  let use_rule =
-    S.Rule.create ~name:"use" ~step:(fun _tc state ->
-      let id = S.Variables.draw state.State.variables in
-      assert (Set.mem state.State.live id);
-      state)
-  in
-  Hegel.Session.run_hegel_test
-    ~settings:(Hegel.settings ~test_cases:5 ~seed:0 ())
-    dummy_test_location
-    (fun tc ->
-       next_id := 0;
-       S.run
-         ~init:{ State.live = Int.Set.empty; variables = S.Variables.create tc }
-         ~rules:[ alloc_rule; use_rule ]
-         tc)
+  S.Rule.create ~name:"free" ~step:(fun _tc state ->
+    let id = S.Variables.consume state.Var_state.variables in
+    assert (Set.mem state.Var_state.live id);
+    { state with Var_state.live = Set.remove state.Var_state.live id })
+;;
+
+let var_use_rule =
+  let module S = Hegel.Stateful in
+  S.Rule.create ~name:"use" ~step:(fun _tc state ->
+    let id = S.Variables.draw state.Var_state.variables in
+    assert (Set.mem state.Var_state.live id);
+    state)
+;;
+
+let%hegel_test stateful_variables_test tc =
+  let module S = Hegel.Stateful in
+  var_next_id := 0;
+  S.run
+    ~init:{ Var_state.live = Int.Set.empty; variables = S.Variables.create tc }
+    ~rules:[ var_alloc_rule; var_free_rule ]
+    ~invariants:
+      [ (fun state ->
+          assert (
+            S.Variables.size state.Var_state.variables = Set.length state.Var_state.live))
+      ]
+    tc
+[@@settings Hegel.settings ~test_cases:10 ~seed:0 ()]
+;;
+
+let%hegel_test stateful_variables_draw_test tc =
+  let module S = Hegel.Stateful in
+  var_next_id := 0;
+  S.run
+    ~init:{ Var_state.live = Int.Set.empty; variables = S.Variables.create tc }
+    ~rules:[ var_alloc_rule; var_use_rule ]
+    tc
+[@@settings Hegel.settings ~test_cases:5 ~seed:0 ()]
 ;;
 
 let stateful_rule_name_test () =
@@ -120,29 +104,25 @@ let stateful_rule_name_test () =
 
 let stateful_no_rules_test () =
   let raised_msg = ref "" in
-  Hegel.Session.run_hegel_test
-    ~settings:(Hegel.settings ~test_cases:1 ())
-    dummy_test_location
-    (fun tc ->
-       try Hegel.Stateful.run ~init:() ~rules:[] tc with
-       | Invalid_argument msg -> raised_msg := msg);
+  Hegel.Session.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
+    try Hegel.Stateful.run ~init:() ~rules:[] tc with
+    | Invalid_argument msg -> raised_msg := msg);
   Alcotest.(check bool)
     "has 'no rules' message"
     true
     (String.equal !raised_msg "Cannot run a state machine with no rules.")
 ;;
 
-let stateful_retry_budget_floor_test () =
+let always_reject_rule =
   let module S = Hegel.Stateful in
-  let always_reject =
-    S.Rule.create ~name:"reject" ~step:(fun tc s ->
-      Hegel.assume tc false;
-      s)
-  in
-  Hegel.Session.run_hegel_test
-    ~settings:(Hegel.settings ~test_cases:1 ~seed:0 ())
-    dummy_test_location
-    (fun tc -> S.run ~init:() ~rules:[ always_reject ] tc)
+  S.Rule.create ~name:"reject" ~step:(fun tc s ->
+    Hegel.assume tc false;
+    s)
+;;
+
+let%hegel_test stateful_retry_budget_floor_test tc =
+  Hegel.Stateful.run ~init:() ~rules:[ always_reject_rule ] tc
+[@@settings Hegel.settings ~test_cases:1 ~seed:0 ()]
 ;;
 
 let tests =
