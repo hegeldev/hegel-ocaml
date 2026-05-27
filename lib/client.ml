@@ -624,15 +624,7 @@ let run_test
                | _ -> failwith "Server returned non-bytes element in failure_blobs")
            | _ -> []
          in
-         if not (List.is_empty blobs)
-         then (
-           Blobs.write_corrected target ~blobs;
-           eprintf
-             "Hegel: failure blob recorded -- run `dune promote` (expect backend) or \
-              move %s.corrected to %s to accept.\n\
-              %!"
-             target.file
-             target.file));
+         if not (List.is_empty blobs) then Blobs.write_corrected target ~blobs);
       (* Receive a final-replay [test_case] event on [test_stream] and run it. *)
       let replay_test_case () =
         let message_id, message = receive_request test_stream () in

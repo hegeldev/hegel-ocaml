@@ -235,10 +235,18 @@ let test_replay_mode_blob_still_reproduces () =
   let blobs : Hegel.Blobs.t =
     { recorded = [ blob ]; file = blobs_source_path; payload_start = 0; payload_end = 0 }
   in
-  (* Body deliberately raises on every input — every replay should produce
-     a failure, so the overall call returns normally. *)
-  Hegel.Session.run_hegel_test ~test_location:location ~blobs (fun _tc ->
-    failwith "always fails on replay")
+  (* Body raises on every input — replay reproduces it, so the call
+     should re-raise the original exception unchanged. *)
+  let raised_msg = ref "" in
+  (try
+     Hegel.Session.run_hegel_test ~test_location:location ~blobs (fun _tc ->
+       failwith "always fails on replay")
+   with
+   | Failure msg -> raised_msg := msg);
+  Alcotest.(check string)
+    "original Failure re-raised verbatim"
+    "always fails on replay"
+    !raised_msg
 ;;
 
 let test_replay_mode_stale_blob_fails () =
@@ -255,7 +263,7 @@ let test_replay_mode_stale_blob_fails () =
   Alcotest.(check bool)
     "raised stale-blob error"
     true
-    (String.is_substring !raised_msg ~substring:"Failure blob did not cause a failure")
+    (String.is_substring !raised_msg ~substring:"did not reproduce the original failure")
 ;;
 
 let () =

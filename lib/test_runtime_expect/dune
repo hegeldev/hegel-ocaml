@@ -2,6 +2,6 @@
  (name hegel_test_runtime_expect)
  (public_name hegel.test_runtime_expect)
  (wrapped false)
- (libraries hegel_test_runtime ppx_inline_test.runtime-lib)
+ (libraries hegel hegel_test_runtime ppx_inline_test.runtime-lib)
  (instrumentation
   (backend bisect_ppx)))

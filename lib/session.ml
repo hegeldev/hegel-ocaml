@@ -270,17 +270,6 @@ let run_in_session f =
   Exn.protect ~finally:cleanup_fn ~f:(fun () -> f client)
 ;;
 
-(** [stale_blob_error blob] is the [Failure] raised when a recorded blob no
-    longer reproduces the original failure. *)
-let stale_blob_error blob =
-  Failure
-    (sprintf
-       "Failure blob did not cause a failure: %s\n\
-        The recorded blob no longer reproduces the original failure. Remove it from \
-        [@@blobs ...] if the fix is intentional."
-       blob)
-;;
-
 (** [run_hegel_test ?settings ?test_location ?blobs test_fn] runs a property
     test using the shared hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is
     set, creates a disposable session so the test server gets a fresh
@@ -294,9 +283,11 @@ let stale_blob_error blob =
     @param blobs
       when [Some t] with [t.recorded = []], records new failure blobs in
       [<t.file>.corrected] if the test fails. When [Some t] with a
-      non-empty [t.recorded], replays each recorded blob: passes the test
-      if every blob still reproduces a failure, otherwise raises
-      [Failure _] naming the first stale blob. *)
+      non-empty [t.recorded], replays each recorded blob: a blob that
+      still reproduces the failure re-raises the original exception
+      unchanged (so the test stays red with its real exception text, and
+      the recorded blob is noted on stderr); a blob that no longer
+      reproduces raises [Failure] flagging the stale entry. *)
 let run_hegel_test ?(settings = Client.default_settings ()) ?test_location ?blobs test_fn =
   match blobs with
   | None ->
@@ -310,6 +301,13 @@ let run_hegel_test ?(settings = Client.default_settings ()) ?test_location ?blob
         match
           Client.run_test client ~settings ?test_location ~failure_blob:blob test_fn
         with
-        | () -> raise (stale_blob_error blob)
-        | exception _ -> ()))
+        | () ->
+          raise
+            (Failure
+               (sprintf
+                  "Hegel: failure blob %s did not reproduce the original failure"
+                  blob))
+        | exception e ->
+          eprintf "Hegel: failure blob %s reproduced the original failure\n%!" blob;
+          raise e))
 ;;

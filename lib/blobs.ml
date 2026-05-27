@@ -23,13 +23,30 @@ let render_list blobs =
 
 (** [resolve_path file] returns the absolute path under which to read the
     source and write the [.corrected] sibling. The PPX supplies
-    [pos_fname] as a workspace-relative path; the test binary's cwd is
-    the workspace root, so joining them lands the [.corrected] file next
-    to the original source file in the source tree (which is also where
-    [dune promote] looks). Absolute inputs are passed through. *)
+    [pos_fname] as a workspace-relative path; cwd differs by harness —
+    Alcotest tests run from the workspace root, while inline-tests
+    runners run from the per-library directory inside dune's sandbox
+    (which mirrors the source tree by hardlinks). We try the full
+    relative path first (workspace-root case), then fall back to just
+    the basename (sandbox per-library case). Absolute inputs are passed
+    through. *)
 let resolve_path file =
-  if Filename.is_relative file then Filename.concat (Stdlib.Sys.getcwd ()) file else file
+  if not (Filename.is_relative file)
+  then file
+  else (
+    let cwd = Stdlib.Sys.getcwd () in
+    let with_full = Filename.concat cwd file in
+    if Stdlib.Sys.file_exists with_full
+    then with_full
+    else Filename.concat cwd (Filename.basename file))
 ;;
+
+(** Flag flipped to [true] by {!write_corrected}; read by the expect
+    backend's evaluator to decide between an exit-0 (so dune's [(diff?)]
+    action runs) and a failure exit. *)
+let corrected_written = ref false
+
+let any_corrected_written () = !corrected_written
 
 let write_corrected t ~blobs =
   let path = resolve_path t.file in
@@ -39,5 +56,6 @@ let write_corrected t ~blobs =
     String.sub original ~pos:t.payload_end ~len:(String.length original - t.payload_end)
   in
   let corrected = prefix ^ render_list blobs ^ suffix in
-  Out_channel.write_all (path ^ ".corrected") ~data:corrected
+  Out_channel.write_all (path ^ ".corrected") ~data:corrected;
+  corrected_written := true
 ;;
