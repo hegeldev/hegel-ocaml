@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 - 2026-05-27
+
+Fixes uniqueness of hashmap keys and lists when unique=true not being preserved after transformation.
+
 ## 0.4.0 - 2026-05-27
 
 This release changes the public API for running Hegel tests to a new `let%hegel_test` PPX extension.
