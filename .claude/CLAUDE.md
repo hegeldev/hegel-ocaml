@@ -37,10 +37,15 @@ lib/                         # Library source
   generators.ml              # Generator combinators (booleans, integers, lists, …)
   conformance.ml             # Conformance test helpers (get_test_cases, write_metrics)
   derive.ml                  # Runtime support for [@@deriving generator]
+  test_runtime/              # Inline-test registry + runner for [let%hegel_test]
+    hegel_test_runtime.ml    # Registry, run_all, test_main (called by dune-generated runner)
 
-ppx/                         # PPX deriver package (ppx_hegel_generator)
-  dune                       # PPX library build config (depends on ppxlib)
+ppx/                         # PPX rewriters and derivers
+  dune                       # PPX library build configs; ppx_hegel_test declares
+                             # (inline_tests.backend ...) + (ppx_runtime_libraries hegel_test_runtime)
   ppx_hegel_generator.ml     # Deriver: reads type decls, emits generator functions
+  ppx_hegel_test.ml          # Expander: rewrites [let%hegel_test name tc = body]
+                             # into a callable function plus a Hegel_test_runtime.register call
 
 test/                        # Alcotest test suite
   dune                       # Test build config (two executables: test_hegel, test_ppx_derive)
@@ -112,6 +117,35 @@ Generators are a discriminated union:
 - **Filtered** — wraps source + predicate. Up to `max_filter_attempts` retries before `assume false`.
 - **CompositeList** — used when list elements are non-Basic. Uses the collection protocol (new_collection / collection_more) to generate elements one at a time.
 
+### Inline Test Integration (ppx/ppx_hegel_test.ml + lib/test_runtime/)
+
+The `ppx_hegel_test` PPX rewrites `let%hegel_test name tc = body` into two
+top-level items: (1) `let name = fun () -> Hegel.Session.run_hegel_test ...
+(fun tc -> body)`, and (2) `let () = Hegel_test_runtime.register ~name ~file
+~line name`. The function remains directly callable; the registration is a
+side effect run at module init.
+
+`ppx_hegel_test`'s dune stanza declares `(inline_tests.backend ...)` with a
+generated runner that calls `Hegel_test_runtime.test_main ()`, and
+`(ppx_runtime_libraries hegel_test_runtime)` so the runtime is auto-linked
+into any library that uses the PPX. Users opt in per-library with
+`(inline_tests (backend ppx_hegel_test))`, after which `dune runtest`
+discovers and runs every `let%hegel_test`. The runtime's `test_main ()`
+iterates the registry, wraps each test in try/with, prints PASS/FAIL per
+test, and exits non-zero on any failure.
+
+Libraries that don't opt in still get the registration side effect (the
+PPX always emits it) — entries just sit unused. That's harmless and lets
+tests built around alternative harnesses (Alcotest, raw `let () = name ()`)
+keep working unchanged. The runner's behavior is verified in
+`test/test_hegel_test_runtime.ml`, which re-spawns the running
+`test_hegel.exe` with a magic `--__hegel_test_runtime_demo MODE` argv that
+the top of `test_hegel.ml` intercepts to register a single test and call
+`Hegel_test_runtime.test_main`; the subprocess's exit code is then
+asserted. Folding the demo into `test_hegel.exe` itself sidesteps the
+build-ordering trap that would otherwise hit any recipe invoking the test
+binary directly.
+
 ### Type-Directed Derivation (ppx/ + lib/derive.ml)
 
 The `ppx_hegel_generator` PPX deriver synthesizes `unit -> 'a` generator functions
@@ -132,21 +166,23 @@ runtime helpers for option and list types.
 **Usage example:**
 
 ```ocaml
-(* In your dune file, add: (preprocess (pps ppx_hegel_generator)) *)
+(* In your dune file, add:
+     (inline_tests (backend ppx_hegel_test))
+     (preprocess (pps ppx_hegel_generator ppx_hegel_test)) *)
 
 type point = { x : int; y : int } [@@deriving generator]
 type color = Red | Green | Blue [@@deriving generator]
 type entity = { name : string; tag : int option; active : bool }
 [@@deriving generator]
 
-(* Use inside a Hegel test body: *)
-let () =
-  Hegel.Session.run_hegel_test ~name:"my_test" ~test_cases:100 (fun () ->
-    let p = point_generator () in
-    let c = color_generator () in
-    let e = entity_generator () in
-    (* p.x, p.y are ints; c is Red|Green|Blue; e has typed fields *)
-    ignore (p, c, e))
+(* Use inside a let%hegel_test body: *)
+let%hegel_test derived_types_smoke _tc =
+  let p = point_generator () in
+  let c = color_generator () in
+  let e = entity_generator () in
+  (* p.x, p.y are ints; c is Red|Green|Blue; e has typed fields *)
+  ignore (p, c, e)
+;;
 ```
 
 **Supported field types:**

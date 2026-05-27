@@ -176,39 +176,24 @@ let has_working_client session =
 (** [cleanup session] cleans up the session, killing the subprocess and closing
     the connection. *)
 let cleanup session =
-  Printf.eprintf
-    "[hegel-debug] cleanup: start (process=%s, conn=%s)\n%!"
-    (match session.process with
-     | Some _ -> "Some"
-     | None -> "None")
-    (match session.connection with
-     | Some _ -> "Some"
-     | None -> "None");
   (* Kill the server process first so the pipe's write end closes, giving the
      reader thread EOF. On Linux, close() alone does not wake up a blocked
      read() on a pipe, but killing the server (which closes the write end)
      does. After this, the reader thread will process EOF and exit. *)
   (match session.process with
    | Some pid ->
-     Printf.eprintf "[hegel-debug] cleanup: killing pid %d\n%!" pid;
      (try Caml_unix.kill pid Stdlib.Sys.sigterm with
       | _ -> ());
-     Printf.eprintf "[hegel-debug] cleanup: waitpid\n%!";
      (try ignore (Caml_unix.waitpid [] pid : int * Caml_unix.process_status) with
       | _ -> ());
-     Printf.eprintf "[hegel-debug] cleanup: waitpid done\n%!";
      session.process <- None
    | None -> ());
   match session.connection with
   | Some conn ->
-    Printf.eprintf "[hegel-debug] cleanup: closing connection\n%!";
     close conn;
-    Printf.eprintf "[hegel-debug] cleanup: connection closed\n%!";
     session.connection <- None;
     session.client <- None
-  | None ->
-    ();
-    Printf.eprintf "[hegel-debug] cleanup: done\n%!"
+  | None -> ()
 ;;
 
 (** [start session] starts the hegel server if not already running. The server
@@ -257,31 +242,35 @@ let start session =
           session.connection <- Some conn;
           let c = Client.create_client conn in
           session.client <- Some c;
-          Stdlib.at_exit (fun () ->
-            Printf.eprintf "[hegel-debug] at_exit handler invoked\n%!";
-            cleanup session;
-            Printf.eprintf "[hegel-debug] at_exit handler done\n%!"))))
+          Stdlib.at_exit (fun () -> cleanup session))))
 ;;
 
-(** [run_hegel_test ?settings test_fn] runs a property test using the shared
-    hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is set, creates a disposable
-    session so the test server gets a fresh subprocess with the right env var.
-    Uses {!Client.default_settings} when [settings] is not provided. *)
-let run_hegel_test ?(settings = Client.default_settings ()) test_fn =
+(** [run_hegel_test ?settings ?test_location test_fn] runs a property test
+    using the shared hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is set,
+    creates a disposable session so the test server gets a fresh subprocess
+    with the right env var. Uses {!Client.default_settings} when [settings]
+    is not provided.
+
+    @param test_location
+      forwarded to {!Client.run_test} for the Antithesis integration.
+      Supplied automatically by the [let%hegel_test] PPX. When omitted, no
+      Antithesis assertion is emitted. *)
+let run_hegel_test ?(settings = Client.default_settings ()) ?test_location test_fn =
   match Sys.getenv "HEGEL_PROTOCOL_TEST_MODE" with
   | Some mode when not (String.is_empty mode) ->
-    Printf.eprintf "[hegel-debug] disposable session: creating (mode=%s)\n%!" mode;
     let session =
       { process = None; connection = None; client = None; lock = Mutex.create () }
     in
     start session;
     Exn.protect
-      ~finally:(fun () ->
-        Printf.eprintf "[hegel-debug] disposable session: cleanup\n%!";
-        cleanup session;
-        Printf.eprintf "[hegel-debug] disposable session: cleanup done\n%!")
-      ~f:(fun () -> Client.run_test (Option.value_exn session.client) ~settings test_fn)
+      ~finally:(fun () -> cleanup session)
+      ~f:(fun () ->
+        Client.run_test (Option.value_exn session.client) ~settings ?test_location test_fn)
   | _ ->
     start global_session;
-    Client.run_test (Option.value_exn global_session.client) ~settings test_fn
+    Client.run_test
+      (Option.value_exn global_session.client)
+      ~settings
+      ?test_location
+      test_fn
 ;;

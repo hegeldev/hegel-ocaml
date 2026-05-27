@@ -117,55 +117,55 @@ let test_hashmaps_min_greater_than_max () =
 (* ==== E2E tests ==== *)
 
 (** Test: lists(integers) generates a list where all elements are in range. *)
-let test_lists_of_integers_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
-    let gen = lists (integers ~min_value:0 ~max_value:100 ()) ~max_size:3 () in
-    Alcotest.(check bool) "is_basic" true (is_basic gen);
-    let items = Hegel.draw tc gen in
-    Alcotest.(check bool) "max 3" true (List.length items <= 3);
-    List.iter (fun n -> assert (n >= 0 && n <= 100)) items)
+let%hegel_test test_lists_of_integers_e2e tc =
+  let gen = lists (integers ~min_value:0 ~max_value:100 ()) ~max_size:3 () in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  let items = Hegel.draw tc gen in
+  Alcotest.(check bool) "max 3" true (List.length items <= 3);
+  List.iter (fun n -> assert (n >= 0 && n <= 100)) items
+[@@settings Client.settings ~test_cases:50 ()]
 ;;
 
 (** Test: lists(booleans, min_size=3, max_size=5) → length in [3,5]. *)
-let test_lists_booleans_bounds_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
-    let gen = lists (booleans ()) ~min_size:3 ~max_size:5 () in
-    Alcotest.(check bool) "is_basic" true (is_basic gen);
-    let items = Hegel.draw tc gen in
-    let n = List.length items in
-    assert (n >= 3 && n <= 5))
+let%hegel_test test_lists_booleans_bounds_e2e tc =
+  let gen = lists (booleans ()) ~min_size:3 ~max_size:5 () in
+  Alcotest.(check bool) "is_basic" true (is_basic gen);
+  let items = Hegel.draw tc gen in
+  let n = List.length items in
+  assert (n >= 3 && n <= 5)
+[@@settings Client.settings ~test_cases:50 ()]
 ;;
 
 (** Test: lists(filtered integers) → all elements satisfy predicate. *)
-let test_lists_non_basic_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
-    let elem = filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ()) in
-    let gen = lists elem ~min_size:1 ~max_size:3 () in
-    Alcotest.(check bool) "not basic" false (is_basic gen);
-    let items = Hegel.draw tc gen in
-    let n = List.length items in
-    assert (n >= 1 && n <= 3);
-    List.iter (fun x -> assert (x > 5)) items)
+let%hegel_test test_lists_non_basic_e2e tc =
+  let elem = filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ()) in
+  let gen = lists elem ~min_size:1 ~max_size:3 () in
+  Alcotest.(check bool) "not basic" false (is_basic gen);
+  let items = Hegel.draw tc gen in
+  let n = List.length items in
+  assert (n >= 1 && n <= 3);
+  List.iter (fun x -> assert (x > 5)) items
+[@@settings Client.settings ~test_cases:50 ()]
 ;;
 
 (** Test: lists(non-basic) without max_size (max_size=None in collection). *)
-let test_lists_non_basic_no_max_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
-    let elem = filter (fun _ -> true) (integers ~min_value:0 ~max_value:10 ()) in
-    let gen = lists elem () in
-    let items = Hegel.draw tc gen in
-    List.iter (fun x -> assert (x >= 0 && x <= 10)) items)
+let%hegel_test test_lists_non_basic_no_max_e2e tc =
+  let elem = filter (fun _ -> true) (integers ~min_value:0 ~max_value:10 ()) in
+  let gen = lists elem () in
+  let items = Hegel.draw tc gen in
+  List.iter (fun x -> assert (x >= 0 && x <= 10)) items
+[@@settings Client.settings ~test_cases:10 ()]
 ;;
 
 (** Test: lists(lists(booleans)) → nested lists work. *)
-let test_lists_nested_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
-    let inner = lists (booleans ()) ~max_size:3 () in
-    let gen = lists inner ~max_size:3 () in
-    Alcotest.(check bool) "outer is_basic" true (is_basic gen);
-    let outer_items = Hegel.draw tc gen in
-    assert (List.length outer_items <= 3);
-    List.iter (fun inner_items -> assert (List.length inner_items <= 3)) outer_items)
+let%hegel_test test_lists_nested_e2e tc =
+  let inner = lists (booleans ()) ~max_size:3 () in
+  let gen = lists inner ~max_size:3 () in
+  Alcotest.(check bool) "outer is_basic" true (is_basic gen);
+  let outer_items = Hegel.draw tc gen in
+  assert (List.length outer_items <= 3);
+  List.iter (fun inner_items -> assert (List.length inner_items <= 3)) outer_items
+[@@settings Client.settings ~test_cases:50 ()]
 ;;
 
 (** Test: lists(basic, unique=true) has unique=true in schema. *)
@@ -192,69 +192,69 @@ let test_lists_unique_false_schema () =
 ;;
 
 (** Test: lists(basic, unique=true) E2E — elements are distinct. *)
-let test_lists_unique_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
-    let gen =
-      lists
-        (integers ~min_value:0 ~max_value:1000 ())
-        ~min_size:3
-        ~max_size:10
-        ~unique:true
-        ()
-    in
-    let items = Hegel.draw tc gen in
-    let n = List.length items in
-    assert (n >= 3 && n <= 10);
-    let uniq = List.sort_uniq compare items |> List.length in
-    Alcotest.(check int) "all unique" n uniq)
+let%hegel_test test_lists_unique_e2e tc =
+  let gen =
+    lists
+      (integers ~min_value:0 ~max_value:1000 ())
+      ~min_size:3
+      ~max_size:10
+      ~unique:true
+      ()
+  in
+  let items = Hegel.draw tc gen in
+  let n = List.length items in
+  assert (n >= 3 && n <= 10);
+  let uniq = List.sort_uniq compare items |> List.length in
+  Alcotest.(check int) "all unique" n uniq
+[@@settings Client.settings ~test_cases:50 ()]
 ;;
 
 (** Test: lists(non-basic, unique=true) E2E — elements are distinct. *)
-let test_lists_non_basic_unique_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
-    let elem = filter (fun v -> v >= 0) (integers ~min_value:0 ~max_value:1000 ()) in
-    let gen = lists elem ~min_size:1 ~max_size:5 ~unique:true () in
-    Alcotest.(check bool) "not basic" false (is_basic gen);
-    let items = Hegel.draw tc gen in
-    let n = List.length items in
-    assert (n >= 1 && n <= 5);
-    let uniq = List.sort_uniq compare items |> List.length in
-    Alcotest.(check int) "all unique" n uniq)
+let%hegel_test test_lists_non_basic_unique_e2e tc =
+  let elem = filter (fun v -> v >= 0) (integers ~min_value:0 ~max_value:1000 ()) in
+  let gen = lists elem ~min_size:1 ~max_size:5 ~unique:true () in
+  Alcotest.(check bool) "not basic" false (is_basic gen);
+  let items = Hegel.draw tc gen in
+  let n = List.length items in
+  assert (n >= 1 && n <= 5);
+  let uniq = List.sort_uniq compare items |> List.length in
+  Alcotest.(check int) "all unique" n uniq
+[@@settings Client.settings ~test_cases:50 ()]
 ;;
 
 (** Test: lists(non-basic, unique=true) with impossible constraints terminates
     via the server's rejection limit instead of hanging. Uses
     min_value=max_value=0 so every second element is a guaranteed duplicate,
     which causes the server to send StopTest after its rejection threshold. *)
-let test_lists_non_basic_unique_exhaustion_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
-    let elem = filter (fun _ -> true) (integers ~min_value:0 ~max_value:0 ()) in
-    (* Asking for ≥2 unique elements from {0} — impossible. The server's
-         many.reject() limit will fire and send StopTest, which
-         collection_reject converts to Data_exhausted. *)
-    let gen = lists elem ~min_size:2 ~unique:true () in
-    ignore (Hegel.draw tc gen))
+let%hegel_test test_lists_non_basic_unique_exhaustion_e2e tc =
+  let elem = filter (fun _ -> true) (integers ~min_value:0 ~max_value:0 ()) in
+  (* Asking for ≥2 unique elements from {0} — impossible. The server's
+     many.reject() limit will fire and send StopTest, which
+     collection_reject converts to Data_exhausted. *)
+  let gen = lists elem ~min_size:2 ~unique:true () in
+  ignore (Hegel.draw tc gen)
+[@@settings Client.settings ~test_cases:10 ()]
 ;;
 
 (** Test: hashmaps(non-basic keys) E2E — generates pairs. *)
-let test_hashmaps_non_basic_keys_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
-    let key_gen = filter (fun _ -> true) (integers ~min_value:0 ~max_value:100 ()) in
-    let val_gen = integers ~min_value:0 ~max_value:100 () in
-    let gen = hashmaps key_gen val_gen ~min_size:0 ~max_size:5 () in
-    Alcotest.(check bool) "not basic" false (is_basic gen);
-    let pairs = Hegel.draw tc gen in
-    assert (List.length pairs <= 5))
+let%hegel_test test_hashmaps_non_basic_keys_e2e tc =
+  let key_gen = filter (fun _ -> true) (integers ~min_value:0 ~max_value:100 ()) in
+  let val_gen = integers ~min_value:0 ~max_value:100 () in
+  let gen = hashmaps key_gen val_gen ~min_size:0 ~max_size:5 () in
+  Alcotest.(check bool) "not basic" false (is_basic gen);
+  let pairs = Hegel.draw tc gen in
+  assert (List.length pairs <= 5)
+[@@settings Client.settings ~test_cases:10 ()]
 ;;
 
 (** Test: hashmaps(non-basic values) E2E — generates pairs. *)
-let test_hashmaps_non_basic_values_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
-    let key_gen = integers ~min_value:0 ~max_value:100 () in
-    let val_gen = filter (fun _ -> true) (integers ~min_value:0 ~max_value:100 ()) in
-    let gen = hashmaps key_gen val_gen ~min_size:0 ~max_size:5 () in
-    let pairs = Hegel.draw tc gen in
-    assert (List.length pairs <= 5))
+let%hegel_test test_hashmaps_non_basic_values_e2e tc =
+  let key_gen = integers ~min_value:0 ~max_value:100 () in
+  let val_gen = filter (fun _ -> true) (integers ~min_value:0 ~max_value:100 ()) in
+  let gen = hashmaps key_gen val_gen ~min_size:0 ~max_size:5 () in
+  let pairs = Hegel.draw tc gen in
+  assert (List.length pairs <= 5)
+[@@settings Client.settings ~test_cases:10 ()]
 ;;
 
 let tests =

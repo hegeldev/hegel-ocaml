@@ -28,6 +28,9 @@ module Derive = Derive
 (** Stateful property-based testing on top of {!Generators}. *)
 module Stateful = Stateful
 
+(** Antithesis integration. *)
+module Antithesis = Antithesis
+
 (** {2 Convenience re-exports} *)
 
 (** [assume tc condition] rejects the current test case if [condition] is
@@ -45,9 +48,6 @@ let target = Client.target
 (** [draw tc gen] produces a typed value from generator [gen] using test case
     [tc]. *)
 let draw = Generators.draw
-
-(** [run_hegel_test ?settings test_fn] runs a property test. *)
-let run_hegel_test = Session.run_hegel_test
 
 (** [default_settings ()] creates default test settings with CI auto-detection.
 *)

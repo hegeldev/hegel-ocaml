@@ -22,7 +22,7 @@ let () =
   let test_cases = get_test_cases () in
   if key_type = "string"
   then
-    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases ()) (fun tc ->
+    Hegel.Session.run_hegel_test ~settings:(Hegel.settings ~test_cases ()) (fun tc ->
       with_metrics (fun () ->
         let key_gen = text ~min_size:1 ~max_size:10 () in
         let key_gen =
@@ -53,7 +53,7 @@ let () =
         ; "max_value", Json_params.int_opt_to_json max_val_result
         ]))
   else
-    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases ()) (fun tc ->
+    Hegel.Session.run_hegel_test ~settings:(Hegel.settings ~test_cases ()) (fun tc ->
       with_metrics (fun () ->
         let key_gen = integers ~min_value:min_key ~max_value:max_key () in
         let key_gen =

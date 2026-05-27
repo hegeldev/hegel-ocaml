@@ -8,9 +8,10 @@ check-tests:
     # Run test binaries directly (not via dune runtest) so output streams
     # in real-time — dune runtest buffers output until completion, hiding
     # diagnostic messages when a test hangs.
-    dune build --instrument-with bisect_ppx test/test_hegel.exe test/test_ppx_derive.exe
+    dune build --instrument-with bisect_ppx test/test_hegel.exe test/test_ppx_derive.exe test/test_ppx_hegel_test.exe
     export BISECT_FILE=_build/default/test/bisect
     ./_build/default/test/test_ppx_derive.exe
+    ./_build/default/test/test_ppx_hegel_test.exe
     ./_build/default/test/test_hegel.exe
     python3 scripts/check-coverage.py
 
@@ -51,8 +52,9 @@ check-tests-no-coverage:
     #!/usr/bin/env bash
     set -euo pipefail
     eval $(opam env)
-    dune build test/test_hegel.exe test/test_ppx_derive.exe
+    dune build test/test_hegel.exe test/test_ppx_derive.exe test/test_ppx_hegel_test.exe
     ./_build/default/test/test_ppx_derive.exe
+    ./_build/default/test/test_ppx_hegel_test.exe
     ./_build/default/test/test_hegel.exe
 
 check-conformance:

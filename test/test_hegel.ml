@@ -1,9 +1,20 @@
+(* When invoked with the [--__hegel_test_runtime_demo MODE] argv, this binary
+   reuses itself as the subprocess for [Test_hegel_test_runtime]'s exit-code
+   assertions. *)
 let () =
-  (* Register first so it runs LAST (LIFO) — after all session at_exit
-     handlers. If this message never appears, process exit is hanging before
-     at_exit handlers run (H2). *)
-  Stdlib.at_exit (fun () ->
-    Printf.eprintf "[hegel-debug] final at_exit handler (registered first)\n%!");
+  match Sys.argv with
+  | [| _; "--__hegel_test_runtime_demo"; mode |] ->
+    let run =
+      match mode with
+      | "fail" -> fun () -> failwith "deliberate"
+      | _ -> fun () -> ()
+    in
+    Hegel_test_runtime.register ~name:"demo" ~file:__FILE__ ~line:__LINE__ run;
+    Hegel_test_runtime.test_main ()
+  | _ -> ()
+;;
+
+let () =
   Alcotest.run
     "hegel"
     [ "protocol", Test_protocol.tests
@@ -20,5 +31,7 @@ let () =
     ; "derive", Test_derive.tests
     ; "stateful", Test_stateful.tests
     ; "single_test_case", Test_single_test_case.tests
+    ; "antithesis", Test_antithesis.tests
+    ; "hegel_test_runtime", Test_hegel_test_runtime.tests
     ]
 ;;

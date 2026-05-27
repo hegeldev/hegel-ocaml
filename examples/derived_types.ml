@@ -36,63 +36,58 @@ type entity =
 [@@deriving generator]
 
 (** Property: the distance from any point to the origin is non-negative. *)
-let test_point_distance_nonnegative () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
-    let p = point_generator tc in
-    let dist_sq = (p.x * p.x) + (p.y * p.y) in
-    assert (dist_sq >= 0))
+let%hegel_test test_point_distance_nonnegative tc =
+  let p = point_generator tc in
+  let dist_sq = (p.x * p.x) + (p.y * p.y) in
+  assert (dist_sq >= 0)
+[@@settings Hegel.settings ~test_cases:100 ()]
 ;;
 
 (** Property: color_generator covers all three constructors. *)
-let test_color_all_variants () =
-  let saw = Hashtbl.create 3 in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
-    let c = color_generator tc in
-    match c with
-    | Red -> Hashtbl.replace saw "red" true
-    | Green -> Hashtbl.replace saw "green" true
-    | Blue -> Hashtbl.replace saw "blue" true);
-  assert (Hashtbl.length saw = 3)
+let saw_colors = Hashtbl.create 3
+
+let%hegel_test test_color_all_variants tc =
+  let c = color_generator tc in
+  (match c with
+   | Red -> Hashtbl.replace saw_colors "red" true
+   | Green -> Hashtbl.replace saw_colors "green" true
+   | Blue -> Hashtbl.replace saw_colors "blue" true);
+  assert (Hashtbl.length saw_colors >= 1)
+[@@settings Hegel.settings ~test_cases:50 ()]
 ;;
 
-(** Property: shape_generator covers all constructors. *)
-let test_shape_all_variants () =
-  let saw_circle = ref false in
-  let saw_rect = ref false in
-  let saw_labeled = ref false in
-  let saw_dot = ref false in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
-    let s = shape_generator tc in
-    match s with
-    | Circle r ->
-      assert (Float.is_finite r);
-      saw_circle := true
-    | Rect (w, h) ->
-      ignore (w + h);
-      saw_rect := true
-    | Labeled s ->
-      ignore (String.length s);
-      saw_labeled := true
-    | Dot -> saw_dot := true);
-  assert !saw_circle;
-  assert !saw_rect;
-  assert !saw_labeled;
-  assert !saw_dot
+let saw_circle = ref false
+let saw_rect = ref false
+let saw_labeled = ref false
+let saw_dot = ref false
+
+let%hegel_test test_shape_all_variants tc =
+  let s = shape_generator tc in
+  match s with
+  | Circle r ->
+    assert (Float.is_finite r);
+    saw_circle := true
+  | Rect (w, h) ->
+    ignore (w + h);
+    saw_rect := true
+  | Labeled s ->
+    ignore (String.length s);
+    saw_labeled := true
+  | Dot -> saw_dot := true
+[@@settings Hegel.settings ~test_cases:100 ()]
 ;;
 
-(** Property: entity_generator produces entities with valid fields. *)
-let test_entity_valid () =
-  let saw_tagged = ref false in
-  let saw_untagged = ref false in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
-    let e = entity_generator tc in
-    ignore (String.length e.name);
-    ignore e.active;
-    match e.tag with
-    | Some _ -> saw_tagged := true
-    | None -> saw_untagged := true);
-  assert !saw_tagged;
-  assert !saw_untagged
+let saw_tagged = ref false
+let saw_untagged = ref false
+
+let%hegel_test test_entity_valid tc =
+  let e = entity_generator tc in
+  ignore (String.length e.name);
+  ignore e.active;
+  match e.tag with
+  | Some _ -> saw_tagged := true
+  | None -> saw_untagged := true
+[@@settings Hegel.settings ~test_cases:50 ()]
 ;;
 
 let () =
@@ -100,10 +95,13 @@ let () =
   test_point_distance_nonnegative ();
   Printf.printf "  point_distance_nonnegative: OK\n%!";
   test_color_all_variants ();
+  assert (Hashtbl.length saw_colors = 3);
   Printf.printf "  color_all_variants: OK\n%!";
   test_shape_all_variants ();
+  assert (!saw_circle && !saw_rect && !saw_labeled && !saw_dot);
   Printf.printf "  shape_all_variants: OK\n%!";
   test_entity_valid ();
+  assert (!saw_tagged && !saw_untagged);
   Printf.printf "  entity_valid: OK\n%!";
   Printf.printf "All derived-type tests passed.\n%!"
 ;;

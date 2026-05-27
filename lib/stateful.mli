@@ -24,8 +24,8 @@
           Client.assume tc (not (List.is_empty stack));
           List.tl stack)
 
-    let test_integer_stack () =
-      run_hegel_test (fun tc -> Stateful.run ~init:[] ~rules:[ push; pop ] tc)
+    let%hegel_test test_integer_stack tc =
+      Stateful.run ~init:[] ~rules:[ push; pop ] tc
     ]} *)
 
 module Variables : sig
