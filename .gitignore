@@ -27,4 +27,5 @@ _coverage/
 *.o
 *.a
 ppx_hegel_generator.opam
+ppx_hegel_test.opam
 .hegelator/
