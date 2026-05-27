@@ -21,6 +21,25 @@
   (generate_runner
    (echo "let () = Hegel_test_runtime.test_main ();;"))))
 
+; Opt-in expect-style backend variant. A library using
+;   (inline_tests (backend ppx_hegel_test.expect))
+; gets the same PPX expansion plus dune's auto-generated [(diff?)] rules
+; for [<source>.ml.corrected] siblings — so [dune promote] applies the
+; recorded blob list without per-test-file configuration. The default
+; backend (ppx_hegel_test, above) does not pull in ppx_inline_test.
+
+(library
+ (name ppx_hegel_test_expect)
+ (public_name ppx_hegel_test.expect)
+ (kind ppx_rewriter)
+ (libraries ppxlib)
+ (modules)
+ (ppx_runtime_libraries hegel.test_runtime_expect)
+ (inline_tests.backend
+  (runner_libraries hegel.test_runtime_expect)
+  (flags :standard)
+  (extends ppx_inline_test)))
+
 ; Select the ppx_compat implementation based on whether we are building on
 ; OxCaml (ppxlib AST has labeled tuples and constructor modalities) or
 ; standard OCaml.

@@ -48,6 +48,53 @@ let extract_settings_attr (attrs : attributes) : expression option =
     attrs
 ;;
 
+(** [parse_string_list e] returns the list of literal strings carried by
+    [e] when [e] has the shape [[ "..."; "..."; ... ]], else raises a
+    located error pointing at the offending sub-expression. *)
+let rec parse_string_list (e : expression) : string list =
+  match e.pexp_desc with
+  | Pexp_construct ({ txt = Lident "[]"; _ }, None) -> []
+  | Pexp_construct ({ txt = Lident "::"; _ }, Some payload) ->
+    (match payload.pexp_desc with
+     | Pexp_tuple [ head; tail ] ->
+       let head_str =
+         match head.pexp_desc with
+         | Pexp_constant (Pconst_string (s, _, _)) -> s
+         | _ ->
+           Location.raise_errorf
+             ~loc:head.pexp_loc
+             "ppx_hegel_test: [@@blobs ...] elements must be string literals"
+       in
+       head_str :: parse_string_list tail
+     | _ ->
+       Location.raise_errorf
+         ~loc:e.pexp_loc
+         "ppx_hegel_test: malformed [@@blobs ...] list payload")
+  | _ ->
+    Location.raise_errorf
+      ~loc:e.pexp_loc
+      "ppx_hegel_test: [@@blobs ...] must carry a list literal of string literals"
+;;
+
+(** [extract_blobs_attr attrs] returns the parsed string list and the
+    payload expression's source location when a [[@@blobs ...]] attribute
+    is present, else [None]. *)
+let extract_blobs_attr (attrs : attributes) : (string list * Ppxlib.Location.t) option =
+  List.find_map
+    (fun (attr : attribute) ->
+       if String.equal attr.attr_name.txt "blobs"
+       then (
+         match attr.attr_payload with
+         | PStr [ { pstr_desc = Pstr_eval (e, _); _ } ] ->
+           Some (parse_string_list e, e.pexp_loc)
+         | _ ->
+           Location.raise_errorf
+             ~loc:attr.attr_loc
+             "ppx_hegel_test: [@@blobs ...] must carry a list literal")
+       else None)
+    attrs
+;;
+
 (** [extract_function_name pat] returns the name bound by [pat] if [pat] is a
     simple variable, else raises. *)
 let extract_function_name (pat : pattern) : string =
@@ -72,30 +119,49 @@ let build_location_record ~loc ~function_name : expression =
     }]
 ;;
 
-(** [build_items ~loc ~function_name ~settings_expr ~body_fn] returns the
-    pair of structure items the expander splices in:
+(** [build_blobs_expr ~loc ~payload_loc parsed] returns an expression of
+    type [Hegel.Blobs.t] populated from the parsed attribute payload and
+    the byte offsets of [payload_loc] in the source file. *)
+let build_blobs_expr ~loc ~payload_loc parsed : expression =
+  let file_str = payload_loc.loc_start.pos_fname in
+  let payload_start = payload_loc.loc_start.pos_cnum in
+  let payload_end = payload_loc.loc_end.pos_cnum in
+  let elements = List.map (fun s -> Ast_builder.Default.estring ~loc s) parsed in
+  let recorded_e = Ast_builder.Default.elist ~loc elements in
+  [%expr
+    { Hegel.Blobs.recorded = [%e recorded_e]
+    ; file = [%e Ast_builder.Default.estring ~loc file_str]
+    ; payload_start = [%e Ast_builder.Default.eint ~loc payload_start]
+    ; payload_end = [%e Ast_builder.Default.eint ~loc payload_end]
+    }]
+;;
+
+(** [build_items ~loc ~function_name ~settings_expr ~blobs_expr ~body_fn]
+    returns the pair of structure items the expander splices in:
 
     {[
       let function_name () =
-        Hegel.Session.run_hegel_test [?settings] location body_fn
+        Hegel.Session.run_hegel_test [?settings] [?blobs] location body_fn
       ;;
 
       let () =
         Hegel_test_runtime.register ~name:.. ~file:.. ~line:.. function_name
     ]} *)
-let build_items ~loc ~function_name ~settings_expr ~body_fn : structure_item list =
+let build_items ~loc ~function_name ~settings_expr ~blobs_expr ~body_fn
+  : structure_item list
+  =
   let location_record = build_location_record ~loc ~function_name in
-  let call =
+  let base_call =
     match settings_expr with
     | Some s ->
       [%expr
-        Hegel.Session.run_hegel_test
-          ~settings:[%e s]
-          ~test_location:[%e location_record]
-          [%e body_fn]]
-    | None ->
-      [%expr
-        Hegel.Session.run_hegel_test ~test_location:[%e location_record] [%e body_fn]]
+        Hegel.Session.run_hegel_test ~settings:[%e s] ~test_location:[%e location_record]]
+    | None -> [%expr Hegel.Session.run_hegel_test ~test_location:[%e location_record]]
+  in
+  let call =
+    match blobs_expr with
+    | Some b -> [%expr [%e base_call] ~blobs:[%e b] [%e body_fn]]
+    | None -> [%expr [%e base_call] [%e body_fn]]
   in
   let pat = Ast_builder.Default.pvar ~loc function_name in
   let definition = [%stri let [%p pat] = fun () -> [%e call]] in
@@ -120,10 +186,15 @@ let build_items ~loc ~function_name ~settings_expr ~body_fn : structure_item lis
 let expand_value_binding ~loc (vb : value_binding) : structure_item list =
   let function_name = extract_function_name vb.pvb_pat in
   let settings_expr = extract_settings_attr vb.pvb_attributes in
+  let blobs_expr =
+    match extract_blobs_attr vb.pvb_attributes with
+    | None -> None
+    | Some (parsed, payload_loc) -> Some (build_blobs_expr ~loc ~payload_loc parsed)
+  in
   (* The body of [let%hegel_test name <args> = expr] is parsed as
      [let name = <args -> expr>]. We pass that lambda as the [test_fn] to
      [Hegel.Session.run_hegel_test]. *)
-  build_items ~loc ~function_name ~settings_expr ~body_fn:vb.pvb_expr
+  build_items ~loc ~function_name ~settings_expr ~blobs_expr ~body_fn:vb.pvb_expr
 ;;
 
 (** The [hegel_test] extension is attached to [structure_item] (top-level

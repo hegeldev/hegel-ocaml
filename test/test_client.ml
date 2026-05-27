@@ -1793,6 +1793,160 @@ let test_session_start_and_run () =
     ignore (Cbor_helpers.extract_bool v : bool))
 ;;
 
+(* ---- failure_blob / failure_blobs branches ---- *)
+
+(** Test: ~failure_blob arg is sent through as a Bytes field on the run_test
+    command map. *)
+let test_run_test_failure_blob_field () =
+  let observed = ref None in
+  with_fake_server
+    (fun peer_conn ->
+       let ctrl = control_stream peer_conn in
+       let msg_id, msg = receive_request ctrl () in
+       let pairs = Cbor_helpers.extract_dict msg in
+       observed := Some (List.Assoc.find pairs ~equal:Poly.( = ) (`Text "failure_blob"));
+       let test_ch_id =
+         Int32.of_int_exn
+           (Cbor_helpers.extract_int
+              (List.Assoc.find_exn pairs ~equal:Poly.( = ) (`Text "stream_id")))
+       in
+       send_response_value ctrl msg_id `Null;
+       let test_ch = connect_stream peer_conn test_ch_id ~role:"Test" () in
+       send_test_done test_ch [ `Text "interesting_test_cases", `Int 0 ])
+    (fun client ->
+       run_test
+         client
+         ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+         ~failure_blob:"ZmFpbHVyZQ=="
+         (fun _tc -> ()));
+  match !observed with
+  | Some (Some (`Bytes b)) ->
+    Alcotest.(check string) "failure_blob sent as bytes" "ZmFpbHVyZQ==" b
+  | _ -> Alcotest.fail "expected failure_blob field on run_test command"
+;;
+
+(** [blobs_fixture ~dir ~name] creates a fixture source file at [dir/name]
+    with a payload range [[]] and returns a [Blobs.t] addressing it. *)
+let blobs_fixture ~dir ~name =
+  let prefix = "[@@blobs " in
+  let suffix = "]" in
+  let contents = prefix ^ "[]" ^ suffix in
+  let path = Filename.concat dir name in
+  Out_channel.write_all path ~data:contents;
+  let payload_start = String.length prefix in
+  let payload_end = payload_start + 2 in
+  { Hegel.Blobs.recorded = []; file = path; payload_start; payload_end }
+;;
+
+(** Test: record_blobs_to writes a .corrected sibling when the server
+    reports a non-empty failure_blobs array on a failing run. *)
+let test_run_test_record_blobs_to_writes_corrected () =
+  Test_helpers.with_tempdir ~prefix:"/tmp/hegel-client-record-" ~f:(fun dir ->
+    let target = blobs_fixture ~dir ~name:"foo.ml" in
+    let raised = ref false in
+    with_fake_server
+      (fun peer_conn ->
+         let _ctrl, test_ch = accept_run_test peer_conn in
+         send_test_done
+           test_ch
+           [ `Text "interesting_test_cases", `Int 0
+           ; `Text "passed", `Bool false
+           ; `Text "failure_blobs", `Array [ `Bytes "AAAA"; `Bytes "BBBB" ]
+           ])
+      (fun client ->
+         try
+           run_test
+             client
+             ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+             ~record_blobs_to:target
+             (fun _tc -> ())
+         with
+         | Failure _ -> raised := true);
+    let corrected = In_channel.read_all (target.file ^ ".corrected") in
+    Alcotest.(check string)
+      "corrected spliced with both blobs"
+      "[@@blobs [ \"AAAA\"; \"BBBB\" ]]"
+      corrected;
+    Alcotest.(check bool) "raised after recording" true !raised)
+;;
+
+(** Test: record_blobs_to does NOT write a .corrected when failure_blobs is
+    missing/empty (i.e. no failure to record). *)
+let test_run_test_record_blobs_to_skips_when_empty () =
+  Test_helpers.with_tempdir ~prefix:"/tmp/hegel-client-record-skip-" ~f:(fun dir ->
+    let target = blobs_fixture ~dir ~name:"foo.ml" in
+    with_fake_server
+      (fun peer_conn ->
+         let _ctrl, test_ch = accept_run_test peer_conn in
+         send_test_done
+           test_ch
+           [ `Text "interesting_test_cases", `Int 0; `Text "passed", `Bool true ])
+      (fun client ->
+         run_test
+           client
+           ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+           ~record_blobs_to:target
+           (fun _tc -> ()));
+    Alcotest.(check bool)
+      "no .corrected when failure_blobs empty"
+      false
+      (Stdlib.Sys.file_exists (target.file ^ ".corrected")))
+;;
+
+(** Test: ~failure_blob rejected up front in Single_test_case mode. *)
+let test_failure_blob_in_single_mode_rejected () =
+  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
+  let client_conn = Test_helpers.make_connection s1 ~name:"Client" () in
+  let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
+  let t_hs = Thread.create Test_helpers.handshake_via_stream peer_conn in
+  let client = create_client client_conn in
+  Thread.join t_hs;
+  let raised_msg = ref "" in
+  (try
+     run_test
+       client
+       ~settings:(Client.default_settings () |> Client.with_mode Client.Single_test_case)
+       ~failure_blob:"xx"
+       (fun _tc -> ())
+   with
+   | Failure msg -> raised_msg := msg);
+  Alcotest.(check bool)
+    "rejected"
+    true
+    (contains_substring !raised_msg "failure_blob is not supported");
+  close client_conn;
+  close peer_conn
+;;
+
+(** Test: malformed failure_blobs array (non-Bytes element) raises Failure. *)
+let test_failure_blobs_bad_element () =
+  Test_helpers.with_tempdir ~prefix:"/tmp/hegel-client-badblob-" ~f:(fun dir ->
+    let target = blobs_fixture ~dir ~name:"foo.ml" in
+    let raised_msg = ref "" in
+    with_fake_server
+      (fun peer_conn ->
+         let _ctrl, test_ch = accept_run_test peer_conn in
+         send_test_done
+           test_ch
+           [ `Text "interesting_test_cases", `Int 0
+           ; `Text "passed", `Bool false
+           ; `Text "failure_blobs", `Array [ `Text "not-bytes" ]
+           ])
+      (fun client ->
+         try
+           run_test
+             client
+             ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+             ~record_blobs_to:target
+             (fun _tc -> ())
+         with
+         | Failure msg -> raised_msg := msg);
+    Alcotest.(check bool)
+      "raised on non-Bytes element"
+      true
+      (contains_substring !raised_msg "non-bytes element in failure_blobs"))
+;;
+
 let tests =
   [ (* Unit tests *)
     Alcotest.test_case "assume true" `Quick test_assume_true
@@ -1984,5 +2138,23 @@ let tests =
   ; Alcotest.test_case "stop test on mark complete" `Quick test_stop_test_on_mark_complete
   ; Alcotest.test_case "error response" `Quick test_error_response
   ; Alcotest.test_case "empty test" `Quick test_empty_test
+  ; (* failure_blob / failure_blobs *)
+    Alcotest.test_case
+      "failure_blob field sent on wire"
+      `Quick
+      test_run_test_failure_blob_field
+  ; Alcotest.test_case
+      "record_blobs_to writes .corrected"
+      `Quick
+      test_run_test_record_blobs_to_writes_corrected
+  ; Alcotest.test_case
+      "record_blobs_to skipped on empty"
+      `Quick
+      test_run_test_record_blobs_to_skips_when_empty
+  ; Alcotest.test_case
+      "failure_blob rejected in Single_test_case"
+      `Quick
+      test_failure_blob_in_single_mode_rejected
+  ; Alcotest.test_case "failure_blobs bad element" `Quick test_failure_blobs_bad_element
   ]
 ;;

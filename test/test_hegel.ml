@@ -33,5 +33,6 @@ let () =
     ; "single_test_case", Test_single_test_case.tests
     ; "antithesis", Test_antithesis.tests
     ; "hegel_test_runtime", Test_hegel_test_runtime.tests
+    ; "blobs", Test_blobs.suite
     ]
 ;;

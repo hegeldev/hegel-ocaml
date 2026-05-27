@@ -245,32 +245,71 @@ let start session =
           Stdlib.at_exit (fun () -> cleanup session))))
 ;;
 
-(** [run_hegel_test ?settings ?test_location test_fn] runs a property test
-    using the shared hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is set,
-    creates a disposable session so the test server gets a fresh subprocess
-    with the right env var. Uses {!Client.default_settings} when [settings]
-    is not provided.
-
-    @param test_location
-      forwarded to {!Client.run_test} for the Antithesis integration.
-      Supplied automatically by the [let%hegel_test] PPX. When omitted, no
-      Antithesis assertion is emitted. *)
-let run_hegel_test ?(settings = Client.default_settings ()) ?test_location test_fn =
+(** [client_of_session ()] returns the live client of the session to use
+    for a given call, choosing a disposable session when
+    [HEGEL_PROTOCOL_TEST_MODE] is set and the global session otherwise.
+    Returns the client and a cleanup thunk to run when the call is done. *)
+let client_of_session () =
   match Sys.getenv "HEGEL_PROTOCOL_TEST_MODE" with
   | Some mode when not (String.is_empty mode) ->
     let session =
       { process = None; connection = None; client = None; lock = Mutex.create () }
     in
     start session;
-    Exn.protect
-      ~finally:(fun () -> cleanup session)
-      ~f:(fun () ->
-        Client.run_test (Option.value_exn session.client) ~settings ?test_location test_fn)
+    Option.value_exn session.client, fun () -> cleanup session
   | _ ->
     start global_session;
-    Client.run_test
-      (Option.value_exn global_session.client)
-      ~settings
-      ?test_location
-      test_fn
+    Option.value_exn global_session.client, fun () -> ()
+;;
+
+(** [run_in_session f] resolves the appropriate session and runs [f client]
+    inside an [Exn.protect] so the disposable session (if any) is cleaned
+    up on both normal return and exception. *)
+let run_in_session f =
+  let client, cleanup_fn = client_of_session () in
+  Exn.protect ~finally:cleanup_fn ~f:(fun () -> f client)
+;;
+
+(** [stale_blob_error blob] is the [Failure] raised when a recorded blob no
+    longer reproduces the original failure. *)
+let stale_blob_error blob =
+  Failure
+    (sprintf
+       "Failure blob did not cause a failure: %s\n\
+        The recorded blob no longer reproduces the original failure. Remove it from \
+        [@@blobs ...] if the fix is intentional."
+       blob)
+;;
+
+(** [run_hegel_test ?settings ?test_location ?blobs test_fn] runs a property
+    test using the shared hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is
+    set, creates a disposable session so the test server gets a fresh
+    subprocess with the right env var. Uses {!Client.default_settings} when
+    [settings] is not provided.
+
+    @param test_location
+      forwarded to {!Client.run_test} for the Antithesis integration.
+      Supplied automatically by the [let%hegel_test] PPX. When omitted, no
+      Antithesis assertion is emitted.
+    @param blobs
+      when [Some t] with [t.recorded = []], records new failure blobs in
+      [<t.file>.corrected] if the test fails. When [Some t] with a
+      non-empty [t.recorded], replays each recorded blob: passes the test
+      if every blob still reproduces a failure, otherwise raises
+      [Failure _] naming the first stale blob. *)
+let run_hegel_test ?(settings = Client.default_settings ()) ?test_location ?blobs test_fn =
+  match blobs with
+  | None ->
+    run_in_session (fun client -> Client.run_test client ~settings ?test_location test_fn)
+  | Some ({ Blobs.recorded = []; _ } as b) ->
+    run_in_session (fun client ->
+      Client.run_test client ~settings ?test_location ~record_blobs_to:b test_fn)
+  | Some { Blobs.recorded; _ } ->
+    run_in_session (fun client ->
+      List.iter recorded ~f:(fun blob ->
+        match
+          Client.run_test client ~settings ?test_location ~failure_blob:blob test_fn
+        with
+        | () -> raise (stale_blob_error blob)
+        | exception _ -> ()))
 ;;

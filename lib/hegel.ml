@@ -31,6 +31,9 @@ module Stateful = Stateful
 (** Antithesis integration. *)
 module Antithesis = Antithesis
 
+(** Source-file splicing for [[@@blobs]] failure-blob recording. *)
+module Blobs = Blobs
+
 (** {2 Convenience re-exports} *)
 
 (** [assume tc condition] rejects the current test case if [condition] is

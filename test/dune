@@ -30,7 +30,8 @@
   test_stateful
   test_single_test_case
   test_antithesis
-  test_hegel_test_runtime)
+  test_hegel_test_runtime
+  test_blobs)
  (libraries
   hegel
   hegel_test_runtime
@@ -63,5 +64,19 @@
  (name test_ppx_hegel_test)
  (modules test_ppx_hegel_test)
  (libraries hegel alcotest core core_unix threads.posix yojson)
+ (preprocess
+  (pps ppx_js_style ppx_hegel_test -- -allow-unannotated-ignores)))
+
+; Smoke test for the opt-in ppx_hegel_test.expect backend. Lives in its
+; own library stanza because (inline_tests ...) requires a library, not a
+; test executable. The library carries no public modules and is exercised
+; entirely through `dune runtest`.
+
+(library
+ (name test_expect_backend_smoke)
+ (modules test_expect_backend_smoke)
+ (libraries hegel)
+ (inline_tests
+  (backend ppx_hegel_test.expect))
  (preprocess
   (pps ppx_js_style ppx_hegel_test -- -allow-unannotated-ignores)))
