@@ -270,26 +270,31 @@ let run_in_session f =
   Exn.protect ~finally:cleanup_fn ~f:(fun () -> f client)
 ;;
 
-(** [run_hegel_test ?settings ?test_location ?blobs test_fn] runs a property
-    test using the shared hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is
-    set, creates a disposable session so the test server gets a fresh
-    subprocess with the right env var. Uses {!Client.default_settings} when
-    [settings] is not provided.
+(** [run_hegel_test ?settings ?test_location ?failure_blobs test_fn] runs
+    a property test using the shared hegel process. When
+    [HEGEL_PROTOCOL_TEST_MODE] is set, creates a disposable session so
+    the test server gets a fresh subprocess with the right env var.
+    Uses {!Client.default_settings} when [settings] is not provided.
 
     @param test_location
       forwarded to {!Client.run_test} for the Antithesis integration.
       Supplied automatically by the [let%hegel_test] PPX. When omitted, no
       Antithesis assertion is emitted.
-    @param blobs
-      drives the [[@@blobs ...]] failure-blob workflow. When [Some []] the
+    @param failure_blobs
+      drives the [[@@failure_blobs ...]] workflow. When [Some []] the
       test runs normally and any server-reported failure blob is printed
       to stdout on failure (recording mode). When [Some (_ :: _)] each
       recorded blob is replayed against the server: a blob that still
       reproduces the failure re-raises the original exception (with a
       one-line note on stderr); a blob that no longer reproduces raises
       [Failure] flagging the stale entry. *)
-let run_hegel_test ?(settings = Client.default_settings ()) ?test_location ?blobs test_fn =
-  match blobs with
+let run_hegel_test
+      ?(settings = Client.default_settings ())
+      ?test_location
+      ?failure_blobs
+      test_fn
+  =
+  match failure_blobs with
   | None ->
     run_in_session (fun client -> Client.run_test client ~settings ?test_location test_fn)
   | Some [] ->

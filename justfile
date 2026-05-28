@@ -12,17 +12,17 @@ check-tests:
       test/test_hegel.exe \
       test/test_ppx_derive.exe \
       test/test_ppx_hegel_test.exe \
-      test/.test_blobs_record.inline-tests/inline-test-runner.exe
+      test/.test_failure_blobs_record.inline-tests/inline-test-runner.exe
     export BISECT_FILE="$PWD/_build/default/test/bisect"
     ./_build/default/test/test_ppx_derive.exe
     ./_build/default/test/test_ppx_hegel_test.exe
     ./_build/default/test/test_hegel.exe
     # ppx_expect resolves [%expect] source paths relative to the
     # initial cwd, so run the inline-test runner from test/ where
-    # [test_blobs_record.ml] sits directly.
+    # [test_failure_blobs_record.ml] sits directly.
     (cd test && \
-      "$PWD/../_build/default/test/.test_blobs_record.inline-tests/inline-test-runner.exe" \
-      inline-test-runner test_blobs_record)
+      "$PWD/../_build/default/test/.test_failure_blobs_record.inline-tests/inline-test-runner.exe" \
+      inline-test-runner test_failure_blobs_record)
     python3 scripts/check-coverage.py
 
 format:

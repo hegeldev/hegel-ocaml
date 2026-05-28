@@ -58,29 +58,29 @@ val cleanup : hegel_session -> unit
 *)
 val start : hegel_session -> unit
 
-(** [run_hegel_test ?settings ?test_location ?blobs test_fn] runs a property
-    test using the shared hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is
-    set, creates a disposable session so the test server gets a fresh
-    subprocess with the right env var. Uses {!Client.default_settings} when
-    [settings] is not provided.
+(** [run_hegel_test ?settings ?test_location ?failure_blobs test_fn] runs
+    a property test using the shared hegel process. When
+    [HEGEL_PROTOCOL_TEST_MODE] is set, creates a disposable session so
+    the test server gets a fresh subprocess with the right env var.
+    Uses {!Client.default_settings} when [settings] is not provided.
 
     @param test_location
       forwarded to {!Client.run_test} for the Antithesis integration.
       Supplied automatically by the [let%hegel_test] PPX. When omitted, no
       Antithesis assertion is emitted.
-    @param blobs
-      drives the [[@@blobs ...]] failure-blob workflow. Supplied
-      automatically by the [let%hegel_test] PPX when the attribute is
-      present. [Some []] enables recording mode: a failing test prints
-      the server-reported failure blob(s) to stdout so the user can
-      paste them back into the attribute. [Some (_ :: _)] enables
-      replay mode: each recorded blob is sent to the server in a
-      single-shot replay; a blob that still reproduces re-raises the
-      original exception, one that no longer reproduces raises [Failure]
+    @param failure_blobs
+      drives the [[@@failure_blobs ...]] workflow. Supplied automatically
+      by the [let%hegel_test] PPX when the attribute is present.
+      [Some []] enables recording mode: a failing test prints the
+      server-reported failure blob(s) to stdout so the user can paste
+      them back into the attribute. [Some (_ :: _)] enables replay
+      mode: each recorded blob is sent to the server in a single-shot
+      replay; a blob that still reproduces re-raises the original
+      exception, one that no longer reproduces raises [Failure]
       flagging the stale entry. *)
 val run_hegel_test
   :  ?settings:Client.settings
   -> ?test_location:Antithesis.test_location
-  -> ?blobs:string list
+  -> ?failure_blobs:string list
   -> (Client.test_case -> unit)
   -> unit

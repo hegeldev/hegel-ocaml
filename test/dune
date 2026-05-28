@@ -66,13 +66,13 @@
  (preprocess
   (pps ppx_js_style ppx_hegel_test -- -allow-unannotated-ignores)))
 
-; Snapshot tests for the [@@blobs []] recording flow. Uses
+; Snapshot tests for the [@@failure_blobs []] recording flow. Uses
 ; [let%expect_test] so the printed blob can be captured and compared
-; against a [%expect {| ... |}] snapshot 
+; against a [%expect {| ... |}] snapshot.
 
 (library
- (name test_blobs_record)
- (modules test_blobs_record)
+ (name test_failure_blobs_record)
+ (modules test_failure_blobs_record)
  (libraries hegel)
  (inline_tests
   (backend ppx_inline_test))

@@ -1,18 +1,18 @@
-(** Snapshot tests for the [@@blobs ...] recording and replay flows.
+(** Snapshot tests for the [@@failure_blobs ...] recording and replay flows.
 
     Uses [let%expect_test] so the printed blob can be captured and
     compared against a [%expect {| ... |}] snapshot — no hand-rolled
     stdout redirection needed. If hegel's server is upgraded and the
     shrunk blob changes, accept the new snapshot with [dune promote]. *)
 
-(* Recording mode: an empty [~blobs:[]] argument enables capture. With
-   a fixed seed the server's exploration is deterministic, so the
+(* Recording mode: an empty [~failure_blobs:[]] argument enables capture.
+   With a fixed seed the server's exploration is deterministic, so the
    printed blob is stable. *)
 let%expect_test "recording mode prints failure blob on test failure" =
   (try
      Hegel.Session.run_hegel_test
        ~settings:(Hegel.settings ~test_cases:50 ~seed:0 ())
-       ~blobs:[]
+       ~failure_blobs:[]
        (fun tc ->
           let _ = Hegel.draw tc (Hegel.Generators.booleans ()) in
           failwith "deliberate failure")
@@ -20,13 +20,12 @@ let%expect_test "recording mode prints failure blob on test failure" =
    | _ -> ());
   [%expect
     {|
-    [hegel] failure blob(s) recorded:
-      - "AAA="
-    [hegel] to replay, add to your test: [@@blobs [ "AAA=" ]]
+    [hegel] Failure blob(s) recorded:
+    [hegel] To replay, add to your test: [@@failure_blobs [ "AAA=" ]]
     |}]
 ;;
 
-(* Replay mode: a non-empty [~blobs:[...]] list re-runs each blob
+(* Replay mode: a non-empty [~failure_blobs:[...]] list re-runs each blob
    through the server. A blob that still reproduces the failure
    re-raises the original exception, with a one-line note on stderr —
    captured here too. *)
@@ -35,7 +34,7 @@ let%expect_test "replay mode reproduces the original failure" =
     try
       Hegel.Session.run_hegel_test
         ~settings:(Hegel.settings ~test_cases:50 ~seed:0 ())
-        ~blobs:[ "AAA=" ]
+        ~failure_blobs:[ "AAA=" ]
         (fun tc ->
            let _ = Hegel.draw tc (Hegel.Generators.booleans ()) in
            failwith "deliberate failure");
@@ -60,7 +59,7 @@ let%expect_test "replay mode raises on stale blob" =
     try
       Hegel.Session.run_hegel_test
         ~settings:(Hegel.settings ~test_cases:50 ~seed:0 ())
-        ~blobs:[ "AAA=" ]
+        ~failure_blobs:[ "AAA=" ]
         (fun _tc -> ());
       "unexpectedly succeeded"
     with

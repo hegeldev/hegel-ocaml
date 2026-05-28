@@ -373,7 +373,7 @@ let create_client connection =
     @param record_failure_blobs
       when [true] (default [false]), prints any server-reported
       [failure_blobs] to stdout after a failing test so the user can
-      copy-paste them into a [[@@blobs [...]]] attribute on the test for
+      copy-paste them into a [[@@failure_blobs [...]]] attribute on the test for
       future replay. *)
 let run_test
       client
@@ -612,7 +612,7 @@ let run_test
       in
       (* When recording is requested and the server reported any
          [failure_blobs], print them to stdout so the user can paste
-         them into a [[@@blobs [...]]] attribute. *)
+         them into a [[@@failure_blobs [...]]] attribute. *)
       if record_failure_blobs
       then (
         let blobs =
@@ -626,10 +626,9 @@ let run_test
         match blobs with
         | [] -> ()
         | _ ->
-          Stdlib.print_endline "[hegel] failure blob(s) recorded:";
-          List.iter blobs ~f:(fun b -> Printf.printf "  - %S\n" b);
+          Stdlib.print_endline "[hegel] Failure blob(s) recorded:";
           Printf.printf
-            "[hegel] to replay, add to your test: [@@blobs [ %s ]]\n%!"
+            "[hegel] To replay, add to your test: [@@failure_blobs [ %s ]]\n%!"
             (String.concat ~sep:"; " (List.map blobs ~f:(fun b -> Printf.sprintf "%S" b))));
       (* Receive a final-replay [test_case] event on [test_stream] and run it. *)
       let replay_test_case () =
