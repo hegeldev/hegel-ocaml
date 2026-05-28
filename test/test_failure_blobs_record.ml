@@ -19,10 +19,7 @@ let%expect_test "recording mode prints failure blob on test failure" =
    with
    | _ -> ());
   [%expect
-    {|
-    [hegel] Failure blob(s) recorded:
-    [hegel] To replay, add to your test: [@@failure_blobs [ "AAA=" ]]
-    |}]
+    {| [hegel] To replay the failure, add to your test: [@@failure_blobs [ "AAA=" ]] |}]
 ;;
 
 (* Replay mode: a non-empty [~failure_blobs:[...]] list re-runs each blob
@@ -46,7 +43,7 @@ let%expect_test "replay mode reproduces the original failure" =
   print_endline outcome;
   [%expect
     {|
-    Hegel: failure blob AAA= reproduced the original failure
+    [hegel] failure blob AAA= reproduced the original failure
     Failure("deliberate failure")
     |}]
 ;;
@@ -68,5 +65,5 @@ let%expect_test "replay mode raises on stale blob" =
   in
   print_endline outcome;
   [%expect
-    {| Failure("Hegel: failure blob AAA= did not reproduce the original failure") |}]
+    {| Failure("[hegel] failure blob AAA= did not reproduce the original failure") |}]
 ;;

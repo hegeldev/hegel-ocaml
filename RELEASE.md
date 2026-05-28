@@ -6,8 +6,7 @@ When a test fails, the following is outputted:
 ```
 <some exception here>
 ...
-[hegel] Failure blob(s) recorded:
-[hegel] to replay, add to your test: [@@failure_blobs [ "<blob string>"; ... ]]
+[hegel] To replay the failure, add to your test: [@@failure_blobs [ "<blob string>"; ... ]]
 ```
 
 To replay:

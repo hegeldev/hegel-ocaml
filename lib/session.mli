@@ -72,7 +72,7 @@ val start : hegel_session -> unit
       drives the [[@@failure_blobs ...]] workflow. Supplied automatically
       by the [let%hegel_test] PPX when the attribute is present.
       [Some []] enables recording mode: a failing test prints the
-      server-reported failure blob(s) to stdout so the user can paste
+      server-reported failure blob(s) to stderr so the user can paste
       them back into the attribute. [Some (_ :: _)] enables replay
       mode: each recorded blob is sent to the server in a single-shot
       replay; a blob that still reproduces re-raises the original

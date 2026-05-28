@@ -198,7 +198,7 @@ val create_client : Connection.connection -> client
       of running normal exploration. Only valid with [Test_run] mode.
     @param record_failure_blobs
       when [true] (default [false]), prints any server-reported
-      [failure_blobs] to stdout after a failing test so the user can
+      [failure_blobs] to stderr after a failing test so the user can
       copy-paste them into a [[@@failure_blobs [...]]] attribute on the test for
       future replay. *)
 val run_test

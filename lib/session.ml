@@ -283,7 +283,7 @@ let run_in_session f =
     @param failure_blobs
       drives the [[@@failure_blobs ...]] workflow. When [Some []] the
       test runs normally and any server-reported failure blob is printed
-      to stdout on failure (recording mode). When [Some (_ :: _)] each
+      to stderr on failure (recording mode). When [Some (_ :: _)] each
       recorded blob is replayed against the server: a blob that still
       reproduces the failure re-raises the original exception (with a
       one-line note on stderr); a blob that no longer reproduces raises
@@ -310,9 +310,9 @@ let run_hegel_test
           raise
             (Failure
                (sprintf
-                  "Hegel: failure blob %s did not reproduce the original failure"
+                  "[hegel] failure blob %s did not reproduce the original failure"
                   blob))
         | exception e ->
-          eprintf "Hegel: failure blob %s reproduced the original failure\n%!" blob;
+          eprintf "[hegel] failure blob %s reproduced the original failure\n%!" blob;
           raise e))
 ;;
