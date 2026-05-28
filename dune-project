@@ -44,6 +44,17 @@
   (odoc :with-doc)))
 
 (package
+ (name ppx_hegel_compat)
+ (synopsis "Internal ppxlib AST shim shared by Hegel's PPX packages")
+ (description
+  "Abstracts over the differences between standard OCaml's ppxlib AST and OxCaml's ppxlib AST (labeled tuples, constructor modalities) so the Hegel PPX deriver and test rewriter can share a single implementation. Not intended for direct use.")
+ (depends
+  (ocaml
+   (>= 5.2))
+  (ppxlib
+   (>= 0.28))))
+
+(package
  (name ppx_hegel_generator)
  (synopsis "PPX deriver for Hegel generator derivation")
  (description
@@ -55,6 +66,8 @@
    (>= 0.28))
   (ppx_js_style
    (>= v0.17))
+  (ppx_hegel_compat
+   (= :version))
   (hegel
    (= :version))))
 
@@ -70,5 +83,7 @@
    (>= 0.28))
   (ppx_js_style
    (>= v0.17))
+  (ppx_hegel_compat
+   (= :version))
   (hegel
    (= :version))))
