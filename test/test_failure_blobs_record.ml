@@ -1,51 +1,44 @@
-(** Snapshot tests for the [@@failure_blobs ...] recording and replay flows.
+(** Snapshot tests for the [@@failure_blobs ...] recording and replay flows. *)
 
-    Uses [let%expect_test] so the printed blob can be captured and
-    compared against a [%expect {| ... |}] snapshot — no hand-rolled
-    stdout redirection needed. If hegel's server is upgraded and the
-    shrunk blob changes, accept the new snapshot with [dune promote]. *)
-
-(* Recording mode: an empty [~failure_blobs:[]] argument enables capture.
-   With a fixed seed the server's exploration is deterministic, so the
-   printed blob is stable. *)
-let%expect_test "recording mode prints failure blob on test failure" =
-  (try
-     Hegel.Session.run_hegel_test
-       ~settings:(Hegel.settings ~test_cases:50 ~seed:0 ())
-       ~failure_blobs:[]
-       (fun tc ->
-          let _ = Hegel.draw tc (Hegel.Generators.booleans ()) in
-          failwith "deliberate failure")
-   with
-   | _ -> ());
-  [%expect
-    {| [hegel] To replay the failure, add to your test: [@@failure_blobs [ "AAA=" ]] |}]
+let prop tc =
+  if Hegel.draw tc (Hegel.Generators.booleans ()) then failwith "deliberate failure"
 ;;
 
-(* Replay mode: a non-empty [~failure_blobs:[...]] list re-runs each blob
-   through the server. A blob that still reproduces the failure
-   re-raises the original exception, with a one-line note on stderr —
-   captured here too. *)
-let%expect_test "replay mode reproduces the original failure" =
-  let outcome =
-    try
-      Hegel.Session.run_hegel_test
-        ~settings:(Hegel.settings ~test_cases:50 ~seed:0 ())
-        ~failure_blobs:[ "AAA=" ]
-        (fun tc ->
-           let _ = Hegel.draw tc (Hegel.Generators.booleans ()) in
-           failwith "deliberate failure");
-      "unexpectedly succeeded"
-    with
-    | Failure msg -> Printf.sprintf "Failure(%S)" msg
-    | e -> Printexc.to_string e
+let settings () = Hegel.settings ~test_cases:50 ~seed:0 ()
+
+let contains ~needle s =
+  let nl = String.length needle in
+  let sl = String.length s in
+  let rec go i =
+    i + nl <= sl && (String.equal (String.sub s i nl) needle || go (i + 1))
   in
-  print_endline outcome;
-  [%expect
-    {|
-    [hegel] failure blob AAA= reproduced the original failure
-    Failure("deliberate failure")
-    |}]
+  nl = 0 || go 0
+;;
+
+let extract_blob out =
+  let i = String.index out '"' in
+  let j = String.index_from out (i + 1) '"' in
+  String.sub out (i + 1) (j - i - 1)
+;;
+
+(* Round-trip: recording mode prints a blob on failure; that exact blob, fed
+   back through replay mode, must reproduce the original failure. *)
+let%expect_test "recording then replay round-trips the failure blob" =
+  (try Hegel.Session.run_hegel_test ~settings:(settings ()) ~failure_blobs:[] prop with
+   | _ -> ());
+  let recorded = [%expect.output] in
+  assert (contains ~needle:"[hegel] To replay the failure" recorded);
+  let blob = extract_blob recorded in
+  let reproduced =
+    try
+      Hegel.Session.run_hegel_test ~settings:(settings ()) ~failure_blobs:[ blob ] prop;
+      false
+    with
+    | _ -> true
+  in
+  assert reproduced;
+  let replay_out = [%expect.output] in
+  assert (contains ~needle:"reproduced the original failure" replay_out)
 ;;
 
 (* Replay mode with a blob whose failure no longer reproduces: should
@@ -55,7 +48,7 @@ let%expect_test "replay mode raises on stale blob" =
   let outcome =
     try
       Hegel.Session.run_hegel_test
-        ~settings:(Hegel.settings ~test_cases:50 ~seed:0 ())
+        ~settings:(settings ())
         ~failure_blobs:[ "AAA=" ]
         (fun _tc -> ());
       "unexpectedly succeeded"

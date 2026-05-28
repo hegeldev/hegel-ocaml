@@ -611,7 +611,7 @@ let run_test
           (List.Assoc.find_exn results ~equal:Poly.( = ) (`Text "interesting_test_cases"))
       in
       (* When recording is requested and the server reported any
-         [failure_blobs], print them to stdout so the user can paste
+         [failure_blobs], print them to stderr so the user can paste
          them into a [[@@failure_blobs [...]]] attribute. *)
       if record_failure_blobs
       then (
@@ -627,7 +627,8 @@ let run_test
         | [] -> ()
         | _ ->
           Printf.eprintf
-            "[hegel] To replay the failure, add to your test: [@@failure_blobs [ %s ]]\n%!"
+            "[hegel] To replay the failure, add to your test: [@@failure_blobs [ %s ]]\n\
+             %!"
             (String.concat ~sep:"; " (List.map blobs ~f:(fun b -> Printf.sprintf "%S" b))));
       (* Receive a final-replay [test_case] event on [test_stream] and run it. *)
       let replay_test_case () =

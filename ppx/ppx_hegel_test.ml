@@ -31,7 +31,7 @@
     The [@@settings ...] and [@@failure_blobs ...] attributes are both optional. The
     [@@failure_blobs ...] attribute drives the failure-blob workflow: an empty list
     [[@@failure_blobs []]] enables recording mode (a failure prints the captured
-    blob to stdout for copy-paste); a non-empty list switches to replay mode
+    blob to stderr for copy-paste); a non-empty list switches to replay mode
     (each blob is replayed through the server). See {!Hegel.Session.run_hegel_test}. *)
 
 open Ppxlib
