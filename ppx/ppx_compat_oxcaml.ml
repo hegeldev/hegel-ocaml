@@ -10,3 +10,9 @@ let extract_constr_tuple_types = function
   | Pcstr_tuple args -> Some (List.map (fun arg -> arg.pca_type) args)
   | Pcstr_record _ -> None
 ;;
+
+let extract_expr_tuple e =
+  match e.pexp_desc with
+  | Pexp_tuple labeled_es -> Some (List.map snd labeled_es)
+  | _ -> None
+;;

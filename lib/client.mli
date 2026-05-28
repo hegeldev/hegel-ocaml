@@ -185,17 +185,28 @@ type client =
     connection must not yet have had its handshake performed. *)
 val create_client : Connection.connection -> client
 
-(** [run_test client ~settings ?test_location ?database_key test_fn] runs a
-    property test using the given settings.
+(** [run_test client ~settings ?test_location ?database_key ?failure_blob
+      ?record_failure_blobs test_fn] runs a property test using the given
+    settings.
 
     @param test_location
       source location of the test, used by the Antithesis integration.
       Provided automatically by the [let%hegel_test] PPX. When omitted, no
-      Antithesis assertion is emitted. *)
+      Antithesis assertion is emitted.
+    @param failure_blob
+      when [Some b], replays the recorded failure encoded in [b] instead
+      of running normal exploration. Only valid with [Test_run] mode.
+    @param record_failure_blobs
+      when [true] (default [false]), prints any server-reported
+      [failure_blobs] to stdout after a failing test so the user can
+      copy-paste them into a [[@@blobs [...]]] attribute on the test for
+      future replay. *)
 val run_test
   :  client
   -> settings:settings
   -> ?test_location:Antithesis.test_location
   -> ?database_key:string
+  -> ?failure_blob:string
+  -> ?record_failure_blobs:bool
   -> (test_case -> unit)
   -> unit

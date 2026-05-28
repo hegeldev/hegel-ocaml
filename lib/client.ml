@@ -355,18 +355,41 @@ let create_client connection =
   { connection; control = control_stream connection; lock = Mutex.create () }
 ;;
 
-(** [run_test client ~settings ?test_location ?database_key test_fn] runs a
-    property test using the given settings.
+(** [run_test client ~settings ?test_location ?database_key ?failure_blob
+      ?record_failure_blobs test_fn] runs a property test using the given
+    settings.
 
     @param database_key
       optional key for persistent failure storage (internal use).
     @param test_location
       source location of the test, used by the Antithesis integration.
       Provided automatically by the [let%hegel_test] PPX. When omitted, no
-      Antithesis assertion is emitted. *)
-let run_test client ~(settings : settings) ?test_location ?database_key test_fn =
+      Antithesis assertion is emitted.
+    @param failure_blob
+      when [Some b], replays the recorded failure encoded in [b] instead
+      of running normal exploration. The server skips generation and
+      executes the test body once on the decoded choice sequence. Only
+      valid with [Test_run] mode.
+    @param record_failure_blobs
+      when [true] (default [false]), prints any server-reported
+      [failure_blobs] to stdout after a failing test so the user can
+      copy-paste them into a [[@@blobs [...]]] attribute on the test for
+      future replay. *)
+let run_test
+      client
+      ~(settings : settings)
+      ?test_location
+      ?database_key
+      ?failure_blob
+      ?(record_failure_blobs = false)
+      test_fn
+  =
   if Stdlib.Domain.DLS.get in_test_context
   then failwith "Cannot nest test cases - already inside a test case";
+  (match failure_blob, settings.mode with
+   | Some _, Single_test_case ->
+     failwith "failure_blob is not supported in Single_test_case mode"
+   | _ -> ());
   let test_stream = new_stream client.connection ~role:"Test" () in
   (* Runs a single test case on [stream]. Sets up thread-local state, calls
      [test_fn], reports status via mark_complete, and returns the captured
@@ -542,8 +565,18 @@ let run_test client ~(settings : settings) ?test_location ?database_key test_fn 
             , `Array (List.map phases ~f:(fun p -> `Text (phase_to_string p))) )
           ]
       in
+      let failure_blob_field =
+        match failure_blob with
+        | Some b -> [ `Text "failure_blob", `Bytes b ]
+        | None -> []
+      in
       send_run_command
-        (`Map (base_fields @ database_field @ suppress_field @ phases_field));
+        (`Map
+            (base_fields
+             @ database_field
+             @ suppress_field
+             @ phases_field
+             @ failure_blob_field));
       let on_test_case stream =
         let (_ : exn option) = run_test_case stream ~is_final:false in
         check_server_alive ()
@@ -577,6 +610,27 @@ let run_test client ~(settings : settings) ?test_location ?database_key test_fn 
         Cbor_helpers.extract_int
           (List.Assoc.find_exn results ~equal:Poly.( = ) (`Text "interesting_test_cases"))
       in
+      (* When recording is requested and the server reported any
+         [failure_blobs], print them to stdout so the user can paste
+         them into a [[@@blobs [...]]] attribute. *)
+      if record_failure_blobs
+      then (
+        let blobs =
+          match List.Assoc.find results ~equal:Poly.( = ) (`Text "failure_blobs") with
+          | Some (`Array items) ->
+            List.map items ~f:(function
+              | `Bytes b -> b
+              | _ -> failwith "Server returned non-bytes element in failure_blobs")
+          | _ -> failwith "Server did not return failure blobs"
+        in
+        match blobs with
+        | [] -> ()
+        | _ ->
+          Stdlib.print_endline "[hegel] failure blob(s) recorded:";
+          List.iter blobs ~f:(fun b -> Printf.printf "  - %S\n" b);
+          Printf.printf
+            "[hegel] to replay, add to your test: [@@blobs [ %s ]]\n%!"
+            (String.concat ~sep:"; " (List.map blobs ~f:(fun b -> Printf.sprintf "%S" b))));
       (* Receive a final-replay [test_case] event on [test_stream] and run it. *)
       let replay_test_case () =
         let message_id, message = receive_request test_stream () in

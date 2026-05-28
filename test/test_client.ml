@@ -618,6 +618,107 @@ let test_run_test_passed_false () =
        Alcotest.(check bool) "raised" true !raised)
 ;;
 
+(** Test: [~failure_blob] combined with [Single_test_case] mode raises
+    before any server interaction. *)
+let test_failure_blob_with_single_test_case_raises () =
+  with_fake_server
+    (fun _peer_conn -> ())
+    (fun client ->
+       let raised = ref false in
+       (try
+          run_test
+            client
+            ~settings:
+              (Client.default_settings () |> Client.with_mode Client.Single_test_case)
+            ~failure_blob:"blob"
+            (fun _tc -> ())
+        with
+        | Failure msg ->
+          raised := true;
+          Alcotest.(check bool)
+            "has 'failure_blob is not supported'"
+            true
+            (contains_substring msg "failure_blob is not supported"));
+       Alcotest.(check bool) "raised" true !raised)
+;;
+
+(** Test: [~record_failure_blobs:true] with the server omitting the
+    [failure_blobs] key is a wire-contract violation and raises. *)
+let test_record_failure_blobs_no_key_raises () =
+  with_fake_server
+    (fun peer_conn ->
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_test_done
+         test_ch
+         [ `Text "interesting_test_cases", `Int 0; `Text "passed", `Bool true ])
+    (fun client ->
+       let raised = ref false in
+       (try
+          run_test
+            client
+            ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+            ~record_failure_blobs:true
+            (fun _tc -> ())
+        with
+        | Failure msg ->
+          raised := true;
+          Alcotest.(check bool)
+            "has 'did not return failure blobs'"
+            true
+            (contains_substring msg "did not return failure blobs"));
+       Alcotest.(check bool) "raised" true !raised)
+;;
+
+(** Test: [~record_failure_blobs:true] with [failure_blobs] present but
+    empty array is a no-op (no print, no error). *)
+let test_record_failure_blobs_empty_array () =
+  with_fake_server
+    (fun peer_conn ->
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_test_done
+         test_ch
+         [ `Text "interesting_test_cases", `Int 0
+         ; `Text "passed", `Bool true
+         ; `Text "failure_blobs", `Array []
+         ])
+    (fun client ->
+       run_test
+         client
+         ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+         ~record_failure_blobs:true
+         (fun _tc -> ()))
+;;
+
+(** Test: [~record_failure_blobs:true] with a non-[Bytes] element in the
+    [failure_blobs] array raises a wire-contract violation. *)
+let test_record_failure_blobs_non_bytes_element () =
+  with_fake_server
+    (fun peer_conn ->
+       let _ctrl, test_ch = accept_run_test peer_conn in
+       send_test_done
+         test_ch
+         [ `Text "interesting_test_cases", `Int 0
+         ; `Text "passed", `Bool true
+         ; `Text "failure_blobs", `Array [ `Text "not bytes" ]
+         ])
+    (fun client ->
+       let raised = ref false in
+       (try
+          run_test
+            client
+            ~settings:(Client.default_settings () |> Client.with_test_cases 0)
+            ~record_failure_blobs:true
+            (fun _tc -> ())
+        with
+        | Failure msg ->
+          raised := true;
+          Alcotest.(check bool)
+            "has 'non-bytes element in failure_blobs'"
+            true
+            (contains_substring msg "non-bytes element in failure_blobs"));
+       Alcotest.(check bool) "raised" true !raised)
+;;
+
 (** Test: Single_test_case mode with multiple failing test_case events triggers
     the [Multiple failures] branch. *)
 let test_single_test_case_multiple_failures () =
@@ -1873,6 +1974,22 @@ let tests =
       test_run_test_health_check_failure
   ; Alcotest.test_case "run_test flaky" `Quick test_run_test_flaky
   ; Alcotest.test_case "run_test passed=false" `Quick test_run_test_passed_false
+  ; Alcotest.test_case
+      "failure_blob+Single_test_case raises"
+      `Quick
+      test_failure_blob_with_single_test_case_raises
+  ; Alcotest.test_case
+      "record_failure_blobs: no key raises"
+      `Quick
+      test_record_failure_blobs_no_key_raises
+  ; Alcotest.test_case
+      "record_failure_blobs: empty array is no-op"
+      `Quick
+      test_record_failure_blobs_empty_array
+  ; Alcotest.test_case
+      "record_failure_blobs: non-bytes element raises"
+      `Quick
+      test_record_failure_blobs_non_bytes_element
   ; Alcotest.test_case
       "single_test_case multiple failures"
       `Quick
