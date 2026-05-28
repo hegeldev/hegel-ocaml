@@ -14,6 +14,14 @@ Add `hegel` to your opam environment:
 opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
 ```
 
+The `let%hegel_test` extension used in this guide is provided by a
+separate opam package, `ppx_hegel_test`. Install it from the same
+repository:
+
+```bash
+opam pin add ppx_hegel_test "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
+```
+
 ## Write your first test
 
 You're now ready to write your first test. Add `hegel` to your dune library dependencies:

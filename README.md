@@ -10,6 +10,13 @@ Hegel is a property-based testing library for OCaml. Hegel is based on
 opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
 ```
 
+To use the `let%hegel_test` extension shown below, also install the PPX
+package.
+
+```bash
+opam pin add ppx_hegel_test "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
+```
+
 You will need [`uv`](https://docs.astral.sh/uv/) installed and on your PATH.
 
 ## Quick start
