@@ -55,8 +55,8 @@ let rec parse_string_list (e : expression) : string list =
   match e.pexp_desc with
   | Pexp_construct ({ txt = Lident "[]"; _ }, None) -> []
   | Pexp_construct ({ txt = Lident "::"; _ }, Some payload) ->
-    (match payload.pexp_desc with
-     | Pexp_tuple [ head; tail ] ->
+    (match Ppx_compat.extract_expr_tuple payload with
+     | Some [ head; tail ] ->
        let head_str =
          match head.pexp_desc with
          | Pexp_constant (Pconst_string (s, _, _)) -> s

@@ -1,9 +1,20 @@
+; Internal OCaml/OxCaml AST compatibility shim shared by the deriver and
+; the test rewriter. The accompanying [.mli] is checked in; the [.ml] is
+; selected by the rule at the bottom of this file based on the compiler
+; flavor.
+
+(library
+ (name ppx_compat)
+ (public_name ppx_hegel_generator.compat)
+ (libraries ppxlib)
+ (modules ppx_compat))
+
 (library
  (name ppx_hegel_generator)
  (public_name ppx_hegel_generator)
  (kind ppx_deriver)
- (libraries ppxlib)
- (modules ppx_hegel_generator ppx_compat)
+ (libraries ppxlib ppx_compat)
+ (modules ppx_hegel_generator)
  (preprocess
   (pps ppx_js_style ppxlib.metaquot)))
 
@@ -11,7 +22,7 @@
  (name ppx_hegel_test)
  (public_name ppx_hegel_test)
  (kind ppx_rewriter)
- (libraries ppxlib)
+ (libraries ppxlib ppx_compat)
  (modules ppx_hegel_test)
  (ppx_runtime_libraries hegel.test_runtime)
  (preprocess

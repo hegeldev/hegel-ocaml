@@ -15,3 +15,8 @@ val extract_tuple_types : core_type -> core_type list option
     [Pcstr_tuple], [None] if [Pcstr_record]. On OxCaml, extracts the core types
     from [constructor_argument] records. *)
 val extract_constr_tuple_types : constructor_arguments -> core_type list option
+
+(** [extract_expr_tuple e] returns [Some es] if [e] is a tuple expression,
+    [None] otherwise. On OxCaml, strips the optional labels from labeled
+    tuples. *)
+val extract_expr_tuple : expression -> expression list option
