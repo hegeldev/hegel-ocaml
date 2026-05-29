@@ -245,32 +245,83 @@ let start session =
           Stdlib.at_exit (fun () -> cleanup session))))
 ;;
 
-(** [run_hegel_test ?settings ?test_location test_fn] runs a property test
-    using the shared hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is set,
-    creates a disposable session so the test server gets a fresh subprocess
-    with the right env var. Uses {!Client.default_settings} when [settings]
-    is not provided.
-
-    @param test_location
-      forwarded to {!Client.run_test} for the Antithesis integration.
-      Supplied automatically by the [let%hegel_test] PPX. When omitted, no
-      Antithesis assertion is emitted. *)
-let run_hegel_test ?(settings = Client.default_settings ()) ?test_location test_fn =
+(** [client_of_session ()] returns the live client to use for a single
+    [run_hegel_test] call, choosing a disposable session when
+    [HEGEL_PROTOCOL_TEST_MODE] is set and the global session otherwise.
+    Returns the client and a cleanup thunk to run when the call is done. *)
+let client_of_session () =
   match Sys.getenv "HEGEL_PROTOCOL_TEST_MODE" with
   | Some mode when not (String.is_empty mode) ->
     let session =
       { process = None; connection = None; client = None; lock = Mutex.create () }
     in
     start session;
-    Exn.protect
-      ~finally:(fun () -> cleanup session)
-      ~f:(fun () ->
-        Client.run_test (Option.value_exn session.client) ~settings ?test_location test_fn)
+    Option.value_exn session.client, fun () -> cleanup session
   | _ ->
     start global_session;
-    Client.run_test
-      (Option.value_exn global_session.client)
-      ~settings
+    Option.value_exn global_session.client, fun () -> ()
+;;
+
+(** [run_in_session f] resolves the appropriate session and runs [f client]
+    inside an [Exn.protect] so the disposable session (if any) is cleaned
+    up on both normal return and exception. *)
+let run_in_session f =
+  let client, cleanup_fn = client_of_session () in
+  Exn.protect ~finally:cleanup_fn ~f:(fun () -> f client)
+;;
+
+(** [run_hegel_test ?settings ?test_location ?failure_blobs test_fn] runs
+    a property test using the shared hegel process. When
+    [HEGEL_PROTOCOL_TEST_MODE] is set, creates a disposable session so
+    the test server gets a fresh subprocess with the right env var.
+    Uses {!Client.default_settings} when [settings] is not provided.
+
+    @param test_location
+      forwarded to {!Client.run_test} for the Antithesis integration.
+      Supplied automatically by the [let%hegel_test] PPX. When omitted, no
+      Antithesis assertion is emitted.
+    @param failure_blobs
+      drives the [[@@failure_blobs ...]] workflow. When [Some []] the
+      test runs normally and any server-reported failure blob is printed
+      to stderr on failure (recording mode). When [Some (_ :: _)] every
+      recorded blob is replayed against the server and each result is
+      reported to stderr (which blobs reproduced the failure and which
+      did not). If any blob still reproduces, its exception is re-raised
+      so the failure surfaces for debugging; if every blob is stale,
+      raises [Failure]. *)
+let run_hegel_test
+      ?(settings = Client.default_settings ())
       ?test_location
+      ?failure_blobs
       test_fn
+  =
+  match failure_blobs with
+  | None ->
+    run_in_session (fun client -> Client.run_test client ~settings ?test_location test_fn)
+  | Some [] ->
+    run_in_session (fun client ->
+      Client.run_test client ~settings ?test_location ~record_failure_blobs:true test_fn)
+  | Some recorded ->
+    run_in_session (fun client ->
+      let reproduced, stale =
+        List.fold_left recorded ~init:([], []) ~f:(fun (reproduced, stale) blob ->
+          match
+            Client.run_test client ~settings ?test_location ~failure_blob:blob test_fn
+          with
+          | () -> reproduced, blob :: stale
+          | exception e -> (e, blob) :: reproduced, stale)
+      in
+      let mk_blobs_list blobs =
+        String.concat ~sep:"; " (List.map blobs ~f:(fun b -> Printf.sprintf "%S" b))
+      in
+      match reproduced, stale with
+      | (e, _) :: _, _ ->
+        Printf.eprintf
+          "[hegel] The following blobs reproduced an error: [ %s ]\n%!"
+          (mk_blobs_list (List.map ~f:snd reproduced));
+        Printf.eprintf
+          "[hegel] The following blobs did not reproduce an error: [ %s ]\n%!"
+          (mk_blobs_list stale);
+        raise e
+      | [], _ -> raise (Failure "[hegel] no failure blob reproduced the original failure"))
 ;;

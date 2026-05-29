@@ -4,6 +4,7 @@
     {[
       let%hegel_test my_test tc = body
       [@@settings expr]
+      [@@failure_blobs [ "<base64>"; ... ]]
     ]}
     into:
     {[
@@ -11,6 +12,7 @@
         Hegel.Session.run_hegel_test
           ~settings:expr
           ~test_location:{ function_name; file; begin_line }
+          ~failure_blobs:[ "<base64>"; ... ]
           (fun tc -> body)
       ;;
 
@@ -26,8 +28,11 @@
     with [Hegel_test_runtime] so that [dune runtest] (via the [ppx_hegel_test]
     inline-tests backend) discovers and runs it.
 
-    The [@@settings ...] attribute is optional. When omitted, the [~settings]
-    argument is also omitted and [Hegel.Session.run_hegel_test] uses its default. *)
+    The [@@settings ...] and [@@failure_blobs ...] attributes are both optional. The
+    [@@failure_blobs ...] attribute drives the failure-blob workflow: an empty list
+    [[@@failure_blobs []]] enables recording mode (a failure prints the captured
+    blob to stderr for copy-paste); a non-empty list switches to replay mode
+    (each blob is replayed through the server). See {!Hegel.Session.run_hegel_test}. *)
 
 open Ppxlib
 
@@ -44,6 +49,51 @@ let extract_settings_attr (attrs : attributes) : expression option =
            Location.raise_errorf
              ~loc:attr.attr_loc
              "ppx_hegel_test: [@@settings ...] must carry a single expression")
+       else None)
+    attrs
+;;
+
+(** [parse_string_list e] returns the list of literal strings carried by
+    [e] when [e] has the shape [[ "..."; "..."; ... ]], else raises a
+    located error pointing at the offending sub-expression. *)
+let rec parse_string_list (e : expression) : string list =
+  match e.pexp_desc with
+  | Pexp_construct ({ txt = Lident "[]"; _ }, None) -> []
+  | Pexp_construct ({ txt = Lident "::"; _ }, Some payload) ->
+    (match Ppx_compat.extract_expr_tuple payload with
+     | Some [ head; tail ] ->
+       let head_str =
+         match head.pexp_desc with
+         | Pexp_constant (Pconst_string (s, _, _)) -> s
+         | _ ->
+           Location.raise_errorf
+             ~loc:head.pexp_loc
+             "ppx_hegel_test: [@@failure_blobs ...] elements must be string literals"
+       in
+       head_str :: parse_string_list tail
+     | _ ->
+       Location.raise_errorf
+         ~loc:e.pexp_loc
+         "ppx_hegel_test: malformed [@@failure_blobs ...] list payload")
+  | _ ->
+    Location.raise_errorf
+      ~loc:e.pexp_loc
+      "ppx_hegel_test: [@@failure_blobs ...] must carry a list literal of string literals"
+;;
+
+(** [extract_failure_blobs_attr attrs] returns the parsed string list
+    if a [[@@failure_blobs ...]] attribute is present, else [None]. *)
+let extract_failure_blobs_attr (attrs : attributes) : string list option =
+  List.find_map
+    (fun (attr : attribute) ->
+       if String.equal attr.attr_name.txt "failure_blobs"
+       then (
+         match attr.attr_payload with
+         | PStr [ { pstr_desc = Pstr_eval (e, _); _ } ] -> Some (parse_string_list e)
+         | _ ->
+           Location.raise_errorf
+             ~loc:attr.attr_loc
+             "ppx_hegel_test: [@@failure_blobs ...] must carry a list literal")
        else None)
     attrs
 ;;
@@ -72,30 +122,37 @@ let build_location_record ~loc ~function_name : expression =
     }]
 ;;
 
-(** [build_items ~loc ~function_name ~settings_expr ~body_fn] returns the
-    pair of structure items the expander splices in:
+(** [build_items ~loc ~function_name ~settings_expr ~failure_blobs
+      ~body_fn] returns the pair of structure items the expander splices
+    in:
 
     {[
       let function_name () =
-        Hegel.Session.run_hegel_test [?settings] location body_fn
+        Hegel.Session.run_hegel_test
+          [?settings] location [?failure_blobs] body_fn
       ;;
 
       let () =
         Hegel_test_runtime.register ~name:.. ~file:.. ~line:.. function_name
     ]} *)
-let build_items ~loc ~function_name ~settings_expr ~body_fn : structure_item list =
+let build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn
+  : structure_item list
+  =
   let location_record = build_location_record ~loc ~function_name in
-  let call =
+  let base_call =
     match settings_expr with
     | Some s ->
       [%expr
-        Hegel.Session.run_hegel_test
-          ~settings:[%e s]
-          ~test_location:[%e location_record]
-          [%e body_fn]]
-    | None ->
-      [%expr
-        Hegel.Session.run_hegel_test ~test_location:[%e location_record] [%e body_fn]]
+        Hegel.Session.run_hegel_test ~settings:[%e s] ~test_location:[%e location_record]]
+    | None -> [%expr Hegel.Session.run_hegel_test ~test_location:[%e location_record]]
+  in
+  let call =
+    match failure_blobs with
+    | Some bs ->
+      let elements = List.map (Ast_builder.Default.estring ~loc) bs in
+      let failure_blobs_e = Ast_builder.Default.elist ~loc elements in
+      [%expr [%e base_call] ~failure_blobs:[%e failure_blobs_e] [%e body_fn]]
+    | None -> [%expr [%e base_call] [%e body_fn]]
   in
   let pat = Ast_builder.Default.pvar ~loc function_name in
   let definition = [%stri let [%p pat] = fun () -> [%e call]] in
@@ -120,10 +177,11 @@ let build_items ~loc ~function_name ~settings_expr ~body_fn : structure_item lis
 let expand_value_binding ~loc (vb : value_binding) : structure_item list =
   let function_name = extract_function_name vb.pvb_pat in
   let settings_expr = extract_settings_attr vb.pvb_attributes in
+  let failure_blobs = extract_failure_blobs_attr vb.pvb_attributes in
   (* The body of [let%hegel_test name <args> = expr] is parsed as
      [let name = <args -> expr>]. We pass that lambda as the [test_fn] to
      [Hegel.Session.run_hegel_test]. *)
-  build_items ~loc ~function_name ~settings_expr ~body_fn:vb.pvb_expr
+  build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn:vb.pvb_expr
 ;;
 
 (** The [hegel_test] extension is attached to [structure_item] (top-level

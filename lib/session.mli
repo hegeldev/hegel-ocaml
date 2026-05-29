@@ -58,18 +58,30 @@ val cleanup : hegel_session -> unit
 *)
 val start : hegel_session -> unit
 
-(** [run_hegel_test ?settings ?test_location test_fn] runs a property test
-    using the shared hegel process. When [HEGEL_PROTOCOL_TEST_MODE] is set,
-    creates a disposable session so the test server gets a fresh subprocess
-    with the right env var. Uses {!Client.default_settings} when [settings]
-    is not provided.
+(** [run_hegel_test ?settings ?test_location ?failure_blobs test_fn] runs
+    a property test using the shared hegel process. When
+    [HEGEL_PROTOCOL_TEST_MODE] is set, creates a disposable session so
+    the test server gets a fresh subprocess with the right env var.
+    Uses {!Client.default_settings} when [settings] is not provided.
 
     @param test_location
       forwarded to {!Client.run_test} for the Antithesis integration.
       Supplied automatically by the [let%hegel_test] PPX. When omitted, no
-      Antithesis assertion is emitted. *)
+      Antithesis assertion is emitted.
+    @param failure_blobs
+      drives the [[@@failure_blobs ...]] workflow. Supplied automatically
+      by the [let%hegel_test] PPX when the attribute is present.
+      [Some []] enables recording mode: a failing test prints the
+      server-reported failure blob(s) to stderr so the user can paste
+      them back into the attribute. [Some (_ :: _)] enables replay
+      mode: every recorded blob is sent to the server in a single-shot
+      replay and each result is reported to stderr (which blobs
+      reproduced the failure and which did not). If any blob still
+      reproduces, its exception is re-raised so the failure surfaces;
+      if every blob is stale, raises [Failure]. *)
 val run_hegel_test
   :  ?settings:Client.settings
   -> ?test_location:Antithesis.test_location
+  -> ?failure_blobs:string list
   -> (Client.test_case -> unit)
   -> unit

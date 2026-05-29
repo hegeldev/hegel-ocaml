@@ -8,11 +8,21 @@ check-tests:
     # Run test binaries directly (not via dune runtest) so output streams
     # in real-time — dune runtest buffers output until completion, hiding
     # diagnostic messages when a test hangs.
-    dune build --instrument-with bisect_ppx test/test_hegel.exe test/test_ppx_derive.exe test/test_ppx_hegel_test.exe
-    export BISECT_FILE=_build/default/test/bisect
+    dune build --instrument-with bisect_ppx \
+      test/test_hegel.exe \
+      test/test_ppx_derive.exe \
+      test/test_ppx_hegel_test.exe \
+      test/.test_failure_blobs_record.inline-tests/inline-test-runner.exe
+    export BISECT_FILE="$PWD/_build/default/test/bisect"
     ./_build/default/test/test_ppx_derive.exe
     ./_build/default/test/test_ppx_hegel_test.exe
     ./_build/default/test/test_hegel.exe
+    # ppx_expect resolves [%expect] source paths relative to the
+    # initial cwd, so run the inline-test runner from test/ where
+    # [test_failure_blobs_record.ml] sits directly.
+    (cd test && \
+      "$PWD/../_build/default/test/.test_failure_blobs_record.inline-tests/inline-test-runner.exe" \
+      inline-test-runner test_failure_blobs_record)
     python3 scripts/check-coverage.py
 
 format:

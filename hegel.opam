@@ -13,6 +13,7 @@ depends: [
   "core" {>= "0.17"}
   "core_unix" {>= "0.17"}
   "alcotest" {with-test & >= "1.7"}
+  "ppx_expect" {with-test & >= "v0.17"}
   "ocplib-endian" {>= "1.2"}
   "ppx_js_style" {>= "v0.17"}
   "bisect_ppx" {with-test & >= "2.8"}
