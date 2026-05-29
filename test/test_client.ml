@@ -224,6 +224,13 @@ let test_note_and_target () =
     assert (v >= 0))
 ;;
 
+(** Force [database = Unset] (independent of CI auto-detection) to cover the
+    [Unset] arm of settings translation. *)
+let test_run_database_unset () =
+  let settings = Client.settings ~test_cases:3 () |> Client.with_database Client.Unset in
+  Client.run_test ~settings (fun tc -> ignore (Hegel.draw tc int_gen : int))
+;;
+
 (** Exercise build_ffi_settings branches: phases, disabled database,
     suppressed health checks, derandomize, seed. *)
 let test_run_with_full_settings () =
@@ -355,6 +362,7 @@ let tests =
   ; Alcotest.test_case "run nested guard" `Quick test_run_nested_guard
   ; Alcotest.test_case "single mode failure" `Quick test_single_mode_failure
   ; Alcotest.test_case "note and target" `Quick test_note_and_target
+  ; Alcotest.test_case "run database unset" `Quick test_run_database_unset
   ; Alcotest.test_case "run with full settings" `Quick test_run_with_full_settings
   ; Alcotest.test_case "run all settings branches" `Quick test_run_all_settings_branches
   ; Alcotest.test_case "run flaky strategy" `Quick test_run_flaky_strategy
