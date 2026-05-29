@@ -236,10 +236,10 @@ jobs:
       - name: lint
         run: just check-format-nix
 
-  # Cross-platform compatibility check: build and run the suite on macOS and
-  # Windows against the matching per-OS libhegel artifact. Each job stages the
-  # release asset and points the loader at it via HEGEL_LIBHEGEL_PATH (so the
-  # loader does not need to download or verify checksums on the runner).
+  # Cross-platform compatibility check: build and run the suite on macOS
+  # against the matching libhegel artifact. The job stages the release asset
+  # and points the loader at it via HEGEL_LIBHEGEL_PATH (so the loader does not
+  # need to download or verify checksums on the runner).
   smoke:
     name: smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -252,9 +252,6 @@ jobs:
           - os: macos-latest
             asset: libhegel-darwin-arm64.dylib
             libname: libhegel.dylib
-          - os: windows-latest
-            asset: libhegel-windows-amd64.dll
-            libname: libhegel.dll
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:

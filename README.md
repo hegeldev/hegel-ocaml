@@ -2,8 +2,7 @@
 
 Hegel is a property-based testing library for OCaml. Hegel is based on
 [Hypothesis](https://github.com/hypothesisworks/hypothesis) and runs the native
-[Hegel](https://hegel.dev/) engine in-process via the `libhegel` C library — no
-Python or `uv` is required.
+[Hegel](https://hegel.dev/) engine in-process via the `libhegel` C library.
 
 ## Install Hegel
 
@@ -21,10 +20,11 @@ at runtime — no separate install step. It looks, in order, for:
 3. a checksum-verified download of the matching version from hegel-rust's GitHub
    releases, cached under `~/.cache/hegel-ocaml/libhegel/<version>/`.
 
-Set `HEGEL_LIBHEGEL_NO_DOWNLOAD=1` to opt out of the download fallback. Published
-platforms: Linux amd64/arm64, macOS arm64 (Apple Silicon), and Windows
-amd64/arm64. macOS amd64 (Intel) is not published upstream, so on that platform
-point `HEGEL_LIBHEGEL_PATH` at a locally built `libhegel.dylib`.
+Set `HEGEL_LIBHEGEL_NO_DOWNLOAD=1` to opt out of the download fallback.
+
+Hegel for OCaml supports **Linux** (amd64/arm64) and **macOS** (Apple Silicon).
+macOS amd64 (Intel) has no published `libhegel` artifact, so on that platform point
+`HEGEL_LIBHEGEL_PATH` at a locally built `libhegel.dylib`.
 
 ## Quick start
 
