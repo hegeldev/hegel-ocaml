@@ -141,9 +141,22 @@ jobs:
           eval $(opam env)
           opam install . --deps-only --with-test --yes
 
-      # libhegel is fetched and cached automatically at runtime by the
-      # loader (verified GitHub-release download); no setup step needed.
+      - name: Stage libhegel from the matching GitHub release
+        id: libhegel
+        run: |
+          VERSION=$(awk -F'"' '/let version =/{print $2}' lib/ffi/loader.ml)
+          ASSET="libhegel-linux-amd64.so"
+          URL_BASE="https://github.com/hegeldev/hegel-rust/releases/download/v${VERSION}"
+          DEST="${RUNNER_TEMP}/libhegel.so"
+          curl -fsSL -o "${DEST}" "${URL_BASE}/${ASSET}"
+          curl -fsSL -o "${DEST}.sha256" "${URL_BASE}/${ASSET}.sha256"
+          WANT=$(awk '{print $1}' "${DEST}.sha256")
+          echo "${WANT}  ${DEST}" | sha256sum -c -
+          echo "path=${DEST}" >> "$GITHUB_OUTPUT"
+
       - name: Run tests
+        env:
+          HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
         run: just check-tests
 
   docs:
@@ -222,6 +235,63 @@ jobs:
 
       - name: lint
         run: just check-format-nix
+
+  # Cross-platform compatibility check: build and run the suite on macOS and
+  # Windows against the matching per-OS libhegel artifact. Each job stages the
+  # release asset and points the loader at it via HEGEL_LIBHEGEL_PATH (so the
+  # loader does not need to download or verify checksums on the runner).
+  smoke:
+    name: smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            asset: libhegel-darwin-arm64.dylib
+            libname: libhegel.dylib
+          - os: windows-latest
+            asset: libhegel-windows-amd64.dll
+            libname: libhegel.dll
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: ocaml/setup-ocaml@e32b06a3e831ff2fbc6f08cf35be2085e3918014 # v3
+        with:
+          ocaml-compiler: "5.2"
+
+      - name: Install OCaml dependencies
+        run: opam install . --deps-only --with-test --yes
+
+      - name: Stage libhegel from the matching GitHub release
+        id: libhegel
+        shell: bash
+        env:
+          ASSET: ${{ matrix.asset }}
+          LIBNAME: ${{ matrix.libname }}
+        run: |
+          VERSION=$(awk -F'"' '/let version =/{print $2}' lib/ffi/loader.ml)
+          URL_BASE="https://github.com/hegeldev/hegel-rust/releases/download/v${VERSION}"
+          DEST="${RUNNER_TEMP}/${LIBNAME}"
+          curl -fsSL -o "${DEST}" "${URL_BASE}/${ASSET}"
+          curl -fsSL -o "${DEST}.sha256" "${URL_BASE}/${ASSET}.sha256"
+          WANT=$(awk '{print $1}' "${DEST}.sha256")
+          if command -v sha256sum >/dev/null 2>&1; then
+            echo "${WANT}  ${DEST}" | sha256sum -c -
+          else
+            echo "${WANT}  ${DEST}" | shasum -a 256 -c -
+          fi
+          echo "path=${DEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Run tests
+        shell: bash
+        env:
+          HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
+        run: opam exec -- dune runtest
 
   release:
     name: release

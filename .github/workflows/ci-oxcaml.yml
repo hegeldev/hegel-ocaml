@@ -75,5 +75,20 @@ jobs:
           opam install . --deps-only --yes
           opam install alcotest --yes
 
+      - name: Stage libhegel from the matching GitHub release
+        id: libhegel
+        run: |
+          VERSION=$(awk -F'"' '/let version =/{print $2}' lib/ffi/loader.ml)
+          ASSET="libhegel-linux-amd64.so"
+          URL_BASE="https://github.com/hegeldev/hegel-rust/releases/download/v${VERSION}"
+          DEST="${RUNNER_TEMP}/libhegel.so"
+          curl -fsSL -o "${DEST}" "${URL_BASE}/${ASSET}"
+          curl -fsSL -o "${DEST}.sha256" "${URL_BASE}/${ASSET}.sha256"
+          WANT=$(awk '{print $1}' "${DEST}.sha256")
+          echo "${WANT}  ${DEST}" | sha256sum -c -
+          echo "path=${DEST}" >> "$GITHUB_OUTPUT"
+
       - name: Run tests
+        env:
+          HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
         run: just check-tests-no-coverage

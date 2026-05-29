@@ -15,9 +15,11 @@
 (** The libhegel version these bindings target. *)
 let version = "0.14.17"
 
-(* Baked-in SHA-256 checksums of the published [libhegel-<goos>-<goarch>.<ext>]
-   artifacts for {!version}, keyed by "<goos>-<goarch>". Platforms without an
-   entry (e.g. macOS amd64 / Intel) are not published upstream. *)
+(* Baked-in SHA-256 checksums of the published [libhegel-<os>-<arch>.<ext>]
+   artifacts for {!version}, keyed by "<os>-<arch>". Platforms without an
+   entry (e.g. macOS amd64 / Intel) are not published upstream.
+
+   Regenerate after bumping {!version} with: scripts/update-checksums.py *)
 let checksums =
   [ "darwin-arm64", "4eb79ff53b408d4e922434933719b8c7d170c041096473df137c62a33307bed8"
   ; "linux-amd64", "6d0d76932e735a002177431697cee63654cea632954310699f54cba0d352f431"
@@ -48,7 +50,9 @@ let read_line_cmd cmd =
   | _ -> ""
 ;;
 
-let goos () =
+(* OS identifier used in the libhegel release-artifact name. The values
+   ("darwin" / "linux" / "windows") follow that artifact naming convention. *)
+let os_id () =
   match Sys.os_type with
   | "Win32" | "Cygwin" -> "windows"
   | _ ->
@@ -58,7 +62,9 @@ let goos () =
      | other -> failwith (Printf.sprintf "hegel: unsupported operating system %S" other))
 ;;
 
-let goarch () =
+(* Architecture identifier used in the libhegel release-artifact name
+   ("amd64" / "arm64"). *)
+let arch_id () =
   let raw =
     match Sys.os_type with
     | "Win32" -> Option.value (getenv_nonempty "PROCESSOR_ARCHITECTURE") ~default:""
@@ -70,7 +76,7 @@ let goarch () =
   | other -> failwith (Printf.sprintf "hegel: unsupported architecture %S" other)
 ;;
 
-let ext_of_goos = function
+let ext_of_os = function
   | "darwin" -> "dylib"
   | "windows" -> "dll"
   | _ -> "so"
@@ -156,8 +162,8 @@ let from_sibling ext =
 ;;
 
 (* 3. Cached download (fetching + verifying on first use). *)
-let from_cache_or_download goos ext =
-  let key = goos ^ "-" ^ goarch () in
+let from_cache_or_download os_id ext =
+  let key = os_id ^ "-" ^ arch_id () in
   let expected =
     match List.assoc_opt key checksums with
     | Some h -> h
@@ -215,12 +221,12 @@ let from_cache_or_download goos ext =
     and caching it if necessary. Raises [Failure] with a descriptive message if
     no library can be found or fetched. *)
 let locate () =
-  let goos = goos () in
-  let ext = ext_of_goos goos in
+  let os_id = os_id () in
+  let ext = ext_of_os os_id in
   match from_env ext with
   | Some p -> p
   | None ->
     (match from_sibling ext with
      | Some p -> p
-     | None -> from_cache_or_download goos ext)
+     | None -> from_cache_or_download os_id ext)
 ;;
