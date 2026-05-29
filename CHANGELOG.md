@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.2 - 2026-05-29
+
+Implements reproducing a test case with failure blobs.
+When a test fails, the following is outputted:
+
+```
+<some exception here>
+...
+[hegel] To replay the failure, add to your test: [@@failure_blobs [ "<blob string>"; ... ]]
+```
+
+To replay:
+
+```ocaml
+let%hegel_test my_test tc = body
+[@@failure_blobs [ "<blob string>"; ... ]]
+```
+
 ## 0.4.1 - 2026-05-27
 
 Fixes uniqueness of hashmap keys and lists when unique=true not being preserved after transformation.
