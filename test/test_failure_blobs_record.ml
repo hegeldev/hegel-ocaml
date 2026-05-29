@@ -38,13 +38,52 @@ let%expect_test "recording then replay round-trips the failure blob" =
   in
   assert reproduced;
   let replay_out = [%expect.output] in
-  assert (contains ~needle:"reproduced the original failure" replay_out)
+  assert (contains ~needle:"The following blobs reproduced an error" replay_out)
 ;;
 
-(* Replay mode with a blob whose failure no longer reproduces: should
-   raise a distinctive [Failure] flagging the stale entry, leaving the
-   original blob string in the message for diagnosis. *)
-let%expect_test "replay mode raises on stale blob" =
+(* Replay mode with multiple blobs reports every blob's outcome: a stale
+   blob ahead of a valid one must neither be skipped nor mask the valid
+   one, and both results must be printed. *)
+let%expect_test "replay reports outcome of every blob (stale then valid)" =
+  (try Hegel.Session.run_hegel_test ~settings:(settings ()) ~failure_blobs:[] prop with
+   | _ -> ());
+  let recorded = [%expect.output] in
+  let blob = extract_blob recorded in
+  (try
+     Hegel.Session.run_hegel_test
+       ~settings:(settings ())
+       ~failure_blobs:[ "AAA="; blob ]
+       prop
+   with
+   | _ -> ());
+  let out = [%expect.output] in
+  assert (contains ~needle:{|did not reproduce an error: [ "AAA=" ]|} out);
+  assert (contains ~needle:(Printf.sprintf "reproduced an error: [ %S ]" blob) out)
+;;
+
+(* A reproducing blob does not stop the replay: a later blob is still
+   replayed (and reported) after the first one reproduces, exercising
+   reuse of the client connection after [run_test] re-raises. *)
+let%expect_test "replay continues past a reproducing blob" =
+  (try Hegel.Session.run_hegel_test ~settings:(settings ()) ~failure_blobs:[] prop with
+   | _ -> ());
+  let recorded = [%expect.output] in
+  let blob = extract_blob recorded in
+  (try
+     Hegel.Session.run_hegel_test
+       ~settings:(settings ())
+       ~failure_blobs:[ blob; "AAA=" ]
+       prop
+   with
+   | _ -> ());
+  let out = [%expect.output] in
+  assert (contains ~needle:(Printf.sprintf "reproduced an error: [ %S ]" blob) out);
+  assert (contains ~needle:{|did not reproduce an error: [ "AAA=" ]|} out)
+;;
+
+(* Replay mode where every blob is stale: the run raises a distinctive
+   [Failure] (the stale-only branch prints no summary). *)
+let%expect_test "replay mode raises when every blob is stale" =
   let outcome =
     try
       Hegel.Session.run_hegel_test
@@ -57,6 +96,5 @@ let%expect_test "replay mode raises on stale blob" =
     | e -> Printexc.to_string e
   in
   print_endline outcome;
-  [%expect
-    {| Failure("[hegel] failure blob AAA= did not reproduce the original failure") |}]
+  [%expect {| Failure("[hegel] no failure blob reproduced the original failure") |}]
 ;;

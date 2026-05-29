@@ -283,11 +283,12 @@ let run_in_session f =
     @param failure_blobs
       drives the [[@@failure_blobs ...]] workflow. When [Some []] the
       test runs normally and any server-reported failure blob is printed
-      to stderr on failure (recording mode). When [Some (_ :: _)] each
-      recorded blob is replayed against the server: a blob that still
-      reproduces the failure re-raises the original exception (with a
-      one-line note on stderr); a blob that no longer reproduces raises
-      [Failure] flagging the stale entry. *)
+      to stderr on failure (recording mode). When [Some (_ :: _)] every
+      recorded blob is replayed against the server and each result is
+      reported to stderr (which blobs reproduced the failure and which
+      did not). If any blob still reproduces, its exception is re-raised
+      so the failure surfaces for debugging; if every blob is stale,
+      raises [Failure]. *)
 let run_hegel_test
       ?(settings = Client.default_settings ())
       ?test_location
@@ -302,17 +303,25 @@ let run_hegel_test
       Client.run_test client ~settings ?test_location ~record_failure_blobs:true test_fn)
   | Some recorded ->
     run_in_session (fun client ->
-      List.iter recorded ~f:(fun blob ->
-        match
-          Client.run_test client ~settings ?test_location ~failure_blob:blob test_fn
-        with
-        | () ->
-          raise
-            (Failure
-               (sprintf
-                  "[hegel] failure blob %s did not reproduce the original failure"
-                  blob))
-        | exception e ->
-          eprintf "[hegel] failure blob %s reproduced the original failure\n%!" blob;
-          raise e))
+      let reproduced, stale =
+        List.fold_left recorded ~init:([], []) ~f:(fun (reproduced, stale) blob ->
+          match
+            Client.run_test client ~settings ?test_location ~failure_blob:blob test_fn
+          with
+          | () -> reproduced, blob :: stale
+          | exception e -> (e, blob) :: reproduced, stale)
+      in
+      let mk_blobs_list blobs =
+        String.concat ~sep:"; " (List.map blobs ~f:(fun b -> Printf.sprintf "%S" b))
+      in
+      match reproduced, stale with
+      | (e, _) :: _, _ ->
+        Printf.eprintf
+          "[hegel] The following blobs reproduced an error: [ %s ]\n%!"
+          (mk_blobs_list (List.map ~f:snd reproduced));
+        Printf.eprintf
+          "[hegel] The following blobs did not reproduce an error: [ %s ]\n%!"
+          (mk_blobs_list stale);
+        raise e
+      | [], _ -> raise (Failure "[hegel] no failure blob reproduced the original failure"))
 ;;

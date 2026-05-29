@@ -389,7 +389,7 @@ let run_test
   (match failure_blob, settings.mode with
    | Some _, Single_test_case ->
      failwith "failure_blob is not supported in Single_test_case mode"
-   | _ -> ());
+   | Some _, Test_run | None, _ -> ());
   let test_stream = new_stream client.connection ~role:"Test" () in
   (* Runs a single test case on [stream]. Sets up thread-local state, calls
      [test_fn], reports status via mark_complete, and returns the captured

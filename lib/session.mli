@@ -74,10 +74,11 @@ val start : hegel_session -> unit
       [Some []] enables recording mode: a failing test prints the
       server-reported failure blob(s) to stderr so the user can paste
       them back into the attribute. [Some (_ :: _)] enables replay
-      mode: each recorded blob is sent to the server in a single-shot
-      replay; a blob that still reproduces re-raises the original
-      exception, one that no longer reproduces raises [Failure]
-      flagging the stale entry. *)
+      mode: every recorded blob is sent to the server in a single-shot
+      replay and each result is reported to stderr (which blobs
+      reproduced the failure and which did not). If any blob still
+      reproduces, its exception is re-raised so the failure surfaces;
+      if every blob is stale, raises [Failure]. *)
 val run_hegel_test
   :  ?settings:Client.settings
   -> ?test_location:Antithesis.test_location

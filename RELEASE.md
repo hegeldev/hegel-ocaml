@@ -1,6 +1,6 @@
 RELEASE_TYPE: patch
 
-Implements reproducing a test case with failure blobs. 
+Implements reproducing a test case with failure blobs.
 When a test fails, the following is outputted:
 
 ```
