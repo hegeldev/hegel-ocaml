@@ -22,18 +22,25 @@ module Variables = struct
   let size t = Hashtbl.length t.values
   let is_empty t = Hashtbl.is_empty t.values
 
+  (* Resolve a drawn variable id against the local table, removing it when
+     [consume]. The [None] case is a server-contract violation (the engine
+     returned an id we never registered) and is unreachable through the normal
+     engine-driven path, so it is split out here to be unit-testable. *)
+  let resolve_drawn values ~consume variable_id =
+    match Hashtbl.find values variable_id with
+    | Some v ->
+      if consume then Hashtbl.remove values variable_id;
+      v
+    | None ->
+      (* State diverged between the engine and the client, or a bug in the
+         variables bookkeeping. *)
+      raise Client.Flaky_strategy
+  ;;
+
   let pick t ~consume =
     Client.assume t.tc (not (is_empty t));
     let variable_id = Client.pool_generate t.tc ~pool_id:t.pool_id ~consume () in
-    match Hashtbl.find t.values variable_id with
-    | Some v ->
-      if consume then Hashtbl.remove t.values variable_id;
-      v
-    | None ->
-      (* Server returned an id we don't know about. This indicates either a
-           flaky strategy (state diverged between the engine and the client)
-           or a bug in the variables bookkeeping. *)
-      raise Client.Flaky_strategy
+    resolve_drawn t.values ~consume variable_id
   ;;
 
   let draw t = pick t ~consume:false

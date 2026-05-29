@@ -90,7 +90,7 @@ val discardable_group : int -> Client.test_case -> (unit -> 'a) -> 'a
 (** A collection handle for generating variable-length sequences. *)
 type collection =
   { mutable finished : bool
-  ; mutable collection_id : Cbor.t option
+  ; mutable collection_id : int option
   ; min_size : int
   ; max_size : int option
   }

@@ -23,6 +23,10 @@
    (>= 0.17))
   (core_unix
    (>= 0.17))
+  (ctypes
+   (>= 0.20))
+  (ctypes-foreign
+   (>= 0.20))
   (alcotest
    (and
     :with-test

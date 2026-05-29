@@ -1,4 +1,0 @@
-(library
- (name crc32)
- (package hegel)
- (wrapped false))

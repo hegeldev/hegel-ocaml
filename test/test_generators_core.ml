@@ -1,5 +1,4 @@
 open Hegel
-open Connection
 open Generators
 
 (* ==== Unit tests (no server needed) ==== *)
@@ -143,145 +142,56 @@ let test_max_filter_attempts () =
   Alcotest.(check int) "max attempts" 3 max_filter_attempts
 ;;
 
-let dummy_data () =
-  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
-  let conn = Test_helpers.make_connection s1 ~name:"Dummy" () in
-  let data =
-    Client.
-      { stream = control_stream conn
-      ; mode = Test_run
-      ; is_final = false
-      ; test_aborted = false
-      }
-  in
-  data, conn, s2
-;;
+(* [with_tc f] runs [f] with a real per-test-case handle from the native
+   engine. Used by the collection-record tests, which exercise the OCaml-side
+   collection bookkeeping. *)
+let with_tc f = Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:1 ()) f
 
 let test_collection_new () =
-  let data, conn, s2 = dummy_data () in
-  let coll = new_collection ~min_size:0 ~max_size:5 data () in
-  Alcotest.(check bool) "not finished" false coll.finished;
-  close conn;
-  Unix.close s2
+  with_tc (fun data ->
+    let coll = new_collection ~min_size:0 ~max_size:5 data () in
+    Alcotest.(check bool) "not finished" false coll.finished)
 ;;
 
 let test_collection_new_no_max () =
-  let data, conn, s2 = dummy_data () in
-  let coll = new_collection ~min_size:0 data () in
-  Alcotest.(check bool) "not finished" false coll.finished;
-  Alcotest.(check bool) "max_size is None" true (coll.max_size = None);
-  close conn;
-  Unix.close s2
+  with_tc (fun data ->
+    let coll = new_collection ~min_size:0 data () in
+    Alcotest.(check bool) "not finished" false coll.finished;
+    Alcotest.(check bool) "max_size is None" true (coll.max_size = None))
 ;;
 
 let test_collection_reject_when_finished () =
-  let data, conn, s2 = dummy_data () in
-  let coll = new_collection ~min_size:0 data () in
-  coll.finished <- true;
-  (* Should be a no-op, not send any commands *)
-  collection_reject coll data;
-  close conn;
-  Unix.close s2
+  with_tc (fun data ->
+    let coll = new_collection ~min_size:0 data () in
+    coll.finished <- true;
+    (* Should be a no-op, not touch the engine. *)
+    collection_reject coll data)
 ;;
 
 (** Test: collection_more returns false when already finished. *)
 let test_collection_more_when_finished () =
-  let data, conn, s2 = dummy_data () in
-  let coll = new_collection ~min_size:0 data () in
-  coll.finished <- true;
-  let result = collection_more coll data in
-  Alcotest.(check bool) "returns false" false result;
-  close conn;
-  Unix.close s2
+  with_tc (fun data ->
+    let coll = new_collection ~min_size:0 data () in
+    coll.finished <- true;
+    let result = collection_more coll data in
+    Alcotest.(check bool) "returns false" false result)
 ;;
 
-(** Test: discardable_group exception path — stop_span with discard. *)
+(** Test: discardable_group exception path — stop_span skipped when aborted. *)
 let test_discardable_group_exception () =
-  let data, conn, s2 = dummy_data () in
-  data.Client.test_aborted <- true;
-  let raised = ref false in
-  (try ignore (discardable_group Labels.flat_map data (fun () -> raise Exit) : _) with
-   | Exit -> raised := true);
-  Alcotest.(check bool) "raised Exit" true !raised;
-  close conn;
-  Unix.close s2
-;;
-
-(** Test: collection_more raises Data_exhausted on StopTest (socketpair). *)
-let test_collection_more_stoptest () =
-  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
-  let conn = Test_helpers.make_connection s1 ~name:"Client" () in
-  let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
-  let t_hs = Thread.create Test_helpers.handshake_via_stream peer_conn in
-  ignore (send_handshake conn);
-  Thread.join t_hs;
-  let ch = new_stream conn ~role:"Data" () in
-  let data =
-    Client.{ stream = ch; mode = Test_run; is_final = false; test_aborted = false }
-  in
-  let coll = new_collection ~min_size:0 data () in
-  let peer_ch = connect_stream peer_conn (stream_id ch) ~role:"Peer" () in
-  let t_peer =
-    Thread.create
-      (fun () ->
-         let msg_id, _msg = receive_request peer_ch () in
-         send_response_raw
-           peer_ch
-           msg_id
-           (Cbor.encode
-              (`Map
-                  [ `Text "error", `Text "Test case is being abandoned"
-                  ; `Text "type", `Text "StopTest"
-                  ])))
-      ()
-  in
-  let raised = ref false in
-  (try ignore (collection_more coll data) with
-   | Client.Data_exhausted -> raised := true);
-  Thread.join t_peer;
-  Alcotest.(check bool) "raised Data_exhausted" true !raised;
-  Alcotest.(check bool) "test_aborted" true data.test_aborted;
-  close conn;
-  close peer_conn
-;;
-
-(** Test: collection_reject sends command when not finished (socketpair). *)
-let test_collection_reject_live () =
-  let s1, s2 = Core_unix.socketpair ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
-  let conn = Test_helpers.make_connection s1 ~name:"Client" () in
-  let peer_conn = Test_helpers.make_connection s2 ~name:"Peer" () in
-  let t_hs = Thread.create Test_helpers.handshake_via_stream peer_conn in
-  ignore (send_handshake conn);
-  Thread.join t_hs;
-  let ch = new_stream conn ~role:"Data" () in
-  let data =
-    Client.{ stream = ch; mode = Test_run; is_final = false; test_aborted = false }
-  in
-  let coll = new_collection ~min_size:0 data () in
-  coll.collection_id <- Some (`Int 0);
-  let peer_ch = connect_stream peer_conn (stream_id ch) ~role:"Peer" () in
-  let received_cmd = ref "" in
-  let t_peer =
-    Thread.create
-      (fun () ->
-         let msg_id, msg = receive_request peer_ch () in
-         let pairs = Cbor_helpers.extract_dict msg in
-         received_cmd := Cbor_helpers.extract_string (List.assoc (`Text "command") pairs);
-         send_response_value peer_ch msg_id `Null)
-      ()
-  in
-  collection_reject coll data;
-  Thread.join t_peer;
-  Alcotest.(check string) "command" "collection_reject" !received_cmd;
-  close conn;
-  close peer_conn
+  with_tc (fun data ->
+    data.Client.test_aborted <- true;
+    let raised = ref false in
+    (try ignore (discardable_group Labels.flat_map data (fun () -> raise Exit) : _) with
+     | Exit -> raised := true);
+    Alcotest.(check bool) "raised Exit" true !raised)
 ;;
 
 (* ==== E2E tests ==== *)
 
 (** Test: map doubles values correctly. *)
 let test_map_doubles_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
     let gen = integers ~min_value:1 ~max_value:5 () |> map (fun v -> v * 2) in
     Alcotest.(check bool) "still basic" true (is_basic gen);
     let v = Hegel.draw tc gen in
@@ -291,7 +201,7 @@ let test_map_doubles_e2e () =
 
 (** Test: double map composes correctly. *)
 let test_double_map_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
     let gen =
       integers ~min_value:1 ~max_value:5 ()
       |> map (fun v -> v * 2)
@@ -311,7 +221,7 @@ let test_double_map_e2e () =
 
 (** Test: map on non-basic (Mapped branch of do_draw). *)
 let test_map_on_filtered_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
     let gen =
       filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ())
       |> map (fun v -> v * 2)
@@ -322,7 +232,7 @@ let test_map_on_filtered_e2e () =
 
 (** Test: flat_map through server. *)
 let test_flat_map_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
     let gen =
       flat_map
         (fun n -> integers ~min_value:0 ~max_value:(max 1 n) ())
@@ -335,7 +245,7 @@ let test_flat_map_e2e () =
 
 (** Test: filter through server. *)
 let test_filter_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
     let gen = filter (fun v -> v mod 2 = 0) (integers ~min_value:0 ~max_value:100 ()) in
     Alcotest.(check bool) "not basic" false (is_basic gen);
     let v = Hegel.draw tc gen in
@@ -344,14 +254,14 @@ let test_filter_e2e () =
 
 (** Test: filter exhaustion through server (always false → assume false). *)
 let test_filter_exhaustion_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
     let gen = filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ()) in
     ignore (Hegel.draw tc gen))
 ;;
 
 (** Test: group helper through server. *)
 let test_group_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
     let v =
       group Labels.list tc (fun () ->
         Client.generate_from_schema
@@ -368,7 +278,7 @@ let test_group_e2e () =
 
 (** Test: discardable_group through server — success path. *)
 let test_discardable_group_e2e () =
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
     let v =
       discardable_group Labels.tuple tc (fun () ->
         Client.generate_from_schema
@@ -429,8 +339,6 @@ let tests =
       "discardable_group exception"
       `Quick
       test_discardable_group_exception
-  ; Alcotest.test_case "collection_more StopTest" `Quick test_collection_more_stoptest
-  ; Alcotest.test_case "collection_reject live" `Quick test_collection_reject_live
   ; Alcotest.test_case "map doubles e2e" `Quick test_map_doubles_e2e
   ; Alcotest.test_case "double map e2e" `Quick test_double_map_e2e
   ; Alcotest.test_case "map on filtered e2e" `Quick test_map_on_filtered_e2e

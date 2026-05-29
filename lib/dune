@@ -1,7 +1,7 @@
 (library
  (name hegel)
  (public_name hegel)
- (libraries core core_unix cbor crc32 threads.posix yojson)
+ (libraries core core_unix cbor hegel_ffi threads.posix yojson)
  (private_modules
   generators_core
   generators_primitives

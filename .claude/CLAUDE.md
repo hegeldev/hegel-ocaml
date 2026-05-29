@@ -3,12 +3,11 @@
 ## Build Commands
 
 ```bash
-just setup       # Install dependencies and hegel binary into .venv/
+# No setup step: libhegel is located (or downloaded + cached) at runtime.
 just test        # Run tests with 100% coverage enforcement
 just format      # Auto-format code with ocamlformat
 just lint        # Check formatting (fails if unformatted)
 just docs        # Build API documentation with odoc
-just conformance # Run conformance tests against the Python framework
 just check       # Run lint + docs + test (the full CI check)
 ```
 
@@ -29,13 +28,12 @@ just check       # Run lint + docs + test (the full CI check)
 lib/                         # Library source
   dune                       # Library build config (bisect_ppx instrumented)
   hegel.ml                   # Main module — re-exports all sub-modules
-  protocol.ml                # Binary wire protocol: packet format, CRC32, constants
+  ffi/                       # ctypes bindings to native libhegel (NOT instrumented)
+    ffi.ml                   # dlopen + 1:1 C-ABI wrappers; settings/run/test_case handles
+    loader.ml                # locate/download libhegel at runtime (env > sibling > release)
   cbor_helpers.ml            # CBOR encoding/decoding with type-safe extractors
-  connection.ml              # Multiplexed connection and stream abstractions
-  client.ml                  # Test runner and lifecycle management
-  session.ml                 # Global server subprocess management
+  client.ml                  # Test runner + run lifecycle on top of Hegel_ffi.Ffi
   generators.ml              # Generator combinators (booleans, integers, lists, …)
-  conformance.ml             # Conformance test helpers (get_test_cases, write_metrics)
   derive.ml                  # Runtime support for [@@deriving generator]
   test_runtime/              # Inline-test registry + runner for [let%hegel_test]
     hegel_test_runtime.ml    # Registry, run_all, test_main (called by dune-generated runner)
@@ -50,30 +48,11 @@ ppx/                         # PPX rewriters and derivers
 test/                        # Alcotest test suite
   dune                       # Test build config (two executables: test_hegel, test_ppx_derive)
   test_hegel.ml              # Top-level Alcotest runner
-  test_protocol.ml           # Wire protocol tests
   test_cbor_helpers.ml       # CBOR helper tests
-  test_connection.ml         # Connection and stream tests
-  test_client.ml             # Client lifecycle tests
-  test_generators.ml         # Generator combinator tests
-  test_showcase.ml           # End-to-end example property tests
-  test_conformance_helpers.ml # Conformance helper and new-generator tests
+  test_client.ml             # Client config + run lifecycle tests (real engine)
+  test_generators_*.ml       # Generator combinator / collection / schema tests
   test_derive.ml             # Derive module runtime helper tests
   test_ppx_derive.ml         # PPX deriver E2E tests (uses ppx_hegel_generator)
-
-conformance/                 # Conformance test binaries (compiled executables)
-  dune                       # Builds json_params library + 8 executables
-  json_params.ml             # Lightweight JSON parser for argv[1] params
-  test_booleans.ml           # Boolean conformance binary
-  test_integers.ml           # Integer conformance binary
-  test_floats.ml             # Float conformance binary
-  test_text.ml               # Text (string) conformance binary
-  test_binary.ml             # Binary (bytes) conformance binary
-  test_lists.ml              # List conformance binary (uses CompositeList path)
-  test_sampled_from.ml       # SampledFrom conformance binary
-  test_hashmaps.ml           # Hashmap (dict) conformance binary
-
-test/conformance/            # Python conformance test harness
-  test_conformance.py        # pytest file — imports from hegel.conformance
 
 docs/                        # Tutorial and guide documents
   getting-started.md         # Getting Started tutorial (OCaml translation)
@@ -93,20 +72,26 @@ README.md                    # Project overview, install, quick-start
 
 ## Architecture Overview
 
-### Transport Layer (protocol.ml)
+### Native backend (lib/ffi/ffi.ml)
 
-Packets are fixed-format binary frames:
-- 4-byte magic `HEGL` (0x4845474C)
-- 4-byte CRC32 of the payload
-- 4-byte stream ID (odd = client-allocated, even = server-allocated)
-- 4-byte message ID (high bit set = reply)
-- 4-byte payload length
-- N-byte CBOR payload
-- 1-byte terminator (0x0A)
+There is no subprocess, socket, or wire protocol. The engine is the native
+`libhegel` C library (from hegel-rust, header `hegel-c/include/hegel.h`), called
+in-process via ctypes. `Hegel_ffi.Loader` resolves the shared library at runtime
+(mirroring hegel-go): `$HEGEL_LIBHEGEL_PATH`, then a sibling
+`../hegel-rust/target/{release,debug}/` checkout, then a SHA-256-verified
+download from the hegel-rust GitHub release cached under
+`~/.cache/hegel-ocaml/libhegel/<version>/` (opt out with
+`HEGEL_LIBHEGEL_NO_DOWNLOAD=1`). `Hegel_ffi.Ffi` `dlopen`s that path and exposes
+thin 1:1 wrappers: settings handles, the run lifecycle (`run_start`,
+`next_test_case`, `run_result`, `run_free`), and per-test-case primitives
+(`generate`, spans, collections, pools, `target`, `mark_complete`). CBOR is used
+only for schema bytes (in) and generated-value bytes (out). `hegel_next_test_case`
+blocks on the engine's worker thread, so its binding releases the OCaml runtime
+lock. The `ffi` library is deliberately NOT bisect_ppx-instrumented, keeping its
+mechanical marshalling out of the 100%-coverage gate (no `[@coverage off]`).
 
-### Multiplexing (connection.ml)
-
-A single Unix socket carries many logical streams. The reader thread dispatches incoming packets to per-stream inboxes (guarded by a mutex + condition variable). Streams are demand-driven: the reader only runs when a stream is waiting for a packet. Client streams get odd IDs; server streams get even IDs.
+`lib/protocol.ml`, `lib/connection.ml`, and the old Python-subprocess install
+flow were removed in the native-backend migration.
 
 ### Generator System (generators.ml)
 
@@ -120,7 +105,7 @@ Generators are a discriminated union:
 ### Inline Test Integration (ppx/ppx_hegel_test.ml + lib/test_runtime/)
 
 The `ppx_hegel_test` PPX rewrites `let%hegel_test name tc = body` into two
-top-level items: (1) `let name = fun () -> Hegel.Session.run_hegel_test ...
+top-level items: (1) `let name = fun () -> Hegel.run_hegel_test ...
 (fun tc -> body)`, and (2) `let () = Hegel_test_runtime.register ~name ~file
 ~line name`. The function remains directly callable; the registration is a
 side effect run at module init.
@@ -202,13 +187,29 @@ Non-basic list elements use a server-side collection handle:
 2. `collection_more` → server returns true/false (should we generate another element?)
 3. `collection_reject` → undo the last element (used by filter)
 
-### Session Management (session.ml)
+### Entry point
 
-A singleton `_session` lazily starts the `hegel` binary as a subprocess on first use. It creates a temporary directory, waits for the Unix socket to appear, connects, and registers an `at_exit` handler to clean up. `restart_session` is provided for test modes that need a fresh server (e.g., `HEGEL_PROTOCOL_TEST_MODE`).
+The engine runs in-process, so there is no subprocess or session to manage.
+The public entry point is `Hegel.run_hegel_test ?settings ?test_location
+test_fn` — `Client.run_hegel_test`, which is `Client.run_test` with [settings]
+defaulting to `default_settings ()`. It is what the `let%hegel_test` PPX
+targets. The old `[@@failure_blobs ...]` record/replay workflow was dropped in
+the native-backend migration; use `database` / `database_key` for failure
+persistence and replay.
 
 ### Test Runner (client.ml)
 
-`run_test` sends a `run_test` command on the control stream, then processes `test_case` events — each carrying a new data stream ID. For each test case, `run_test_case` runs the user's test function with the data stream as the active stream (stored in thread-local refs). Exceptions are mapped to `mark_complete` statuses: VALID, INVALID (assume), INTERESTING (any other exception). If StopTest is received on any command, `_test_aborted` is set and `mark_complete` is skipped.
+`run_test` builds an `Ffi.settings` from the OCaml settings, calls
+`Ffi.run_start`, then loops on `Ffi.next_test_case` until it returns `None`. Each
+test case handle is wrapped in a `test_case` record (with `is_final` from
+`Ffi.is_final_replay`) and passed to the user's function. Exceptions map to
+`Ffi.mark_complete` statuses: VALID, INVALID (`Assume_rejected`/`Flaky_strategy`),
+OVERRUN (`Data_exhausted` from a `Stop_test` during a primitive), INTERESTING
+(any other exception, with a location-derived origin from `extract_origin`).
+Interesting exceptions are captured by origin so the final-replay exception is
+re-raised; after the loop, `Ffi.run_result` failures are raised (single) or
+aggregated into a "Multiple failures" report. `run`/`settings` handles are freed
+in an `Exn.protect ~finally`.
 
 ## Key Patterns and Conventions
 
@@ -257,7 +258,7 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
 - `scripts/check-coverage.py` parses `bisect-ppx-report summary` output
 - Unreachable server-contract violations use `failwith "..."` (tested via unit tests on the transform)
 - `[@coverage off]` annotations are never used
-- Only `lib/` code is instrumented; conformance binaries, examples, and PPX code are not measured
+- Only the instrumented `hegel` library is measured; the `hegel_ffi` bindings, examples, and PPX code are not
 
 ## Lessons Learned
 
@@ -355,41 +356,15 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
     treats `Option.fold` as a single coverage point, but a match creates two branches, one of which
     may be hard to cover in tests.
 
-18. **`Checkseum.Crc32.digest_string` supports incremental computation**: The `init` parameter of
-    `digest_string` can be the result of a previous digestion, enabling CRC32 over multiple
-    string segments without concatenation. Use `compute_crc32_parts` for two-segment CRC.
-
-19. **`Bytes.blit_string` for zero-copy assembly**: When building a buffer from header + payload +
-    terminator, use `Bytes.create` + `Bytes.blit` / `Bytes.blit_string` instead of string
-    concatenation followed by `Bytes.of_string`. This avoids intermediate string allocations.
-
-20. **Shared test helpers belong in `test/test_helpers.ml`**: Any utility function used across
+18. **Shared test helpers belong in `test/test_helpers.ml`**: Any utility function used across
     multiple test modules (e.g. `contains_substring`) should live in a shared helper module listed
     in the dune `(modules ...)` stanza. This avoids copy-paste and ensures consistent behavior.
 
-21. **Or-patterns in match arms for deduplication**: When two match arms do the same thing with
+19. **Or-patterns in match arms for deduplication**: When two match arms do the same thing with
     minor variation, use `(Some (Dead _) | None) as entry -> ...` and dispatch on the bound
     variable inside the arm body. This is cleaner than duplicating the entire block.
 
-22. **Test helper deduplication must include protocol helpers**: The `with_fake_server`,
-    `accept_run_test`, `send_test_case`, `send_test_done`, and `recv_command` helpers are
-    used across `test_client.ml`, `test_generators.ml`, and `test_derive.ml`. They all live
-    in `test_helpers.ml` and are re-exported via `let foo = Test_helpers.foo` in each test
-    file. This is idiomatic OCaml — module-level `let` aliases are cheap and keep the call
-    sites clean while eliminating copy-paste.
-
-23. **OCaml codebase is stable and well-structured after greybeard pass**: After three rounds
-    of expert review, the lib/ code has no reinvented wheels, no non-idiomatic patterns,
-    no needless complexity, no bad names, and no dead code. The `List.filter_map Fun.id`
-    pattern for optional schema fields, `Option.fold` for accumulator updates, and
-    `Fun.protect ~finally` for resource cleanup are all standard idiomatic OCaml.
-
-24. **`dune-project` license must match the actual LICENSE file**: The `(license ...)` field
+20. **`dune-project` license must match the actual LICENSE file**: The `(license ...)` field
     in `dune-project` is propagated to the generated `.opam` file. If these disagree with
     the actual `LICENSE` file, downstream tooling (opam, GitHub license detection) will show
     conflicting information. Always check that the declared license matches the file.
-
-25. **Shared conformance helpers belong in `json_params.ml`**: Utility functions used by
-    multiple conformance binaries (like `int_opt_to_json`) should live in the shared
-    `json_params` module rather than being copy-pasted into each binary. The conformance
-    binaries already depend on `json_params` via the dune `(libraries ...)` stanza.

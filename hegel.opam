@@ -12,6 +12,8 @@ depends: [
   "ocaml" {>= "5.2"}
   "core" {>= "0.17"}
   "core_unix" {>= "0.17"}
+  "ctypes" {>= "0.20"}
+  "ctypes-foreign" {>= "0.20"}
   "alcotest" {with-test & >= "1.7"}
   "ppx_expect" {with-test & >= "v0.17"}
   "ocplib-endian" {>= "1.2"}

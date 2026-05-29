@@ -1,17 +1,16 @@
 (** Test runner and lifecycle management for Hegel.
 
     This module implements the client-side logic for running property-based
-    tests against a Hegel server. *)
-
-module Mutex = Caml_threads.Mutex
+    tests against the native libhegel engine (via {!Hegel_ffi.Ffi}). *)
 
 (** Raised when {!assume} condition is [false]. *)
 exception Assume_rejected
 
-(** Raised when the server runs out of test data (StopTest). *)
+(** Raised when the engine runs out of choice budget for the current test case
+    (StopTest). *)
 exception Data_exhausted
 
-(** Raised when the server detects a flaky strategy definition. *)
+(** Raised when the engine detects a flaky strategy definition. *)
 exception Flaky_strategy
 
 (** Health checks that can be suppressed during test execution. *)
@@ -21,7 +20,7 @@ type health_check =
   | Test_cases_too_large
   | Large_initial_test_case
 
-(** [health_check_to_string hc] returns the wire protocol name for [hc]. *)
+(** [health_check_to_string hc] returns the canonical name for [hc]. *)
 val health_check_to_string : health_check -> string
 
 (** Controls how much output Hegel produces during test runs. *)
@@ -55,7 +54,7 @@ type phase =
   | Target
   | Shrink
 
-(** [phase_to_string p] returns the wire protocol name for [p] (the lowercase
+(** [phase_to_string p] returns the lowercase name for [p] (the
     [hypothesis.Phase] value name). *)
 val phase_to_string : phase -> string
 
@@ -69,7 +68,7 @@ type settings =
   ; database : database
   ; suppress_health_check : health_check list
   ; phases : phase list option
-    (** [None] uses the server's default phase list (all phases); [Some xs]
+    (** [None] uses the engine's default phase list (all phases); [Some xs]
           restricts execution to [xs]. *)
   }
 
@@ -112,23 +111,23 @@ val with_phases : phase list -> settings -> settings
 (** [with_mode mode s] returns settings [s] with test [mode] set to [mode]. *)
 val with_mode : mode -> settings -> settings
 
-(** Per-test-case state passed explicitly to the test function. Holds the data
-    stream, final-run flag, and abort state. *)
+(** Per-test-case state passed explicitly to the test function. Holds the
+    native test-case handle, the final-replay flag, and abort state. *)
 type test_case =
-  { stream : Connection.stream
+  { handle : Hegel_ffi.Ffi.test_case
   ; mode : mode
   ; is_final : bool
   ; mutable test_aborted : bool
   }
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
-    Uses the backtrace if available. *)
+    Uses the backtrace if available; derived from the assertion's location so
+    the shrinker can group probes for the same bug. *)
 val extract_origin : exn -> string
 
-(** [generate_from_schema schema tc] generates a value from a schema by sending
-    a generate command to the server. Raises {!Data_exhausted} if the server
-    signals StopTest or {!Flaky_strategy} if it signals FlakyStrategyDefinition.
-*)
+(** [generate_from_schema schema tc] generates a value from a schema by drawing
+    from the native engine. Raises {!Data_exhausted} if the engine signals
+    StopTest. *)
 val generate_from_schema : Cbor.t -> test_case -> Cbor.t
 
 (** [assume tc condition] rejects the current test case if [condition] is
@@ -136,11 +135,11 @@ val generate_from_schema : Cbor.t -> test_case -> Cbor.t
 val assume : test_case -> bool -> unit
 
 (** [note tc message] records a message that will be printed on the final
-    (failing) run. *)
+    (failing) replay. *)
 val note : test_case -> string -> unit
 
-(** [target tc value label] sends a target command to guide the search engine
-    toward higher values. *)
+(** [target tc value label] records a targeting observation to guide the search
+    engine toward higher values. *)
 val target : test_case -> float -> string -> unit
 
 (** [start_span ?label tc] starts a generation span for better shrinking. *)
@@ -149,13 +148,31 @@ val start_span : ?label:int -> test_case -> unit
 (** [stop_span ?discard tc] ends the current generation span. *)
 val stop_span : ?discard:bool -> test_case -> unit
 
+(** {2 Engine-managed collections}
+
+    Collections let the engine choose the length of a variable-length sequence
+    while the caller draws elements one at a time. *)
+
+(** [new_collection tc ~min_size ~max_size] starts a collection and returns its
+    id ([max_size = None] means unbounded). *)
+val new_collection : test_case -> min_size:int -> max_size:int option -> int
+
+(** [collection_more tc ~collection_id] returns whether the engine wants another
+    element. *)
+val collection_more : test_case -> collection_id:int -> bool
+
+(** [collection_reject tc ~collection_id] rejects the collection's last element.
+*)
+val collection_reject : test_case -> collection_id:int -> unit
+
 (** {2 Variable pools}
 
-    Pools are the server-side primitive backing variables in stateful testing
-    (see {!Stateful.Variables}). A pool is a list of integer "variable ids" that
-    the engine can sample from *)
+    Pools are the engine-side primitive backing variables in stateful testing
+    (see {!Stateful.Variables}). A pool is a set of integer "variable ids" that
+    the engine can sample from. *)
 
-(** [new_pool tc] creates a new server-side variable pool and returns its id. *)
+(** [new_pool tc] creates a new engine-managed variable pool and returns its id.
+*)
 val new_pool : test_case -> int
 
 (** [pool_add tc ~pool_id] adds a fresh variable to [pool_id] and returns the
@@ -164,49 +181,30 @@ val pool_add : test_case -> pool_id:int -> int
 
 (** [pool_generate tc ~pool_id ?consume ()] draws a variable id from [pool_id].
     When [consume] is [true] (default [false]), the variable is also removed
-    from the pool server-side. Drawing from an empty pool raises
-    {!Data_exhausted}. *)
+    from the pool. Drawing from an empty pool raises {!Data_exhausted}. *)
 val pool_generate : test_case -> pool_id:int -> ?consume:bool -> unit -> int
 
-(** Lowest supported protocol version. *)
-val supported_protocol_lo : string
-
-(** Highest supported protocol version. *)
-val supported_protocol_hi : string
-
-(** Hegel client for running property-based tests. *)
-type client =
-  { connection : Connection.connection
-  ; control : Connection.stream
-  ; lock : Mutex.t
-  }
-
-(** [create_client connection] creates a new client from a connection. The
-    connection must not yet have had its handshake performed. *)
-val create_client : Connection.connection -> client
-
-(** [run_test client ~settings ?test_location ?database_key ?failure_blob
-      ?record_failure_blobs test_fn] runs a property test using the given
-    settings.
+(** [run_test ~settings ?test_location ?database_key test_fn] runs a property
+    test using the given settings against the native engine.
 
     @param test_location
       source location of the test, used by the Antithesis integration.
       Provided automatically by the [let%hegel_test] PPX. When omitted, no
       Antithesis assertion is emitted.
-    @param failure_blob
-      when [Some b], replays the recorded failure encoded in [b] instead
-      of running normal exploration. Only valid with [Test_run] mode.
-    @param record_failure_blobs
-      when [true] (default [false]), prints any server-reported
-      [failure_blobs] to stderr after a failing test so the user can
-      copy-paste them into a [[@@failure_blobs [...]]] attribute on the test for
-      future replay. *)
+    @param database_key
+      optional key scoping persisted/replayed failing examples. *)
 val run_test
-  :  client
-  -> settings:settings
+  :  settings:settings
   -> ?test_location:Antithesis.test_location
   -> ?database_key:string
-  -> ?failure_blob:string
-  -> ?record_failure_blobs:bool
+  -> (test_case -> unit)
+  -> unit
+
+(** [run_hegel_test ?settings ?test_location test_fn] is {!run_test} with
+    [settings] defaulting to {!default_settings}. The entry point the
+    [let%hegel_test] PPX targets; re-exported as [Hegel.run_hegel_test]. *)
+val run_hegel_test
+  :  ?settings:settings
+  -> ?test_location:Antithesis.test_location
   -> (test_case -> unit)
   -> unit

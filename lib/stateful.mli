@@ -52,6 +52,14 @@ module Variables : sig
   (** Removes and returns a variable from the [variables]. Calls [assume false]
       if the [variables] is empty. *)
   val consume : 'a t -> 'a
+
+  (**/**)
+
+  (** Internal: resolve a drawn variable id against a local value table,
+      removing it when [consume]. Raises {!Client.Flaky_strategy} on an
+      unknown id. Exposed only so the engine-unreachable contract-violation
+      branch can be unit-tested. *)
+  val resolve_drawn : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
 end
 
 module Rule : sig

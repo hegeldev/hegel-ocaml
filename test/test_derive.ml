@@ -11,7 +11,7 @@ open Hegel
 let test_generate_option_e2e () =
   let saw_some = ref false in
   let saw_none = ref false in
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
     let gen_fn tc =
       Hegel.draw tc (Hegel.Generators.integers ~min_value:0 ~max_value:10 ())
     in

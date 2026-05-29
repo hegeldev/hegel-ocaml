@@ -1,174 +1,10 @@
-(** Tests for the Conformance helper module and new generator types. *)
+(** Schema, transform, and e2e tests for floats / text / binary / sampled_from /
+    hashmaps generators. *)
 
 open Hegel
 open Generators
 
-(* ==== Conformance helper tests ==== *)
-
-(** Test: parse_test_cases with None returns 50. *)
-let test_parse_test_cases_none () =
-  let n = Hegel.Conformance.parse_test_cases None in
-  Alcotest.(check int) "None → 50" 50 n
-;;
-
-(** Test: parse_test_cases with a valid integer string. *)
-let test_parse_test_cases_valid () =
-  let n = Hegel.Conformance.parse_test_cases (Some "123") in
-  Alcotest.(check int) "valid → 123" 123 n
-;;
-
-(** Test: parse_test_cases with an invalid string returns 50. *)
-let test_parse_test_cases_invalid () =
-  let n = Hegel.Conformance.parse_test_cases (Some "not_a_number") in
-  Alcotest.(check int) "invalid → 50" 50 n
-;;
-
-(** Test: get_test_cases reads the CONFORMANCE_TEST_CASES env var. *)
-let test_get_test_cases_env () =
-  let saved = Sys.getenv_opt "CONFORMANCE_TEST_CASES" in
-  Unix.putenv "CONFORMANCE_TEST_CASES" "77";
-  let n = Hegel.Conformance.get_test_cases () in
-  Alcotest.(check int) "reads env var" 77 n;
-  match saved with
-  | None -> ()
-  | Some v -> Unix.putenv "CONFORMANCE_TEST_CASES" v
-;;
-
-(** Test: format_metrics produces a correct JSON object string. *)
-let test_format_metrics () =
-  let line = Hegel.Conformance.format_metrics [ "value", "true" ] in
-  Alcotest.(check string) "format" "{\"value\": true}\n" line
-;;
-
-(** Test: format_metrics with multiple pairs. *)
-let test_format_metrics_multiple () =
-  let line = Hegel.Conformance.format_metrics [ "size", "3"; "min_element", "1" ] in
-  Alcotest.(check string) "format multi" "{\"size\": 3, \"min_element\": 1}\n" line
-;;
-
-(** Test: write_metrics_to appends JSON lines to the file. *)
-let test_write_metrics_to_appends () =
-  let tmp = Filename.temp_file "hegel_test_metrics" ".jsonl" in
-  Fun.protect
-    ~finally:(fun () ->
-      try Sys.remove tmp with
-      | _ -> ())
-    (fun () ->
-       Hegel.Conformance.write_metrics_to tmp [ "value", "true" ];
-       Hegel.Conformance.write_metrics_to tmp [ "value", "false" ];
-       let ic = open_in tmp in
-       let content = really_input_string ic (in_channel_length ic) in
-       close_in ic;
-       let lines = String.split_on_char '\n' content in
-       let non_empty = List.filter (fun l -> l <> "") lines in
-       Alcotest.(check int) "two lines" 2 (List.length non_empty);
-       Alcotest.(check string) "first line" {|{"value": true}|} (List.nth non_empty 0);
-       Alcotest.(check string) "second line" {|{"value": false}|} (List.nth non_empty 1))
-;;
-
-(** Test: write_metrics raises Failure when CONFORMANCE_METRICS_FILE not set
-    (None). This test must run before CONFORMANCE_METRICS_FILE is ever set in
-    this process. *)
-let test_write_metrics_none () =
-  (* If env var was previously set by another test, skip the None-raises test
-     and just verify the Some branch works. *)
-  match Sys.getenv_opt "CONFORMANCE_METRICS_FILE" with
-  | None ->
-    (* Env var not set: write_metrics should raise Failure *)
-    let raised =
-      match Hegel.Conformance.write_metrics [ "k", "v" ] with
-      | () -> false
-      | exception Failure _ -> true
-    in
-    Alcotest.(check bool) "raises Failure when env not set" true raised
-  | Some _ ->
-    (* Already set: test the Some branch via write_metrics_to directly *)
-    let n = Hegel.Conformance.parse_test_cases None in
-    Alcotest.(check int) "None → 50" 50 n
-;;
-
-(** Test: write_metrics appends JSON lines via env var. *)
-let test_write_metrics_appends () =
-  let tmp = Filename.temp_file "hegel_test_metrics2" ".jsonl" in
-  let saved = Sys.getenv_opt "CONFORMANCE_METRICS_FILE" in
-  Unix.putenv "CONFORMANCE_METRICS_FILE" tmp;
-  Fun.protect
-    ~finally:(fun () ->
-      (try Sys.remove tmp with
-       | _ -> ());
-      match saved with
-      | None -> ()
-      | Some v -> Unix.putenv "CONFORMANCE_METRICS_FILE" v)
-    (fun () ->
-       Hegel.Conformance.write_metrics [ "value", "42" ];
-       let ic = open_in tmp in
-       let content = really_input_string ic (in_channel_length ic) in
-       close_in ic;
-       Alcotest.(check string) "appended" {|{"value": 42}|} (String.trim content))
-;;
-
-(** Test: with_metrics writes the body's returned pairs on success. *)
-let test_with_metrics_success () =
-  let tmp = Filename.temp_file "hegel_test_with" ".jsonl" in
-  let saved = Sys.getenv_opt "CONFORMANCE_METRICS_FILE" in
-  Unix.putenv "CONFORMANCE_METRICS_FILE" tmp;
-  Fun.protect
-    ~finally:(fun () ->
-      (try Sys.remove tmp with
-       | _ -> ());
-      match saved with
-      | None -> ()
-      | Some v -> Unix.putenv "CONFORMANCE_METRICS_FILE" v)
-    (fun () ->
-       Hegel.Conformance.with_metrics (fun () -> [ "value", "7" ]);
-       let ic = open_in tmp in
-       let content = really_input_string ic (in_channel_length ic) in
-       close_in ic;
-       Alcotest.(check string) "wrote pairs" {|{"value": 7}|} (String.trim content))
-;;
-
-(** Test: with_metrics writes empty metrics and re-raises on exception. *)
-let test_with_metrics_failure () =
-  let tmp = Filename.temp_file "hegel_test_with_fail" ".jsonl" in
-  let saved = Sys.getenv_opt "CONFORMANCE_METRICS_FILE" in
-  Unix.putenv "CONFORMANCE_METRICS_FILE" tmp;
-  Fun.protect
-    ~finally:(fun () ->
-      (try Sys.remove tmp with
-       | _ -> ());
-      match saved with
-      | None -> ()
-      | Some v -> Unix.putenv "CONFORMANCE_METRICS_FILE" v)
-    (fun () ->
-       let raised =
-         match Hegel.Conformance.with_metrics (fun () -> failwith "boom") with
-         | () -> false
-         | exception Failure _ -> true
-       in
-       Alcotest.(check bool) "re-raised exception" true raised;
-       let ic = open_in tmp in
-       let content = really_input_string ic (in_channel_length ic) in
-       close_in ic;
-       Alcotest.(check string) "wrote empty metric" "{}" (String.trim content))
-;;
-
-(** Test: write_metrics raises Sys_error on bad path. *)
-let test_write_metrics_bad_path () =
-  let saved = Sys.getenv_opt "CONFORMANCE_METRICS_FILE" in
-  Unix.putenv "CONFORMANCE_METRICS_FILE" "/nonexistent/dir/file.jsonl";
-  let raised =
-    match Hegel.Conformance.write_metrics [ "k", "v" ] with
-    | () -> false
-    | exception Sys_error _ -> true
-    | exception Failure _ -> true
-  in
-  Alcotest.(check bool) "raises on bad path" true raised;
-  match saved with
-  | None -> ()
-  | Some v -> Unix.putenv "CONFORMANCE_METRICS_FILE" v
-;;
-
-(* ==== New generator schema tests ==== *)
+(* ==== Generator schema tests ==== *)
 
 (** Test: floats() with no options produces a Basic generator with type=number.
 *)
@@ -438,7 +274,7 @@ let test_hashmaps_non_basic_values_composite () =
   Alcotest.(check bool) "not basic" false (is_basic gen)
 ;;
 
-(* ==== E2E tests for new generators ==== *)
+(* ==== E2E tests ==== *)
 
 (** Test: floats() E2E — values are floats. *)
 let%hegel_test test_floats_e2e tc =
@@ -491,21 +327,7 @@ let%hegel_test test_hashmaps_e2e tc =
 ;;
 
 let tests =
-  [ (* Conformance helper tests — write_metrics None MUST be first to run before env is set *)
-    Alcotest.test_case "write_metrics None" `Quick test_write_metrics_none
-  ; Alcotest.test_case "parse_test_cases None" `Quick test_parse_test_cases_none
-  ; Alcotest.test_case "parse_test_cases valid" `Quick test_parse_test_cases_valid
-  ; Alcotest.test_case "parse_test_cases invalid" `Quick test_parse_test_cases_invalid
-  ; Alcotest.test_case "get_test_cases env" `Quick test_get_test_cases_env
-  ; Alcotest.test_case "format_metrics" `Quick test_format_metrics
-  ; Alcotest.test_case "format_metrics multiple" `Quick test_format_metrics_multiple
-  ; Alcotest.test_case "write_metrics_to appends" `Quick test_write_metrics_to_appends
-  ; Alcotest.test_case "write_metrics appends" `Quick test_write_metrics_appends
-  ; Alcotest.test_case "write_metrics bad path" `Quick test_write_metrics_bad_path
-  ; Alcotest.test_case "with_metrics success" `Quick test_with_metrics_success
-  ; Alcotest.test_case "with_metrics failure" `Quick test_with_metrics_failure
-  ; (* New generator schema tests *)
-    Alcotest.test_case "floats schema no bounds" `Quick test_floats_schema_no_bounds
+  [ Alcotest.test_case "floats schema no bounds" `Quick test_floats_schema_no_bounds
   ; Alcotest.test_case "floats schema all options" `Quick test_floats_schema_all_options
   ; Alcotest.test_case
       "floats schema exclude false"
@@ -538,8 +360,7 @@ let tests =
       "hashmaps non-basic values composite"
       `Quick
       test_hashmaps_non_basic_values_composite
-  ; (* E2E tests *)
-    Alcotest.test_case "floats e2e" `Quick test_floats_e2e
+  ; Alcotest.test_case "floats e2e" `Quick test_floats_e2e
   ; Alcotest.test_case "floats bounds e2e" `Quick test_floats_bounds_e2e
   ; Alcotest.test_case "text e2e" `Quick test_text_e2e
   ; Alcotest.test_case "binary e2e" `Quick test_binary_e2e
