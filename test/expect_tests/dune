@@ -1,0 +1,11 @@
+; ppx_expect tests. In their own directory so the coverage recipe can run just
+; these inline tests via [dune runtest test/expect_tests] without re-running the
+; Alcotest suites.
+
+(library
+ (name expect_tests)
+ (libraries hegel core core_unix)
+ (inline_tests
+  (backend ppx_inline_test))
+ (preprocess
+  (pps ppx_expect)))

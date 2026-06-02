@@ -12,56 +12,6 @@ open! Core
 open Hegel
 open Generators
 
-(* ---- printer accessor (pure, no engine) ---- *)
-
-let show_printer f_opt v =
-  match f_opt with
-  | Some f -> print_s (f v)
-  | None -> print_string "NONE"
-;;
-
-let%expect_test "printer renders a primitive int draw" =
-  show_printer (printer (integers ())) 42;
-  [%expect {| 42 |}]
-;;
-
-let%expect_test "printer renders a primitive bool draw" =
-  show_printer (printer (booleans ())) true;
-  [%expect {| true |}]
-;;
-
-let%expect_test "printer renders a text draw" =
-  show_printer (printer (text ())) "hi";
-  [%expect {| hi |}]
-;;
-
-let%expect_test "filter delegates the source printer" =
-  show_printer (printer (filter (fun _ -> true) (integers ()))) 5;
-  [%expect {| 5 |}]
-;;
-
-let%expect_test "map over Basic drops the carried printer" =
-  printf "%b" (Option.is_none (printer (map (fun x -> x) (integers ()))));
-  [%expect {| true |}]
-;;
-
-let%expect_test "map over non-Basic (Mapped) has no printer" =
-  let g = map (fun x -> x) (filter (fun _ -> true) (integers ())) in
-  printf "%b" (Option.is_none (printer g));
-  [%expect {| true |}]
-;;
-
-let%expect_test "sampled_from has no printer" =
-  printf "%b" (Option.is_none (printer (sampled_from [ 1; 2; 3 ])));
-  [%expect {| true |}]
-;;
-
-let%expect_test "composite list has no printer in phase 1" =
-  let g = lists (filter (fun _ -> true) (integers ())) () in
-  printf "%b" (Option.is_none (printer g));
-  [%expect {| true |}]
-;;
-
 (* ---- draw / draw_silent through the engine ---- *)
 
 (* Quiet, deterministic run; swallow the failure the property raises so the

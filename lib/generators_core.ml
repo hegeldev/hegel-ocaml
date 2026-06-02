@@ -90,7 +90,9 @@ let basic ?sexp_of ?(unique_safe = true) ~schema ~transform () =
 let rec printer : type a. a generator -> (a -> Sexp.t) option = function
   | Basic { sexp_of; _ } -> sexp_of
   | Filtered { source; _ } -> printer source
-  | Mapped _ | FlatMapped _ | CompositeList _ | Composite _ -> None
+  (* [Mapped]/[FlatMapped] and the composite generators: the output type is
+     chosen by user code, so no printer is carried. *)
+  | _ -> None
 ;;
 
 (** Maximum number of filter attempts before calling [assume false]. *)

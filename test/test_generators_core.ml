@@ -297,6 +297,45 @@ let test_discardable_group_e2e () =
     assert (n >= 0 && n <= 10))
 ;;
 
+(** [printer gen] renders [value] to [expected]. *)
+let check_printer name gen value expected =
+  match printer gen with
+  | Some f -> Alcotest.(check string) name expected (Core.Sexp.to_string (f value))
+  | None -> Alcotest.fail (name ^ ": expected a printer")
+;;
+
+(** [printer gen] carries no printer. *)
+let check_no_printer name gen =
+  Alcotest.(check bool) name true (Option.is_none (printer gen))
+;;
+
+let test_printer_int () = check_printer "int" (integers ()) 42 "42"
+let test_printer_bool () = check_printer "bool" (booleans ()) true "true"
+let test_printer_text () = check_printer "text" (text ()) "hi" "hi"
+
+(* [filter] is type-preserving, so it delegates to the source's printer. *)
+let test_printer_filter_delegates () =
+  check_printer "filter" (filter (fun _ -> true) (integers ())) 5 "5"
+;;
+
+(* [map] over a [Basic] stays [Basic] but drops the printer (the output type is
+   the user's). *)
+let test_printer_map_basic_none () =
+  check_no_printer "map basic" (map (fun x -> x) (integers ()))
+;;
+
+let test_printer_mapped_none () =
+  check_no_printer "mapped" (map (fun x -> x) (filter (fun _ -> true) (integers ())))
+;;
+
+let test_printer_sampled_from_none () =
+  check_no_printer "sampled_from" (sampled_from [ 1; 2; 3 ])
+;;
+
+let test_printer_composite_list_none () =
+  check_no_printer "composite list" (lists (filter (fun _ -> true) (integers ())) ())
+;;
+
 let tests =
   [ Alcotest.test_case "span label constants" `Quick test_span_label_constants
   ; Alcotest.test_case "basic generator schema" `Quick test_basic_generator_schema
@@ -351,5 +390,16 @@ let tests =
   ; Alcotest.test_case "filter exhaustion e2e" `Quick test_filter_exhaustion_e2e
   ; Alcotest.test_case "group e2e" `Quick test_group_e2e
   ; Alcotest.test_case "discardable_group e2e" `Quick test_discardable_group_e2e
+  ; Alcotest.test_case "printer int" `Quick test_printer_int
+  ; Alcotest.test_case "printer bool" `Quick test_printer_bool
+  ; Alcotest.test_case "printer text" `Quick test_printer_text
+  ; Alcotest.test_case "printer filter delegates" `Quick test_printer_filter_delegates
+  ; Alcotest.test_case "printer map basic none" `Quick test_printer_map_basic_none
+  ; Alcotest.test_case "printer mapped none" `Quick test_printer_mapped_none
+  ; Alcotest.test_case "printer sampled_from none" `Quick test_printer_sampled_from_none
+  ; Alcotest.test_case
+      "printer composite list none"
+      `Quick
+      test_printer_composite_list_none
   ]
 ;;
