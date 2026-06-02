@@ -122,7 +122,9 @@ let always_reject_rule =
 
 let%hegel_test stateful_retry_budget_floor_test tc =
   Hegel.Stateful.run ~init:() ~rules:[ always_reject_rule ] tc
-[@@settings Hegel.settings ~test_cases:1 ~seed:0 ()]
+[@@settings
+  Hegel.settings ~test_cases:1 ~seed:0 ()
+  |> Hegel.Client.with_suppress_health_check [ Hegel.Client.Filter_too_much ]]
 ;;
 
 (* Directly exercise [resolve_drawn]: the engine-unreachable [None] branch

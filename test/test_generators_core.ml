@@ -254,9 +254,13 @@ let test_filter_e2e () =
 
 (** Test: filter exhaustion through server (always false → assume false). *)
 let test_filter_exhaustion_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
-    let gen = filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ()) in
-    ignore (Hegel.draw tc gen))
+  Hegel.run_hegel_test
+    ~settings:
+      (Client.settings ~test_cases:10 ()
+       |> Hegel.Client.with_suppress_health_check [ Hegel.Client.Filter_too_much ])
+    (fun tc ->
+       let gen = filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ()) in
+       ignore (Hegel.draw tc gen))
 ;;
 
 (** Test: group helper through server. *)
