@@ -61,3 +61,15 @@
  (libraries hegel alcotest core core_unix threads.posix yojson)
  (preprocess
   (pps ppx_js_style ppx_hegel_test -- -allow-unannotated-ignores)))
+
+; Expect tests for Phase 1 draw-value printing. Uses [let%expect_test] so the
+; final-replay draw/note output (stderr) can be captured and snapshotted.
+
+(library
+ (name test_draw_printing)
+ (modules test_draw_printing)
+ (libraries hegel core core_unix)
+ (inline_tests
+  (backend ppx_inline_test))
+ (preprocess
+  (pps ppx_expect)))

@@ -112,12 +112,15 @@ val with_phases : phase list -> settings -> settings
 val with_mode : mode -> settings -> settings
 
 (** Per-test-case state passed explicitly to the test function. Holds the
-    native test-case handle, the final-replay flag, and abort state. *)
+    native test-case handle, the final-replay flag, abort state, and the
+    current generation-span depth (used to print only the outermost drawn value
+    on the final replay). *)
 type test_case =
   { handle : Hegel_ffi.Ffi.test_case
   ; mode : mode
   ; is_final : bool
   ; mutable test_aborted : bool
+  ; mutable draw_depth : int
   }
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.

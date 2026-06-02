@@ -28,7 +28,9 @@ end
       composes transforms. The [unique_safe] flag tracks whether [transform] is
       known to preserve distinctness over the schema's value space (i.e. is
       injective); leaf generators set it to [true], and [map] sets it to
-      [false] since the user's function may collapse distinct inputs.
+      [false] since the user's function may collapse distinct inputs. The
+      optional [sexp_of] is the printer used to render a drawn value on the
+      final replay; it is [None] when the output type's printer is not known.
     - [Mapped] generators wrap a source generator and a transform function.
     - [FlatMapped] generators wrap a source and a function returning a
       generator.
@@ -42,6 +44,7 @@ type 'a generator =
       { schema : Cbor.t
       ; transform : Cbor.t -> 'a
       ; unique_safe : bool
+      ; sexp_of : ('a -> Sexp.t) option
       }
       -> 'a generator
   | Mapped :
@@ -70,6 +73,25 @@ type 'a generator =
       ; generate_fn : Client.test_case -> 'a
       }
       -> 'a generator
+
+(** [basic ~schema ~transform ?sexp_of ?unique_safe ()] builds a {!Basic}
+    generator. [sexp_of], when given, is the printer used to render a drawn
+    value on the final replay. [unique_safe] defaults to [true] (leaf
+    generators preserve distinctness); set it to [false] for transforms that
+    may collapse distinct inputs. *)
+let basic ?sexp_of ?(unique_safe = true) ~schema ~transform () =
+  Basic { schema; transform; unique_safe; sexp_of }
+;;
+
+(** [printer gen] returns the printer carried by [gen], if any. Primitive
+    [Basic] generators carry one; [Filtered] delegates to its source (it
+    preserves the value type); [Mapped]/[FlatMapped] and the composite
+    generators carry none, since their output type is chosen by user code. *)
+let rec printer : type a. a generator -> (a -> Sexp.t) option = function
+  | Basic { sexp_of; _ } -> sexp_of
+  | Filtered { source; _ } -> printer source
+  | Mapped _ | FlatMapped _ | CompositeList _ | Composite _ -> None
+;;
 
 (** Maximum number of filter attempts before calling [assume false]. *)
 let max_filter_attempts = 3
@@ -192,9 +214,34 @@ let rec do_draw : type a. a generator -> Client.test_case -> a =
   | Composite { label; generate_fn } -> group label data (fun () -> generate_fn data)
 ;;
 
-(** [draw tc gen] produces a typed value from generator [gen] using test case
-    [tc]. *)
-let draw tc gen = do_draw gen tc
+(** [draw ?label ?sexp_of tc gen] produces a typed value from generator [gen]
+    using test case [tc].
+
+    On the final replay of a failing test, an outermost draw prints its value
+    through {!Client.note} — as [label = value] when [label] is given, or just
+    the value otherwise. Draws nested inside a span (e.g. composite elements)
+    are suppressed so only the outermost value shows. [sexp_of], when given,
+    overrides the printer carried by [gen]; if neither is available nothing is
+    printed. *)
+let draw ?label ?sexp_of tc gen =
+  let value = do_draw gen tc in
+  if tc.Client.is_final && tc.Client.draw_depth = 0
+  then
+    Option.iter
+      (Option.first_some sexp_of (printer gen))
+      ~f:(fun f ->
+        let rendered = Sexp.to_string_hum (f value) in
+        Client.note
+          tc
+          (Option.value_map label ~default:rendered ~f:(fun l ->
+             sprintf "%s = %s" l rendered)));
+  value
+;;
+
+(** [draw_silent tc gen] is {!draw} without recording the value for the
+    final-replay output. Use it for draws whose value is not a useful part of
+    the printed counterexample. *)
+let draw_silent tc gen = do_draw gen tc
 
 (** [map f gen] transforms values from [gen] using [f].
 
@@ -208,7 +255,7 @@ let map : type a b. (a -> b) -> a generator -> b generator =
        is no longer known to preserve uniqueness. Consumers that rely on this
        (e.g. [lists ~unique:true]) must fall back to a post-transform dedup
        path when [unique_safe] is [false]. *)
-    Basic { schema; transform = (fun x -> f (transform x)); unique_safe = false }
+    basic ~schema ~transform:(fun x -> f (transform x)) ~unique_safe:false ()
   | other -> Mapped { source = other; f }
 ;;
 

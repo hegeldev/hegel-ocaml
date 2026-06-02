@@ -166,12 +166,15 @@ let with_phases phases s = { s with phases = Some phases }
 let with_mode mode s = { s with mode }
 
 (** Per-test-case state passed explicitly to the test function. Holds the
-    native test-case handle, the final-replay flag, and abort state. *)
+    native test-case handle, the final-replay flag, abort state, and the
+    current generation-span depth (used to print only the outermost drawn value
+    on the final replay). *)
 type test_case =
   { handle : Ffi.test_case
   ; mode : mode
   ; is_final : bool
   ; mutable test_aborted : bool
+  ; mutable draw_depth : int
   }
 
 (** Domain-local flag to detect nested test cases. *)
@@ -234,6 +237,9 @@ let target tc value label =
 
 (** [start_span ?label tc] starts a generation span for better shrinking. *)
 let start_span ?(label = 0) tc =
+  (* Bump before the abort guard so the depth stays balanced with [stop_span]
+     even when the test case has been aborted. *)
+  tc.draw_depth <- tc.draw_depth + 1;
   if tc.test_aborted
   then ()
   else with_stop_guard tc (fun () -> Ffi.start_span tc.handle label)
@@ -241,6 +247,7 @@ let start_span ?(label = 0) tc =
 
 (** [stop_span ?discard tc] ends the current generation span. *)
 let stop_span ?(discard = false) tc =
+  tc.draw_depth <- tc.draw_depth - 1;
   if tc.test_aborted
   then ()
   else with_stop_guard tc (fun () -> Ffi.stop_span tc.handle discard)
@@ -364,7 +371,9 @@ let run_test ~(settings : settings) ?test_location ?database_key test_fn =
       | None -> ()
       | Some handle ->
         let is_final = Ffi.is_final_replay handle in
-        let tc = { handle; mode = settings.mode; is_final; test_aborted = false } in
+        let tc =
+          { handle; mode = settings.mode; is_final; test_aborted = false; draw_depth = 0 }
+        in
         Stdlib.Domain.DLS.set in_test_context true;
         let status, origin =
           match test_fn tc with

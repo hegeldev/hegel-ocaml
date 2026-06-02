@@ -29,6 +29,7 @@ type 'a generator =
       { schema : Cbor.t
       ; transform : Cbor.t -> 'a
       ; unique_safe : bool
+      ; sexp_of : ('a -> Core.Sexp.t) option
       }
       -> 'a generator
   | Mapped :
@@ -116,9 +117,30 @@ val collection_reject : collection -> Client.test_case -> unit
     test case [tc]. *)
 val do_draw : 'a generator -> Client.test_case -> 'a
 
-(** [draw tc gen] produces a typed value from generator [gen] using test case
-    [tc]. *)
-val draw : Client.test_case -> 'a generator -> 'a
+(** [draw ?label ?sexp_of tc gen] produces a typed value from generator [gen]
+    using test case [tc].
+
+    On the final replay of a failing test, an outermost draw prints its value
+    through {!Client.note} — as [label = value] when [label] is given, or just
+    the value otherwise. Draws nested inside a span (e.g. composite elements)
+    are suppressed so only the outermost value shows. [sexp_of], when given,
+    overrides the printer carried by [gen]; if neither is available nothing is
+    printed. *)
+val draw
+  :  ?label:string
+  -> ?sexp_of:('a -> Core.Sexp.t)
+  -> Client.test_case
+  -> 'a generator
+  -> 'a
+
+(** [draw_silent tc gen] is {!draw} without recording the value for the
+    final-replay output. *)
+val draw_silent : Client.test_case -> 'a generator -> 'a
+
+(** [printer gen] returns the printer carried by [gen], if any. Primitive
+    generators carry one; {!filter} delegates to its source; {!map}, {!flat_map}
+    and the composite generators carry none. *)
+val printer : 'a generator -> ('a -> Core.Sexp.t) option
 
 (** [map f gen] transforms values from [gen] using [f].
 

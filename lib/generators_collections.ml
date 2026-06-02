@@ -36,11 +36,11 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
           | _ -> failwith "hashmaps: expected [k, v] pair from server")
       | _ -> failwith "hashmaps: expected array from server"
     in
-    Basic
-      { schema = `Map pairs
-      ; transform
-      ; unique_safe = basic_unique_safe keys && basic_unique_safe values
-      }
+    basic
+      ~schema:(`Map pairs)
+      ~transform
+      ~unique_safe:(basic_unique_safe keys && basic_unique_safe values)
+      ()
   | _ ->
     (* dict semantics require unique keys, so we dedup client-side here just
        like [lists ~unique:true] does *)
@@ -112,11 +112,11 @@ let lists elements ?(min_size = 0) ?max_size ?(unique = false) () =
       | `Array items -> List.map items ~f:elem_transform
       | _ -> failwith "Internal error: server returned non-array for list schema"
     in
-    Basic
-      { schema = raw_schema
-      ; transform = list_transform
-      ; unique_safe = basic_unique_safe elements
-      }
+    basic
+      ~schema:raw_schema
+      ~transform:list_transform
+      ~unique_safe:(basic_unique_safe elements)
+      ()
   | _ ->
     if not unique
     then

@@ -42,9 +42,20 @@ val note : Client.test_case -> string -> unit
     toward higher values. *)
 val target : Client.test_case -> float -> string -> unit
 
-(** [draw tc gen] produces a typed value from generator [gen] using test case
-    [tc]. *)
-val draw : Client.test_case -> 'a Generators.generator -> 'a
+(** [draw ?label ?sexp_of tc gen] produces a typed value from generator [gen]
+    using test case [tc]. On the final replay of a failing test, an outermost
+    draw prints its value (as [label = value], or just the value); [sexp_of]
+    overrides the printer carried by [gen]. See {!Generators.draw}. *)
+val draw
+  :  ?label:string
+  -> ?sexp_of:('a -> Core.Sexp.t)
+  -> Client.test_case
+  -> 'a Generators.generator
+  -> 'a
+
+(** [draw_silent tc gen] is {!draw} without printing the value on the final
+    replay. *)
+val draw_silent : Client.test_case -> 'a Generators.generator -> 'a
 
 (** [default_settings ()] creates default test settings with CI auto-detection.
 *)
