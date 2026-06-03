@@ -38,8 +38,9 @@ let test_lists_basic_no_max_schema () =
 (** Test: lists(basic_elem_with_transform) produces a Basic generator whose
     transform applies the element transform to every item in the result list. *)
 let test_lists_basic_with_element_transform () =
-  (* Build a basic generator with a transform (doubles the value) *)
-  let elem = map (fun v -> v * 2) (integers ()) in
+  (* Build a basic generator with a transform (doubles the value); [with_printer]
+     makes the mapped element drawable/composable while preserving its core. *)
+  let elem = with_printer Core.Int.sexp_of_t (map (fun v -> v * 2) (integers ())) in
   Alcotest.(check bool) "elem is_basic" true (is_basic elem);
   let gen = lists elem () in
   Alcotest.(check bool) "gen is_basic" true (is_basic gen);
@@ -61,13 +62,13 @@ let test_lists_non_basic_is_not_basic () =
 (** Test: lists basic transform raises on non-array input. *)
 let test_lists_basic_non_array_raises () =
   let gen = lists (integers ()) () in
-  match gen with
-  | Basic { transform; _ } ->
+  match as_basic gen with
+  | Some (_, transform) ->
     let raised = ref false in
     (try ignore (transform (`Int 42) : _) with
      | Failure _ -> raised := true);
     Alcotest.(check bool) "raised" true !raised
-  | _ -> Alcotest.fail "expected Basic"
+  | None -> Alcotest.fail "expected Basic"
 ;;
 
 (* ==== Validation tests ==== *)
@@ -266,7 +267,9 @@ let%hegel_test test_hashmaps_non_basic_values_e2e tc =
 let%hegel_test test_lists_unique_under_map_e2e tc =
   let gen =
     lists
-      (map (fun _ -> 0) (integers ~min_value:0 ~max_value:1 ()))
+      (with_printer
+         Core.Int.sexp_of_t
+         (map (fun _ -> 0) (integers ~min_value:0 ~max_value:1 ())))
       ~min_size:2
       ~max_size:2
       ~unique:true

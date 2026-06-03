@@ -311,7 +311,7 @@ let%hegel_test test_binary_e2e tc =
 (** Test: sampled_from() E2E — values come from the options list. *)
 let%hegel_test test_sampled_from_e2e tc =
   let options = [ 10; 20; 30 ] in
-  let n = Hegel.draw tc (sampled_from options) in
+  let n = Hegel.draw_silent tc (sampled_from options) in
   assert (List.mem n [ 10; 20; 30 ])
 [@@settings Client.settings ~test_cases:10 ()]
 ;;

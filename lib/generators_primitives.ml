@@ -295,10 +295,9 @@ let binary ?(min_size = 0) ?max_size () =
     result, returning the constant [value]. The output type is chosen by the
     caller, so no printer is carried. *)
 let just value =
-  basic
+  basic_silent
     ~schema:(`Map [ `Text "type", `Text "constant"; `Text "value", `Null ])
     ~transform:(fun _ -> value)
-    ~unique_safe:false
     ()
 ;;
 

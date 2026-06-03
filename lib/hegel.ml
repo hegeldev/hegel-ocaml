@@ -38,14 +38,18 @@ let note = Client.note
     toward higher values. *)
 let target = Client.target
 
-(** [draw ?label ?sexp_of tc gen] produces a typed value from generator [gen].
-    On the final replay of a failing test, an outermost draw prints its value.
-    See {!Generators.draw}. *)
+(** [draw ?label tc gen] produces a typed value from the printable generator
+    [gen]. On the final replay of a failing test, an outermost draw prints its
+    value. See {!Generators.draw}. *)
 let draw = Generators.draw
 
 (** [draw_silent tc gen] is {!draw} without printing the value on the final
-    replay. *)
+    replay, and accepts a generator with no printer. *)
 let draw_silent = Generators.draw_silent
+
+(** [with_printer sexp_of gen] attaches [sexp_of] so [gen] can be drawn with
+    {!draw}. See {!Generators.with_printer}. *)
+let with_printer = Generators.with_printer
 
 (** [default_settings ()] creates default test settings with CI auto-detection.
 *)

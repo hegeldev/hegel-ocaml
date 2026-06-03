@@ -248,7 +248,10 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) : express
   [%expr
     fun _hegel_tc ->
       let _variant_idx =
-        Hegel.draw
+        (* [sampled_from] carries no printer; the whole derived value is printed
+           separately below, and these inner draws are nested in a [group] span
+           anyway, so the index draw is silent. *)
+        Hegel.draw_silent
           _hegel_tc
           (Hegel.Generators.sampled_from
              [%e Ast_builder.Default.elist ~loc index_options])

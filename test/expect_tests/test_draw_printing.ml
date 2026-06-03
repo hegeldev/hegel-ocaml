@@ -4,9 +4,9 @@
     [draw] prints its value through the [note] channel (stderr, captured here by
     ppx_expect). [draw_silent] never prints, and draws nested inside a span
     (depth > 0) are suppressed so only the outermost value shows. The printer is
-    carried on primitive generators (and overridable per-draw via [~sexp_of]);
-    combinators that hand the output type to user code ([map], [sampled_from])
-    carry no printer. *)
+    carried on primitive generators; combinators that hand the output type to
+    user code ([map], [sampled_from]) carry none, and [with_printer] attaches
+    one (and is what [draw] requires). *)
 
 open! Core
 open Hegel
@@ -53,20 +53,32 @@ let%expect_test "unlabeled draw prints the bare value on final replay" =
     |}]
 ;;
 
-let%expect_test "explicit ~sexp_of overrides the carried printer" =
+let%expect_test "with_printer supplies the printer draw renders with" =
   run_failing (fun tc ->
     let _ =
       Hegel.draw
         ~label:"h"
-        ~sexp_of:(fun n -> Sexp.Atom (sprintf "0x%x" n))
         tc
-        (integers ~min_value:255 ~max_value:255 ())
+        (with_printer
+           (fun n -> Sexp.Atom (sprintf "0x%x" n))
+           (integers ~min_value:255 ~max_value:255 ()))
     in
     assert false);
   [%expect
     {|
     Counterexample found
     h = 0xff
+    |}]
+;;
+
+let%expect_test "with_printer makes an unprintable sampled_from drawable" =
+  run_failing (fun tc ->
+    let _ = Hegel.draw ~label:"c" tc (with_printer Int.sexp_of_t (sampled_from [ 9 ])) in
+    assert false);
+  [%expect
+    {|
+    Counterexample found
+    c = 9
     |}]
 ;;
 
