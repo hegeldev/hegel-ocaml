@@ -35,14 +35,22 @@ let%expect_test "labeled draw prints name = value on final replay" =
   run_failing (fun tc ->
     let _ = Hegel.draw ~label:"x" tc (integers ~min_value:7 ~max_value:7 ()) in
     assert false);
-  [%expect {| x = 7 |}]
+  [%expect
+    {|
+    Counterexample found
+    x = 7
+    |}]
 ;;
 
 let%expect_test "unlabeled draw prints the bare value on final replay" =
   run_failing (fun tc ->
     let _ = Hegel.draw tc (integers ~min_value:123456 ~max_value:123456 ()) in
     assert false);
-  [%expect {| 123456 |}]
+  [%expect
+    {|
+    Counterexample found
+    123456
+    |}]
 ;;
 
 let%expect_test "explicit ~sexp_of overrides the carried printer" =
@@ -55,7 +63,11 @@ let%expect_test "explicit ~sexp_of overrides the carried printer" =
         (integers ~min_value:255 ~max_value:255 ())
     in
     assert false);
-  [%expect {| h = 0xff |}]
+  [%expect
+    {|
+    Counterexample found
+    h = 0xff
+    |}]
 ;;
 
 let%expect_test "draw nested in a span (depth > 0) is suppressed" =
@@ -67,7 +79,11 @@ let%expect_test "draw nested in a span (depth > 0) is suppressed" =
     Hegel.note tc "ran";
     assert false);
   (* Only the outermost draw should print; the nested one is suppressed. *)
-  [%expect {| ran |}]
+  [%expect
+    {|
+    Counterexample found
+    ran
+    |}]
 ;;
 
 let%expect_test "a tuple draw prints as one sexp" =
@@ -81,7 +97,11 @@ let%expect_test "a tuple draw prints as one sexp" =
            (integers ~min_value:8 ~max_value:8 ()))
     in
     assert false);
-  [%expect {| pair = (7 8) |}]
+  [%expect
+    {|
+    Counterexample found
+    pair = (7 8)
+    |}]
 ;;
 
 let%expect_test "a list draw prints as one sexp" =
@@ -93,5 +113,47 @@ let%expect_test "a list draw prints as one sexp" =
         (lists (integers ~min_value:7 ~max_value:7 ()) ~min_size:2 ~max_size:2 ())
     in
     assert false);
-  [%expect {| xs = (7 7) |}]
+  [%expect
+    {|
+    Counterexample found
+    xs = (7 7)
+    |}]
+;;
+
+let%expect_test "Variables.draw prints the binding (with ~sexp_of)" =
+  run_failing (fun tc ->
+    let vars = Stateful.Variables.create ~sexp_of:Int.sexp_of_t tc in
+    Stateful.Variables.add vars 42;
+    let _ = Stateful.Variables.draw vars in
+    assert false);
+  [%expect
+    {|
+    Counterexample found
+    v1 = 42
+    |}]
+;;
+
+let%expect_test "Variables.draw without ~sexp_of prints no binding" =
+  run_failing (fun tc ->
+    let vars = Stateful.Variables.create tc in
+    Stateful.Variables.add vars 42;
+    let _ = Stateful.Variables.draw vars in
+    assert false);
+  (* Header only — no [v<id>] line, since no printer was supplied. *)
+  [%expect {| Counterexample found |}]
+;;
+
+let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
+  let rule =
+    Stateful.Rule.create ~name:"push" ~step:(fun tc _state ->
+      let _ = Hegel.draw ~label:"n" tc (integers ~min_value:7 ~max_value:7 ()) in
+      assert false)
+  in
+  run_failing (fun tc -> Stateful.run ~init:() ~rules:[ rule ] tc);
+  [%expect
+    {|
+    Counterexample found
+    Step 1: push
+    n = 7
+    |}]
 ;;

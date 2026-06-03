@@ -107,22 +107,34 @@ let rec printer : type a. a generator -> (a -> Sexp.t) option = function
 let max_filter_attempts = 3
 
 (** [group label data f] runs [f ()] inside a span with the given [label]. The
-    span is stopped with [discard:false] regardless of whether [f] raises. *)
+    span is stopped with [discard:false] regardless of whether [f] raises.
+
+    A group also increments [draw_depth] for the duration of [f], marking [f]'s
+    draws as nested so only the outermost value prints on the final replay. (A
+    counter, not a flag, so nested groups compose.) *)
 let group label data f =
   Client.start_span ~label data;
-  Exn.protect ~finally:(fun () -> Client.stop_span data) ~f:(fun () -> f ())
+  data.Client.draw_depth <- data.Client.draw_depth + 1;
+  Exn.protect
+    ~finally:(fun () ->
+      data.Client.draw_depth <- data.Client.draw_depth - 1;
+      Client.stop_span data)
+    ~f
 ;;
 
-(** [discardable_group label data f] runs [f ()] inside a span with [label]. If
-    [f] raises, the span is stopped with [discard:true]; otherwise
-    [discard:false]. *)
+(** [discardable_group label data f] runs [f ()] inside a span with [label],
+    incrementing [draw_depth] like {!group}. If [f] raises, the span is stopped
+    with [discard:true]; otherwise [discard:false]. *)
 let discardable_group label data f =
   Client.start_span ~label data;
+  data.Client.draw_depth <- data.Client.draw_depth + 1;
   match f () with
   | v ->
+    data.Client.draw_depth <- data.Client.draw_depth - 1;
     Client.stop_span data;
     v
   | exception e ->
+    data.Client.draw_depth <- data.Client.draw_depth - 1;
     Client.stop_span ~discard:true data;
     raise e
 ;;

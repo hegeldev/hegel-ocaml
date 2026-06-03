@@ -237,9 +237,6 @@ let target tc value label =
 
 (** [start_span ?label tc] starts a generation span for better shrinking. *)
 let start_span ?(label = 0) tc =
-  (* Bump before the abort guard so the depth stays balanced with [stop_span]
-     even when the test case has been aborted. *)
-  tc.draw_depth <- tc.draw_depth + 1;
   if tc.test_aborted
   then ()
   else with_stop_guard tc (fun () -> Ffi.start_span tc.handle label)
@@ -247,7 +244,6 @@ let start_span ?(label = 0) tc =
 
 (** [stop_span ?discard tc] ends the current generation span. *)
 let stop_span ?(discard = false) tc =
-  tc.draw_depth <- tc.draw_depth - 1;
   if tc.test_aborted
   then ()
   else with_stop_guard tc (fun () -> Ffi.stop_span tc.handle discard)
@@ -374,6 +370,12 @@ let run_test ~(settings : settings) ?test_location ?database_key test_fn =
         let tc =
           { handle; mode = settings.mode; is_final; test_aborted = false; draw_depth = 0 }
         in
+        (* The final replay of a property-test failure is where drawn values are
+           printed; head that block with a marker. Not for [Single_test_case]
+           (value inspection), which is not a counterexample. *)
+        (match settings.mode with
+         | Test_run when is_final -> eprintf "Counterexample found\n%!"
+         | _ -> ());
         Stdlib.Domain.DLS.set in_test_context true;
         let status, origin =
           match test_fn tc with

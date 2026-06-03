@@ -7,11 +7,12 @@ module Variables = struct
     { tc : Client.test_case
     ; pool_id : int
     ; values : (int, 'a) Hashtbl.t
+    ; sexp_of : ('a -> Sexp.t) option
     }
 
-  let create tc =
+  let create ?sexp_of tc =
     let pool_id = Client.new_pool tc in
-    { tc; pool_id; values = Hashtbl.create (module Int) }
+    { tc; pool_id; values = Hashtbl.create (module Int); sexp_of }
   ;;
 
   let add t value =
@@ -40,7 +41,16 @@ module Variables = struct
   let pick t ~consume =
     Client.assume t.tc (not (is_empty t));
     let variable_id = Client.pool_generate t.tc ~pool_id:t.pool_id ~consume () in
-    resolve_drawn t.values ~consume variable_id
+    let value = resolve_drawn t.values ~consume variable_id in
+    (* On the final replay, print the chosen binding — but only when a printer
+       was supplied; without one we print nothing (not even the handle). *)
+    if t.tc.Client.is_final
+    then
+      Option.iter t.sexp_of ~f:(fun f ->
+        Client.note
+          t.tc
+          (Printf.sprintf "v%d = %s" variable_id (Sexp.to_string (f value))));
+    value
   ;;
 
   let draw t = pick t ~consume:false
@@ -70,9 +80,11 @@ let run ~init ~rules ?(invariants = []) tc =
     let run_invariants state = List.iter invariants ~f:(fun inv -> inv state) in
     run_invariants init;
     let step_cap =
+      (* [draw_silent]: the step count is engine bookkeeping, not a useful part
+         of the printed counterexample. *)
       if is_single
       then Int.max_value
-      else Generators.draw tc (Generators.integers ~min_value:1 ~max_value:50 ())
+      else Generators.draw_silent tc (Generators.integers ~min_value:1 ~max_value:50 ())
     in
     let should_continue ~num_steps_succeeded ~num_steps =
       is_single
@@ -83,10 +95,10 @@ let run ~init ~rules ?(invariants = []) tc =
     let try_step ~state ~num_steps =
       Client.start_span ~label:Generators.Labels.stateful_rule tc;
       try
-        let rule = Generators.draw tc rule_generator in
+        let rule = Generators.draw_silent tc rule_generator in
         if tc.Client.is_final
         then
-          Client.note tc (Printf.sprintf "    Step %d: %s" (num_steps + 1) rule.Rule.name);
+          Client.note tc (Printf.sprintf "Step %d: %s" (num_steps + 1) rule.Rule.name);
         let new_state = rule.Rule.step tc state in
         run_invariants new_state;
         Client.stop_span tc;
