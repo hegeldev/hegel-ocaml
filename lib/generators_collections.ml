@@ -17,6 +17,12 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
      raise
        (Invalid_argument (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
    | _ -> ());
+  let sexp_of =
+    Option.map
+      (Option.both (printer keys) (printer values))
+      ~f:(fun (pk, pv) kvs ->
+        Sexp.List (List.map kvs ~f:(fun (k, v) -> Sexp.List [ pk k; pv v ])))
+  in
   match as_basic keys, as_basic values with
   | Some (key_schema, key_transform), Some (val_schema, val_transform) ->
     let pairs =
@@ -37,6 +43,7 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
       | _ -> failwith "hashmaps: expected array from server"
     in
     basic
+      ?sexp_of
       ~schema:(`Map pairs)
       ~transform
       ~unique_safe:(basic_unique_safe keys && basic_unique_safe values)
@@ -44,26 +51,26 @@ let hashmaps keys values ?(min_size = 0) ?max_size () =
   | _ ->
     (* dict semantics require unique keys, so we dedup client-side here just
        like [lists ~unique:true] does *)
-    Composite
-      { label = Labels.map
-      ; generate_fn =
-          (fun data ->
-            let coll = new_collection ~min_size ?max_size data () in
-            let rec collect acc =
-              if collection_more coll data
-              then (
-                let k = do_draw keys data in
-                if List.exists acc ~f:(fun (k', _) -> Poly.equal k' k)
-                then (
-                  collection_reject coll data;
-                  collect acc)
-                else (
-                  let v = do_draw values data in
-                  collect ((k, v) :: acc)))
-              else List.rev acc
-            in
-            collect [])
-      }
+    composite
+      ?sexp_of
+      ~label:Labels.map
+      ~generate_fn:(fun data ->
+        let coll = new_collection ~min_size ?max_size data () in
+        let rec collect acc =
+          if collection_more coll data
+          then (
+            let k = do_draw keys data in
+            if List.exists acc ~f:(fun (k', _) -> Poly.equal k' k)
+            then (
+              collection_reject coll data;
+              collect acc)
+            else (
+              let v = do_draw values data in
+              collect ((k, v) :: acc)))
+          else List.rev acc
+        in
+        collect [])
+      ()
 ;;
 
 (** [lists elements ?min_size ?max_size ?unique ()] creates a generator for
@@ -90,6 +97,9 @@ let lists elements ?(min_size = 0) ?max_size ?(unique = false) () =
      raise
        (Invalid_argument (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
    | _ -> ());
+  let sexp_of =
+    Option.map (printer elements) ~f:(fun elt xs -> Sexp.List (List.map xs ~f:elt))
+  in
   match as_basic elements with
   | Some (elem_schema, elem_transform) when (not unique) || basic_unique_safe elements ->
     (* Server-side uniqueness is only safe when the element transform
@@ -113,6 +123,7 @@ let lists elements ?(min_size = 0) ?max_size ?(unique = false) () =
       | _ -> failwith "Internal error: server returned non-array for list schema"
     in
     basic
+      ?sexp_of
       ~schema:raw_schema
       ~transform:list_transform
       ~unique_safe:(basic_unique_safe elements)
@@ -127,22 +138,22 @@ let lists elements ?(min_size = 0) ?max_size ?(unique = false) () =
            and duplicate rejection.  The server's own rejection limit
            (via [many.reject]) will send StopTest when too many duplicates
            occur, which [collection_reject] converts to [Data_exhausted]. *)
-      Composite
-        { label = Labels.list
-        ; generate_fn =
-            (fun data ->
-              let coll = new_collection ~min_size ?max_size data () in
-              let rec collect acc =
-                if collection_more coll data
-                then (
-                  let elem = do_draw elements data in
-                  if List.mem acc elem ~equal:Poly.equal
-                  then (
-                    collection_reject coll data;
-                    collect acc)
-                  else collect (elem :: acc))
-                else List.rev acc
-              in
-              collect [])
-        }
+      composite
+        ?sexp_of
+        ~label:Labels.list
+        ~generate_fn:(fun data ->
+          let coll = new_collection ~min_size ?max_size data () in
+          let rec collect acc =
+            if collection_more coll data
+            then (
+              let elem = do_draw elements data in
+              if List.mem acc elem ~equal:Poly.equal
+              then (
+                collection_reject coll data;
+                collect acc)
+              else collect (elem :: acc))
+            else List.rev acc
+          in
+          collect [])
+        ()
 ;;

@@ -71,6 +71,7 @@ type 'a generator =
   | Composite :
       { label : int
       ; generate_fn : Client.test_case -> 'a
+      ; sexp_of : ('a -> Sexp.t) option
       }
       -> 'a generator
 
@@ -83,15 +84,22 @@ let basic ?sexp_of ?(unique_safe = true) ~schema ~transform () =
   Basic { schema; transform; unique_safe; sexp_of }
 ;;
 
-(** [printer gen] returns the printer carried by [gen], if any. Primitive
-    [Basic] generators carry one; [Filtered] delegates to its source (it
-    preserves the value type); [Mapped]/[FlatMapped] and the composite
-    generators carry none, since their output type is chosen by user code. *)
+(** [composite ~label ~generate_fn ?sexp_of ()] builds a {!Composite} generator.
+    [sexp_of], when given, renders a drawn value on the final replay. *)
+let composite ?sexp_of ~label ~generate_fn () = Composite { label; generate_fn; sexp_of }
+
+(** [printer gen] returns the printer carried by [gen], if any. [Basic] and
+    [Composite] generators carry one when known; [Filtered] delegates to its
+    source; a [CompositeList] composes a list printer from its elements'.
+    [Mapped]/[FlatMapped] carry none, since their output type is chosen by user
+    code. *)
 let rec printer : type a. a generator -> (a -> Sexp.t) option = function
   | Basic { sexp_of; _ } -> sexp_of
+  | Composite { sexp_of; _ } -> sexp_of
   | Filtered { source; _ } -> printer source
-  (* [Mapped]/[FlatMapped] and the composite generators: the output type is
-     chosen by user code, so no printer is carried. *)
+  | CompositeList { elements; _ } ->
+    Option.map (printer elements) ~f:(fun elt xs -> Sexp.List (List.map xs ~f:elt))
+  (* [Mapped]/[FlatMapped]: the output type is chosen by user code. *)
   | _ -> None
 ;;
 
@@ -213,7 +221,7 @@ let rec do_draw : type a. a generator -> Client.test_case -> a =
         else List.rev acc
       in
       collect [])
-  | Composite { label; generate_fn } -> group label data (fun () -> generate_fn data)
+  | Composite { label; generate_fn; _ } -> group label data (fun () -> generate_fn data)
 ;;
 
 (** [draw ?label ?sexp_of tc gen] produces a typed value from generator [gen]

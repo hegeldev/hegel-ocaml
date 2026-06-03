@@ -69,3 +69,29 @@ let%expect_test "draw nested in a span (depth > 0) is suppressed" =
   (* Only the outermost draw should print; the nested one is suppressed. *)
   [%expect {| ran |}]
 ;;
+
+let%expect_test "a tuple draw prints as one sexp" =
+  run_failing (fun tc ->
+    let _ =
+      Hegel.draw
+        ~label:"pair"
+        tc
+        (tuples2
+           (integers ~min_value:7 ~max_value:7 ())
+           (integers ~min_value:8 ~max_value:8 ()))
+    in
+    assert false);
+  [%expect {| pair = (7 8) |}]
+;;
+
+let%expect_test "a list draw prints as one sexp" =
+  run_failing (fun tc ->
+    let _ =
+      Hegel.draw
+        ~label:"xs"
+        tc
+        (lists (integers ~min_value:7 ~max_value:7 ()) ~min_size:2 ~max_size:2 ())
+    in
+    assert false);
+  [%expect {| xs = (7 7) |}]
+;;

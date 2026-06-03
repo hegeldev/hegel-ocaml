@@ -56,6 +56,7 @@ type 'a generator =
   | Composite :
       { label : int
       ; generate_fn : Client.test_case -> 'a
+      ; sexp_of : ('a -> Core.Sexp.t) option
       }
       -> 'a generator
   (** The type of generators. Generators produce typed OCaml values and can
@@ -281,9 +282,10 @@ val hashmaps
     non-empty list of values. *)
 val sampled_from : 'a list -> 'a generator
 
-(** [one_of generators] creates a generator that picks from one of the given
-    [generators]. Requires at least 2 generators. *)
-val one_of : 'a generator list -> 'a generator
+(** [one_of ?sexp_of generators] creates a generator that picks from one of the
+    given [generators]. Requires at least 2 generators. [sexp_of], when given,
+    overrides the printer used on the final replay. *)
+val one_of : ?sexp_of:('a -> Core.Sexp.t) -> 'a generator list -> 'a generator
 
 (** [optional element] creates a generator that produces either [None] or
     [Some value] from [element]. *)

@@ -23,31 +23,33 @@ let sampled_from options =
       transform to apply.
     - Any non-basic: compositional via [ONE_OF] span.
 
-    Requires at least one generator. *)
-let one_of (generators : 'a generator list) =
+    Requires at least one generator. [sexp_of], when given, overrides the
+    printer used on the final replay (used by {!optional}). *)
+let one_of ?sexp_of (generators : 'a generator list) =
   if List.length generators = 0 then failwith "one_of requires at least one generator";
   let basics = List.filter_map generators ~f:as_basic in
+  let sexp_of = Option.first_some sexp_of (List.find_map generators ~f:printer) in
   if List.length basics <> List.length generators
   then (
     (* Composite path: generate index in ONE_OF span, then delegate *)
     let gens = Array.of_list generators in
     let n = Array.length gens in
-    Composite
-      { label = Labels.one_of
-      ; generate_fn =
-          (fun data ->
-            let idx =
-              Cbor_helpers.extract_int
-                (Client.generate_from_schema
-                   (`Map
-                       [ `Text "type", `Text "integer"
-                       ; `Text "min_value", `Int 0
-                       ; `Text "max_value", `Int (n - 1)
-                       ])
-                   data)
-            in
-            do_draw gens.(idx) data)
-      })
+    composite
+      ?sexp_of
+      ~label:Labels.one_of
+      ~generate_fn:(fun data ->
+        let idx =
+          Cbor_helpers.extract_int
+            (Client.generate_from_schema
+               (`Map
+                   [ `Text "type", `Text "integer"
+                   ; `Text "min_value", `Int 0
+                   ; `Text "max_value", `Int (n - 1)
+                   ])
+               data)
+        in
+        do_draw gens.(idx) data)
+      ())
   else (
     (* Basic path: one_of schema with raw child schemas. The server returns
        [index, value]; dispatch through the per-branch transform table. *)
@@ -62,9 +64,9 @@ let one_of (generators : 'a generator list) =
        OCaml value when two branches produce overlapping outputs (e.g.
        [one_of [integers 0..10; integers 5..15]] can yield 7 from either
        branch). We can't prove disjointness, so the dispatch transform is not
-       known to preserve uniqueness, and the output type is chosen by the
-       branches, so no printer is carried. *)
+       known to preserve uniqueness. *)
     basic
+      ?sexp_of
       ~schema:
         (`Map [ `Text "type", `Text "one_of"; `Text "generators", `Array child_schemas ])
       ~transform:dispatch
@@ -76,7 +78,10 @@ let one_of (generators : 'a generator list) =
     [Some value] from [element].
 
     Equivalent to [one_of [just None; map (fun x -> Some x) element]]. *)
-let optional element = one_of [ just None; map (fun x -> Some x) element ]
+let optional element =
+  let sexp_of = Option.map (printer element) ~f:Option.sexp_of_t in
+  one_of ?sexp_of [ just None; map (fun x -> Some x) element ]
+;;
 
 (** [ip_addresses ?version ()] creates a generator for IP address strings.
 
@@ -107,12 +112,18 @@ let rec ip_addresses ?version () =
     [tuple] schema. Otherwise, elements are generated separately inside a
     {!Labels.tuple} span. *)
 let tuples2 (type a b) (g1 : a generator) (g2 : b generator) : (a * b) generator =
+  let sexp_of =
+    Option.map
+      (Option.both (printer g1) (printer g2))
+      ~f:(fun (p1, p2) (a, b) -> Sexp.List [ p1 a; p2 b ])
+  in
   match as_basic g1, as_basic g2 with
   | Some (s1, t1), Some (s2, t2) ->
     let combined =
       `Map [ `Text "type", `Text "tuple"; `Text "elements", `Array [ s1; s2 ] ]
     in
     basic
+      ?sexp_of
       ~schema:combined
       ~transform:(fun raw ->
         match raw with
@@ -121,14 +132,14 @@ let tuples2 (type a b) (g1 : a generator) (g2 : b generator) : (a * b) generator
       ~unique_safe:(basic_unique_safe g1 && basic_unique_safe g2)
       ()
   | _ ->
-    Composite
-      { label = Labels.tuple
-      ; generate_fn =
-          (fun data ->
-            let a = do_draw g1 data in
-            let b = do_draw g2 data in
-            a, b)
-      }
+    composite
+      ?sexp_of
+      ~label:Labels.tuple
+      ~generate_fn:(fun data ->
+        let a = do_draw g1 data in
+        let b = do_draw g2 data in
+        a, b)
+      ()
 ;;
 
 (** [tuples3 g1 g2 g3] creates a generator for 3-element tuples.
@@ -138,12 +149,18 @@ let tuples2 (type a b) (g1 : a generator) (g2 : b generator) : (a * b) generator
 let tuples3 (type a b c) (g1 : a generator) (g2 : b generator) (g3 : c generator)
   : (a * b * c) generator
   =
+  let sexp_of =
+    Option.map
+      (Option.map3 (printer g1) (printer g2) (printer g3) ~f:(fun p1 p2 p3 -> p1, p2, p3))
+      ~f:(fun (p1, p2, p3) (a, b, c) -> Sexp.List [ p1 a; p2 b; p3 c ])
+  in
   match as_basic g1, as_basic g2, as_basic g3 with
   | Some (s1, t1), Some (s2, t2), Some (s3, t3) ->
     let combined =
       `Map [ `Text "type", `Text "tuple"; `Text "elements", `Array [ s1; s2; s3 ] ]
     in
     basic
+      ?sexp_of
       ~schema:combined
       ~transform:(fun raw ->
         match raw with
@@ -152,15 +169,15 @@ let tuples3 (type a b c) (g1 : a generator) (g2 : b generator) (g3 : c generator
       ~unique_safe:(basic_unique_safe g1 && basic_unique_safe g2 && basic_unique_safe g3)
       ()
   | _ ->
-    Composite
-      { label = Labels.tuple
-      ; generate_fn =
-          (fun data ->
-            let a = do_draw g1 data in
-            let b = do_draw g2 data in
-            let c = do_draw g3 data in
-            a, b, c)
-      }
+    composite
+      ?sexp_of
+      ~label:Labels.tuple
+      ~generate_fn:(fun data ->
+        let a = do_draw g1 data in
+        let b = do_draw g2 data in
+        let c = do_draw g3 data in
+        a, b, c)
+      ()
 ;;
 
 (** [tuples4 g1 g2 g3 g4] creates a generator for 4-element tuples.
@@ -175,12 +192,25 @@ let tuples4
       (g4 : d generator)
   : (a * b * c * d) generator
   =
+  let open Option in
+  let printer =
+    return (fun p1 p2 p3 p4 -> p1, p2, p3, p4)
+    <*> printer g1
+    <*> printer g2
+    <*> printer g3
+    <*> printer g4
+  in
+  let sexp_of =
+    Option.map printer ~f:(fun (p1, p2, p3, p4) (a, b, c, d) ->
+      Sexp.List [ p1 a; p2 b; p3 c; p4 d ])
+  in
   match as_basic g1, as_basic g2, as_basic g3, as_basic g4 with
   | Some (s1, t1), Some (s2, t2), Some (s3, t3), Some (s4, t4) ->
     let combined =
       `Map [ `Text "type", `Text "tuple"; `Text "elements", `Array [ s1; s2; s3; s4 ] ]
     in
     basic
+      ?sexp_of
       ~schema:combined
       ~transform:(fun raw ->
         match raw with
@@ -193,14 +223,14 @@ let tuples4
          && basic_unique_safe g4)
       ()
   | _ ->
-    Composite
-      { label = Labels.tuple
-      ; generate_fn =
-          (fun data ->
-            let a = do_draw g1 data in
-            let b = do_draw g2 data in
-            let c = do_draw g3 data in
-            let d = do_draw g4 data in
-            a, b, c, d)
-      }
+    composite
+      ?sexp_of
+      ~label:Labels.tuple
+      ~generate_fn:(fun data ->
+        let a = do_draw g1 data in
+        let b = do_draw g2 data in
+        let c = do_draw g3 data in
+        let d = do_draw g4 data in
+        a, b, c, d)
+      ()
 ;;
