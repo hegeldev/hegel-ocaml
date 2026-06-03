@@ -20,7 +20,7 @@ check-tests:
     ./_build/default/test/test_hegel.exe
     # The ppx_expect tests are an inline-tests library (no standalone exe), so
     # run them through dune; coverage merges via BISECT_FILE.
-    dune runtest test/expect_tests --instrument-with bisect_ppx
+    dune runtest test/expect_tests --instrument-with bisect_ppx --force
     python3 scripts/check-coverage.py
 
 format:

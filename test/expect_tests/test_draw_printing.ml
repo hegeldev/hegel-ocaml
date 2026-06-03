@@ -170,16 +170,18 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
     |}]
 ;;
 
-(* Phase 4: [@@deriving generator] synthesizes the printer (no [@@deriving
-   sexp_of] needed) and prints the whole value as one sexp. Deterministic types
-   are used so the snapshot is stable. *)
+(* [@@deriving generator] emits an unprintable generator value. Adding
+   [@@deriving sexp_of] and drawing through [with_printer] prints the whole value
+   as one sexp; a bare [@@deriving generator] drawn with [draw_silent] prints
+   nothing. *)
 
 type only = Only [@@deriving sexp_of, generator]
-type wrap = { tag : only } [@@deriving generator]
+type wrap = { tag : only } [@@deriving sexp_of, generator]
+type bare = Bare [@@deriving generator]
 
-let%expect_test "a derived value prints as one sexp on the final replay" =
+let%expect_test "a derived value prints as one sexp via with_printer" =
   run_failing (fun tc ->
-    let _ = only_generator tc in
+    let _ = Hegel.draw tc (with_printer sexp_of_only only_generator) in
     assert false);
   [%expect
     {|
@@ -188,13 +190,21 @@ let%expect_test "a derived value prints as one sexp on the final replay" =
     |}]
 ;;
 
-let%expect_test "a nested derived record prints as one sexp" =
+let%expect_test "a nested derived record prints as one sexp via with_printer" =
   run_failing (fun tc ->
-    let _ = wrap_generator tc in
+    let _ = Hegel.draw tc (with_printer sexp_of_wrap wrap_generator) in
     assert false);
   [%expect
     {|
     Counterexample found
     ((tag Only))
     |}]
+;;
+
+let%expect_test "a bare [@@deriving generator] drawn with draw_silent prints nothing" =
+  run_failing (fun tc ->
+    let _ = Hegel.draw_silent tc bare_generator in
+    assert false);
+  (* Header only — no [@@deriving sexp_of], so nothing to print. *)
+  [%expect {| Counterexample found |}]
 ;;

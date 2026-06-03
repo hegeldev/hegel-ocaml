@@ -13,7 +13,7 @@
  (name ppx_hegel_generator)
  (public_name ppx_hegel_generator)
  (kind ppx_deriver)
- (libraries ppxlib ppx_hegel_compat ppx_sexp_conv.expander)
+ (libraries ppxlib ppx_hegel_compat)
  (modules ppx_hegel_generator)
  (preprocess
   (pps ppx_js_style ppxlib.metaquot)))

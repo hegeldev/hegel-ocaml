@@ -130,6 +130,16 @@ let printer : type a. (a, printable) generator -> a -> Sexp.t =
   fun (Printable { sexp_of; _ }) -> sexp_of
 ;;
 
+(** [composite generate_fn] builds an unprintable generator from an imperative
+    [generate_fn] that draws sub-values from the test case and returns a value.
+    The draws run inside a span, so they are suppressed on the final replay and
+    only an outer [draw] of the whole value prints. Carries no printer (the
+    output type is the caller's); use {!with_printer} to draw it with {!draw}.
+    This is the form [@@deriving generator] emits. *)
+let composite generate_fn =
+  Unprintable { core = Composite { label = Labels.fixed_dict; generate_fn } }
+;;
+
 (** Maximum number of filter attempts before calling [assume false]. *)
 let max_filter_attempts = 3
 

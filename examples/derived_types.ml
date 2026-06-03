@@ -3,7 +3,9 @@
     This example shows how to use the PPX deriver to automatically generate test
     data for user-defined types. Instead of manually constructing generators,
     you annotate your types with [@@deriving generator] and get a
-    [<type>_generator : unit -> <type>] function for free. *)
+    [<type>_generator : (<type>, unprintable) generator] value for free, drawn
+    with [Hegel.draw_silent]. (No [@@deriving sexp_of] is needed; add it and use
+    [Hegel.with_printer] if you want the value printed on a failing replay.) *)
 
 (** A 2D point with integer coordinates. *)
 type point =
@@ -37,7 +39,7 @@ type entity =
 
 (** Property: the distance from any point to the origin is non-negative. *)
 let%hegel_test test_point_distance_nonnegative tc =
-  let p = point_generator tc in
+  let p = Hegel.draw_silent tc point_generator in
   let dist_sq = (p.x * p.x) + (p.y * p.y) in
   assert (dist_sq >= 0)
 [@@settings Hegel.settings ~test_cases:100 ()]
@@ -47,7 +49,7 @@ let%hegel_test test_point_distance_nonnegative tc =
 let saw_colors = Hashtbl.create 3
 
 let%hegel_test test_color_all_variants tc =
-  let c = color_generator tc in
+  let c = Hegel.draw_silent tc color_generator in
   (match c with
    | Red -> Hashtbl.replace saw_colors "red" true
    | Green -> Hashtbl.replace saw_colors "green" true
@@ -62,7 +64,7 @@ let saw_labeled = ref false
 let saw_dot = ref false
 
 let%hegel_test test_shape_all_variants tc =
-  let s = shape_generator tc in
+  let s = Hegel.draw_silent tc shape_generator in
   match s with
   | Circle r ->
     assert (Float.is_finite r);
@@ -81,7 +83,7 @@ let saw_tagged = ref false
 let saw_untagged = ref false
 
 let%hegel_test test_entity_valid tc =
-  let e = entity_generator tc in
+  let e = Hegel.draw_silent tc entity_generator in
   ignore (String.length e.name);
   ignore e.active;
   match e.tag with
