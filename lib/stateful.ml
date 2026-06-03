@@ -97,8 +97,7 @@ let run ~init ~rules ?(invariants = []) tc =
       try
         let rule = Generators.draw_silent tc rule_generator in
         if tc.Client.is_final
-        then
-          Client.note tc (Printf.sprintf "Step %d: %s" (num_steps + 1) rule.Rule.name);
+        then Client.note tc (Printf.sprintf "Step %d: %s" (num_steps + 1) rule.Rule.name);
         let new_state = rule.Rule.step tc state in
         run_invariants new_state;
         Client.stop_span tc;

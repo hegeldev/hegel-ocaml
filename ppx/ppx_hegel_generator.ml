@@ -261,8 +261,15 @@ let generator_of_alias ~loc:_ (ct : core_type) : expression =
   generate_expr_of_core_type ct
 ;;
 
-(** The main deriver. *)
-let generate_impl ~ctxt ((_rec_flag, type_decls) : rec_flag * type_declaration list)
+(** The main deriver.
+
+    The printer is synthesized inline from the type via ppx_sexp_conv's expander
+    and confined to a local module, so a bare [@@deriving generator] both
+    compiles (no [@@deriving sexp_of] needed) and does not collide with a user's
+    own [@@deriving sexp]. Nested named-type fields still resolve against their
+    own top-level [sexp_of_<t>] (so such field types must [@@deriving sexp_of]),
+    symmetric to the existing nested-[<t>_generator] requirement. *)
+let generate_impl ~ctxt ((rec_flag, type_decls) : rec_flag * type_declaration list)
   : structure
   =
   let loc = Expansion_context.Deriver.derived_item_loc ctxt in
@@ -284,7 +291,45 @@ let generate_impl ~ctxt ((_rec_flag, type_decls) : rec_flag * type_declaration l
              ~loc
              "ppx_hegel_generator: unsupported type kind in [@@deriving generator]"
        in
-       [%stri let [%p Ast_builder.Default.pvar ~loc gen_name] = [%e gen_expr]])
+       let sexp_of_module =
+         Ast_builder.Default.pmod_structure
+           ~loc
+           ([%stri open! Core]
+            :: Ppx_sexp_conv_expander.Sexp_of.str_type_decl
+                 ~loc
+                 ~path:""
+                 (rec_flag, [ td ]))
+       in
+       let sexp_of_ref =
+         Ast_builder.Default.pexp_ident
+           ~loc
+           { txt = Ldot (Lident "Hegel_sexp_of", "sexp_of_" ^ name); loc }
+       in
+       let print_expr =
+         Ast_builder.Default.pexp_letmodule
+           ~loc
+           { txt = Some "Hegel_sexp_of"; loc }
+           sexp_of_module
+           [%expr
+             Hegel.Client.note _hegel_tc (Core.Sexp.to_string ([%e sexp_of_ref] _hegel_v))]
+       in
+       let generator_expr =
+         [%expr
+           fun _hegel_tc ->
+             let _hegel_v =
+               Hegel.Generators.group
+                 Hegel.Generators.Labels.fixed_dict
+                 _hegel_tc
+                 (fun () -> [%e gen_expr] _hegel_tc)
+             in
+             let () =
+               if _hegel_tc.Hegel.Client.is_final && _hegel_tc.Hegel.Client.draw_depth = 0
+               then [%e print_expr]
+               else ()
+             in
+             _hegel_v]
+       in
+       [%stri let [%p Ast_builder.Default.pvar ~loc gen_name] = [%e generator_expr]])
     type_decls
 ;;
 

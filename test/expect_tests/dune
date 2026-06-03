@@ -8,4 +8,4 @@
  (inline_tests
   (backend ppx_inline_test))
  (preprocess
-  (pps ppx_expect)))
+  (pps ppx_expect ppx_sexp_conv ppx_hegel_generator)))

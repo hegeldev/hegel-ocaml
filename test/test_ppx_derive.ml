@@ -8,6 +8,7 @@
     - Nested derived types
     - Variants with tuple arguments *)
 
+open! Core
 open Hegel
 
 (* ==== Type declarations with derived generators ==== *)
@@ -17,7 +18,7 @@ type point =
   { x : int
   ; y : int
   }
-[@@deriving generator]
+[@@deriving sexp_of, generator]
 
 (** A record with three different-typed fields. *)
 type person =

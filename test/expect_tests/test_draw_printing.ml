@@ -157,3 +157,32 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
     n = 7
     |}]
 ;;
+
+(* Phase 4: [@@deriving generator] synthesizes the printer (no [@@deriving
+   sexp_of] needed) and prints the whole value as one sexp. Deterministic types
+   are used so the snapshot is stable. *)
+
+type only = Only [@@deriving sexp_of, generator]
+type wrap = { tag : only } [@@deriving generator]
+
+let%expect_test "a derived value prints as one sexp on the final replay" =
+  run_failing (fun tc ->
+    let _ = only_generator tc in
+    assert false);
+  [%expect
+    {|
+    Counterexample found
+    Only
+    |}]
+;;
+
+let%expect_test "a nested derived record prints as one sexp" =
+  run_failing (fun tc ->
+    let _ = wrap_generator tc in
+    assert false);
+  [%expect
+    {|
+    Counterexample found
+    ((tag Only))
+    |}]
+;;

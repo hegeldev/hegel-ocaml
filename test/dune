@@ -50,6 +50,7 @@
  (preprocess
   (pps
    ppx_js_style
+   ppx_sexp_conv
    ppx_hegel_generator
    ppx_hegel_test
    --
