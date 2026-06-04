@@ -4,8 +4,8 @@
 
 (library
  (name expect_tests)
- (libraries hegel core core_unix)
+ (libraries hegel hegel_test_runtime core core_unix)
  (inline_tests
   (backend ppx_inline_test))
  (preprocess
-  (pps ppx_expect ppx_sexp_conv ppx_hegel_generator)))
+  (pps ppx_expect ppx_sexp_conv ppx_hegel_generator ppx_hegel_test)))

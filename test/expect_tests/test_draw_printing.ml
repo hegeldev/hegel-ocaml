@@ -1,6 +1,4 @@
-(** Expect tests for Phase 1 draw-value printing.
-
-    On the final replay of a failing test ([is_final = true]) an outermost
+(** On the final replay of a failing test ([is_final = true]) an outermost
     [draw] prints its value through the [note] channel (stderr, captured here by
     ppx_expect). [draw_silent] never prints, and draws nested inside a span
     (depth > 0) are suppressed so only the outermost value shows. The printer is
@@ -207,4 +205,29 @@ let%expect_test "a bare [@@deriving hegel] drawn with draw_silent prints nothing
     assert false);
   (* Header only — no [@@deriving sexp_of], so nothing to print. *)
   [%expect {| Counterexample found |}]
+;;
+
+(* ---- ppx_hegel_test label injection (end-to-end) ----
+
+   Inside a [let%hegel_test] body, a draw bound to a simple variable —
+   [let x = draw tc g] — is rewritten by the PPX to [draw ~label:"x" tc g], so
+   the value prints as [x = value] (not a bare value) on the failing replay.
+   This file enables the [ppx_hegel_test] rewriter, so the test below exercises
+   a real expansion. *)
+
+let%hegel_test label_injection_from_binding (tc : Hegel.Client.test_case) =
+  let x = Hegel.draw tc (integers ~min_value:7 ~max_value:7 ()) in
+  ignore (x : int);
+  assert false
+[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Quiet)]
+;;
+
+let%expect_test "ppx injects ~label from the binding name" =
+  (try label_injection_from_binding () with
+   | _ -> ());
+  [%expect
+    {|
+    Counterexample found
+    x = 7
+    |}]
 ;;
