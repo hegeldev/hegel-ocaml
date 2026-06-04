@@ -1,9 +1,9 @@
-(** PPX deriver for [@@deriving generator].
+(** PPX deriver for [@@deriving hegel].
 
-    Reads OCaml type declarations annotated with [@@deriving generator] and
+    Reads OCaml type declarations annotated with [@@deriving hegel] and
     synthesizes a value [<t>_generator : (<t>, unprintable) generator].
 
-    The generator carries no printer, so a bare [@@deriving generator] always
+    The generator carries no printer, so a bare [@@deriving hegel] always
     compiles. Inside a test body, draw it with [Hegel.draw_silent tc
     <t>_generator]; to print the whole value on a failing replay, add
     [@@deriving sexp_of] and draw [Hegel.draw tc (Hegel.with_printer
@@ -84,7 +84,7 @@ let rec generate_expr_of_core_type (ct : core_type) : expression =
      | None ->
        Location.raise_errorf
          ~loc
-         "ppx_hegel_generator: unsupported type in [@@deriving generator]")
+         "ppx_hegel_generator: unsupported type in [@@deriving hegel]")
 
 (** Generate a [test_case -> (t1 * t2 * ...)] function for a tuple type. *)
 and generate_expr_of_tuple ~loc components =
@@ -286,7 +286,7 @@ let generate_impl ~ctxt ((_rec_flag, type_decls) : rec_flag * type_declaration l
          | _, _ ->
            Location.raise_errorf
              ~loc
-             "ppx_hegel_generator: unsupported type kind in [@@deriving generator]"
+             "ppx_hegel_generator: unsupported type kind in [@@deriving hegel]"
        in
        (* [gen_expr] is a [test_case -> t] field-drawing thunk; [composite] wraps it
           as an unprintable generator (and supplies the surrounding span). *)
@@ -296,5 +296,5 @@ let generate_impl ~ctxt ((_rec_flag, type_decls) : rec_flag * type_declaration l
 ;;
 
 let _deriver =
-  Deriving.add "generator" ~str_type_decl:(Deriving.Generator.V2.make_noarg generate_impl)
+  Deriving.add "hegel" ~str_type_decl:(Deriving.Generator.V2.make_noarg generate_impl)
 ;;

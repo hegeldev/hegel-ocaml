@@ -1,8 +1,8 @@
-(** Derived types: demonstrating [@@deriving generator].
+(** Derived types: demonstrating [@@deriving hegel].
 
     This example shows how to use the PPX deriver to automatically generate test
     data for user-defined types. Instead of manually constructing generators,
-    you annotate your types with [@@deriving generator] and get a
+    you annotate your types with [@@deriving hegel] and get a
     [<type>_generator : (<type>, unprintable) generator] value for free, drawn
     with [Hegel.draw_silent]. (No [@@deriving sexp_of] is needed; add it and use
     [Hegel.with_printer] if you want the value printed on a failing replay.) *)
@@ -12,14 +12,14 @@ type point =
   { x : int
   ; y : int
   }
-[@@deriving generator]
+[@@deriving hegel]
 
 (** An RGB color represented as a variant. *)
 type color =
   | Red
   | Green
   | Blue
-[@@deriving generator]
+[@@deriving hegel]
 
 (** A geometric shape that can be a circle, rectangle, or labeled point. *)
 type shape =
@@ -27,7 +27,7 @@ type shape =
   | Rect of int * int
   | Labeled of string
   | Dot
-[@@deriving generator]
+[@@deriving hegel]
 
 (** A named entity with an optional tag. *)
 type entity =
@@ -35,7 +35,7 @@ type entity =
   ; tag : int option
   ; active : bool
   }
-[@@deriving generator]
+[@@deriving hegel]
 
 (** Property: the distance from any point to the origin is non-negative. *)
 let%hegel_test test_point_distance_nonnegative tc =

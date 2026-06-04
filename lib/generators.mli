@@ -109,7 +109,7 @@ val printer : ('a, printable) generator -> 'a -> Core.Sexp.t
     that draws sub-values from the test case and assembles a result — the
     OCaml/imperative counterpart to the schema-driven combinators, useful when a
     value is easiest to describe by drawing its parts in sequence (this is also
-    the form [@@deriving generator] emits). Carries no printer (the output type
+    the form [@@deriving hegel] emits). Carries no printer (the output type
     is the caller's), so it is {!unprintable}: draw it with {!draw_silent}, or
     {!with_printer} it to draw with {!draw}. *)
 val composite : (Client.test_case -> 'a) -> ('a, unprintable) generator

@@ -1,4 +1,4 @@
-(** Tests for the [@@deriving generator] PPX.
+(** Tests for the [@@deriving hegel] PPX.
 
     These tests exercise the PPX-generated code for:
     - Record types (product types)
@@ -18,7 +18,7 @@ type point =
   { x : int
   ; y : int
   }
-[@@deriving generator]
+[@@deriving hegel]
 
 (** A record with three different-typed fields. *)
 type person =
@@ -26,55 +26,55 @@ type person =
   ; age : int
   ; active : bool
   }
-[@@deriving generator]
+[@@deriving hegel]
 
 (** A variant with no-arg constructors. *)
 type color =
   | Red
   | Green
   | Blue
-[@@deriving generator]
+[@@deriving hegel]
 
 (** A variant with arguments. *)
 type shape =
   | Circle of float
   | Rectangle of int * int
   | Point
-[@@deriving generator]
+[@@deriving hegel]
 
 (** A type alias to int. *)
-type score = int [@@deriving generator]
+type score = int [@@deriving hegel]
 
 (** A single-field record. *)
-type wrapper = { value : int } [@@deriving generator]
+type wrapper = { value : int } [@@deriving hegel]
 
 (** A type with an option field. *)
-type maybe_int = { data : int option } [@@deriving generator]
+type maybe_int = { data : int option } [@@deriving hegel]
 
 (** A nested derived type: record containing another derived record. *)
 type line_segment =
   { start_pt : point
   ; end_pt : point
   }
-[@@deriving generator]
+[@@deriving hegel]
 
 (** A variant with a tuple argument. *)
 type pair_or_single =
   | Pair of int * int
   | Single of int
-[@@deriving generator]
+[@@deriving hegel]
 
 (** A type alias to bool. *)
-type flag = bool [@@deriving generator]
+type flag = bool [@@deriving hegel]
 
 (** A type alias to float. *)
-type temperature = float [@@deriving generator]
+type temperature = float [@@deriving hegel]
 
 (** A type alias to string. *)
-type label = string [@@deriving generator]
+type label = string [@@deriving hegel]
 
 (** A type with a list field. *)
-type int_list_wrapper = { items : int list } [@@deriving generator]
+type int_list_wrapper = { items : int list } [@@deriving hegel]
 
 (* ==== Tests ==== *)
 

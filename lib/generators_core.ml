@@ -135,7 +135,7 @@ let printer : type a. (a, printable) generator -> a -> Sexp.t =
     The draws run inside a span, so they are suppressed on the final replay and
     only an outer [draw] of the whole value prints. Carries no printer (the
     output type is the caller's); use {!with_printer} to draw it with {!draw}.
-    This is the form [@@deriving generator] emits. *)
+    This is the form [@@deriving hegel] emits. *)
 let composite generate_fn =
   Unprintable { core = Composite { label = Labels.fixed_dict; generate_fn } }
 ;;
