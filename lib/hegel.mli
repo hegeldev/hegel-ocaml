@@ -43,11 +43,23 @@ val note : Client.test_case -> string -> unit
 val target : Client.test_case -> float -> string -> unit
 
 (** [draw ?label tc gen] produces a typed value from the printable generator
-    [gen] using test case [tc]. On the final replay of a failing test, an
-    outermost draw prints its value (as [label = value], or just the value).
-    See {!Generators.draw}. *)
+    [gen] using test case [tc]. On the final replay of a failing test (or on
+    every case under verbose output), an outermost draw prints its value as
+    [name = value], where [name] is [label] (else ["draw"]); an unlabeled draw is
+    numbered ([draw_1], [draw_2], …) while a [label] is printed bare. See
+    {!Generators.draw}. *)
 val draw
   :  ?label:string
+  -> Client.test_case
+  -> ('a, Generators.printable) Generators.generator
+  -> 'a
+
+(** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
+    [let%hegel_test] PPX rewrites bindings to; not intended for direct use
+    (prefer {!draw}). See {!Generators.draw_named}. *)
+val draw_named
+  :  label:string
+  -> repeatable:bool
   -> Client.test_case
   -> ('a, Generators.printable) Generators.generator
   -> 'a

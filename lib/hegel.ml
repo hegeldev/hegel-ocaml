@@ -43,6 +43,11 @@ let target = Client.target
     value. See {!Generators.draw}. *)
 let draw = Generators.draw
 
+(** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
+    [let%hegel_test] PPX rewrites bindings to; not intended for direct use
+    (prefer {!draw}). See {!Generators.draw_named}. *)
+let draw_named = Generators.draw_named
+
 (** [draw_silent tc gen] is {!draw} without printing the value on the final
     replay, and accepts a generator with no printer. *)
 let draw_silent = Generators.draw_silent

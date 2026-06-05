@@ -83,12 +83,26 @@ val collection_reject : collection -> Client.test_case -> unit
 (** [draw ?label tc gen] produces a typed value from the printable generator
     [gen] using test case [tc].
 
-    On the final replay of a failing test, an outermost draw prints its value
-    through {!Client.note} — as [label = value] when [label] is given, or just
-    the value otherwise. Draws nested inside a span (e.g. composite elements)
-    are suppressed so only the outermost value shows. To draw a generator with
-    no printer, use {!draw_silent} or upgrade it with {!with_printer}. *)
+    On the final replay of a failing test (or on every case under verbose
+    output), an outermost draw prints its value through {!Client.note} as
+    [name = value]. The [name] is [label] when given, else ["draw"]; an unlabeled
+    draw is numbered ([draw_1], [draw_2], …) while a [label] is printed bare.
+    Draws nested inside a span (e.g. composite elements) are suppressed so only
+    the outermost value shows. To draw a generator with no printer, use
+    {!draw_silent} or or attach a printer with {!with_printer}. *)
 val draw : ?label:string -> Client.test_case -> ('a, printable) generator -> 'a
+
+(** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
+    [let%hegel_test] PPX rewrites bindings to; not intended for direct use
+    (prefer {!draw}). It prints [label = value] (bare), or [label_1 = value],
+    [label_2 = value], … when [repeatable] is set — which the PPX does for a
+    binding name that is reused or drawn in a loop. *)
+val draw_named
+  :  label:string
+  -> repeatable:bool
+  -> Client.test_case
+  -> ('a, printable) generator
+  -> 'a
 
 (** [draw_silent tc gen] produces a typed value from any generator without
     recording it for the final-replay output. Use it for draws whose value is

@@ -40,14 +40,27 @@ let%expect_test "labeled draw prints name = value on final replay" =
     |}]
 ;;
 
-let%expect_test "unlabeled draw prints the bare value on final replay" =
+let%expect_test "unlabeled draw is auto-named draw_N on final replay" =
   run_failing (fun tc ->
     let _ = Hegel.draw tc (integers ~min_value:123456 ~max_value:123456 ()) in
     assert false);
   [%expect
     {|
     Counterexample found
-    123456
+    draw_1 = 123456
+    |}]
+;;
+
+let%expect_test "successive unlabeled draws number draw_1, draw_2" =
+  run_failing (fun tc ->
+    let _ = Hegel.draw tc (integers ~min_value:1 ~max_value:1 ()) in
+    let _ = Hegel.draw tc (integers ~min_value:2 ~max_value:2 ()) in
+    assert false);
+  [%expect
+    {|
+    Counterexample found
+    draw_1 = 1
+    draw_2 = 2
     |}]
 ;;
 
@@ -164,9 +177,11 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
     {|
     Counterexample found
     Step 1: push
-    n = 7
+    n = 7 
     |}]
 ;;
+
+(* indent inner draws in a step *)
 
 (* [@@deriving hegel] emits an unprintable generator value. Adding
    [@@deriving sexp_of] and drawing through [with_printer] prints the whole value
@@ -184,7 +199,7 @@ let%expect_test "a derived value prints as one sexp via with_printer" =
   [%expect
     {|
     Counterexample found
-    Only
+    draw_1 = Only
     |}]
 ;;
 
@@ -195,7 +210,7 @@ let%expect_test "a nested derived record prints as one sexp via with_printer" =
   [%expect
     {|
     Counterexample found
-    ((tag Only))
+    draw_1 = ((tag Only))
     |}]
 ;;
 
@@ -230,4 +245,121 @@ let%expect_test "ppx injects ~label from the binding name" =
     Counterexample found
     x = 7
     |}]
+;;
+
+(* The receiver decides what is rewritten, not the module path: a draw on [tc]
+   qualified by any Hegel-exporting module (here [Generators]) is labeled, and
+   the rewrite keeps that prefix (targeting [Generators.draw_named]). *)
+
+let%hegel_test qualified_generators_draw (tc : Hegel.Client.test_case) =
+  let g = Generators.draw tc (integers ~min_value:9 ~max_value:9 ()) in
+  ignore (g : int);
+  assert false
+[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Quiet)]
+;;
+
+let%expect_test "a Generators-qualified draw is labeled (prefix preserved)" =
+  (try qualified_generators_draw () with
+   | _ -> ());
+  [%expect
+    {|
+    Counterexample found
+    g = 9
+    |}]
+;;
+
+(* A local function also named [draw] that is not Hegel's is left untouched,
+   because the rewrite keys off the receiver (the draw must be applied to the
+   test's own [tc]). Here [draw 5] is not applied to [tc], so it gets no
+   label and the user's own [draw] runs; only the genuine [Hegel.draw tc] is
+   labeled. *)
+
+let%hegel_test local_draw_not_on_tc_untouched (tc : Hegel.Client.test_case) =
+  let draw n = n + 100 in
+  let y = draw 5 in
+  ignore (y : int);
+  let z = Hegel.draw tc (integers ~min_value:1 ~max_value:1 ()) in
+  ignore (z : int);
+  assert false
+[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Quiet)]
+;;
+
+let%expect_test "a local non-Hegel draw (not on tc) is not rewritten" =
+  (try local_draw_not_on_tc_untouched () with
+   | _ -> ());
+  (* No [y = …] line: [draw 5] was left alone; only [z], a real Hegel draw on
+     [tc], is labeled. *)
+  [%expect
+    {|
+    Counterexample found
+    z = 1
+    |}]
+;;
+
+(* When a binding name is drawn more than once, the PPX flags it repeatable, so
+   every occurrence is numbered ([x_1], [x_2], …) — including the first — rather
+   than the lone-binding bare [x]. *)
+
+let%hegel_test repeated_binding_numbers (tc : Hegel.Client.test_case) =
+  let x = Hegel.draw tc (integers ~min_value:1 ~max_value:1 ()) in
+  ignore (x : int);
+  let x = Hegel.draw tc (integers ~min_value:2 ~max_value:2 ()) in
+  ignore (x : int);
+  let x = Hegel.draw tc (integers ~min_value:3 ~max_value:3 ()) in
+  ignore (x : int);
+  assert false
+[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Quiet)]
+;;
+
+let%expect_test "a reused binding name numbers x_1, x_2, x_3" =
+  (try repeated_binding_numbers () with
+   | _ -> ());
+  [%expect
+    {|
+    Counterexample found
+    x_1 = 1
+    x_2 = 2
+    x_3 = 3
+    |}]
+;;
+
+(* A draw inside a loop (block depth > 0) is flagged repeatable even though the
+   name appears once syntactically, so its per-iteration values are numbered. *)
+
+let%hegel_test looped_binding_numbers (tc : Hegel.Client.test_case) =
+  for i = 1 to 2 do
+    let x = Hegel.draw tc (integers ~min_value:i ~max_value:i ()) in
+    ignore (x : int)
+  done;
+  assert false
+[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Quiet)]
+;;
+
+let%expect_test "a draw inside a loop numbers x_1, x_2" =
+  (try looped_binding_numbers () with
+   | _ -> ());
+  [%expect
+    {|
+    Counterexample found
+    x_1 = 1
+    x_2 = 2
+    |}]
+;;
+
+(* ---- verbose verbosity prints draws on a non-final case ----
+
+   At [Normal]/[Quiet] verbosity a passing test prints nothing, since printing
+   is gated on the failing final replay. At [Verbose]/[Debug] a draw prints on a
+   passing (non-final) case too, with no [Counterexample found] header since the
+   test does not fail. A single case keeps the snapshot clean: the engine emits
+   its own [Running test case] lines between cases under verbose, which a
+   multi-case run would capture. *)
+
+let%expect_test "verbose prints draws on a passing run" =
+  Hegel.run_hegel_test
+    ~settings:Client.(settings ~test_cases:1 ~seed:0 () |> with_verbosity Verbose)
+    (fun tc ->
+       let _ = Hegel.draw tc (integers ~min_value:5 ~max_value:5 ()) in
+       ());
+  [%expect {| draw_1 = 5 |}]
 ;;

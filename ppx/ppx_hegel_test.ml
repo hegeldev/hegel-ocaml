@@ -110,12 +110,25 @@ let build_items ~loc ~function_name ~settings_expr ~body_fn : structure_item lis
   [ definition; registration ]
 ;;
 
-(** [is_draw_lident lid] is [true] when [lid] names the [draw] function, whether
-    unqualified ([draw]) or qualified ([Hegel.draw], [Generators.draw], …). It
-    deliberately excludes [draw_silent], which takes no [~label]. *)
+(** [is_draw_lident lid] is [true] when [lid]'s final component is [draw],
+    whether unqualified ([draw]) or qualified ([Hegel.draw], [Generators.draw],
+    a module alias [G.draw], …). Precision comes from the receiver check in
+    {!draw_binding_name} (the draw must be applied to the test's own [tc]), so
+    this only needs to recognize the name; [draw_silent] is a different name and
+    is excluded. *)
 let is_draw_lident : longident -> bool = function
   | Lident "draw" | Ldot (_, "draw") -> true
   | _ -> false
+;;
+
+(** [draw_named_lident lid] is [lid] with its final [draw] component replaced by
+    [draw_named], preserving the module prefix the user wrote, so the rewrite
+    targets the same module's internal entry point (e.g. [Hegel.draw] becomes
+    [Hegel.draw_named]). *)
+let draw_named_lident : longident -> longident = function
+  | Lident "draw" -> Lident "draw_named"
+  | Ldot (prefix, "draw") -> Ldot (prefix, "draw_named")
+  | other -> other
 ;;
 
 (** [has_label_arg args] is [true] when an application already passes [~label]
@@ -129,27 +142,131 @@ let has_label_arg (args : (arg_label * expression) list) : bool =
     args
 ;;
 
-(** [inject_label vb] rewrites [let x = draw tc gen] into
-    [let x = draw ~label:"x" tc gen] so the drawn value prints as [x = value] on
-    a failing replay. It fires only when the bound pattern is a simple variable
-    and the right-hand side is a [draw] application with no explicit [~label];
-    every other binding is returned unchanged. *)
-let inject_label (vb : value_binding) : value_binding =
+(** [param_name pat] is the variable bound by [pat], if it is a simple variable
+    (possibly type-annotated), else [None]. *)
+let rec param_name (pat : pattern) : string option =
+  match pat.ppat_desc with
+  | Ppat_var { txt; _ } -> Some txt
+  | Ppat_constraint (p, _) -> param_name p
+  | _ -> None
+;;
+
+(** [test_case_name e] is the name of the test function's first parameter (its
+    [tc]), used as the receiver the rewrite keys off. [None] when the binding is
+    not a function or its parameter is not a simple variable. *)
+let test_case_name (e : expression) : string option =
+  match e.pexp_desc with
+  | Pexp_fun (_, _, pat, _) -> param_name pat
+  | _ -> None
+;;
+
+(** [tc_arg_is ~tc_name args] is [true] when the first positional argument of an
+    application is exactly the identifier [tc_name]. *)
+let tc_arg_is ~tc_name (args : (arg_label * expression) list) : bool =
+  match List.find_map (fun (lbl, e) -> if lbl = Nolabel then Some e else None) args with
+  | Some { pexp_desc = Pexp_ident { txt = Lident n; _ }; _ } -> String.equal n tc_name
+  | _ -> false
+;;
+
+(** [draw_binding_name ~tc_name vb] returns [Some name] when [vb] is
+    [let <name> = draw tc …] — a simple-variable binding whose right-hand side is
+    a [draw] application on the test's own [tc] — and [None] otherwise. *)
+let draw_binding_name ~tc_name (vb : value_binding) : string option =
   match vb.pvb_pat.ppat_desc, vb.pvb_expr.pexp_desc with
   | ( Ppat_var { txt = name; _ }
-    , Pexp_apply (({ pexp_desc = Pexp_ident { txt = lid; _ }; _ } as fn), args) )
-    when is_draw_lident lid && not (has_label_arg args) ->
+    , Pexp_apply ({ pexp_desc = Pexp_ident { txt = lid; _ }; _ }, args) )
+    when is_draw_lident lid && tc_arg_is ~tc_name args -> Some name
+  | _ -> None
+;;
+
+(** [peel_params e] strips the test function's own parameter lambdas, returning
+    the body expression. Analysing the body (rather than the whole lambda) keeps
+    the test's [tc] parameter from counting as a nesting level. *)
+let rec peel_params (e : expression) : expression =
+  match e.pexp_desc with
+  | Pexp_fun (_, _, _, body) -> peel_params body
+  | _ -> e
+;;
+
+(** [collect_repeatable body] maps each draw-bound name to whether its draws
+    should be numbered. A name is repeatable
+    if it is drawn more than once, or drawn anywhere at block depth > 0 (inside a
+    function, [for], or [while] body, where it may run repeatedly). *)
+let collect_repeatable ~tc_name (body : expression) : (string, bool) Stdlib.Hashtbl.t =
+  let flags : (string, bool) Stdlib.Hashtbl.t = Stdlib.Hashtbl.create 8 in
+  let depth = ref 0 in
+  let record name =
+    let seen = Stdlib.Hashtbl.mem flags name in
+    if not seen then Stdlib.Hashtbl.replace flags name false;
+    if !depth > 0 || seen then Stdlib.Hashtbl.replace flags name true
+  in
+  let collector =
+    object
+      inherit Ast_traverse.iter as super
+
+      method! expression e =
+        match e.pexp_desc with
+        | Pexp_fun _ | Pexp_function _ | Pexp_for _ | Pexp_while _ ->
+          incr depth;
+          super#expression e;
+          decr depth
+        | Pexp_let (_, vbs, _) ->
+          List.iter
+            (fun vb ->
+               match draw_binding_name ~tc_name vb with
+               | Some name -> record name
+               | None -> ())
+            vbs;
+          super#expression e
+        | _ -> super#expression e
+    end
+  in
+  collector#expression body;
+  flags
+;;
+
+(** [inject_draw ~tc_name flags vb] rewrites [let x = M.draw tc gen] into
+    [let x = M.draw_named ~label:"x" ~repeatable:b tc gen], so the drawn value
+    prints as [x = value] (numbered when [x] is flagged repeatable in [flags] —
+    reused name or drawn in a loop). It targets the internal [draw_named] rather
+    than the public [draw] (so [repeatable] stays off the public API), keeping
+    the module prefix [M] the user wrote. It fires only for a simple-variable
+    binding whose right-hand side is a [draw] application on [tc] with no
+    explicit [~label]; every other binding is unchanged. *)
+let inject_draw ~tc_name (flags : (string, bool) Stdlib.Hashtbl.t) (vb : value_binding)
+  : value_binding
+  =
+  match draw_binding_name ~tc_name vb, vb.pvb_expr.pexp_desc with
+  | ( Some name
+    , Pexp_apply (({ pexp_desc = Pexp_ident ({ txt = lid; _ } as ident); _ } as fn), args)
+    )
+    when not (has_label_arg args) ->
     let loc = vb.pvb_expr.pexp_loc in
-    let label_arg = Labelled "label", Ast_builder.Default.estring ~loc name in
-    { vb with pvb_expr = Ast_builder.Default.pexp_apply ~loc fn (label_arg :: args) }
+    let repeatable =
+      match Stdlib.Hashtbl.find_opt flags name with
+      | Some b -> b
+      | None -> false
+    in
+    let named_fn =
+      { fn with pexp_desc = Pexp_ident { ident with txt = draw_named_lident lid } }
+    in
+    let named_args =
+      [ Labelled "label", Ast_builder.Default.estring ~loc name
+      ; Labelled "repeatable", Ast_builder.Default.ebool ~loc repeatable
+      ]
+    in
+    { vb with
+      pvb_expr = Ast_builder.Default.pexp_apply ~loc named_fn (named_args @ args)
+    }
   | _ -> vb
 ;;
 
-(** A traversal that applies {!inject_label} to every [let]-binding in an
-    expression, so labels are injected throughout the test body (nested [let]s,
-    helper functions, match arms, …). Draws nested inside a span are still
-    suppressed at runtime by the depth gate, so labeling them is harmless. *)
-let label_injector =
+(** A traversal that applies {!inject_draw} to every [let]-binding in an
+    expression, threading the precomputed [flags], so labels are injected
+    throughout the test body (nested [let]s, helper functions, match arms, …).
+    Draws nested inside a generation span are still suppressed at runtime by the
+    depth gate, so labeling them is harmless. *)
+let label_injector ~tc_name flags =
   object
     inherit Ast_traverse.map as super
 
@@ -157,7 +274,9 @@ let label_injector =
       let e = super#expression e in
       match e.pexp_desc with
       | Pexp_let (rec_flag, vbs, body) ->
-        { e with pexp_desc = Pexp_let (rec_flag, List.map inject_label vbs, body) }
+        { e with
+          pexp_desc = Pexp_let (rec_flag, List.map (inject_draw ~tc_name flags) vbs, body)
+        }
       | _ -> e
   end
 ;;
@@ -168,9 +287,17 @@ let expand_value_binding ~loc (vb : value_binding) : structure_item list =
   let settings_expr = extract_settings_attr vb.pvb_attributes in
   (* The body of [let%hegel_test name <args> = expr] is parsed as
      [let name = <args -> expr>]. We pass that lambda as the [test_fn] to
-     [Hegel.run_hegel_test], first injecting [~label]s drawn from the binding
-     names so the counterexample replay prints [name = value]. *)
-  let body_fn = label_injector#expression vb.pvb_expr in
+     [Hegel.run_hegel_test], first injecting [~label]/[~repeatable] from the
+     binding names — for draws on the test's own [tc] — so the counterexample
+     replay prints [name = value]. With no recognizable [tc] parameter, the body
+     is passed through unchanged. *)
+  let body_fn =
+    match test_case_name vb.pvb_expr with
+    | None -> vb.pvb_expr
+    | Some tc_name ->
+      let flags = collect_repeatable ~tc_name (peel_params vb.pvb_expr) in
+      (label_injector ~tc_name flags)#expression vb.pvb_expr
+  in
   build_items ~loc ~function_name ~settings_expr ~body_fn
 ;;
 

@@ -112,15 +112,18 @@ val with_phases : phase list -> settings -> settings
 val with_mode : mode -> settings -> settings
 
 (** Per-test-case state passed explicitly to the test function. Holds the
-    native test-case handle, the final-replay flag, abort state, and the
-    current generation-span depth (used to print only the outermost drawn value
-    on the final replay). *)
+    native test-case handle, the final-replay flag, whether verbose output is
+    on, abort state, the current generation-span depth (used to print only the
+    outermost drawn value), and the per-name occurrence counter that numbers
+    repeatable draws. *)
 type test_case =
   { handle : Hegel_ffi.Ffi.test_case
   ; mode : mode
   ; is_final : bool
+  ; verbose : bool
   ; mutable test_aborted : bool
   ; mutable draw_depth : int
+  ; draw_counts : int Core.String.Table.t
   }
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
@@ -138,8 +141,14 @@ val generate_from_schema : Cbor.t -> test_case -> Cbor.t
 val assume : test_case -> bool -> unit
 
 (** [note tc message] records a message that will be printed on the final
-    (failing) replay. *)
+    (failing) replay, or on every case when verbose output is on. *)
 val note : test_case -> string -> unit
+
+(** [draw_display_name tc ~label ~repeatable] returns the display name to print
+    for a drawn value, bumping the per-test-case occurrence counter for [label].
+    A [repeatable] name is numbered on every occurrence ([label_1], [label_2],
+    …), while a non-repeatable name is printed bare. *)
+val draw_display_name : test_case -> label:string -> repeatable:bool -> string
 
 (** [target tc value label] records a targeting observation to guide the search
     engine toward higher values. *)

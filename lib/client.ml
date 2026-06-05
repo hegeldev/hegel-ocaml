@@ -166,15 +166,18 @@ let with_phases phases s = { s with phases = Some phases }
 let with_mode mode s = { s with mode }
 
 (** Per-test-case state passed explicitly to the test function. Holds the
-    native test-case handle, the final-replay flag, abort state, and the
-    current generation-span depth (used to print only the outermost drawn value
-    on the final replay). *)
+    native test-case handle, the final-replay flag, whether verbose output is
+    on, abort state, the current generation-span depth (used to print only the
+    outermost drawn value), and the per-name occurrence counter that numbers
+    repeatable draws. *)
 type test_case =
   { handle : Ffi.test_case
   ; mode : mode
   ; is_final : bool
+  ; verbose : bool
   ; mutable test_aborted : bool
   ; mutable draw_depth : int
+  ; draw_counts : int String.Table.t
   }
 
 (** Domain-local flag to detect nested test cases. *)
@@ -226,8 +229,18 @@ let generate_from_schema schema tc =
 let assume _tc condition = if not condition then raise Assume_rejected
 
 (** [note tc message] records a message that will be printed on the final
-    (failing) replay. *)
-let note tc message = if tc.is_final then eprintf "%s\n%!" message
+    (failing) replay, or on every case when verbose output is on. *)
+let note tc message = if tc.is_final || tc.verbose then eprintf "%s\n%!" message
+
+(** [draw_display_name tc ~label ~repeatable] returns the display name to print
+    for a drawn value, bumping the per-test-case occurrence counter for [label].
+    A [repeatable] name is numbered on every occurrence ([label_1], [label_2],
+    …), while a non-repeatable name is printed bare. *)
+let draw_display_name tc ~label ~repeatable =
+  let n = Option.value (Hashtbl.find tc.draw_counts label) ~default:0 + 1 in
+  Hashtbl.set tc.draw_counts ~key:label ~data:n;
+  if repeatable then sprintf "%s_%d" label n else label
+;;
 
 (** [target tc value label] records a targeting observation to guide the search
     engine toward higher values. *)
@@ -358,6 +371,11 @@ let run_test ~(settings : settings) ?test_location ?database_key test_fn =
      For a given bug the engine's final replay is the last interesting case,
      so overwriting by origin leaves us with the shrunk counterexample. *)
   let captured : (string, exn) Hashtbl.t = String.Table.create () in
+  let verbose =
+    match settings.verbosity with
+    | Verbose | Debug -> true
+    | Normal | Quiet -> false
+  in
   let run_ref = ref None in
   let run_body () =
     let run = Ffi.run_start ffi_settings in
@@ -368,7 +386,14 @@ let run_test ~(settings : settings) ?test_location ?database_key test_fn =
       | Some handle ->
         let is_final = Ffi.is_final_replay handle in
         let tc =
-          { handle; mode = settings.mode; is_final; test_aborted = false; draw_depth = 0 }
+          { handle
+          ; mode = settings.mode
+          ; is_final
+          ; verbose
+          ; test_aborted = false
+          ; draw_depth = 0
+          ; draw_counts = String.Table.create ()
+          }
         in
         (* The final replay of a property-test failure is where drawn values are
            printed; head that block with a marker. Not for [Single_test_case]

@@ -273,25 +273,45 @@ let rec do_draw : type a. a core -> Client.test_case -> a =
   | Composite { label; generate_fn } -> group label data (fun () -> generate_fn data)
 ;;
 
+(** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
+    [let%hegel_test] PPX rewrites bindings to; it is not intended for direct use
+    (prefer {!draw}). On the final replay of a failing test (or on every case
+    under verbose output), an outermost draw prints its value through
+    {!Client.note} as [name = value], where [name] is [label], printed bare on
+    its sole use and numbered ([label_1], [label_2], …) when [repeatable] is set
+    — which the PPX does for a binding name that is reused or drawn in a loop.
+    Draws nested inside a span (e.g. composite elements) are suppressed so only
+    the outermost value shows. *)
+let draw_named
+  : type a.
+    label:string -> repeatable:bool -> Client.test_case -> (a, printable) generator -> a
+  =
+  fun ~label ~repeatable tc (Printable { core; sexp_of }) ->
+  let value = do_draw core tc in
+  if (tc.Client.is_final || tc.Client.verbose) && tc.Client.draw_depth = 0
+  then (
+    let name = Client.draw_display_name tc ~label ~repeatable in
+    let rendered = Sexp.to_string_hum (sexp_of value) in
+    Client.note tc (sprintf "%s = %s" name rendered));
+  value
+;;
+
 (** [draw ?label tc gen] produces a typed value from the printable generator
     [gen] using test case [tc].
 
-    On the final replay of a failing test, an outermost draw prints its value
-    through {!Client.note} — as [label = value] when [label] is given, or just
-    the value otherwise. Draws nested inside a span (e.g. composite elements)
-    are suppressed so only the outermost value shows. To draw a generator that
-    carries no printer, use {!draw_silent}, or upgrade it with {!with_printer}.
-*)
-let draw : type a. ?label:string -> Client.test_case -> (a, printable) generator -> a =
-  fun ?label tc (Printable { core; sexp_of }) ->
-  let value = do_draw core tc in
-  if tc.Client.is_final && tc.Client.draw_depth = 0
-  then (
-    let rendered = Sexp.to_string_hum (sexp_of value) in
-    Client.note
-      tc
-      (Option.value_map label ~default:rendered ~f:(fun l -> sprintf "%s = %s" l rendered)));
-  value
+    On the final replay of a failing test (or on every case under verbose
+    output), an outermost draw prints its value through {!Client.note} as
+    [name = value]. The [name] is [label] when given, else ["draw"]; an
+    unlabeled draw is numbered ([draw_1], [draw_2], …) while a [label] is printed
+    bare. Draws nested inside a span (e.g. composite elements) are suppressed so
+    only the outermost value shows. To draw a generator that carries no printer,
+    use {!draw_silent}, or attach a printer with {!with_printer}. *)
+let draw ?label tc gen =
+  draw_named
+    ~label:(Option.value label ~default:"draw")
+    ~repeatable:(Option.is_none label)
+    tc
+    gen
 ;;
 
 (** [draw_silent tc gen] produces a typed value from any generator [gen] without
