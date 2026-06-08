@@ -3,8 +3,6 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    # note: this version is automatically bumped when we update hegel-core, do not update manually
-    hegel.url = "git+https://github.com/hegeldev/hegel-core?dir=nix&ref=refs/tags/v0.9.1"; # git+https instead of github so that we can use the ref parameter
     flake-compat.url = "https://flakehub.com/f/edolstra/flake-compat/1.tar.gz";
   };
 
@@ -12,7 +10,6 @@
     {
       self,
       nixpkgs,
-      hegel,
       ...
     }:
     let
@@ -41,6 +38,8 @@
           propagatedBuildInputs = with pkgs.ocamlPackages; [
             core
             core_unix
+            ctypes
+            ctypes-foreign
             ocplib-endian
             ppx_js_style
             ppxlib
@@ -72,9 +71,16 @@
               pkgs.dune_3
               pkgs.opam
               pkgs.just
-              pkgs.uv
+              # curl is used by the loader's download fallback (see below).
+              pkgs.curl
             ];
-            HEGEL_SERVER_COMMAND = pkgs.lib.getExe hegel.packages.${system}.default;
+            # The native engine (libhegel) is resolved at runtime by
+            # lib/ffi/loader.ml, not provided by Nix: it checks
+            # $HEGEL_LIBHEGEL_PATH, then a sibling
+            # ../hegel-rust/target/{release,debug}/ checkout, then a
+            # SHA-256-verified download cached under ~/.cache/hegel-ocaml.
+            # Build hegel-rust locally and set HEGEL_LIBHEGEL_PATH to skip the
+            # download (or rely on the sibling-checkout lookup).
           };
         }
       );
