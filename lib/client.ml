@@ -418,7 +418,7 @@ let handle_result ~(settings : settings) ~captured ~test_location result =
        if settings.print_blob
        then eprintf "failure blob: \"%s\"" (Option.value_exn (Ffi.failure_blob failure));
        raise (engine_failure_exn ~captured failure)
-     | exns ->
+     | _ ->
        let details =
          List.mapi failures ~f:(fun i failure ->
            sprintf "  %d: %s" i (Exn.to_string (engine_failure_exn ~captured failure))
@@ -431,7 +431,8 @@ let handle_result ~(settings : settings) ~captured ~test_location result =
            else "")
          |> String.concat ~sep:"\n"
        in
-       raise (Failure (sprintf "Multiple failures (%d):\n%s" (List.length exns) details)))
+       raise
+         (Failure (sprintf "Multiple failures (%d):\n%s" (List.length failures) details)))
 ;;
 
 (** [run_from_engine ~settings ~ffi_settings ~test_fn ~test_location] drives a full property

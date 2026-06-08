@@ -50,24 +50,21 @@ let%expect_test "recording then replay round-trips the failure blob" =
   assert (contains ~needle:"The failure blob reproduced an error" replay_out)
 ;;
 
+let%hegel_test stale_blob _ = () [@@failure_blobs [ "AAEAAAABAQ==" ]]
+
 let%expect_test "a stale blob does not reproduce an error" =
-  try
-    Hegel.run_hegel_test
-      ~settings:(settings ())
-      ~failure_blobs:[ "AAEAAAABAQ==" ]
-      (fun _ -> ())
-  with
+  try stale_blob () with
   | Failure msg ->
     assert (contains ~needle:"The failure blob did not reproduce an error" msg);
     [%expect {||}]
 ;;
 
+let%hegel_test invalid_blob = prop [@@failure_blobs [ "INVALID_BLOB" ]]
+
 let%expect_test
     "an invalid blob does not reproduce an error and fails with a clear error message"
   =
-  try
-    Hegel.run_hegel_test ~settings:(settings ()) ~failure_blobs:[ "INVALID_BLOB" ] prop
-  with
+  try invalid_blob () with
   | Failure msg ->
     assert (
       contains
