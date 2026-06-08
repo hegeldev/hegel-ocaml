@@ -70,6 +70,8 @@ type settings =
   ; phases : phase list option
     (** [None] uses the engine's default phase list (all phases); [Some xs]
           restricts execution to [xs]. *)
+  ; print_blob : bool
+  ; report_multiple_failures : bool
   }
 
 (** [default_settings ()] creates settings with defaults. Detects CI
@@ -110,6 +112,15 @@ val with_phases : phase list -> settings -> settings
 
 (** [with_mode mode s] returns settings [s] with test [mode] set to [mode]. *)
 val with_mode : mode -> settings -> settings
+
+(** [with_print_blob b s] returns settings [s] with [print_blob] set to [b]. When
+    [true], a failing run prints replay instructions (the failure blob), and
+    replay runs report which blobs reproduced the failure. *)
+val with_print_blob : bool -> settings -> settings
+
+(** [with_report_multiple_failures b s] returns settings [s] with [report_multiple_failures] 
+    set to [b]. When [true], a failing run reports all the failures it found *)
+val with_report_multiple_failures : bool -> settings -> settings
 
 (** Per-test-case state passed explicitly to the test function. Holds the
     native test-case handle, the final-replay flag, and abort state. *)
@@ -197,6 +208,7 @@ val run_test
   :  settings:settings
   -> ?test_location:Antithesis.test_location
   -> ?database_key:string
+  -> ?failure_blobs:string list
   -> (test_case -> unit)
   -> unit
 
@@ -206,5 +218,6 @@ val run_test
 val run_hegel_test
   :  ?settings:settings
   -> ?test_location:Antithesis.test_location
+  -> ?failure_blobs:string list
   -> (test_case -> unit)
   -> unit

@@ -27,6 +27,7 @@ module Antithesis = Antithesis
 val run_hegel_test
   :  ?settings:Client.settings
   -> ?test_location:Antithesis.test_location
+  -> ?failure_blobs:string list
   -> (Client.test_case -> unit)
   -> unit
 

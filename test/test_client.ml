@@ -149,6 +149,31 @@ let test_extract_origin_no_backtrace () =
         (Test_helpers.contains_substring origin "Failure"))
 ;;
 
+(* Two same-typed exceptions ([Failure]) raised at different source lines must
+   yield distinct origins: [extract_origin] keys on the innermost user frame,
+   not the message. The two [failwith]s are inline (each a distinct, non-tail
+   call site the backtrace records) rather than in helper functions, which would
+   be tail-call-eliminated and collapse to the caller's frame. *)
+let test_extract_origin_distinct_lines () =
+  let a =
+    try failwith "boom one" with
+    | e -> Client.extract_origin e
+  in
+  let b =
+    try failwith "boom two" with
+    | e -> Client.extract_origin e
+  in
+  Alcotest.(check bool)
+    "both origins mention Failure"
+    true
+    (Test_helpers.contains_substring a "Failure"
+     && Test_helpers.contains_substring b "Failure");
+  Alcotest.(check bool)
+    "same-typed exceptions at different lines get distinct origins"
+    false
+    (String.equal a b)
+;;
+
 (* ==== Real-engine run tests ==== *)
 
 let int_gen = Generators.integers ~min_value:0 ~max_value:100 ()
@@ -356,6 +381,10 @@ let tests =
       "extract_origin no backtrace"
       `Quick
       test_extract_origin_no_backtrace
+  ; Alcotest.test_case
+      "extract_origin distinct lines"
+      `Quick
+      test_extract_origin_distinct_lines
   ; Alcotest.test_case "run passing" `Quick test_run_passing
   ; Alcotest.test_case "run failing re-raises" `Quick test_run_failing_reraises
   ; Alcotest.test_case "run assume rejects" `Quick test_run_assume_rejects

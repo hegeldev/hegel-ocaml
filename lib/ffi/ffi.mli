@@ -47,6 +47,11 @@ type status =
     exhausted its choice budget for the current test case. *)
 exception Stop_test
 
+(** Raised when a primitive returns [HEGEL_E_ASSUME] — the engine rejected the
+    current test case as invalid (e.g. an impossible uniqueness constraint that
+    exceeds the collection reject limit). Carries no diagnostic. *)
+exception Assume_rejected
+
 (** Raised when a libhegel call fails with any other negative status code; the
     payload is {!last_error_message}. *)
 exception Backend_error of string
@@ -125,12 +130,23 @@ val run_start : settings -> run
     engine error or caller misuse. *)
 val next_test_case : run -> test_case option
 
+(** [test_case_from_blob settings blob] builds a standalone test case that
+    replays the example encoded in a base64 failure [blob]. Raises
+    {!Backend_error} (with the engine's diagnostic) when the blob is missing,
+    not UTF-8, or cannot be decoded — the engine never returns a null handle
+    without setting an error. The handle must be freed with
+    {!blob_test_case_free}. *)
+val test_case_from_blob : settings -> string option -> test_case
+
 (** [run_result run] returns the aggregated result of a finished run. Raises
     {!Backend_error} if the run has not finished. *)
 val run_result : run -> run_result
 
 (** [run_free run] frees a run handle, draining the worker thread. *)
 val run_free : run -> unit
+
+(** [blob_test_case_free run] frees a test case created by a failure_blob *)
+val blob_test_case_free : test_case -> unit
 
 (** {2 Per-test-case primitives} *)
 
@@ -187,4 +203,5 @@ val result_failures : run_result -> failure list
 
 val failure_panic_message : failure -> string option
 val failure_diagnostic : failure -> string option
+val failure_blob : failure -> string option
 val failure_origin : failure -> string option

@@ -233,7 +233,9 @@ let%hegel_test test_lists_non_basic_unique_exhaustion_e2e tc =
      collection_reject converts to Data_exhausted. *)
   let gen = lists elem ~min_size:2 ~unique:true () in
   ignore (Hegel.draw tc gen)
-[@@settings Client.settings ~test_cases:10 ()]
+[@@settings
+  Client.settings ~test_cases:10 ()
+  |> Client.with_suppress_health_check [ Client.Filter_too_much ]]
 ;;
 
 (** Test: hashmaps(non-basic keys) E2E — generates pairs. *)

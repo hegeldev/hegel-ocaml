@@ -85,7 +85,16 @@ type settings =
   ; database : database
   ; suppress_health_check : health_check list
   ; phases : phase list option
+  ; print_blob : bool
+  ; report_multiple_failures : bool
   }
+
+(** Outcome of replaying a single failure blob. *)
+type replay =
+  | Undecodable of string
+  (** the blob could not be decoded; carries the engine's diagnostic *)
+  | Did_not_reproduce (** the blob replayed cleanly — it is stale *)
+  | Reproduced of exn (** the blob re-triggered the original failure *)
 
 (** CI environment variables to check for auto-detection. Each entry is
     [(var_name, expected_value)] where [None] means "any value". *)
@@ -124,6 +133,8 @@ let default_settings () =
   ; database = (if in_ci then Disabled else Unset)
   ; suppress_health_check = []
   ; phases = None
+  ; print_blob = false
+  ; report_multiple_failures = true
   }
 ;;
 
@@ -165,6 +176,15 @@ let with_phases phases s = { s with phases = Some phases }
 (** [with_mode mode s] returns settings [s] with test [mode] set to [mode]. *)
 let with_mode mode s = { s with mode }
 
+(** [with_print_blob b s] returns settings [s] with [print_blob] set to [b]. When
+    [true], a failing run prints replay instructions (the failure blob), and
+    replay runs report which blobs reproduced the failure. *)
+let with_print_blob b s = { s with print_blob = b }
+
+(** [with_report_multiple_failures b s] returns settings [s] with [report_multiple_failures] 
+    set to [b]. When [true], a failing run reports all the failures it found *)
+let with_report_multiple_failures b s = { s with report_multiple_failures = b }
+
 (** Per-test-case state passed explicitly to the test function. Holds the
     native test-case handle, the final-replay flag, and abort state. *)
 type test_case =
@@ -180,34 +200,47 @@ let in_test_context : bool Stdlib.Domain.DLS.key =
 ;;
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
-    Uses the backtrace if available. The origin is derived from the assertion's
-    {e location}, not its message, so the shrinker groups probes for the same
-    bug together (see {!Ffi.mark_complete}). *)
+    Uses the backtrace if available. The origin is derived from the exception
+    type plus the {e innermost user frame}, so the shrinker
+    groups probes for the same bug while keeping failures at distinct source
+    lines apart (see {!Ffi.mark_complete}).
+
+    [failwith] and [invalid_arg] raise from within the runtime ([stdlib.ml]), so
+    the innermost backtrace slot is the runtime, not the assertion's true source.
+    Such frames are skipped so the origin points at the caller's line; without
+    this, every same-typed exception in a run would collapse to one origin. *)
 let extract_origin exn =
   let bt = Stdlib.Printexc.get_raw_backtrace () in
-  let file_line =
+  let is_runtime_file file = String.is_suffix file ~suffix:"stdlib.ml" in
+  let user_location =
     match Stdlib.Printexc.backtrace_slots bt with
     | None -> None
     | Some slots ->
-      Array.fold slots ~init:None ~f:(fun acc slot ->
-        Option.value_map (Stdlib.Printexc.Slot.location slot) ~default:acc ~f:(fun loc ->
-          Some loc))
-      |> Option.map ~f:(fun (loc : Stdlib.Printexc.location) ->
-        loc.filename, loc.line_number)
+      Array.find_map slots ~f:(fun slot ->
+        match Stdlib.Printexc.Slot.location slot with
+        | Some (loc : Stdlib.Printexc.location) when not (is_runtime_file loc.filename) ->
+          Some (loc.filename, loc.line_number)
+        | _ -> None)
   in
-  match file_line with
+  match user_location with
   | None -> sprintf "%s at :0" (Stdlib.Printexc.exn_slot_name exn)
   | Some (file, line) ->
     sprintf "%s at %s:%d" (Stdlib.Printexc.exn_slot_name exn) file line
 ;;
 
-(** [with_stop_guard tc f] runs [f ()], translating {!Ffi.Stop_test} into
-    {!Data_exhausted} and marking the test case aborted. *)
+(** [with_stop_guard tc f] runs [f ()], translating the engine's per-case abort
+    signals into the corresponding OCaml exceptions and marking the test case
+    aborted: {!Ffi.Stop_test} becomes {!Data_exhausted} (choice budget exhausted)
+    and {!Ffi.Assume_rejected} becomes {!Assume_rejected} (the engine rejected
+    the case as invalid, e.g. an unsatisfiable uniqueness constraint). *)
 let with_stop_guard tc f =
   try f () with
   | Ffi.Stop_test ->
     tc.test_aborted <- true;
     raise Data_exhausted
+  | Ffi.Assume_rejected ->
+    tc.test_aborted <- true;
+    raise Assume_rejected
 ;;
 
 (** [generate_from_schema schema tc] generates a value from a schema by drawing
@@ -321,6 +354,7 @@ let build_ffi_settings (settings : settings) ~database_key =
   Ffi.settings_verbosity s (ffi_verbosity settings.verbosity);
   Ffi.settings_seed s settings.seed;
   Ffi.settings_derandomize s settings.derandomize;
+  Ffi.settings_report_multiple_failures s settings.report_multiple_failures;
   (match settings.database with
    | Unset -> ()
    | Disabled -> Ffi.settings_database s (Some "")
@@ -334,12 +368,134 @@ let build_ffi_settings (settings : settings) ~database_key =
   s
 ;;
 
-(* ------------------------------------------------------------------ *)
-(* Test run                                                            *)
-(* ------------------------------------------------------------------ *)
+(** [run_test_case ~mode ~test_fn handle] runs [test_fn] over a single native
+    test-case [handle], maps the outcome to a {!Ffi.status}, and marks the case
+    complete. Returns [Some (origin, exn)] when the case was {e interesting}
+    (the body raised an unexpected exception), otherwise [None]. Shared by the
+    engine-run and failure-blob replay paths. *)
+let run_test_case ~mode ~test_fn handle =
+  let is_final = Ffi.is_final_replay handle in
+  let tc = { handle; mode; is_final; test_aborted = false } in
+  Stdlib.Domain.DLS.set in_test_context true;
+  let status, captured =
+    match test_fn tc with
+    | () -> Ffi.Valid, None
+    | exception Assume_rejected -> Ffi.Invalid, None
+    | exception Data_exhausted -> Ffi.Overrun, None
+    | exception Flaky_strategy -> Ffi.Invalid, None
+    | exception exn -> Ffi.Interesting, Some (extract_origin exn, exn)
+  in
+  Stdlib.Domain.DLS.set in_test_context false;
+  Ffi.mark_complete handle status (Option.map captured ~f:fst);
+  captured
+;;
 
-(** [run_test ~settings ?test_location ?database_key test_fn] runs a property
-    test using the given settings against the native engine.
+(** [handle_result ~settings ~captured result] inspects a finished run's
+    [result]. A clean run returns [unit]. On failure it prints the replay blob
+    for each failure (when [settings.print_blob]), then raises the single
+    captured exception, or an aggregated [Failure] for multiple distinct
+    failures. *)
+let handle_result ~(settings : settings) ~captured ~test_location result =
+  let emit ~passed =
+    Option.iter test_location ~f:(fun loc -> Antithesis.emit_assertion loc ~passed)
+  in
+  match Ffi.result_failures result with
+  | [] -> emit ~passed:true
+  | failures ->
+    emit ~passed:false;
+    let engine_failure_exn ~captured failure =
+      let origin = Option.value (Ffi.failure_origin failure) ~default:"" in
+      match Hashtbl.find captured origin with
+      | Some e -> e
+      | None ->
+        Failure
+          (Option.value
+             (Ffi.failure_diagnostic failure)
+             ~default:"hegel: failing example (no diagnostic)")
+    in
+    (match failures with
+     | [ failure ] ->
+       if settings.print_blob
+       then eprintf "failure blob: \"%s\"" (Option.value_exn (Ffi.failure_blob failure));
+       raise (engine_failure_exn ~captured failure)
+     | exns ->
+       let details =
+         List.mapi failures ~f:(fun i failure ->
+           sprintf "  %d: %s" i (Exn.to_string (engine_failure_exn ~captured failure))
+           ^
+           if settings.print_blob
+           then
+             sprintf
+               "\n  failure blob: \"%s\""
+               (Option.value_exn (Ffi.failure_blob failure))
+           else "")
+         |> String.concat ~sep:"\n"
+       in
+       raise (Failure (sprintf "Multiple failures (%d):\n%s" (List.length exns) details)))
+;;
+
+(** [run_from_engine ~settings ~ffi_settings ~test_fn ~test_location] drives a full property
+    run: it starts the engine worker, loops over generated test cases, and
+    raises on failure. The engine [run] handle is always freed. *)
+let run_from_engine ~(settings : settings) ~ffi_settings ~test_fn ~test_location =
+  (* OCaml exceptions captured from interesting test cases, keyed by origin. For
+     a given bug the engine's final replay is the last interesting case, so
+     overwriting by origin leaves us with the shrunk counterexample. *)
+  let captured : (string, exn) Hashtbl.t = String.Table.create () in
+  let run = Ffi.run_start ffi_settings in
+  Exn.protect
+    ~finally:(fun () -> Ffi.run_free run)
+    ~f:(fun () ->
+      let rec loop () =
+        match Ffi.next_test_case run with
+        | None -> ()
+        | Some handle ->
+          Option.iter
+            (run_test_case ~mode:settings.mode ~test_fn handle)
+            ~f:(fun (origin, exn) -> Hashtbl.set captured ~key:origin ~data:exn);
+          loop ()
+      in
+      loop ();
+      handle_result ~settings ~captured ~test_location (Ffi.run_result run))
+;;
+
+(** [replay_from_blob ~mode ~ffi_settings ~test_fn blob] replays a single failure
+    [blob] as a standalone, deterministic test case (no engine worker, no
+    shrinking). A corrupt or version-incompatible blob is reported as
+    {!Undecodable}. The standalone case is always freed. *)
+let replay_from_blob ~mode ~ffi_settings ~test_fn blob =
+  match Ffi.test_case_from_blob ffi_settings (Some blob) with
+  | exception Ffi.Backend_error msg -> Undecodable msg
+  | tc ->
+    Exn.protect
+      ~finally:(fun () -> Ffi.blob_test_case_free tc)
+      ~f:(fun () ->
+        match run_test_case ~mode ~test_fn tc with
+        | None -> Did_not_reproduce
+        | Some (_, exn) -> Reproduced exn)
+;;
+
+(** [run_from_blob ~settings ~ffi_settings ~test_fn blob] replays a failure
+    [blob] (only the first supplied blob is replayed). A reproducing blob re-raises
+    the original exception; a stale or undecodable blob raises a clear [Failure].
+*)
+let run_from_blob ~(settings : settings) ~ffi_settings ~test_fn blob =
+  match replay_from_blob ~mode:settings.mode ~ffi_settings ~test_fn blob with
+  | Undecodable msg -> raise (Failure msg)
+  | Did_not_reproduce -> raise (Failure "The failure blob did not reproduce an error")
+  | Reproduced exn ->
+    printf "%s\n" "The failure blob reproduced an error:";
+    raise exn
+;;
+
+(** [run_test ~settings ?test_location ?database_key ?failure_blobs test_fn] runs
+    a property test using the given settings against the native engine.
+
+    With an empty [failure_blobs] (the default) it performs a normal engine run —
+    generation, shrinking, and database replay. With a non-empty [failure_blobs]
+    it instead replays the first blob as a standalone deterministic case and
+    reports whether it reproduced the original failure (subsequent blobs are
+    ignored); no engine worker, shrinking, or database is involved.
 
     @param test_location
       source location of the test, used by the Antithesis integration.
@@ -347,84 +503,28 @@ let build_ffi_settings (settings : settings) ~database_key =
       Antithesis assertion is emitted.
     @param database_key
       optional key scoping persisted/replayed failing examples. *)
-let run_test ~(settings : settings) ?test_location ?database_key test_fn =
+let run_test
+      ~(settings : settings)
+      ?test_location
+      ?database_key
+      ?(failure_blobs = [])
+      test_fn
+  =
   if Stdlib.Domain.DLS.get in_test_context
   then failwith "Cannot nest test cases - already inside a test case";
   let ffi_settings = build_ffi_settings settings ~database_key in
-  (* OCaml exceptions captured from interesting test cases, keyed by origin.
-     For a given bug the engine's final replay is the last interesting case,
-     so overwriting by origin leaves us with the shrunk counterexample. *)
-  let captured : (string, exn) Hashtbl.t = String.Table.create () in
-  let run_ref = ref None in
   let run_body () =
-    let run = Ffi.run_start ffi_settings in
-    run_ref := Some run;
-    let rec loop () =
-      match Ffi.next_test_case run with
-      | None -> ()
-      | Some handle ->
-        let is_final = Ffi.is_final_replay handle in
-        let tc = { handle; mode = settings.mode; is_final; test_aborted = false } in
-        Stdlib.Domain.DLS.set in_test_context true;
-        let status, origin =
-          match test_fn tc with
-          | () -> Ffi.Valid, None
-          | exception Assume_rejected -> Ffi.Invalid, None
-          | exception Data_exhausted -> Ffi.Overrun, None
-          | exception Flaky_strategy -> Ffi.Invalid, None
-          | exception exn ->
-            let origin = extract_origin exn in
-            Hashtbl.set captured ~key:origin ~data:exn;
-            Ffi.Interesting, Some origin
-        in
-        Stdlib.Domain.DLS.set in_test_context false;
-        Ffi.mark_complete handle status origin;
-        loop ()
-    in
-    loop ();
-    let result = Ffi.run_result run in
-    match Ffi.result_failures result with
-    | [] -> ()
-    | failures ->
-      let exns =
-        List.map failures ~f:(fun f ->
-          let origin = Option.value (Ffi.failure_origin f) ~default:"" in
-          match Hashtbl.find captured origin with
-          | Some e -> e
-          | None ->
-            Failure
-              (Option.value
-                 (Ffi.failure_diagnostic f)
-                 ~default:"hegel: failing example (no diagnostic)"))
-      in
-      (match exns with
-       | [ e ] -> raise e
-       | _ ->
-         let details =
-           List.mapi exns ~f:(fun i e -> sprintf "  %d: %s" i (Exn.to_string e))
-           |> String.concat ~sep:"\n"
-         in
-         raise
-           (Failure (sprintf "Multiple failures (%d):\n%s" (List.length exns) details)))
+    match failure_blobs with
+    | [] -> run_from_engine ~settings ~ffi_settings ~test_fn ~test_location
+    | blob :: _ -> run_from_blob ~settings ~ffi_settings ~test_fn blob
   in
-  let emit ~passed =
-    Option.iter test_location ~f:(fun loc -> Antithesis.emit_assertion loc ~passed)
-  in
-  Exn.protect
-    ~finally:(fun () ->
-      Option.iter !run_ref ~f:Ffi.run_free;
-      Ffi.settings_free ffi_settings)
-    ~f:(fun () ->
-      match run_body () with
-      | () -> emit ~passed:true
-      | exception e ->
-        emit ~passed:false;
-        raise e)
+  Exn.protect ~finally:(fun () -> Ffi.settings_free ffi_settings) ~f:run_body
 ;;
 
 (** [run_hegel_test ?settings ?test_location test_fn] is {!run_test} with
     [settings] defaulting to {!default_settings}. This is the entry point the
     [let%hegel_test] PPX targets and is re-exported as [Hegel.run_hegel_test]. *)
-let run_hegel_test ?(settings = default_settings ()) ?test_location test_fn =
-  run_test ~settings ?test_location test_fn
+let run_hegel_test ?(settings = default_settings ()) ?test_location ?failure_blobs test_fn
+  =
+  run_test ~settings ?test_location ?failure_blobs test_fn
 ;;
