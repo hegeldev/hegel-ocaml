@@ -309,9 +309,9 @@ let pool_generate tc ~pool_id ?(consume = false) () =
 ;;
 
 (** Supported protocol version range. *)
-let supported_protocol_lo = "0.15"
+let supported_protocol_lo = "0.16"
 
-let supported_protocol_hi = "0.15"
+let supported_protocol_hi = "0.16"
 
 (** Compare two "major.minor" version strings numerically. Returns a negative
     number if a < b, 0 if a = b, positive if a > b. *)
