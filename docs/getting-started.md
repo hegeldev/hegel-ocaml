@@ -2,10 +2,6 @@
 
 This guide walks you through the basics of installing Hegel and writing your first tests.
 
-## Prerequisites
-
-You will need [`uv`](https://docs.astral.sh/uv/) installed and on your PATH.
-
 ## Install Hegel
 
 Add `hegel` to your opam environment:
@@ -13,6 +9,11 @@ Add `hegel` to your opam environment:
 ```bash
 opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
 ```
+
+Hegel calls the native `libhegel` shared library and locates (or downloads and
+caches) it automatically at runtime, so there is no separate install step. See
+the [README](../README.md#install-hegel) for how the library is resolved and the
+supported platforms.
 
 ## Write your first test
 
@@ -59,7 +60,8 @@ let%hegel_test integer_under_fifty tc =
 This test asserts that any integer is less than 50, which is obviously incorrect.
 Hegel will find a test case that makes this assertion fail, and then shrink it
 to find the smallest counterexample — in this case, `n = 50`. `dune runtest`
-will print a `FAIL` line and exit non-zero.
+will print a `FAIL` line, report the drawn value as `n = 50` (named after the
+`let` binding), and exit non-zero.
 
 To fix this test, you can constrain the integers you generate with `min_value`
 and `max_value`:
@@ -123,7 +125,38 @@ let generate_person tc =
 
 ## Debug your failing test cases
 
-Use `note` to attach debug information:
+When a test fails, Hegel replays the minimal failing example and prints each
+value you drew as an s-expression, named after the `let` binding it was bound
+to:
+
+```ocaml
+let%hegel_test addition_commutes tc =
+  let x = draw tc (integers ()) in
+  let y = draw tc (integers ()) in
+  assert (x + y = y + x)
+;;
+
+(* On failure, prints:
+     x = …
+     y = …  *)
+```
+
+A value that is shadowed or drawn inside a loop is numbered (`x_1`, `x_2`, …),
+and you can override the name with `~label`: `draw ~label:"seed" tc (integers ())`.
+
+Some combinators hand the result type to your own code and so carry no printer —
+`map`, `flat_map`, `sampled_from`, `just`, and generators from `[@@deriving
+hegel]`. Either draw it with `draw_silent` (which prints nothing):
+
+```ocaml
+let parity = draw_silent tc (map (fun n -> n mod 2) (integers ())) 
+```
+or attach a printer with `with_printer`:
+```ocaml
+let parity = draw tc (with_printer [%sexp_of: int] (map (fun n -> n mod 2) (integers ()))) 
+```
+
+You can also attach your own debug information with `note`:
 
 ```ocaml
 let%hegel_test addition_commutes tc =
@@ -134,7 +167,8 @@ let%hegel_test addition_commutes tc =
 ;;
 ```
 
-Notes only appear when Hegel replays the minimal failing example.
+Notes, like drawn values, only appear when Hegel replays the minimal failing
+example.
 
 ## Change the number of test cases
 
