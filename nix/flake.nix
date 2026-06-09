@@ -47,13 +47,13 @@
           ];
           buildPhase = ''
             runHook preBuild
-            dune build -p hegel,ppx_hegel_test,ppx_hegel_generator -j $NIX_BUILD_CORES
+            dune build -p hegel,ppx_hegel_compat,ppx_hegel_test,ppx_hegel_generator -j $NIX_BUILD_CORES
             runHook postBuild
           '';
           installPhase = ''
             runHook preInstall
             dune install --prefix $out --libdir $OCAMLFIND_DESTDIR \
-              hegel ppx_hegel_test ppx_hegel_generator
+              hegel ppx_hegel_test ppx_hegel_generator ppx_hegel_compat
             runHook postInstall
           '';
           doCheck = false;
