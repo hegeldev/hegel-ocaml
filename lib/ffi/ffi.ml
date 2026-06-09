@@ -82,11 +82,16 @@ let c_next_test_case =
 
 let c_run_result = foreign "hegel_run_result" (ptr void @-> returning (ptr void))
 let c_run_free = foreign "hegel_run_free" (ptr void @-> returning void)
+let c_test_case_free = foreign "hegel_test_case_free" (ptr void @-> returning void)
 
 let c_generate =
   foreign
     "hegel_generate"
     (ptr void @-> ptr char @-> size_t @-> ptr (ptr char) @-> ptr size_t @-> returning int)
+;;
+
+let c_test_case_from_blob =
+  foreign "hegel_test_case_from_blob" (ptr void @-> string_opt @-> returning (ptr void))
 ;;
 
 let c_start_span = foreign "hegel_start_span" (ptr void @-> uint64_t @-> returning int)
@@ -146,6 +151,10 @@ let c_failure_diagnostic =
   foreign "hegel_failure_diagnostic" (ptr void @-> returning string_opt)
 ;;
 
+let c_failure_blob =
+  foreign "hegel_failure_reproduction_blob" (ptr void @-> returning string_opt)
+;;
+
 let c_failure_origin = foreign "hegel_failure_origin" (ptr void @-> returning string_opt)
 let c_last_error_message = foreign "hegel_last_error_message" (void @-> returning string)
 let c_version = foreign "hegel_version" (void @-> returning string)
@@ -177,6 +186,7 @@ type status =
   | Interesting
 
 exception Stop_test
+exception Assume_rejected
 exception Backend_error of string
 
 (* Phase bitmask values [HEGEL_PHASE_*]. *)
@@ -216,13 +226,18 @@ let status_to_int = function
 ;;
 
 (* Translate a C return code: [HEGEL_OK] succeeds, [HEGEL_E_STOP_TEST]
-   raises {!Stop_test}, anything else raises {!Backend_error} with the
-   thread-local diagnostic. *)
+   raises {!Stop_test}, [HEGEL_E_ASSUME] raises {!Assume_rejected} (the engine
+   rejected the case as invalid — e.g. an impossible uniqueness constraint hits
+   the collection reject limit), anything else raises {!Backend_error} with the
+   thread-local diagnostic. [HEGEL_E_ASSUME] carries no diagnostic, so it must
+   be matched before the catch-all. *)
 let check_rc rc =
   if rc = 0
   then ()
   else if rc = -1
   then raise Stop_test
+  else if rc = -2
+  then raise Assume_rejected
   else raise (Backend_error (c_last_error_message ()))
 ;;
 
@@ -277,6 +292,20 @@ let next_test_case run =
   else Some tc
 ;;
 
+let test_case_from_blob s b =
+  let tc = c_test_case_from_blob s b in
+  (* hegel_test_case_from_blob sets a non-empty last error on every null-return
+     path (bad pointer, non-UTF-8 blob, undecodable blob), so a failure always
+     surfaces as [Backend_error] — it never yields a [None]-like handle. *)
+  if is_null tc
+  then (
+    let msg = c_last_error_message () in
+    raise
+      (Backend_error
+         (if String.length msg = 0 then "hegel_test_case_from_blob failed" else msg)))
+  else tc
+;;
+
 let run_result run =
   let r = c_run_result run in
   if is_null r then raise (Backend_error (c_last_error_message ()));
@@ -284,6 +313,7 @@ let run_result run =
 ;;
 
 let run_free run = c_run_free run
+let blob_test_case_free tc = c_test_case_free tc
 
 (* ------------------------------------------------------------------ *)
 (* Per-test-case primitives                                            *)
@@ -372,3 +402,4 @@ let result_failures r =
 let failure_panic_message f = c_failure_panic_message f
 let failure_diagnostic f = c_failure_diagnostic f
 let failure_origin f = c_failure_origin f
+let failure_blob f = c_failure_blob f

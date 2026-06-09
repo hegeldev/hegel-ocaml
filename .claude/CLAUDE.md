@@ -193,9 +193,11 @@ The engine runs in-process, so there is no subprocess or session to manage.
 The public entry point is `Hegel.run_hegel_test ?settings ?test_location
 test_fn` — `Client.run_hegel_test`, which is `Client.run_test` with [settings]
 defaulting to `default_settings ()`. It is what the `let%hegel_test` PPX
-targets. The old `[@@failure_blobs ...]` record/replay workflow was dropped in
-the native-backend migration; use `database` / `database_key` for failure
-persistence and replay.
+targets. The `[@@failure_blobs ...]` record/replay workflow is supported: the
+PPX forwards the listed blobs as `~failure_blobs` to `run_hegel_test`, which
+replays the first blob as a standalone deterministic case (pair it with
+`with_print_blob true` to print the reproducing blob on failure). For persisting
+and replaying failing examples across runs, use `database` / `database_key`.
 
 ### Test Runner (client.ml)
 

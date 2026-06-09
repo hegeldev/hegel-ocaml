@@ -22,7 +22,7 @@ check-tests:
     # run them through dune; coverage merges via BISECT_FILE.
     dune runtest test/expect_tests --instrument-with bisect_ppx --force
     python3 scripts/check-coverage.py
-
+    
 format:
     #!/usr/bin/env bash
     set -euo pipefail
