@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 - 2026-06-09
+
+This release replaces the hegel-core Python engine with the `libhegel` Rust engine, 
+called in-process via ctypes. There is no longer a subprocess, socket,
+or wire protocol. `libhegel` is located (or downloaded) at runtime and `dlopen`ed.
+
+The breaking change is the removal of the `Hegel.Protocol`, `Hegel.Connection`, and
+`Hegel.Session` modules.
+
 ## 0.4.2 - 2026-05-29
 
 Implements reproducing a test case with failure blobs.
