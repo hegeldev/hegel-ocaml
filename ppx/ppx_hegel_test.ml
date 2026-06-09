@@ -206,17 +206,21 @@ let has_label_arg (args : (arg_label * expression) list) : bool =
 let rec param_name (pat : pattern) : string option =
   match pat.ppat_desc with
   | Ppat_var { txt; _ } -> Some txt
-  | Ppat_constraint (p, _) -> param_name p
-  | _ -> None
+  | _ ->
+    (* [Ppat_constraint] arity differs between standard OCaml and OxCaml, so
+       unwrap a type-annotated pattern through the compat shim. *)
+    (match Ppx_compat.unwrap_pattern_constraint pat with
+     | Some p -> param_name p
+     | None -> None)
 ;;
 
 (** [test_case_name e] is the name of the test function's first parameter (its
     [tc]), used as the receiver the rewrite keys off. [None] when the binding is
     not a function or its parameter is not a simple variable. *)
 let test_case_name (e : expression) : string option =
-  match e.pexp_desc with
-  | Pexp_fun (_, _, pat, _) -> param_name pat
-  | _ -> None
+  match Ppx_compat.expr_first_param_pat e with
+  | Some pat -> param_name pat
+  | None -> None
 ;;
 
 (** [tc_arg_is ~tc_name args] is [true] when the first positional argument of an
@@ -238,15 +242,6 @@ let draw_binding_name ~tc_name (vb : value_binding) : string option =
   | _ -> None
 ;;
 
-(** [peel_params e] strips the test function's own parameter lambdas, returning
-    the body expression. Analysing the body (rather than the whole lambda) keeps
-    the test's [tc] parameter from counting as a nesting level. *)
-let rec peel_params (e : expression) : expression =
-  match e.pexp_desc with
-  | Pexp_fun (_, _, _, body) -> peel_params body
-  | _ -> e
-;;
-
 (** [collect_repeatable body] maps each draw-bound name to whether its draws
     should be numbered. A name is repeatable
     if it is drawn more than once, or drawn anywhere at block depth > 0 (inside a
@@ -264,12 +259,10 @@ let collect_repeatable ~tc_name (body : expression) : (string, bool) Stdlib.Hash
       inherit Ast_traverse.iter as super
 
       method! expression e =
-        match e.pexp_desc with
-        | Pexp_fun _ | Pexp_function _ | Pexp_for _ | Pexp_while _ ->
-          incr depth;
-          super#expression e;
-          decr depth
-        | Pexp_let (_, vbs, _) ->
+        (* [Pexp_let]/[Pexp_fun]/[Pexp_function] arities differ between OCaml
+           flavors, so go through the compat shim. *)
+        match Ppx_compat.extract_let_bindings e with
+        | Some vbs ->
           List.iter
             (fun vb ->
                match draw_binding_name ~tc_name vb with
@@ -277,7 +270,17 @@ let collect_repeatable ~tc_name (body : expression) : (string, bool) Stdlib.Hash
                | None -> ())
             vbs;
           super#expression e
-        | _ -> super#expression e
+        | None ->
+          (match e.pexp_desc with
+           | Pexp_for _ | Pexp_while _ ->
+             incr depth;
+             super#expression e;
+             decr depth
+           | _ when Ppx_compat.is_function_expr e ->
+             incr depth;
+             super#expression e;
+             decr depth
+           | _ -> super#expression e)
     end
   in
   collector#expression body;
@@ -331,12 +334,7 @@ let label_injector ~tc_name flags =
 
     method! expression e =
       let e = super#expression e in
-      match e.pexp_desc with
-      | Pexp_let (rec_flag, vbs, body) ->
-        { e with
-          pexp_desc = Pexp_let (rec_flag, List.map (inject_draw ~tc_name flags) vbs, body)
-        }
-      | _ -> e
+      Ppx_compat.map_let_value_bindings (List.map (inject_draw ~tc_name flags)) e
   end
 ;;
 
@@ -355,7 +353,7 @@ let expand_value_binding ~loc (vb : value_binding) : structure_item list =
     match test_case_name vb.pvb_expr with
     | None -> vb.pvb_expr
     | Some tc_name ->
-      let flags = collect_repeatable ~tc_name (peel_params vb.pvb_expr) in
+      let flags = collect_repeatable ~tc_name (Ppx_compat.peel_fun_params vb.pvb_expr) in
       (label_injector ~tc_name flags)#expression vb.pvb_expr
   in
   build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn

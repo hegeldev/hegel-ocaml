@@ -115,7 +115,8 @@ let%expect_test "recording reports multiple distinct failures" =
   | exception Failure msg ->
     assert (contains ~needle:"Multiple failures (2)" msg);
     assert (count ~needle:"failure blob:" msg = 2);
-  [%expect {|
+    [%expect
+      {|
     v = 60
     v = 0
     |}]
