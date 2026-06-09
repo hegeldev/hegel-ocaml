@@ -14,8 +14,10 @@ open Generators
 
 (* Quiet, deterministic run; swallow the failure the property raises so the
    expect block only sees what we printed. *)
-let run_failing body =
-  let settings = Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Quiet) in
+let run_failing
+      ?(settings = Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Quiet))
+      body
+  =
   try Hegel.run_hegel_test ~settings body with
   | _ -> ()
 ;;
@@ -168,6 +170,36 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
     {|
     Step 1: push
     n = 7 
+    |}]
+;;
+
+let%expect_test
+    "stateful tests prints drawn data across all test cases when verbosity is verbose"
+  =
+  let rule =
+    Stateful.Rule.create ~name:"push" ~step:(fun tc _state ->
+      let _ = Hegel.draw ~label:"n" tc (integers ~min_value:7 ~max_value:7 ()) in
+      assert false)
+  in
+  run_failing
+    ~settings:
+      Client.(
+        settings ~test_cases:1 ~seed:0 ()
+        |> with_verbosity Verbose
+        |> with_phases [ Client.Generate ])
+    (fun tc ->
+       let vars = Stateful.Variables.create ~sexp_of:Int.sexp_of_t tc in
+       Stateful.Variables.add vars 42;
+       let _ = Stateful.Variables.draw vars in
+       Stateful.run ~init:() ~rules:[ rule ] tc);
+  [%expect
+    {|
+    v1 = 42
+    Step 1: push
+    n = 7
+    v1 = 42
+    Step 1: push
+    n = 7
     |}]
 ;;
 

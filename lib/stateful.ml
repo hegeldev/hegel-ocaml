@@ -42,9 +42,7 @@ module Variables = struct
     Client.assume t.tc (not (is_empty t));
     let variable_id = Client.pool_generate t.tc ~pool_id:t.pool_id ~consume () in
     let value = resolve_drawn t.values ~consume variable_id in
-    (* On the final replay, print the chosen binding — but only when a printer
-       was supplied; without one we print nothing (not even the handle). *)
-    if t.tc.Client.is_final
+    if t.tc.is_final || t.tc.verbose
     then
       Option.iter t.sexp_of ~f:(fun f ->
         Client.note
@@ -96,7 +94,7 @@ let run ~init ~rules ?(invariants = []) tc =
       Client.start_span ~label:Generators.Labels.stateful_rule tc;
       try
         let rule = Generators.draw_silent tc rule_generator in
-        if tc.Client.is_final
+        if tc.is_final || tc.verbose
         then Client.note tc (Printf.sprintf "Step %d: %s" (num_steps + 1) rule.Rule.name);
         let new_state = rule.Rule.step tc state in
         run_invariants new_state;

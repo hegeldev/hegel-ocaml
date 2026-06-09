@@ -89,7 +89,7 @@ val collection_reject : collection -> Client.test_case -> unit
     draw is numbered ([draw_1], [draw_2], …) while a [label] is printed bare.
     Draws nested inside a span (e.g. composite elements) are suppressed so only
     the outermost value shows. To draw a generator with no printer, use
-    {!draw_silent} or or attach a printer with {!with_printer}. *)
+    {!draw_silent} or attach a printer with {!with_printer}. *)
 val draw : ?label:string -> Client.test_case -> ('a, printable) generator -> 'a
 
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
