@@ -1,5 +1,4 @@
 open! Core
-open Connection
 
 (** Constants for span labels used in generation tracking. *)
 module Labels = struct
@@ -98,12 +97,12 @@ let discardable_group label data f =
 
 (** A collection handle for generating variable-length sequences.
 
-    Collections communicate with the server to determine when to stop generating
-    elements. The [finished] flag short-circuits subsequent {!collection_more}
-    calls once the server signals completion. *)
+    Collections ask the engine when to stop generating elements. The [finished]
+    flag short-circuits subsequent {!collection_more} calls once the engine
+    signals completion. The engine-side collection is created on first use. *)
 type collection =
   { mutable finished : bool
-  ; mutable collection_id : Cbor.t option
+  ; mutable collection_id : int option
   ; min_size : int
   ; max_size : int option
   }
@@ -115,35 +114,15 @@ let new_collection ~min_size ?max_size data () =
   { finished = false; collection_id = None; min_size; max_size }
 ;;
 
-(** [get_collection_id coll data] lazily initializes the server-side collection
-    and returns its ID. Raises {!Client.Data_exhausted} on StopTest. *)
+(** [get_collection_id coll data] initializes the engine-side collection
+    and returns its id. Raises {!Client.Data_exhausted} on StopTest. *)
 let get_collection_id coll data =
   match coll.collection_id with
   | Some id -> id
   | None ->
-    let stream = data.Client.stream in
-    let max_size_val =
-      match coll.max_size with
-      | Some ms -> `Int ms
-      | None -> `Null
-    in
-    let result =
-      try
-        pending_get
-          (request
-             stream
-             (`Map
-                 [ `Text "command", `Text "new_collection"
-                 ; `Text "min_size", `Int coll.min_size
-                 ; `Text "max_size", max_size_val
-                 ]))
-      with
-      | Request_error e when String.equal e.error_type "StopTest" ->
-        data.test_aborted <- true;
-        raise Client.Data_exhausted
-    in
-    coll.collection_id <- Some result;
-    result
+    let id = Client.new_collection data ~min_size:coll.min_size ~max_size:coll.max_size in
+    coll.collection_id <- Some id;
+    id
 ;;
 
 (** [collection_more coll data] returns [true] if more elements should be
@@ -155,22 +134,7 @@ let collection_more coll data =
   then false
   else (
     let collection_id = get_collection_id coll data in
-    let stream = data.Client.stream in
-    let result =
-      try
-        pending_get
-          (request
-             stream
-             (`Map
-                 [ `Text "command", `Text "collection_more"
-                 ; `Text "collection_id", collection_id
-                 ]))
-      with
-      | Request_error e when String.equal e.error_type "StopTest" ->
-        data.test_aborted <- true;
-        raise Client.Data_exhausted
-    in
-    let more = Cbor_helpers.extract_bool result in
+    let more = Client.collection_more data ~collection_id in
     if not more then coll.finished <- true;
     more)
 ;;
@@ -182,22 +146,7 @@ let collection_reject coll data =
   if not coll.finished
   then (
     let collection_id = get_collection_id coll data in
-    let stream = data.Client.stream in
-    try
-      let (_ : Cbor.t) =
-        pending_get
-          (request
-             stream
-             (`Map
-                 [ `Text "command", `Text "collection_reject"
-                 ; `Text "collection_id", collection_id
-                 ]))
-      in
-      ()
-    with
-    | Request_error e when String.equal e.error_type "StopTest" ->
-      data.test_aborted <- true;
-      raise Client.Data_exhausted)
+    Client.collection_reject data ~collection_id)
 ;;
 
 (** [do_draw gen data] produces a typed value from generator [gen] using the

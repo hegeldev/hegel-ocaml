@@ -1,0 +1,10 @@
+; Low-level ctypes bindings to libhegel. Deliberately NOT instrumented with
+; bisect_ppx: this is mechanical FFI marshalling whose error branches are not
+; meaningfully coverable, so it stays out of the 100%-coverage gate (the same
+; exclusion the PPX libraries rely on). All decision logic lives in the
+; instrumented `hegel` library.
+
+(library
+ (name hegel_ffi)
+ (public_name hegel.ffi)
+ (libraries ctypes ctypes-foreign unix))

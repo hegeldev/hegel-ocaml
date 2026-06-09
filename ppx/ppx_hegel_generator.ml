@@ -13,7 +13,9 @@
     - Type aliases: delegates to the generator for the aliased type
 
     Supported field/argument types:
-    - [int] -> generates via [integers()]
+    - [int] -> generates via [integers ~min_value:(-1073741823)
+      ~max_value:1073741823 ()] (30-bit bound; keeps products like [x*x]
+      from overflowing native [int] and avoids CBOR bigint encoding)
     - [bool] -> generates via [booleans()]
     - [float] -> generates via
       [floats ~allow_nan:false ~allow_infinity:false ()]
@@ -35,10 +37,7 @@ let rec generate_expr_of_core_type (ct : core_type) : expression =
       fun _hegel_tc ->
         Hegel.draw
           _hegel_tc
-          (Hegel.Generators.integers
-             ~min_value:Stdlib.Int.min_int
-             ~max_value:Stdlib.Int.max_int
-             ())]
+          (Hegel.Generators.integers ~min_value:(-1073741823) ~max_value:1073741823 ())]
   | Ptyp_constr ({ txt = Lident "bool"; _ }, []) ->
     [%expr fun _hegel_tc -> Hegel.draw _hegel_tc (Hegel.Generators.booleans ())]
   | Ptyp_constr ({ txt = Lident "float"; _ }, []) ->

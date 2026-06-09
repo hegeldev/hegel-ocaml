@@ -1,26 +1,14 @@
 (** The current version of Hegel for OCaml. *)
 val version : string
 
-(** Binary wire protocol for packet serialization and deserialization. *)
-module Protocol = Protocol
-
 (** CBOR encoding/decoding with type-safe extractor helpers. *)
 module Cbor_helpers = Cbor_helpers
-
-(** Multiplexed connection and stream abstractions. *)
-module Connection = Connection
 
 (** Test runner and lifecycle management. *)
 module Client = Client
 
-(** Global session management for running property tests. *)
-module Session = Session
-
 (** Generator combinators for composable test data generation. *)
 module Generators = Generators
-
-(** Conformance test helpers for writing conformance binaries. *)
-module Conformance = Conformance
 
 (** Runtime support for [@@deriving generator]. *)
 module Derive = Derive
@@ -32,6 +20,16 @@ module Stateful = Stateful
 module Antithesis = Antithesis
 
 (** {2 Convenience re-exports} *)
+
+(** [run_hegel_test ?settings ?test_location test_fn] runs a property test
+    against the native engine, defaulting to {!default_settings}. This is the
+    entry point the [let%hegel_test] PPX targets. *)
+val run_hegel_test
+  :  ?settings:Client.settings
+  -> ?test_location:Antithesis.test_location
+  -> ?failure_blobs:string list
+  -> (Client.test_case -> unit)
+  -> unit
 
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)

@@ -1,8 +1,8 @@
 # Hegel for OCaml
 
 Hegel is a property-based testing library for OCaml. Hegel is based on
-[Hypothesis](https://github.com/hypothesisworks/hypothesis), using the
-[Hegel](https://hegel.dev/) protocol.
+[Hypothesis](https://github.com/hypothesisworks/hypothesis) and runs the native
+[Hegel](https://hegel.dev/) engine in-process via the `libhegel` C library.
 
 ## Install Hegel
 
@@ -10,7 +10,21 @@ Hegel is a property-based testing library for OCaml. Hegel is based on
 opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
 ```
 
-You will need [`uv`](https://docs.astral.sh/uv/) installed and on your PATH.
+Hegel calls the native `libhegel` shared library and locates it automatically
+at runtime — no separate install step. It looks, in order, for:
+
+1. `$HEGEL_LIBHEGEL_PATH` — an explicit path to the library (or a directory
+   containing it);
+2. a sibling [hegel-rust](https://github.com/hegeldev/hegel-rust) checkout at
+   `../hegel-rust/target/release/` (then `.../debug/`) relative to your project;
+3. a checksum-verified download of the matching version from hegel-rust's GitHub
+   releases, cached under `~/.cache/hegel-ocaml/libhegel/<version>/`.
+
+Set `HEGEL_LIBHEGEL_NO_DOWNLOAD=1` to opt out of the download fallback.
+
+Hegel for OCaml supports **Linux** (amd64/arm64) and **macOS** (Apple Silicon).
+macOS amd64 (Intel) has no published `libhegel` artifact, so on that platform point
+`HEGEL_LIBHEGEL_PATH` at a locally built `libhegel.dylib`.
 
 ## Quick start
 
@@ -60,8 +74,9 @@ For a full walkthrough, see [docs/getting-started.md](docs/getting-started.md).
 ## Development
 
 ```bash
-just setup       # Install dependencies
 just check       # Full CI: lint + docs + tests with 100% coverage
 just test        # Run tests only
-just conformance # Run cross-language conformance tests
 ```
+
+`libhegel` is located (and downloaded + cached if needed) automatically at
+runtime — there is no separate setup step.

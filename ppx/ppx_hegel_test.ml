@@ -9,7 +9,7 @@
     into:
     {[
       let my_test () =
-        Hegel.Session.run_hegel_test
+        Hegel.run_hegel_test
           ~settings:expr
           ~test_location:{ function_name; file; begin_line }
           ~failure_blobs:[ "<base64>"; ... ]
@@ -28,11 +28,7 @@
     with [Hegel_test_runtime] so that [dune runtest] (via the [ppx_hegel_test]
     inline-tests backend) discovers and runs it.
 
-    The [@@settings ...] and [@@failure_blobs ...] attributes are both optional. The
-    [@@failure_blobs ...] attribute drives the failure-blob workflow: an empty list
-    [[@@failure_blobs []]] enables recording mode (a failure prints the captured
-    blob to stderr for copy-paste); a non-empty list switches to replay mode
-    (each blob is replayed through the server). See {!Hegel.Session.run_hegel_test}. *)
+    The [@@settings ...] and [@@failure_blobs ...] attributes are both optional. *)
 
 open Ppxlib
 
@@ -68,17 +64,14 @@ let rec parse_string_list (e : expression) : string list =
          | _ ->
            Location.raise_errorf
              ~loc:head.pexp_loc
-             "ppx_hegel_test: [@@failure_blobs ...] elements must be string literals"
+             "ppx_hegel_test: elements must be string literals"
        in
        head_str :: parse_string_list tail
-     | _ ->
-       Location.raise_errorf
-         ~loc:e.pexp_loc
-         "ppx_hegel_test: malformed [@@failure_blobs ...] list payload")
+     | _ -> Location.raise_errorf ~loc:e.pexp_loc "ppx_hegel_test: malformed list payload")
   | _ ->
     Location.raise_errorf
       ~loc:e.pexp_loc
-      "ppx_hegel_test: [@@failure_blobs ...] must carry a list literal of string literals"
+      "ppx_hegel_test: expected a list literal of string literals"
 ;;
 
 (** [extract_failure_blobs_attr attrs] returns the parsed string list
@@ -89,7 +82,13 @@ let extract_failure_blobs_attr (attrs : attributes) : string list option =
        if String.equal attr.attr_name.txt "failure_blobs"
        then (
          match attr.attr_payload with
-         | PStr [ { pstr_desc = Pstr_eval (e, _); _ } ] -> Some (parse_string_list e)
+         | PStr [ { pstr_desc = Pstr_eval (e, _); _ } ] ->
+           (match parse_string_list e with
+            | [] ->
+              Location.raise_errorf
+                ~loc:attr.attr_loc
+                "ppx_hegel_test: [@@failure_blobs ...] must have at least one element"
+            | lst -> Some lst)
          | _ ->
            Location.raise_errorf
              ~loc:attr.attr_loc
@@ -122,14 +121,12 @@ let build_location_record ~loc ~function_name : expression =
     }]
 ;;
 
-(** [build_items ~loc ~function_name ~settings_expr ~failure_blobs
-      ~body_fn] returns the pair of structure items the expander splices
-    in:
+(** [build_items ~loc ~function_name ~settings_expr ~body_fn] returns the pair
+    of structure items the expander splices in:
 
     {[
       let function_name () =
-        Hegel.Session.run_hegel_test
-          [?settings] location [?failure_blobs] body_fn
+        Hegel.run_hegel_test [?settings] location body_fn
       ;;
 
       let () =
@@ -142,9 +139,8 @@ let build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn
   let base_call =
     match settings_expr with
     | Some s ->
-      [%expr
-        Hegel.Session.run_hegel_test ~settings:[%e s] ~test_location:[%e location_record]]
-    | None -> [%expr Hegel.Session.run_hegel_test ~test_location:[%e location_record]]
+      [%expr Hegel.run_hegel_test ~settings:[%e s] ~test_location:[%e location_record]]
+    | None -> [%expr Hegel.run_hegel_test ~test_location:[%e location_record]]
   in
   let call =
     match failure_blobs with
@@ -180,7 +176,7 @@ let expand_value_binding ~loc (vb : value_binding) : structure_item list =
   let failure_blobs = extract_failure_blobs_attr vb.pvb_attributes in
   (* The body of [let%hegel_test name <args> = expr] is parsed as
      [let name = <args -> expr>]. We pass that lambda as the [test_fn] to
-     [Hegel.Session.run_hegel_test]. *)
+     [Hegel.run_hegel_test]. *)
   build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn:vb.pvb_expr
 ;;
 

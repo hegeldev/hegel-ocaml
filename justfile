@@ -7,24 +7,22 @@ check-tests:
     find _build -name '*.coverage' -delete 2>/dev/null || true
     # Run test binaries directly (not via dune runtest) so output streams
     # in real-time — dune runtest buffers output until completion, hiding
-    # diagnostic messages when a test hangs.
+    # diagnostic messages when a test hangs. The native libhegel engine is
+    # located automatically at runtime (HEGEL_LIBHEGEL_PATH > sibling
+    # ../hegel-rust/target build > verified download); see lib/ffi/loader.ml.
     dune build --instrument-with bisect_ppx \
       test/test_hegel.exe \
       test/test_ppx_derive.exe \
-      test/test_ppx_hegel_test.exe \
-      test/.test_failure_blobs_record.inline-tests/inline-test-runner.exe
+      test/test_ppx_hegel_test.exe
     export BISECT_FILE="$PWD/_build/default/test/bisect"
     ./_build/default/test/test_ppx_derive.exe
     ./_build/default/test/test_ppx_hegel_test.exe
     ./_build/default/test/test_hegel.exe
-    # ppx_expect resolves [%expect] source paths relative to the
-    # initial cwd, so run the inline-test runner from test/ where
-    # [test_failure_blobs_record.ml] sits directly.
-    (cd test && \
-      "$PWD/../_build/default/test/.test_failure_blobs_record.inline-tests/inline-test-runner.exe" \
-      inline-test-runner test_failure_blobs_record)
+    # The ppx_expect tests are an inline-tests library (no standalone exe), so
+    # run them through dune; coverage merges via BISECT_FILE.
+    dune runtest test/expect_tests --instrument-with bisect_ppx --force
     python3 scripts/check-coverage.py
-
+    
 format:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -67,15 +65,7 @@ check-tests-no-coverage:
     ./_build/default/test/test_ppx_hegel_test.exe
     ./_build/default/test/test_hegel.exe
 
-check-conformance:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    eval $(opam env 2>/dev/null || true)
-    dune build conformance/
-    uv run --with 'hegel-core==0.7.0' --with pytest pytest test/conformance/ -v
-
 # these aliases are provided as ux improvements for local developers. CI should use the longer
 # forms.
 test: check-tests
-conformance: check-conformance
 check: check-format check-docs check-tests

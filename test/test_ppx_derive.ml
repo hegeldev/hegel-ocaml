@@ -138,7 +138,7 @@ let test_color_e2e () =
   let saw_red = ref false in
   let saw_green = ref false in
   let saw_blue = ref false in
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
     match color_generator tc with
     | Red -> saw_red := true
     | Green -> saw_green := true
@@ -153,7 +153,7 @@ let test_shape_e2e () =
   let saw_circle = ref false in
   let saw_rectangle = ref false in
   let saw_point = ref false in
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
     match shape_generator tc with
     | Circle f ->
       assert (Float.is_finite f);
@@ -171,7 +171,7 @@ let test_shape_e2e () =
 let test_maybe_int_e2e () =
   let saw_some = ref false in
   let saw_none = ref false in
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
     match (maybe_int_generator tc).data with
     | Some _ -> saw_some := true
     | None -> saw_none := true);
@@ -183,7 +183,7 @@ let test_maybe_int_e2e () =
 let test_pair_or_single_e2e () =
   let saw_pair = ref false in
   let saw_single = ref false in
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
     match pair_or_single_generator tc with
     | Pair (a, b) ->
       ignore (a, b);
@@ -199,7 +199,7 @@ let test_pair_or_single_e2e () =
 let test_flag_e2e () =
   let saw_true = ref false in
   let saw_false = ref false in
-  Session.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
     let b : flag = flag_generator tc in
     if b then saw_true := true else saw_false := true);
   assert !saw_true;

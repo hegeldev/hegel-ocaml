@@ -14,18 +14,15 @@
  (modules
   test_hegel
   test_helpers
-  test_protocol
-  test_crc32
   test_cbor_helpers
   test_cbor_vectors
   cbor_appendix_a_data
-  test_connection
   test_client
   test_generators_core
   test_generators_primitives
   test_generators_collections
   test_generators_combinators
-  test_conformance_helpers
+  test_generators_schema
   test_derive
   test_stateful
   test_single_test_case
@@ -38,7 +35,6 @@
   core
   core_unix
   threads.posix
-  crc32
   yojson
   cbor)
  (preprocess
@@ -65,16 +61,3 @@
  (libraries hegel alcotest core core_unix threads.posix yojson)
  (preprocess
   (pps ppx_js_style ppx_hegel_test -- -allow-unannotated-ignores)))
-
-; Snapshot tests for the [@@failure_blobs []] recording flow. Uses
-; [let%expect_test] so the printed blob can be captured and compared
-; against a [%expect {| ... |}] snapshot.
-
-(library
- (name test_failure_blobs_record)
- (modules test_failure_blobs_record)
- (libraries hegel)
- (inline_tests
-  (backend ppx_inline_test))
- (preprocess
-  (pps ppx_expect)))
