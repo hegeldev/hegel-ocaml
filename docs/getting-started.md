@@ -151,9 +151,16 @@ hegel]`. Either draw it with `draw_silent` (which prints nothing):
 ```ocaml
 let parity = draw_silent tc (map (fun n -> n mod 2) (integers ())) 
 ```
-or attach a printer with `with_printer`:
+or attach a printer with `with_printer`. The printer is any `'a -> Sexp.t`:
 ```ocaml
-let parity = draw tc (with_printer [%sexp_of: int] (map (fun n -> n mod 2) (integers ()))) 
+let parity =
+  draw tc (with_printer (fun n -> Sexp.Atom (Int.to_string n))
+             (map (fun n -> n mod 2) (integers ())))
+```
+If you have [`ppx_sexp_conv`](https://github.com/janestreet/ppx_sexp_conv) in your
+`(preprocess (pps ...))`, `[%sexp_of: int]` is a shorthand for that printer:
+```ocaml
+let parity = draw tc (with_printer [%sexp_of: int] (map (fun n -> n mod 2) (integers ())))
 ```
 
 You can also attach your own debug information with `note`:
