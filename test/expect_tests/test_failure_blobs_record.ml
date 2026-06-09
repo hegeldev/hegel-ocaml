@@ -98,21 +98,25 @@ let%expect_test "only the first blob is actually replayed" =
 exception A
 exception B
 
-let%expect_test "recording reports multiple distinct failures" =
+let%hegel_test multi_fail_test tc =
   let int_gen = Hegel.Generators.integers ~min_value:0 ~max_value:100 () in
-  let prop tc =
-    let v = Hegel.draw tc int_gen in
-    if v >= 60 then raise A;
-    if v <= 30 then raise B
-  in
-  let settings =
-    Hegel.settings ~test_cases:300 ~seed:9 ()
-    |> Hegel.Client.with_print_blob true
-    |> Hegel.Client.with_report_multiple_failures true
-  in
-  match Hegel.run_hegel_test ~settings prop with
+  let v = Hegel.draw tc int_gen in
+  if v >= 60 then raise A;
+  if v <= 30 then raise B
+[@@settings
+  Hegel.settings ~test_cases:300 ~seed:9 ()
+  |> Hegel.Client.with_print_blob true
+  |> Hegel.Client.with_report_multiple_failures true]
+;;
+
+let%expect_test "recording reports multiple distinct failures" =
+  match multi_fail_test () with
   | () -> assert false
   | exception Failure msg ->
     assert (contains ~needle:"Multiple failures (2)" msg);
-    assert (count ~needle:"failure blob:" msg = 2)
+    assert (count ~needle:"failure blob:" msg = 2);
+  [%expect {|
+    v = 60
+    v = 0
+    |}]
 ;;

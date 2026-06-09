@@ -35,7 +35,6 @@ let%expect_test "labeled draw prints name = value on final replay" =
     assert false);
   [%expect
     {|
-    Falsifying example
     x = 7
     |}]
 ;;
@@ -46,7 +45,6 @@ let%expect_test "unlabeled draw is auto-named draw_N on final replay" =
     assert false);
   [%expect
     {|
-    Falsifying example
     draw_1 = 123456
     |}]
 ;;
@@ -58,7 +56,6 @@ let%expect_test "successive unlabeled draws number draw_1, draw_2" =
     assert false);
   [%expect
     {|
-    Falsifying example
     draw_1 = 1
     draw_2 = 2
     |}]
@@ -77,7 +74,6 @@ let%expect_test "with_printer supplies the printer draw renders with" =
     assert false);
   [%expect
     {|
-    Falsifying example
     h = 0xff
     |}]
 ;;
@@ -88,7 +84,6 @@ let%expect_test "with_printer makes an unprintable sampled_from drawable" =
     assert false);
   [%expect
     {|
-    Falsifying example
     c = 9
     |}]
 ;;
@@ -104,7 +99,6 @@ let%expect_test "draw nested in a span (depth > 0) is suppressed" =
   (* Only the outermost draw should print; the nested one is suppressed. *)
   [%expect
     {|
-    Falsifying example
     ran
     |}]
 ;;
@@ -122,7 +116,6 @@ let%expect_test "a tuple draw prints as one sexp" =
     assert false);
   [%expect
     {|
-    Falsifying example
     pair = (7 8)
     |}]
 ;;
@@ -138,7 +131,6 @@ let%expect_test "a list draw prints as one sexp" =
     assert false);
   [%expect
     {|
-    Falsifying example
     xs = (7 7)
     |}]
 ;;
@@ -151,7 +143,6 @@ let%expect_test "Variables.draw prints the binding (with ~sexp_of)" =
     assert false);
   [%expect
     {|
-    Falsifying example
     v1 = 42
     |}]
 ;;
@@ -163,7 +154,7 @@ let%expect_test "Variables.draw without ~sexp_of prints no binding" =
     let _ = Stateful.Variables.draw vars in
     assert false);
   (* Header only — no [v<id>] line, since no printer was supplied. *)
-  [%expect {| Falsifying example |}]
+  [%expect {|  |}]
 ;;
 
 let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
@@ -175,7 +166,6 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
   run_failing (fun tc -> Stateful.run ~init:() ~rules:[ rule ] tc);
   [%expect
     {|
-    Falsifying example
     Step 1: push
     n = 7 
     |}]
@@ -198,7 +188,6 @@ let%expect_test "a derived value prints as one sexp via with_printer" =
     assert false);
   [%expect
     {|
-    Falsifying example
     draw_1 = Only
     |}]
 ;;
@@ -209,7 +198,6 @@ let%expect_test "a nested derived record prints as one sexp via with_printer" =
     assert false);
   [%expect
     {|
-    Falsifying example
     draw_1 = ((tag Only))
     |}]
 ;;
@@ -219,7 +207,7 @@ let%expect_test "a bare [@@deriving hegel] drawn with draw_silent prints nothing
     let _ = Hegel.draw_silent tc bare_generator in
     assert false);
   (* Header only — no [@@deriving sexp_of], so nothing to print. *)
-  [%expect {| Falsifying example |}]
+  [%expect {|  |}]
 ;;
 
 (* ---- ppx_hegel_test label injection (end-to-end) ----
@@ -241,8 +229,7 @@ let%expect_test "ppx injects ~label from the binding name" =
   (try label_injection_from_binding () with
    | _ -> ());
   [%expect
-    {|
-    Falsifying example
+    {| 
     x = 7
     |}]
 ;;
@@ -262,8 +249,7 @@ let%expect_test "a Generators-qualified draw is labeled (prefix preserved)" =
   (try qualified_generators_draw () with
    | _ -> ());
   [%expect
-    {|
-    Falsifying example
+    {|   
     g = 9
     |}]
 ;;
@@ -291,7 +277,6 @@ let%expect_test "a local non-Hegel draw (not on tc) is not rewritten" =
      [tc], is labeled. *)
   [%expect
     {|
-    Falsifying example
     z = 1
     |}]
 ;;
@@ -316,7 +301,6 @@ let%expect_test "a reused binding name numbers x_1, x_2, x_3" =
    | _ -> ());
   [%expect
     {|
-    Falsifying example
     x_1 = 1
     x_2 = 2
     x_3 = 3
@@ -340,7 +324,6 @@ let%expect_test "a draw inside a loop numbers x_1, x_2" =
    | _ -> ());
   [%expect
     {|
-    Falsifying example
     x_1 = 1
     x_2 = 2
     |}]
@@ -349,11 +332,9 @@ let%expect_test "a draw inside a loop numbers x_1, x_2" =
 (* ---- verbose verbosity prints draws on a non-final case ----
 
    At [Normal]/[Quiet] verbosity a passing test prints nothing, since printing
-   is gated on the failing final replay. At [Verbose]/[Debug] a draw prints on a
-   passing (non-final) case too, with no [Falsifying example] header since the
-   test does not fail. A single case keeps the snapshot clean: the engine emits
-   its own [Running test case] lines between cases under verbose, which a
-   multi-case run would capture. *)
+   is gated on the failing final replay. A single case keeps the snapshot clean: 
+   the engine emits its own [Running test case] lines between cases under verbose, 
+   which a multi-case run would capture. *)
 
 let%expect_test "verbose prints draws on a passing run" =
   Hegel.run_hegel_test
