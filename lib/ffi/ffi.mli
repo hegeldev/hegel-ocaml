@@ -43,6 +43,20 @@ type status =
   | Overrun
   | Interesting
 
+(** Aggregate outcome of a finished run ([hegel_run_status_t]).
+
+    - [Run_passed]: the property held across every generated test case.
+    - [Run_failed]: the property failed; inspect each distinct counterexample
+      via {!result_failures}.
+    - [Run_error]: the run itself failed — a failed health check, a
+      nondeterministic test, an engine panic — and produced no verdict on the
+      property. There are no failures to inspect; the message is read via
+      {!result_error}. *)
+type run_status =
+  | Run_passed
+  | Run_failed
+  | Run_error
+
 (** Raised when a primitive returns [HEGEL_E_STOP_TEST] — the engine has
     exhausted its choice budget for the current test case. *)
 exception Stop_test
@@ -191,7 +205,15 @@ val is_final_replay : test_case -> bool
 
 (** {2 Result inspection} *)
 
-val result_passed : run_result -> bool
+(** [result_status r] is the run's aggregate status: passed, failed, or
+    errored. *)
+val result_status : run_result -> run_status
+
+(** [result_error r] is the run-level error message when the run ended in
+    {!Run_error} — a failed health check, a nondeterministic test, or an
+    engine panic — or [None] when it completed normally. *)
+val result_error : run_result -> string option
+
 val result_failure_count : run_result -> int
 
 (** [result_failure r i] returns the [i]-th distinct failure, or [None] if out
@@ -202,6 +224,5 @@ val result_failure : run_result -> int -> failure option
 val result_failures : run_result -> failure list
 
 val failure_panic_message : failure -> string option
-val failure_diagnostic : failure -> string option
 val failure_blob : failure -> string option
 val failure_origin : failure -> string option
