@@ -136,7 +136,7 @@ let default_settings () =
   ; suppress_health_check = []
   ; phases = None
   ; print_blob = false
-  ; report_multiple_failures = true
+  ; report_multiple_failures = false
   }
 ;;
 
@@ -407,35 +407,50 @@ let run_test_case ~(settings : settings) ~test_fn handle =
   captured
 ;;
 
+(** [failure_exn ~captured_exn ~panic_message] is the exception to raise for
+    one engine-reported failure: the OCaml exception captured for the failure's
+    origin when there is one, otherwise a [Failure] carrying the engine's panic
+    message. *)
+let failure_exn ~captured_exn ~panic_message =
+  match captured_exn with
+  | Some e -> e
+  | None ->
+    Failure
+      (Option.value panic_message ~default:"hegel: failing example (no panic message)")
+;;
+
 (** [handle_result ~settings ~captured result] inspects a finished run's
-    [result]. A clean run returns [unit]. On failure it prints the replay blob
-    for each failure (when [settings.print_blob]), then raises the single
-    captured exception, or an aggregated [Failure] for multiple distinct
-    failures. *)
+    [result]. A clean run returns [unit]. On a run-level error (a failed health
+    check, a nondeterministic test, an engine panic) it raises [Failure] with
+    the engine's message — there is no counterexample to report. On a failed
+    property it prints the replay blob for each failure (when
+    [settings.print_blob]), then raises the single captured exception, or an
+    aggregated [Failure] for multiple distinct failures. *)
 let handle_result ~(settings : settings) ~captured ~test_location result =
   let emit ~passed =
     Option.iter test_location ~f:(fun loc -> Antithesis.emit_assertion loc ~passed)
   in
-  match Ffi.result_failures result with
-  | [] -> emit ~passed:true
-  | failures ->
+  match Ffi.result_status result with
+  | Run_passed -> emit ~passed:true
+  | Run_error ->
+    emit ~passed:false;
+    raise
+      (Failure
+         (Option.value (Ffi.result_error result) ~default:"hegel: run error (no message)"))
+  | Run_failed ->
     emit ~passed:false;
     let engine_failure_exn ~captured failure =
       let origin = Option.value (Ffi.failure_origin failure) ~default:"" in
-      match Hashtbl.find captured origin with
-      | Some e -> e
-      | None ->
-        Failure
-          (Option.value
-             (Ffi.failure_diagnostic failure)
-             ~default:"hegel: failing example (no diagnostic)")
+      failure_exn
+        ~captured_exn:(Hashtbl.find captured origin)
+        ~panic_message:(Ffi.failure_panic_message failure)
     in
-    (match failures with
+    (match Ffi.result_failures result with
      | [ failure ] ->
        if settings.print_blob
        then eprintf "failure blob: \"%s\"" (Option.value_exn (Ffi.failure_blob failure));
        raise (engine_failure_exn ~captured failure)
-     | _ ->
+     | failures ->
        let details =
          List.mapi failures ~f:(fun i failure ->
            sprintf "  %d: %s" i (Exn.to_string (engine_failure_exn ~captured failure))

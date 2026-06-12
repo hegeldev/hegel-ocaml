@@ -174,6 +174,28 @@ let test_extract_origin_distinct_lines () =
     (String.equal a b)
 ;;
 
+(** [failure_exn] prefers the captured OCaml exception, falls back to the
+    engine's panic message, and survives a missing panic message. *)
+let test_failure_exn () =
+  let captured = Failure "captured" in
+  Alcotest.(check bool)
+    "captured exception wins"
+    true
+    (phys_equal
+       (Client.failure_exn ~captured_exn:(Some captured) ~panic_message:(Some "panic"))
+       captured);
+  (match Client.failure_exn ~captured_exn:None ~panic_message:(Some "panic") with
+   | Failure m -> Alcotest.(check string) "panic message used" "panic" m
+   | e -> Alcotest.failf "expected Failure, got %s" (Exn.to_string e));
+  match Client.failure_exn ~captured_exn:None ~panic_message:None with
+  | Failure m ->
+    Alcotest.(check bool)
+      "default message"
+      true
+      (Test_helpers.contains_substring m "no panic message")
+  | e -> Alcotest.failf "expected Failure, got %s" (Exn.to_string e)
+;;
+
 (* ==== Real-engine run tests ==== *)
 
 let int_gen = Generators.integers ~min_value:0 ~max_value:100 ()
@@ -316,10 +338,14 @@ exception B
 let test_run_multiple_failures () =
   let msg =
     try
-      Client.run_test ~settings:(Client.settings ~test_cases:300 ~seed:9 ()) (fun tc ->
-        let v = Hegel.draw tc int_gen in
-        if v >= 60 then raise A;
-        if v <= 30 then raise B);
+      Client.run_test
+        ~settings:
+          (Client.settings ~test_cases:300 ~seed:9 ()
+           |> Client.with_report_multiple_failures true)
+        (fun tc ->
+           let v = Hegel.draw tc int_gen in
+           if v >= 60 then raise A;
+           if v <= 30 then raise B);
       None
     with
     | Failure m -> Some m
@@ -334,8 +360,8 @@ let test_run_multiple_failures () =
   | None -> Alcotest.fail "expected multiple failures"
 ;;
 
-(** A health-check failure has no captured OCaml exception, so it surfaces via
-    the engine diagnostic. *)
+(** A health-check failure is a run-level error (no counterexample), surfaced
+    as a [Failure] carrying the engine's error message. *)
 let test_run_health_check_failure () =
   let raised =
     try
@@ -385,6 +411,7 @@ let tests =
       "extract_origin distinct lines"
       `Quick
       test_extract_origin_distinct_lines
+  ; Alcotest.test_case "failure_exn fallbacks" `Quick test_failure_exn
   ; Alcotest.test_case "run passing" `Quick test_run_passing
   ; Alcotest.test_case "run failing re-raises" `Quick test_run_failing_reraises
   ; Alcotest.test_case "run assume rejects" `Quick test_run_assume_rejects
