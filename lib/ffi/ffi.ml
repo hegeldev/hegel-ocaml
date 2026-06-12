@@ -133,7 +133,8 @@ let c_is_final_replay =
   foreign "hegel_test_case_is_final_replay" (ptr void @-> returning bool)
 ;;
 
-let c_result_passed = foreign "hegel_run_result_passed" (ptr void @-> returning bool)
+let c_result_status = foreign "hegel_run_result_status" (ptr void @-> returning int)
+let c_result_error = foreign "hegel_run_result_error" (ptr void @-> returning string_opt)
 
 let c_result_failure_count =
   foreign "hegel_run_result_failure_count" (ptr void @-> returning size_t)
@@ -145,10 +146,6 @@ let c_result_failure =
 
 let c_failure_panic_message =
   foreign "hegel_failure_panic_message" (ptr void @-> returning string_opt)
-;;
-
-let c_failure_diagnostic =
-  foreign "hegel_failure_diagnostic" (ptr void @-> returning string_opt)
 ;;
 
 let c_failure_blob =
@@ -184,6 +181,11 @@ type status =
   | Invalid
   | Overrun
   | Interesting
+
+type run_status =
+  | Run_passed
+  | Run_failed
+  | Run_error
 
 exception Stop_test
 exception Assume_rejected
@@ -383,7 +385,16 @@ let is_final_replay tc = c_is_final_replay tc
 (* Result inspection                                                   *)
 (* ------------------------------------------------------------------ *)
 
-let result_passed r = c_result_passed r
+(* [HEGEL_RUN_STATUS_*] values. The catch-all maps any unknown future status
+   to [Run_error], matching the C API's own NULL-pointer convention. *)
+let result_status r =
+  match c_result_status r with
+  | 0 -> Run_passed
+  | 1 -> Run_failed
+  | _ -> Run_error
+;;
+
+let result_error r = c_result_error r
 let result_failure_count r = Unsigned.Size_t.to_int (c_result_failure_count r)
 
 let result_failure r i =
@@ -400,6 +411,5 @@ let result_failures r =
 ;;
 
 let failure_panic_message f = c_failure_panic_message f
-let failure_diagnostic f = c_failure_diagnostic f
 let failure_origin f = c_failure_origin f
 let failure_blob f = c_failure_blob f
