@@ -155,6 +155,32 @@ let test_resolve_drawn () =
   Alcotest.(check bool) "unknown id raises Flaky_strategy" true raised
 ;;
 
+let test_stateful_bounded_steps () =
+  let module S = Hegel.Stateful in
+  let step_count = ref 0 in
+  let step_rule =
+    S.Rule.create ~name:"step" ~step:(fun _tc state ->
+      incr step_count;
+      if !step_count >= 10 then failwith "reached 10 steps";
+      state)
+  in
+  let raised_msg = ref "" in
+  (try
+     Hegel.run_hegel_test
+       ~settings:
+         (Hegel.settings ~test_cases:1 () |> Hegel.Client.with_stateful_step_count 10)
+       (fun tc ->
+          step_count := 0;
+          S.run ~init:() ~rules:[ step_rule ] tc)
+   with
+   | e -> raised_msg := Exn.to_string e; Printf.printf "%s" !raised_msg);
+  Alcotest.(check bool)
+    "exception carries the original message"
+    true
+    (String.is_substring !raised_msg ~substring:"reached 10 steps");
+  Alcotest.(check int) "ran exactly 10 steps" 10 !step_count
+;;
+
 let tests =
   [ Alcotest.test_case "stateful: resolve_drawn" `Quick test_resolve_drawn
   ; Alcotest.test_case "stateful: failing property shrinks" `Quick stateful_failure_test
@@ -172,5 +198,9 @@ let tests =
       "stateful: all-rejected test case is invalid"
       `Quick
       stateful_retry_budget_floor_test
+  ; Alcotest.test_case
+      "stateful: with_stateful_step_count bounds steps"
+      `Quick
+      test_stateful_bounded_steps
   ]
 ;;

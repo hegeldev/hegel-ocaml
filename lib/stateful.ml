@@ -96,18 +96,18 @@ let run ~init ~rules ?(invariants = []) tc =
     find a failing test case, so we stop with probability of
     2 ** -16 during normal operation but force a stop when we've
     generated enough steps. *)
-    let p_continue = 1.0 -. (2.0 ** -16.0) in
+    let p_stop = 2.0 ** -16.0 in
     let rec loop ~state ~num_steps_succeeded ~steps_run =
-      let should_continue =
+      let must_stop =
         if is_single
-        then Some true
-        else if steps_run >= max_steps
         then Some false
-        else if steps_run <= 0
+        else if steps_run >= max_steps
         then Some true
+        else if steps_run <= 0
+        then Some false
         else None
       in
-      if Client.primitive_boolean tc p_continue should_continue
+      if not (Client.primitive_boolean tc p_stop must_stop)
       then (
         let next_state, num_steps_succeeded =
           match try_step ~state ~steps_run with
