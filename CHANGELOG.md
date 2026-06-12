@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 - 2026-06-12
+
+Make reporting multiple failures false by default.
+
 ## 0.5.0 - 2026-06-09
 
 This release replaces the hegel-core Python engine with the `libhegel` Rust engine, 
