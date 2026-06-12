@@ -62,6 +62,7 @@ val phase_to_string : phase -> string
 type settings =
   { mode : mode
   ; test_cases : int
+  ; stateful_step_count : int
   ; verbosity : verbosity
   ; seed : int option
   ; derandomize : bool
@@ -88,6 +89,9 @@ val is_in_ci : unit -> bool
 
 (** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
 val with_test_cases : int -> settings -> settings
+
+(** [with_stateful_step_count n s] returns settings [s] with [stateful_step_count] set to [n]. *)
+val with_stateful_step_count : int -> settings -> settings
 
 (** [with_verbosity v s] returns settings [s] with [verbosity] set to [v]. *)
 val with_verbosity : verbosity -> settings -> settings
@@ -127,6 +131,7 @@ val with_report_multiple_failures : bool -> settings -> settings
 type test_case =
   { handle : Hegel_ffi.Ffi.test_case
   ; mode : mode
+  ; stateful_step_count : int
   ; is_final : bool
   ; mutable test_aborted : bool
   }
@@ -140,6 +145,8 @@ val extract_origin : exn -> string
     from the native engine. Raises {!Data_exhausted} if the engine signals
     StopTest. *)
 val generate_from_schema : Cbor.t -> test_case -> Cbor.t
+
+val primitive_boolean : test_case -> float -> bool option -> bool
 
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)

@@ -90,6 +90,12 @@ let c_generate =
     (ptr void @-> ptr char @-> size_t @-> ptr (ptr char) @-> ptr size_t @-> returning int)
 ;;
 
+let c_primitive_boolean =
+  foreign
+    "hegel_primitive_boolean"
+    (ptr void @-> double @-> bool @-> bool @-> ptr bool @-> returning int)
+;;
+
 let c_test_case_from_blob =
   foreign "hegel_test_case_from_blob" (ptr void @-> string_opt @-> returning (ptr void))
 ;;
@@ -329,6 +335,17 @@ let generate tc schema =
   check_rc rc;
   let n = Unsigned.Size_t.to_int !@out_len in
   string_from_ptr !@out_ptr ~length:n
+;;
+
+let primitive_boolean tc p forced =
+  let out_ptr = allocate bool false in
+  let rc =
+    match forced with
+    | Some b -> c_primitive_boolean tc p b true out_ptr
+    | None -> c_primitive_boolean tc p false false out_ptr
+  in
+  check_rc rc;
+  !@out_ptr
 ;;
 
 let start_span tc label = check_rc (c_start_span tc (Unsigned.UInt64.of_int label))

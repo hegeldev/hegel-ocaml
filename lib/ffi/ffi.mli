@@ -155,6 +155,7 @@ val blob_test_case_free : test_case -> unit
     choice budget is exhausted, {!Backend_error} on a malformed schema. *)
 val generate : test_case -> string -> string
 
+val primitive_boolean : test_case -> float -> bool option -> bool
 val start_span : test_case -> int -> unit
 val stop_span : test_case -> bool -> unit
 

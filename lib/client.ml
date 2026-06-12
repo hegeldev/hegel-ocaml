@@ -79,6 +79,7 @@ let phase_to_string = function
 type settings =
   { mode : mode
   ; test_cases : int
+  ; stateful_step_count : int
   ; verbosity : verbosity
   ; seed : int option
   ; derandomize : bool
@@ -127,6 +128,7 @@ let default_settings () =
   let in_ci = is_in_ci () in
   { mode = Test_run
   ; test_cases = 100
+  ; stateful_step_count = 50
   ; verbosity = Normal
   ; seed = None
   ; derandomize = in_ci
@@ -150,6 +152,9 @@ let settings ?(test_cases = 100) ?seed () =
 
 (** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
 let with_test_cases n s = { s with test_cases = n }
+
+(** [with_stateful_step_count n s] returns settings [s] with [stateful_step_count] set to [n]. *)
+let with_stateful_step_count n s = { s with stateful_step_count = n }
 
 (** [with_verbosity v s] returns settings [s] with [verbosity] set to [v]. *)
 let with_verbosity v s = { s with verbosity = v }
@@ -190,6 +195,7 @@ let with_report_multiple_failures b s = { s with report_multiple_failures = b }
 type test_case =
   { handle : Ffi.test_case
   ; mode : mode
+  ; stateful_step_count : int
   ; is_final : bool
   ; mutable test_aborted : bool
   }
@@ -249,6 +255,10 @@ let with_stop_guard tc f =
 let generate_from_schema schema tc =
   with_stop_guard tc (fun () ->
     Cbor_helpers.decode (Ffi.generate tc.handle (Cbor_helpers.encode schema)))
+;;
+
+let primitive_boolean tc p forced =
+  with_stop_guard tc (fun () -> Ffi.primitive_boolean tc.handle p forced)
 ;;
 
 (** [assume tc condition] rejects the current test case if [condition] is
@@ -368,14 +378,21 @@ let build_ffi_settings (settings : settings) ~database_key =
   s
 ;;
 
-(** [run_test_case ~mode ~test_fn handle] runs [test_fn] over a single native
+(** [run_test_case ~settings ~test_fn handle] runs [test_fn] over a single native
     test-case [handle], maps the outcome to a {!Ffi.status}, and marks the case
     complete. Returns [Some (origin, exn)] when the case was {e interesting}
     (the body raised an unexpected exception), otherwise [None]. Shared by the
     engine-run and failure-blob replay paths. *)
-let run_test_case ~mode ~test_fn handle =
+let run_test_case ~(settings : settings) ~test_fn handle =
   let is_final = Ffi.is_final_replay handle in
-  let tc = { handle; mode; is_final; test_aborted = false } in
+  let tc =
+    { handle
+    ; mode = settings.mode
+    ; stateful_step_count = settings.stateful_step_count
+    ; is_final
+    ; test_aborted = false
+    }
+  in
   Stdlib.Domain.DLS.set in_test_context true;
   let status, captured =
     match test_fn tc with
@@ -451,27 +468,26 @@ let run_from_engine ~(settings : settings) ~ffi_settings ~test_fn ~test_location
         match Ffi.next_test_case run with
         | None -> ()
         | Some handle ->
-          Option.iter
-            (run_test_case ~mode:settings.mode ~test_fn handle)
-            ~f:(fun (origin, exn) -> Hashtbl.set captured ~key:origin ~data:exn);
+          Option.iter (run_test_case ~settings ~test_fn handle) ~f:(fun (origin, exn) ->
+            Hashtbl.set captured ~key:origin ~data:exn);
           loop ()
       in
       loop ();
       handle_result ~settings ~captured ~test_location (Ffi.run_result run))
 ;;
 
-(** [replay_from_blob ~mode ~ffi_settings ~test_fn blob] replays a single failure
+(** [replay_from_blob ~settings ~ffi_settings ~test_fn blob] replays a single failure
     [blob] as a standalone, deterministic test case (no engine worker, no
     shrinking). A corrupt or version-incompatible blob is reported as
     {!Undecodable}. The standalone case is always freed. *)
-let replay_from_blob ~mode ~ffi_settings ~test_fn blob =
+let replay_from_blob ~(settings : settings) ~ffi_settings ~test_fn blob =
   match Ffi.test_case_from_blob ffi_settings (Some blob) with
   | exception Ffi.Backend_error msg -> Undecodable msg
   | tc ->
     Exn.protect
       ~finally:(fun () -> Ffi.blob_test_case_free tc)
       ~f:(fun () ->
-        match run_test_case ~mode ~test_fn tc with
+        match run_test_case ~settings ~test_fn tc with
         | None -> Did_not_reproduce
         | Some (_, exn) -> Reproduced exn)
 ;;
@@ -481,7 +497,7 @@ let replay_from_blob ~mode ~ffi_settings ~test_fn blob =
     the original exception; a stale or undecodable blob raises a clear [Failure].
 *)
 let run_from_blob ~(settings : settings) ~ffi_settings ~test_fn blob =
-  match replay_from_blob ~mode:settings.mode ~ffi_settings ~test_fn blob with
+  match replay_from_blob ~settings ~ffi_settings ~test_fn blob with
   | Undecodable msg -> raise (Failure msg)
   | Did_not_reproduce -> raise (Failure "The failure blob did not reproduce an error")
   | Reproduced exn ->
