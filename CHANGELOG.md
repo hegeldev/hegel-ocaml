@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2 - 2026-06-12
+
+This release updates the bindings to libhegel 0.18.0 and has internal control 
+flow refactors.
+
 ## 0.5.1 - 2026-06-12
 
 Make reporting multiple failures false by default.
