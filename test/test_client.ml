@@ -316,10 +316,14 @@ exception B
 let test_run_multiple_failures () =
   let msg =
     try
-      Client.run_test ~settings:(Client.settings ~test_cases:300 ~seed:9 ()) (fun tc ->
-        let v = Hegel.draw tc int_gen in
-        if v >= 60 then raise A;
-        if v <= 30 then raise B);
+      Client.run_test
+        ~settings:
+          (Client.settings ~test_cases:300 ~seed:9 ()
+           |> Client.with_report_multiple_failures true)
+        (fun tc ->
+           let v = Hegel.draw tc int_gen in
+           if v >= 60 then raise A;
+           if v <= 30 then raise B);
       None
     with
     | Failure m -> Some m

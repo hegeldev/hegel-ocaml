@@ -134,7 +134,7 @@ let default_settings () =
   ; suppress_health_check = []
   ; phases = None
   ; print_blob = false
-  ; report_multiple_failures = true
+  ; report_multiple_failures = false
   }
 ;;
 
