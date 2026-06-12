@@ -173,7 +173,9 @@ let test_stateful_bounded_steps () =
           step_count := 0;
           S.run ~init:() ~rules:[ step_rule ] tc)
    with
-   | e -> raised_msg := Exn.to_string e; Printf.printf "%s" !raised_msg);
+   | e ->
+     raised_msg := Exn.to_string e;
+     Printf.printf "%s" !raised_msg);
   Alcotest.(check bool)
     "exception carries the original message"
     true
