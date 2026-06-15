@@ -15,16 +15,16 @@ let integers ?min_value ?max_value () =
       ; Option.map max_value ~f:(fun v -> `Text "max_value", `Int v)
       ]
   in
-  Basic { schema = `Map pairs; transform = Cbor_helpers.extract_int; unique_safe = true }
+  basic ~schema:(`Map pairs) ~transform:Cbor_helpers.extract_int ~sexp_of:sexp_of_int ()
 ;;
 
 (** [booleans ()] creates a generator for boolean values. *)
 let booleans () =
-  Basic
-    { schema = `Map [ `Text "type", `Text "boolean" ]
-    ; transform = Cbor_helpers.extract_bool
-    ; unique_safe = true
-    }
+  basic
+    ~schema:(`Map [ `Text "type", `Text "boolean" ])
+    ~transform:Cbor_helpers.extract_bool
+    ~sexp_of:sexp_of_bool
+    ()
 ;;
 
 (** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
@@ -85,8 +85,11 @@ let floats
         ; Option.map max_value ~f:(fun v -> `Text "max_value", `Float v)
         ]
   in
-  Basic
-    { schema = `Map pairs; transform = Cbor_helpers.extract_float; unique_safe = true }
+  basic
+    ~schema:(`Map pairs)
+    ~transform:Cbor_helpers.extract_float
+    ~sexp_of:sexp_of_float
+    ()
 ;;
 
 (** Unicode general categories that include surrogate codepoints. OCaml strings
@@ -213,8 +216,11 @@ let text
       ]
     @ char_pairs
   in
-  Basic
-    { schema = `Map pairs; transform = Cbor_helpers.extract_string; unique_safe = true }
+  basic
+    ~schema:(`Map pairs)
+    ~transform:Cbor_helpers.extract_string
+    ~sexp_of:sexp_of_string
+    ()
 ;;
 
 (** [characters ?codec ?min_codepoint ?max_codepoint ?categories
@@ -250,8 +256,11 @@ let characters
     [ `Text "type", `Text "string"; `Text "min_size", `Int 1; `Text "max_size", `Int 1 ]
     @ char_pairs
   in
-  Basic
-    { schema = `Map pairs; transform = Cbor_helpers.extract_string; unique_safe = true }
+  basic
+    ~schema:(`Map pairs)
+    ~transform:Cbor_helpers.extract_string
+    ~sexp_of:sexp_of_string
+    ()
 ;;
 
 (** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.
@@ -273,20 +282,23 @@ let binary ?(min_size = 0) ?max_size () =
       ; Option.map max_size ~f:(fun ms -> `Text "max_size", `Int ms)
       ]
   in
-  Basic
-    { schema = `Map pairs; transform = Cbor_helpers.extract_bytes; unique_safe = true }
+  basic
+    ~schema:(`Map pairs)
+    ~transform:Cbor_helpers.extract_bytes
+    ~sexp_of:sexp_of_string
+    ()
 ;;
 
 (** [just value] creates a generator that always produces [value].
 
     The schema uses [{"constant": null}] and the transform ignores the server
-    result, returning the constant [value]. *)
+    result, returning the constant [value]. The output type is chosen by the
+    caller, so no printer is carried. *)
 let just value =
-  Basic
-    { schema = `Map [ `Text "type", `Text "constant"; `Text "value", `Null ]
-    ; transform = (fun _ -> value)
-    ; unique_safe = false
-    }
+  basic_silent
+    ~schema:(`Map [ `Text "type", `Text "constant"; `Text "value", `Null ])
+    ~transform:(fun _ -> value)
+    ()
 ;;
 
 (** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
@@ -295,34 +307,34 @@ let just value =
     When [fullmatch] is [true] (the default), the entire string must match the
     pattern. When [false], a substring match suffices. *)
 let from_regex pattern ?(fullmatch = true) () =
-  Basic
-    { schema =
-        `Map
+  basic
+    ~schema:
+      (`Map
           [ `Text "type", `Text "regex"
           ; `Text "pattern", `Text pattern
           ; `Text "fullmatch", `Bool fullmatch
-          ]
-    ; transform = Cbor_helpers.extract_string
-    ; unique_safe = true
-    }
+          ])
+    ~transform:Cbor_helpers.extract_string
+    ~sexp_of:sexp_of_string
+    ()
 ;;
 
 (** [emails ()] creates a generator for valid email address strings. *)
 let emails () =
-  Basic
-    { schema = `Map [ `Text "type", `Text "email" ]
-    ; transform = Cbor_helpers.extract_string
-    ; unique_safe = true
-    }
+  basic
+    ~schema:(`Map [ `Text "type", `Text "email" ])
+    ~transform:Cbor_helpers.extract_string
+    ~sexp_of:sexp_of_string
+    ()
 ;;
 
 (** [urls ()] creates a generator for valid URL strings. *)
 let urls () =
-  Basic
-    { schema = `Map [ `Text "type", `Text "url" ]
-    ; transform = Cbor_helpers.extract_string
-    ; unique_safe = true
-    }
+  basic
+    ~schema:(`Map [ `Text "type", `Text "url" ])
+    ~transform:Cbor_helpers.extract_string
+    ~sexp_of:sexp_of_string
+    ()
 ;;
 
 (** [domains ?max_length ()] creates a generator for domain name strings.
@@ -340,33 +352,36 @@ let domains ?max_length () =
       ; Option.map max_length ~f:(fun ml -> `Text "max_length", `Int ml)
       ]
   in
-  Basic
-    { schema = `Map pairs; transform = Cbor_helpers.extract_string; unique_safe = true }
+  basic
+    ~schema:(`Map pairs)
+    ~transform:Cbor_helpers.extract_string
+    ~sexp_of:sexp_of_string
+    ()
 ;;
 
 (** [dates ()] creates a generator for ISO 8601 date strings (YYYY-MM-DD). *)
 let dates () =
-  Basic
-    { schema = `Map [ `Text "type", `Text "date" ]
-    ; transform = Cbor_helpers.extract_string
-    ; unique_safe = true
-    }
+  basic
+    ~schema:(`Map [ `Text "type", `Text "date" ])
+    ~transform:Cbor_helpers.extract_string
+    ~sexp_of:sexp_of_string
+    ()
 ;;
 
 (** [times ()] creates a generator for time strings. *)
 let times () =
-  Basic
-    { schema = `Map [ `Text "type", `Text "time" ]
-    ; transform = Cbor_helpers.extract_string
-    ; unique_safe = true
-    }
+  basic
+    ~schema:(`Map [ `Text "type", `Text "time" ])
+    ~transform:Cbor_helpers.extract_string
+    ~sexp_of:sexp_of_string
+    ()
 ;;
 
 (** [datetimes ()] creates a generator for ISO 8601 datetime strings. *)
 let datetimes () =
-  Basic
-    { schema = `Map [ `Text "type", `Text "datetime" ]
-    ; transform = Cbor_helpers.extract_string
-    ; unique_safe = true
-    }
+  basic
+    ~schema:(`Map [ `Text "type", `Text "datetime" ])
+    ~transform:Cbor_helpers.extract_string
+    ~sexp_of:sexp_of_string
+    ()
 ;;

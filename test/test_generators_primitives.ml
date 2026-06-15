@@ -43,10 +43,10 @@ let test_just_schema () =
 (** Test: just transform ignores server value. *)
 let test_just_transform () =
   let gen = just "hello" in
-  match gen with
-  | Basic { transform; _ } ->
+  match as_basic gen with
+  | Some (_, transform) ->
     Alcotest.(check string) "ignores server" "hello" (transform (`Int 999))
-  | _ -> Alcotest.fail "expected Basic"
+  | None -> Alcotest.fail "expected Basic"
 ;;
 
 (** Test: from_regex schema with default fullmatch. *)
@@ -458,7 +458,7 @@ let test_characters_with_categories () =
 (** Test: just always returns the constant. *)
 let test_just_e2e () =
   Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
-    let v = Hegel.draw tc (just 42) in
+    let v = Hegel.draw_silent tc (just 42) in
     Alcotest.(check int) "always 42" 42 v)
 ;;
 

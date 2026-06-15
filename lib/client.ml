@@ -191,13 +191,19 @@ let with_print_blob b s = { s with print_blob = b }
 let with_report_multiple_failures b s = { s with report_multiple_failures = b }
 
 (** Per-test-case state passed explicitly to the test function. Holds the
-    native test-case handle, the final-replay flag, and abort state. *)
+    native test-case handle, the final-replay flag, whether verbose output is
+    on, abort state, the current generation-span depth (used to print only the
+    outermost drawn value), and the per-name occurrence counter that numbers
+    repeatable draws. *)
 type test_case =
   { handle : Ffi.test_case
   ; mode : mode
   ; stateful_step_count : int
   ; is_final : bool
+  ; verbosity : verbosity
   ; mutable test_aborted : bool
+  ; mutable draw_depth : int
+  ; draw_counts : int String.Table.t
   }
 
 (** Domain-local flag to detect nested test cases. *)
@@ -265,9 +271,28 @@ let primitive_boolean tc p forced =
     [false]. *)
 let assume _tc condition = if not condition then raise Assume_rejected
 
-(** [note tc message] records a message that will be printed on the final
-    (failing) replay. *)
-let note tc message = if tc.is_final then eprintf "%s\n%!" message
+(** [note tc message] prints [message] to stderr subject to the run's
+    {!type:verbosity}: never under [Quiet], only on the final (failing) replay
+    under [Normal], and on every test case under [Verbose] or [Debug]. *)
+let note tc message =
+  let should_print =
+    match tc.verbosity with
+    | Quiet -> false
+    | Normal -> tc.is_final
+    | Verbose | Debug -> true
+  in
+  if should_print then eprintf "%s\n%!" message
+;;
+
+(** [draw_display_name tc ~label ~repeatable] returns the display name to print
+    for a drawn value, bumping the per-test-case occurrence counter for [label].
+    A [repeatable] name is numbered on every occurrence ([label_1], [label_2],
+    …), while a non-repeatable name is printed bare. *)
+let draw_display_name tc ~label ~repeatable =
+  let n = Option.value (Hashtbl.find tc.draw_counts label) ~default:0 + 1 in
+  Hashtbl.set tc.draw_counts ~key:label ~data:n;
+  if repeatable then sprintf "%s_%d" label n else label
+;;
 
 (** [target tc value label] records a targeting observation to guide the search
     engine toward higher values. *)
@@ -393,19 +418,22 @@ let build_ffi_settings (settings : settings) ~database_key =
   s
 ;;
 
-(** [run_test_case ~settings ~test_fn handle] runs [test_fn] over a single native
-    test-case [handle], maps the outcome to a {!Ffi.status}, and marks the case
-    complete. Returns [Some (origin, exn)] when the case was {e interesting}
+(** [run_test_case ~mode ~verbose ~test_fn handle] runs [test_fn] over a single 
+    native test-case [handle], maps the outcome to a {!Ffi.status}, and marks 
+    the case complete. Returns [Some (origin, exn)] when the case was {e interesting}
     (the body raised an unexpected exception), otherwise [None]. Shared by the
     engine-run and failure-blob replay paths. *)
 let run_test_case ~(settings : settings) ~test_fn handle =
   let is_final = Ffi.is_final_replay handle in
-  let tc =
+  let (tc : test_case) =
     { handle
     ; mode = settings.mode
-    ; stateful_step_count = settings.stateful_step_count
     ; is_final
+    ; verbosity = settings.verbosity
+    ; stateful_step_count = settings.stateful_step_count
     ; test_aborted = false
+    ; draw_depth = 0
+    ; draw_counts = String.Table.create ()
     }
   in
   Stdlib.Domain.DLS.set in_test_context true;

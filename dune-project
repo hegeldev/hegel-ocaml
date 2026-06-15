@@ -66,7 +66,7 @@
  (name ppx_hegel_generator)
  (synopsis "PPX deriver for Hegel generator derivation")
  (description
-  "Automatically derives Hegel generators for OCaml types annotated with [@@deriving generator].")
+  "Automatically derives Hegel generators for OCaml types annotated with [@@deriving hegel].")
  (depends
   (ocaml
    (>= 5.2))

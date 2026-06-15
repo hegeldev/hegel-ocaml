@@ -127,13 +127,19 @@ val with_print_blob : bool -> settings -> settings
 val with_report_multiple_failures : bool -> settings -> settings
 
 (** Per-test-case state passed explicitly to the test function. Holds the
-    native test-case handle, the final-replay flag, and abort state. *)
+    native test-case handle, the final-replay flag, whether verbose output is
+    on, abort state, the current generation-span depth (used to print only the
+    outermost drawn value), and the per-name occurrence counter that numbers
+    repeatable draws. *)
 type test_case =
   { handle : Hegel_ffi.Ffi.test_case
   ; mode : mode
   ; stateful_step_count : int
   ; is_final : bool
+  ; verbosity : verbosity
   ; mutable test_aborted : bool
+  ; mutable draw_depth : int
+  ; draw_counts : int Core.String.Table.t
   }
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
@@ -158,9 +164,16 @@ val primitive_boolean : test_case -> float -> bool option -> bool
     [false]. *)
 val assume : test_case -> bool -> unit
 
-(** [note tc message] records a message that will be printed on the final
-    (failing) replay. *)
+(** [note tc message] prints [message] to stderr subject to the run's
+    {!type:verbosity}: never under [Quiet], only on the final (failing) replay
+    under [Normal], and on every test case under [Verbose] or [Debug]. *)
 val note : test_case -> string -> unit
+
+(** [draw_display_name tc ~label ~repeatable] returns the display name to print
+    for a drawn value, bumping the per-test-case occurrence counter for [label].
+    A [repeatable] name is numbered on every occurrence ([label_1], [label_2],
+    …), while a non-repeatable name is printed bare. *)
+val draw_display_name : test_case -> label:string -> repeatable:bool -> string
 
 (** [target tc value label] records a targeting observation to guide the search
     engine toward higher values. *)

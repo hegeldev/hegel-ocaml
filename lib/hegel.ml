@@ -10,7 +10,7 @@ module Client = Client
 (** Generator combinators for composable test data generation. *)
 module Generators = Generators
 
-(** Runtime support for [@@deriving generator]. *)
+(** Runtime support for [@@deriving hegel]. *)
 module Derive = Derive
 
 (** Stateful property-based testing on top of {!Generators}. *)
@@ -30,17 +30,32 @@ let run_hegel_test = Client.run_hegel_test
     [false]. *)
 let assume = Client.assume
 
-(** [note tc message] records a message that will be printed on the final
-    (failing) run. *)
+(** [note tc message] prints [message] to stderr subject to the run's verbosity:
+    never under [Quiet], only on the final (failing) replay under [Normal], and
+    on every test case under [Verbose] or [Debug]. *)
 let note = Client.note
 
 (** [target tc value label] sends a target command to guide the search engine
     toward higher values. *)
 let target = Client.target
 
-(** [draw tc gen] produces a typed value from generator [gen] using test case
-    [tc]. *)
+(** [draw ?label tc gen] produces a typed value from the printable generator
+    [gen]. On the final replay of a failing test, an outermost draw prints its
+    value. See {!Generators.draw}. *)
 let draw = Generators.draw
+
+(** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
+    [let%hegel_test] PPX rewrites bindings to; not intended for direct use
+    (prefer {!draw}). See {!Generators.draw_named}. *)
+let draw_named = Generators.draw_named
+
+(** [draw_silent tc gen] is {!draw} without printing the value on the final
+    replay, and accepts a generator with no printer. *)
+let draw_silent = Generators.draw_silent
+
+(** [with_printer sexp_of gen] attaches [sexp_of] so [gen] can be drawn with
+    {!draw}. See {!Generators.with_printer}. *)
+let with_printer = Generators.with_printer
 
 (** [default_settings ()] creates default test settings with CI auto-detection.
 *)
