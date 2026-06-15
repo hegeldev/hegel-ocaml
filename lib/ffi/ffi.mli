@@ -193,6 +193,21 @@ val pool_add : test_case -> pool_id:int -> int
     variable id from the pool. Raises {!Stop_test} if the pool is empty. *)
 val pool_generate : test_case -> pool_id:int -> consume:bool -> int
 
+(** [new_state_machine tc ~rule_names ~invariant_names] registers an
+    engine-owned state machine with the named rules and invariants and returns
+    its id. The engine owns rule selection (including swarm testing). Raises
+    {!Backend_error} if [rule_names] is empty. *)
+val new_state_machine
+  :  test_case
+  -> rule_names:string list
+  -> invariant_names:string list
+  -> int
+
+(** [state_machine_next_rule tc ~state_machine_id] draws the index of the next
+    rule to run, in [\[0, num_rules)]. Raises {!Stop_test} when the engine's
+    choice budget is exhausted. *)
+val state_machine_next_rule : test_case -> state_machine_id:int -> int
+
 (** [target tc value label] records a targeting observation. *)
 val target : test_case -> float -> string -> unit
 

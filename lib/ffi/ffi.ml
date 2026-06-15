@@ -129,6 +129,24 @@ let c_pool_generate =
     (ptr void @-> int64_t @-> bool @-> ptr int64_t @-> returning int)
 ;;
 
+let c_new_state_machine =
+  foreign
+    "hegel_new_state_machine"
+    (ptr void
+     @-> ptr string
+     @-> size_t
+     @-> ptr string
+     @-> size_t
+     @-> ptr int64_t
+     @-> returning int)
+;;
+
+let c_state_machine_next_rule =
+  foreign
+    "hegel_state_machine_next_rule"
+    (ptr void @-> int64_t @-> ptr int64_t @-> returning int)
+;;
+
 let c_target = foreign "hegel_target" (ptr void @-> double @-> string @-> returning int)
 
 let c_mark_complete =
@@ -387,6 +405,41 @@ let pool_add tc ~pool_id =
 let pool_generate tc ~pool_id ~consume =
   let out = allocate int64_t 0L in
   check_rc (c_pool_generate tc (Int64.of_int pool_id) consume out);
+  Int64.to_int !@out
+;;
+
+(* Build a [const char *const *] argument from an OCaml string list, returning
+   the pointer to its first element (or a null pointer when empty). The backing
+   [CArray] is returned alongside so the caller can keep it alive for the
+   duration of the C call. *)
+let string_array strs =
+  match strs with
+  | [] -> from_voidp string null, None
+  | _ ->
+    let arr = CArray.of_list string strs in
+    CArray.start arr, Some arr
+;;
+
+let new_state_machine tc ~rule_names ~invariant_names =
+  let rules_ptr, rules_arr = string_array rule_names in
+  let invs_ptr, invs_arr = string_array invariant_names in
+  let out = allocate int64_t 0L in
+  check_rc
+    (c_new_state_machine
+       tc
+       rules_ptr
+       (Unsigned.Size_t.of_int (List.length rule_names))
+       invs_ptr
+       (Unsigned.Size_t.of_int (List.length invariant_names))
+       out);
+  (* Keep the backing arrays alive until the call has returned. *)
+  ignore (Sys.opaque_identity (rules_arr, invs_arr));
+  Int64.to_int !@out
+;;
+
+let state_machine_next_rule tc ~state_machine_id =
+  let out = allocate int64_t 0L in
+  check_rc (c_state_machine_next_rule tc (Int64.of_int state_machine_id) out);
   Int64.to_int !@out
 ;;
 
