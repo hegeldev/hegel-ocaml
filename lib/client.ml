@@ -79,6 +79,7 @@ let phase_to_string = function
 type settings =
   { mode : mode
   ; test_cases : int
+  ; stateful_step_count : int
   ; verbosity : verbosity
   ; seed : int option
   ; derandomize : bool
@@ -127,6 +128,7 @@ let default_settings () =
   let in_ci = is_in_ci () in
   { mode = Test_run
   ; test_cases = 100
+  ; stateful_step_count = 50
   ; verbosity = Normal
   ; seed = None
   ; derandomize = in_ci
@@ -150,6 +152,9 @@ let settings ?(test_cases = 100) ?seed () =
 
 (** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
 let with_test_cases n s = { s with test_cases = n }
+
+(** [with_stateful_step_count n s] returns settings [s] with [stateful_step_count] set to [n]. *)
+let with_stateful_step_count n s = { s with stateful_step_count = n }
 
 (** [with_verbosity v s] returns settings [s] with [verbosity] set to [v]. *)
 let with_verbosity v s = { s with verbosity = v }
@@ -193,8 +198,9 @@ let with_report_multiple_failures b s = { s with report_multiple_failures = b }
 type test_case =
   { handle : Ffi.test_case
   ; mode : mode
+  ; stateful_step_count : int
   ; is_final : bool
-  ; verbose : bool
+  ; verbosity : verbosity
   ; mutable test_aborted : bool
   ; mutable draw_depth : int
   ; draw_counts : int String.Table.t
@@ -257,13 +263,17 @@ let generate_from_schema schema tc =
     Cbor_helpers.decode (Ffi.generate tc.handle (Cbor_helpers.encode schema)))
 ;;
 
+let primitive_boolean tc p forced =
+  with_stop_guard tc (fun () -> Ffi.primitive_boolean tc.handle p forced)
+;;
+
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)
 let assume _tc condition = if not condition then raise Assume_rejected
 
 (** [note tc message] records a message that will be printed on the final
     (failing) replay, or on every case when verbose output is on. *)
-let note tc message = if tc.is_final || tc.verbose then eprintf "%s\n%!" message
+let note tc message = if tc.is_final then eprintf "%s\n%!" message
 
 (** [draw_display_name tc ~label ~repeatable] returns the display name to print
     for a drawn value, bumping the per-test-case occurrence counter for [label].
@@ -328,6 +338,21 @@ let pool_generate tc ~pool_id ?(consume = false) () =
   with_stop_guard tc (fun () -> Ffi.pool_generate tc.handle ~pool_id ~consume)
 ;;
 
+(** [new_state_machine tc ~rule_names ~invariant_names] registers an
+    engine-owned state machine and returns its id. The engine owns rule
+    selection (including swarm testing). *)
+let new_state_machine tc ~rule_names ~invariant_names =
+  with_stop_guard tc (fun () ->
+    Ffi.new_state_machine tc.handle ~rule_names ~invariant_names)
+;;
+
+(** [state_machine_next_rule tc ~state_machine_id] draws the index of the next
+    rule to run. Raises {!Data_exhausted} when the engine's choice budget is
+    exhausted. *)
+let state_machine_next_rule tc ~state_machine_id =
+  with_stop_guard tc (fun () -> Ffi.state_machine_next_rule tc.handle ~state_machine_id)
+;;
+
 (* ------------------------------------------------------------------ *)
 (* Settings translation                                                *)
 (* ------------------------------------------------------------------ *)
@@ -389,13 +414,14 @@ let build_ffi_settings (settings : settings) ~database_key =
     the case complete. Returns [Some (origin, exn)] when the case was {e interesting}
     (the body raised an unexpected exception), otherwise [None]. Shared by the
     engine-run and failure-blob replay paths. *)
-let run_test_case ~mode ~verbose ~test_fn handle =
+let run_test_case ~(settings : settings) ~test_fn handle =
   let is_final = Ffi.is_final_replay handle in
-  let tc =
+  let (tc : test_case) =
     { handle
-    ; mode
+    ; mode = settings.mode
     ; is_final
-    ; verbose
+    ; verbosity = settings.verbosity
+    ; stateful_step_count = settings.stateful_step_count
     ; test_aborted = false
     ; draw_depth = 0
     ; draw_counts = String.Table.create ()
@@ -475,12 +501,6 @@ let handle_result ~(settings : settings) ~captured ~test_location result =
          (Failure (sprintf "Multiple failures (%d):\n%s" (List.length failures) details)))
 ;;
 
-let is_verbose verbosity =
-  match verbosity with
-  | Verbose | Debug -> true
-  | Normal | Quiet -> false
-;;
-
 (** [run_from_engine ~settings ~ffi_settings ~test_fn ~test_location] drives a full property
     run: it starts the engine worker, loops over generated test cases, and
     raises on failure. The engine [run] handle is always freed. *)
@@ -497,13 +517,8 @@ let run_from_engine ~(settings : settings) ~ffi_settings ~test_fn ~test_location
         match Ffi.next_test_case run with
         | None -> ()
         | Some handle ->
-          Option.iter
-            (run_test_case
-               ~mode:settings.mode
-               ~verbose:(is_verbose settings.verbosity)
-               ~test_fn
-               handle)
-            ~f:(fun (origin, exn) -> Hashtbl.set captured ~key:origin ~data:exn);
+          Option.iter (run_test_case ~settings ~test_fn handle) ~f:(fun (origin, exn) ->
+            Hashtbl.set captured ~key:origin ~data:exn);
           loop ()
       in
       loop ();
@@ -521,13 +536,7 @@ let replay_from_blob ~(settings : settings) ~ffi_settings ~test_fn blob =
     Exn.protect
       ~finally:(fun () -> Ffi.blob_test_case_free tc)
       ~f:(fun () ->
-        match
-          run_test_case
-            ~mode:settings.mode
-            ~verbose:(is_verbose settings.verbosity)
-            ~test_fn
-            tc
-        with
+        match run_test_case ~settings ~test_fn tc with
         | None -> Did_not_reproduce
         | Some (_, exn) -> Reproduced exn)
 ;;

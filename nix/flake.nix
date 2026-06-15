@@ -16,10 +16,16 @@
       forAllSystems = nixpkgs.lib.genAttrs nixpkgs.lib.systems.flakeExposed;
     in
     {
+      # Callers may override `ocamlPackages` to build against a non-default
+      # OCaml toolchain (e.g. an oxcaml-flavored scope built via
+      # `pkgs.ocaml-ng.mkOcamlPackages`). The default uses `pkgs.ocamlPackages`.
+      # `doCheck` toggles `dune runtest` for the listed packages.
       lib.mkHegelOcamlProject =
         {
           pkgs,
           stdenv ? pkgs.stdenv,
+          ocamlPackages ? pkgs.ocamlPackages,
+          doCheck ? false,
         }:
         let
           duneProjectLines = builtins.filter builtins.isString (
@@ -30,12 +36,12 @@
           );
           duneProjectVersion = builtins.elemAt (builtins.match "\\(version ([^)]+)\\)" versionLine) 0;
         in
-        pkgs.ocamlPackages.buildDunePackage {
+        ocamlPackages.buildDunePackage {
           pname = "hegel";
           version = duneProjectVersion;
           src = ../.;
           duneVersion = "3";
-          propagatedBuildInputs = with pkgs.ocamlPackages; [
+          propagatedBuildInputs = with ocamlPackages; [
             core
             core_unix
             ctypes
@@ -50,13 +56,18 @@
             dune build -p hegel,ppx_hegel_compat,ppx_hegel_test,ppx_hegel_generator -j $NIX_BUILD_CORES
             runHook postBuild
           '';
+          checkPhase = ''
+            runHook preCheck
+            dune runtest -p hegel,ppx_hegel_compat,ppx_hegel_test,ppx_hegel_generator -j $NIX_BUILD_CORES
+            runHook postCheck
+          '';
           installPhase = ''
             runHook preInstall
             dune install --prefix $out --libdir $OCAMLFIND_DESTDIR \
               hegel ppx_hegel_test ppx_hegel_generator ppx_hegel_compat
             runHook postInstall
           '';
-          doCheck = false;
+          inherit doCheck;
         };
 
       devShells = forAllSystems (

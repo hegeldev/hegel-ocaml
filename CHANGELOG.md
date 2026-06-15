@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.4 - 2026-06-15
+
+Adds `with_stateful_step_count` to allow controlling the number of steps in a stateful test
+and [swarm testing](https://users.cs.utah.edu/~regehr/papers/swarm12.pdf) to stateful tests. Internal changes to stateful test generation.
+
+## 0.5.3 - 2026-06-15
+
+This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.18.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.18.0) to [0.19.1](https://github.com/hegeldev/hegel-rust/releases/tag/v0.19.1).
+
 ## 0.5.2 - 2026-06-12
 
 This release updates the bindings to libhegel 0.18.0 and has internal control 

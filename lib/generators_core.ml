@@ -288,7 +288,7 @@ let draw_named
   =
   fun ~label ~repeatable tc (Printable { core; sexp_of }) ->
   let value = do_draw core tc in
-  if (tc.Client.is_final || tc.Client.verbose) && tc.Client.draw_depth = 0
+  if (tc.Client.is_final || not (Core.phys_equal tc.Client.verbosity Quiet)) && tc.Client.draw_depth = 0
   then (
     let name = Client.draw_display_name tc ~label ~repeatable in
     let rendered = Sexp.to_string_hum (sexp_of value) in
