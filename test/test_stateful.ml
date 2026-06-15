@@ -155,6 +155,62 @@ let test_resolve_drawn () =
   Alcotest.(check bool) "unknown id raises Flaky_strategy" true raised
 ;;
 
+let test_stateful_bounded_steps () =
+  let module S = Hegel.Stateful in
+  let step_count = ref 0 in
+  let step_rule =
+    S.Rule.create ~name:"step" ~step:(fun _tc state ->
+      incr step_count;
+      if !step_count >= 10 then failwith "reached 10 steps";
+      state)
+  in
+  let raised_msg = ref "" in
+  (try
+     Hegel.run_hegel_test
+       ~settings:
+         (Hegel.settings ~test_cases:1 () |> Hegel.Client.with_stateful_step_count 10)
+       (fun tc ->
+          step_count := 0;
+          S.run ~init:() ~rules:[ step_rule ] tc)
+   with
+   | e ->
+     raised_msg := Exn.to_string e;
+     Printf.printf "%s" !raised_msg);
+  Alcotest.(check bool)
+    "exception carries the original message"
+    true
+    (String.is_substring !raised_msg ~substring:"reached 10 steps");
+  Alcotest.(check int) "ran exactly 10 steps" 10 !step_count
+;;
+
+(* Swarm testing: with many rules, the engine enables a random subset (at least
+   one) per test case, so some test cases leave a single rule enabled and every
+   step picks that survivor. A long consecutive chain of
+   one rule arises naturally, without the caller weighting anything. With 11
+   rules under uniform selection a run of 20 identical choices is astronomically
+   unlikely ((1/11)^19); under swarm it shows up readily across test cases. *)
+let test_swarm_long_single_rule_run () =
+  let module S = Hegel.Stateful in
+  let longest_run = ref 0 in
+  let last_rule = ref None in
+  let current_run = ref 0 in
+  let make i =
+    S.Rule.create ~name:(Printf.sprintf "rule_%d" i) ~step:(fun _tc () ->
+      (match !last_rule with
+       | Some j when j = i -> incr current_run
+       | _ -> current_run := 1);
+      last_rule := Some i;
+      if !current_run > !longest_run then longest_run := !current_run)
+  in
+  let rules = List.init 11 ~f:make in
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:200 ~seed:0 ()) (fun tc ->
+    (* Reset per test case so a run can't bleed across cases. *)
+    last_rule := None;
+    current_run := 0;
+    S.run ~init:() ~rules tc);
+  Alcotest.(check bool) "swarm produces a long single-rule chain" true (!longest_run >= 20)
+;;
+
 let tests =
   [ Alcotest.test_case "stateful: resolve_drawn" `Quick test_resolve_drawn
   ; Alcotest.test_case "stateful: failing property shrinks" `Quick stateful_failure_test
@@ -172,5 +228,13 @@ let tests =
       "stateful: all-rejected test case is invalid"
       `Quick
       stateful_retry_budget_floor_test
+  ; Alcotest.test_case
+      "stateful: with_stateful_step_count bounds steps"
+      `Quick
+      test_stateful_bounded_steps
+  ; Alcotest.test_case
+      "stateful: swarm yields a long single-rule chain"
+      `Quick
+      test_swarm_long_single_rule_run
   ]
 ;;

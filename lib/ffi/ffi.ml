@@ -90,6 +90,12 @@ let c_generate =
     (ptr void @-> ptr char @-> size_t @-> ptr (ptr char) @-> ptr size_t @-> returning int)
 ;;
 
+let c_primitive_boolean =
+  foreign
+    "hegel_primitive_boolean"
+    (ptr void @-> double @-> bool @-> bool @-> ptr bool @-> returning int)
+;;
+
 let c_test_case_from_blob =
   foreign "hegel_test_case_from_blob" (ptr void @-> string_opt @-> returning (ptr void))
 ;;
@@ -121,6 +127,24 @@ let c_pool_generate =
   foreign
     "hegel_pool_generate"
     (ptr void @-> int64_t @-> bool @-> ptr int64_t @-> returning int)
+;;
+
+let c_new_state_machine =
+  foreign
+    "hegel_new_state_machine"
+    (ptr void
+     @-> ptr (ptr char)
+     @-> size_t
+     @-> ptr (ptr char)
+     @-> size_t
+     @-> ptr int64_t
+     @-> returning int)
+;;
+
+let c_state_machine_next_rule =
+  foreign
+    "hegel_state_machine_next_rule"
+    (ptr void @-> int64_t @-> ptr int64_t @-> returning int)
 ;;
 
 let c_target = foreign "hegel_target" (ptr void @-> double @-> string @-> returning int)
@@ -333,6 +357,17 @@ let generate tc schema =
   string_from_ptr !@out_ptr ~length:n
 ;;
 
+let primitive_boolean tc p forced =
+  let out_ptr = allocate bool false in
+  let rc =
+    match forced with
+    | Some b -> c_primitive_boolean tc p b true out_ptr
+    | None -> c_primitive_boolean tc p false false out_ptr
+  in
+  check_rc rc;
+  !@out_ptr
+;;
+
 let start_span tc label = check_rc (c_start_span tc (Unsigned.UInt64.of_int label))
 let stop_span tc discard = check_rc (c_stop_span tc discard)
 
@@ -370,6 +405,48 @@ let pool_add tc ~pool_id =
 let pool_generate tc ~pool_id ~consume =
   let out = allocate int64_t 0L in
   check_rc (c_pool_generate tc (Int64.of_int pool_id) consume out);
+  Int64.to_int !@out
+;;
+
+(* Marshal an OCaml string list into a [const char *const *] paired with a GC
+   root that pins its backing memory. The caller MUST {!Ctypes.Root.release} the
+   returned root once the C side has copied the names; until then the root keeps
+   the name buffers and the pointer table alive.
+
+   The explicit root is necessary because [CArray.of_list string] stores only
+   the raw [char *] pointers and leaves each name's buffer unrooted, so the GC
+   may free the names out from under the engine and cause flaky tests *)
+let to_string_array names =
+  match names with
+  | [] -> from_voidp (ptr char) null, Root.create ()
+  | _ ->
+    let buffers = List.map CArray.of_string names in
+    let table = CArray.of_list (ptr char) (List.map CArray.start buffers) in
+    CArray.start table, Root.create (buffers, table)
+;;
+
+let new_state_machine tc ~rule_names ~invariant_names =
+  let rules_ptr, rules_root = to_string_array rule_names in
+  let invs_ptr, invs_root = to_string_array invariant_names in
+  let out = allocate int64_t 0L in
+  let rc =
+    c_new_state_machine
+      tc
+      rules_ptr
+      (Unsigned.Size_t.of_int (List.length rule_names))
+      invs_ptr
+      (Unsigned.Size_t.of_int (List.length invariant_names))
+      out
+  in
+  Root.release rules_root;
+  Root.release invs_root;
+  check_rc rc;
+  Int64.to_int !@out
+;;
+
+let state_machine_next_rule tc ~state_machine_id =
+  let out = allocate int64_t 0L in
+  check_rc (c_state_machine_next_rule tc (Int64.of_int state_machine_id) out);
   Int64.to_int !@out
 ;;
 

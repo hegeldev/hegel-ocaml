@@ -62,6 +62,7 @@ val phase_to_string : phase -> string
 type settings =
   { mode : mode
   ; test_cases : int
+  ; stateful_step_count : int
   ; verbosity : verbosity
   ; seed : int option
   ; derandomize : bool
@@ -88,6 +89,9 @@ val is_in_ci : unit -> bool
 
 (** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
 val with_test_cases : int -> settings -> settings
+
+(** [with_stateful_step_count n s] returns settings [s] with [stateful_step_count] set to [n]. *)
+val with_stateful_step_count : int -> settings -> settings
 
 (** [with_verbosity v s] returns settings [s] with [verbosity] set to [v]. *)
 val with_verbosity : verbosity -> settings -> settings
@@ -127,6 +131,7 @@ val with_report_multiple_failures : bool -> settings -> settings
 type test_case =
   { handle : Hegel_ffi.Ffi.test_case
   ; mode : mode
+  ; stateful_step_count : int
   ; is_final : bool
   ; mutable test_aborted : bool
   }
@@ -146,6 +151,8 @@ val failure_exn : captured_exn:exn option -> panic_message:string option -> exn
     from the native engine. Raises {!Data_exhausted} if the engine signals
     StopTest. *)
 val generate_from_schema : Cbor.t -> test_case -> Cbor.t
+
+val primitive_boolean : test_case -> float -> bool option -> bool
 
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)
@@ -200,6 +207,22 @@ val pool_add : test_case -> pool_id:int -> int
     When [consume] is [true] (default [false]), the variable is also removed
     from the pool. Drawing from an empty pool raises {!Data_exhausted}. *)
 val pool_generate : test_case -> pool_id:int -> ?consume:bool -> unit -> int
+
+(** [new_state_machine tc ~rule_names ~invariant_names] registers an
+    engine-owned state machine with the named rules and invariants and returns
+    its id. The engine owns rule selection, including swarm testing (each test
+    case enables a random subset of rules). *)
+val new_state_machine
+  :  test_case
+  -> rule_names:string list
+  -> invariant_names:string list
+  -> int
+
+(** [state_machine_next_rule tc ~state_machine_id] draws the index (in
+    [\[0, num_rules)]) of the next rule to run, letting the engine choose and
+    shrink the rule sequence. Raises {!Data_exhausted} when the engine's choice
+    budget is exhausted. *)
+val state_machine_next_rule : test_case -> state_machine_id:int -> int
 
 (** [run_test ~settings ?test_location ?database_key test_fn] runs a property
     test using the given settings against the native engine.
