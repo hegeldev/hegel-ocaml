@@ -271,9 +271,18 @@ let primitive_boolean tc p forced =
     [false]. *)
 let assume _tc condition = if not condition then raise Assume_rejected
 
-(** [note tc message] records a message that will be printed on the final
-    (failing) replay, or on every case when verbose output is on. *)
-let note tc message = if tc.is_final then eprintf "%s\n%!" message
+(** [note tc message] prints [message] to stderr subject to the run's
+    {!type:verbosity}: never under [Quiet], only on the final (failing) replay
+    under [Normal], and on every test case under [Verbose] or [Debug]. *)
+let note tc message =
+  let should_print =
+    match tc.verbosity with
+    | Quiet -> false
+    | Normal -> tc.is_final
+    | Verbose | Debug -> true
+  in
+  if should_print then eprintf "%s\n%!" message
+;;
 
 (** [draw_display_name tc ~label ~repeatable] returns the display name to print
     for a drawn value, bumping the per-test-case occurrence counter for [label].

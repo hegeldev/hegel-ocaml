@@ -164,8 +164,9 @@ val primitive_boolean : test_case -> float -> bool option -> bool
     [false]. *)
 val assume : test_case -> bool -> unit
 
-(** [note tc message] records a message that will be printed on the final
-    (failing) replay, or on every case when verbose output is on. *)
+(** [note tc message] prints [message] to stderr subject to the run's
+    {!type:verbosity}: never under [Quiet], only on the final (failing) replay
+    under [Normal], and on every test case under [Verbose] or [Debug]. *)
 val note : test_case -> string -> unit
 
 (** [draw_display_name tc ~label ~repeatable] returns the display name to print
