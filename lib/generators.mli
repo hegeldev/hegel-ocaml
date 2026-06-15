@@ -2,7 +2,15 @@
 
     This module provides a composable generator API for property-based testing.
     Generators produce typed OCaml values and can be combined using {!map},
-    {!flat_map}, and {!filter}. *)
+    {!flat_map}, and {!filter}.
+
+    Every generator carries a phantom ['p] recording whether it holds a printer.
+    Primitive and composite generators are {!printable} and may be drawn with
+    {!draw}, which prints the drawn value on a failing replay. {!map},
+    {!flat_map}, {!sampled_from}, and {!just} hand the output type to user code
+    and so are {!unprintable}: they can be drawn with {!draw_silent}, or made
+    printable with {!with_printer}. Composite combinators ({!lists}, {!tuples2},
+    {!one_of}, …) require printable components and produce printable results. *)
 
 (** Constants for span labels used in generation tracking. *)
 module Labels : sig
@@ -24,56 +32,16 @@ module Labels : sig
   val stateful_rule : int
 end
 
-type 'a generator =
-  | Basic :
-      { schema : Cbor.t
-      ; transform : Cbor.t -> 'a
-      ; unique_safe : bool
-      }
-      -> 'a generator
-  | Mapped :
-      { source : 'b generator
-      ; f : 'b -> 'a
-      }
-      -> 'a generator
-  | FlatMapped :
-      { source : 'b generator
-      ; f : 'b -> 'a generator
-      }
-      -> 'a generator
-  | Filtered :
-      { source : 'a generator
-      ; predicate : 'a -> bool
-      }
-      -> 'a generator
-  | CompositeList :
-      { elements : 'a generator
-      ; min_size : int
-      ; max_size : int option
-      }
-      -> 'a list generator
-  | Composite :
-      { label : int
-      ; generate_fn : Client.test_case -> 'a
-      }
-      -> 'a generator
-  (** The type of generators. Generators produce typed OCaml values and can
-          be combined using {!map}, {!flat_map}, and {!filter}.
+(** A generator producing values of type ['a]. The phantom ['p] is {!printable}
+    when the generator carries a printer (and so may be drawn with {!draw}) and
+    {!unprintable} otherwise. *)
+type ('a, 'p) generator
 
-          - [Basic] generators hold a raw schema and a mandatory client-side
-            transform. Calling {!map} on a [Basic] generator preserves the
-            schema and composes transforms.
-          - [Mapped] generators wrap a source generator and a transform
-            function.
-          - [FlatMapped] generators wrap a source and a function returning a
-            generator.
-          - [Filtered] generators wrap a source and a predicate.
-          - [CompositeList] generators use the collection protocol to generate
-            lists of non-basic elements, creating a fresh collection per
-            generate call.
-          - [Composite] generators wrap a [generate_fn] taking test case data
-            inside a span with the given [label]. Used for tuples and one_of
-            with non-basic elements. *)
+(** Phantom witness that a generator carries a printer; see {!generator}. *)
+type printable
+
+(** Phantom witness that a generator carries no printer; see {!generator}. *)
+type unprintable
 
 (** Maximum number of filter attempts before calling [assume false]. *)
 val max_filter_attempts : int
@@ -112,53 +80,99 @@ val collection_more : collection -> Client.test_case -> bool
     Raises {!Client.Data_exhausted} on StopTest. *)
 val collection_reject : collection -> Client.test_case -> unit
 
-(** [do_draw gen tc] produces a typed value from generator [gen] using the given
-    test case [tc]. *)
-val do_draw : 'a generator -> Client.test_case -> 'a
+(** [draw ?label tc gen] produces a typed value from the printable generator
+    [gen] using test case [tc].
 
-(** [draw tc gen] produces a typed value from generator [gen] using test case
-    [tc]. *)
-val draw : Client.test_case -> 'a generator -> 'a
+    On the final replay of a failing test (or on every case under verbose
+    output), an outermost draw prints its value through {!Client.note} as
+    [name = value]. The [name] is [label] when given, else ["draw"]; an unlabeled
+    draw is numbered ([draw_1], [draw_2], …) while a [label] is printed bare.
+    Draws nested inside a span (e.g. composite elements) are suppressed so only
+    the outermost value shows. To draw a generator with no printer, use
+    {!draw_silent} or attach a printer with {!with_printer}. *)
+val draw : ?label:string -> Client.test_case -> ('a, printable) generator -> 'a
 
-(** [map f gen] transforms values from [gen] using [f].
+(** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
+    [let%hegel_test] PPX rewrites bindings to; not intended for direct use
+    (prefer {!draw}). It prints [label = value] (bare), or [label_1 = value],
+    [label_2 = value], … when [repeatable] is set — which the PPX does for a
+    binding name that is reused or drawn in a loop. *)
+val draw_named
+  :  label:string
+  -> repeatable:bool
+  -> Client.test_case
+  -> ('a, printable) generator
+  -> 'a
 
-    When [gen] is a [Basic] generator, the schema is preserved and transforms
-    are composed. Otherwise, a [Mapped] generator is created. *)
-val map : ('a -> 'b) -> 'a generator -> 'b generator
+(** [draw_silent tc gen] produces a typed value from any generator without
+    recording it for the final-replay output. Use it for draws whose value is
+    not a useful part of the printed counterexample, or for generators that
+    carry no printer. *)
+val draw_silent : Client.test_case -> ('a, 'p) generator -> 'a
 
-(** [flat_map f gen] creates a dependent generator. The function [f] receives
-    the generated value and returns a new generator whose value is the final
-    result. *)
-val flat_map : ('a -> 'b generator) -> 'a generator -> 'b generator
+(** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding
+    a printable generator that {!draw} accepts. This is how a [map]/[flat_map]/
+    [sampled_from]/[just] result is made drawable with {!draw}; the printer is
+    often supplied as [\[%sexp_of: t\]]. *)
+val with_printer : ('a -> Core.Sexp.t) -> ('a, 'p) generator -> ('a, printable) generator
 
-(** [filter predicate gen] filters values from [gen] using [predicate]. Tries
-    multiple times; calls [assume false] if all attempts fail. *)
-val filter : ('a -> bool) -> 'a generator -> 'a generator
+(** [printer gen] is the printer carried by the printable generator [gen]. *)
+val printer : ('a, printable) generator -> 'a -> Core.Sexp.t
 
-(** [schema gen] returns the schema for a [Basic] generator, or [None]. *)
-val schema : 'a generator -> Cbor.t option
+(** [composite generate_fn] builds a generator from an imperative [generate_fn]
+    that draws sub-values from the test case and assembles a result — the
+    OCaml/imperative counterpart to the schema-driven combinators, useful when a
+    value is easiest to describe by drawing its parts in sequence (this is also
+    the form [@@deriving hegel] emits). Carries no printer (the output type
+    is the caller's), so it is {!unprintable}: draw it with {!draw_silent}, or
+    {!with_printer} it to draw with {!draw}. *)
+val composite : (Client.test_case -> 'a) -> ('a, unprintable) generator
 
-(** [is_basic gen] returns [true] if [gen] is a [Basic] generator. *)
-val is_basic : 'a generator -> bool
+(** [map f gen] transforms values from [gen] using [f]. The result carries no
+    printer (the output type is the user's); use {!with_printer} to draw it with
+    {!draw}.
 
-(** [as_basic gen] returns [Some (schema, transform)] if [gen] is [Basic], or
-    [None] otherwise. *)
-val as_basic : 'a generator -> (Cbor.t * (Cbor.t -> 'a)) option
+    When [gen]'s core is [Basic], the schema is preserved and transforms are
+    composed; otherwise a mapped core is created. *)
+val map : ('a -> 'b) -> ('a, 'p) generator -> ('b, unprintable) generator
 
-(** [basic_unique_safe gen] returns [true] iff [gen] is a [Basic] generator
-    whose transform is known to preserve distinctness over the schema's value
-    space. Used to decide whether [lists ~unique:true] can take the
-    server-side fast path or must fall back to client-side dedup. *)
-val basic_unique_safe : 'a generator -> bool
+(** [flat_map f gen] creates a dependent generator. [f] receives the generated
+    value and returns a generator whose value is the final result. The result
+    carries no printer; use {!with_printer} to draw it with {!draw}. *)
+val flat_map
+  :  ('a -> ('b, 'q) generator)
+  -> ('a, 'p) generator
+  -> ('b, unprintable) generator
+
+(** [filter predicate gen] filters values from [gen] using [predicate], keeping
+    [gen]'s printability. Tries multiple times; calls [assume false] if all
+    attempts fail. *)
+val filter : ('a -> bool) -> ('a, 'p) generator -> ('a, 'p) generator
+
+(** [schema gen] returns the schema for a [Basic]-core generator, or [None]. *)
+val schema : ('a, 'p) generator -> Cbor.t option
+
+(** [is_basic gen] returns [true] if [gen] has a [Basic] core. *)
+val is_basic : ('a, 'p) generator -> bool
+
+(** [as_basic gen] returns [Some (schema, transform)] if [gen] has a [Basic]
+    core, or [None] otherwise. *)
+val as_basic : ('a, 'p) generator -> (Cbor.t * (Cbor.t -> 'a)) option
+
+(** [basic_unique_safe gen] returns [true] iff [gen] has a [Basic] core whose
+    transform is known to preserve distinctness over the schema's value space.
+    Used to decide whether [lists ~unique:true] can take the server-side fast
+    path or must fall back to client-side dedup. *)
+val basic_unique_safe : ('a, 'p) generator -> bool
 
 (** {2 Primitive generators} *)
 
 (** [booleans ()] creates a generator for boolean values. *)
-val booleans : unit -> bool generator
+val booleans : unit -> (bool, printable) generator
 
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
     the given bounds. *)
-val integers : ?min_value:int -> ?max_value:int -> unit -> int generator
+val integers : ?min_value:int -> ?max_value:int -> unit -> (int, printable) generator
 
 (** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
      ?allow_infinity ()] creates a generator for floating-point values. *)
@@ -170,7 +184,7 @@ val floats
   -> ?allow_nan:bool
   -> ?allow_infinity:bool
   -> unit
-  -> float generator
+  -> (float, printable) generator
 
 (** [text ?min_size ?max_size ?codec ?min_codepoint ?max_codepoint ?categories
      ?exclude_categories ?include_characters ?exclude_characters ?alphabet ()]
@@ -204,7 +218,7 @@ val text
   -> ?exclude_characters:string
   -> ?alphabet:string
   -> unit
-  -> string generator
+  -> (string, printable) generator
 
 (** [characters ?codec ?min_codepoint ?max_codepoint ?categories
      ?exclude_categories ?include_characters ?exclude_characters ()] creates a
@@ -222,90 +236,104 @@ val characters
   -> ?include_characters:string
   -> ?exclude_characters:string
   -> unit
-  -> string generator
+  -> (string, printable) generator
 
 (** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.
 *)
-val binary : ?min_size:int -> ?max_size:int -> unit -> string generator
+val binary : ?min_size:int -> ?max_size:int -> unit -> (string, printable) generator
 
-(** [just value] creates a generator that always produces [value]. *)
-val just : 'a -> 'a generator
+(** [just value] creates a generator that always produces [value]. The output
+    type is the caller's, so the result carries no printer. *)
+val just : 'a -> ('a, unprintable) generator
 
 (** {2 Collection generators} *)
 
 (** [lists elements ?min_size ?max_size ?unique ()] creates a generator for
-    lists. When [unique] is [true], elements will be distinct. *)
+    lists of [elements]. When [unique] is [true], elements will be
+    distinct. *)
 val lists
-  :  'a generator
+  :  ('a, printable) generator
   -> ?min_size:int
   -> ?max_size:int
   -> ?unique:bool
   -> unit
-  -> 'a list generator
+  -> ('a list, printable) generator
 
 (** [hashmaps keys values ?min_size ?max_size ()] creates a generator for
-    dictionaries (hash maps). When both [keys] and [values] are basic
-    generators, uses the server-side dict schema. When either is non-basic,
-    falls back to the collection protocol. *)
+    dictionaries (hash maps) over printable [keys] and [values]. When both are
+    basic generators, uses the server-side dict schema; when either is
+    non-basic, falls back to the collection protocol. *)
 val hashmaps
-  :  'a generator
-  -> 'b generator
+  :  ('a, printable) generator
+  -> ('b, printable) generator
   -> ?min_size:int
   -> ?max_size:int
   -> unit
-  -> ('a * 'b) list generator
+  -> (('a * 'b) list, printable) generator
 
 (** [sampled_from options] creates a generator that samples uniformly from a
-    non-empty list of values. *)
-val sampled_from : 'a list -> 'a generator
+    non-empty list of values. The output type is the caller's, so the result
+    carries no printer. *)
+val sampled_from : 'a list -> ('a, unprintable) generator
 
 (** [one_of generators] creates a generator that picks from one of the given
-    [generators]. Requires at least 2 generators. *)
-val one_of : 'a generator list -> 'a generator
+    printable [generators]. Requires at least one generator; the drawn value
+    renders with the first branch's printer. *)
+val one_of : ('a, printable) generator list -> ('a, printable) generator
 
 (** [optional element] creates a generator that produces either [None] or
-    [Some value] from [element]. *)
-val optional : 'a generator -> 'a option generator
+    [Some value] from the printable [element]. *)
+val optional : ('a, printable) generator -> ('a option, printable) generator
 
 (** {2 Tuple generators} *)
 
-(** [tuples2 g1 g2] creates a generator for 2-element tuples. *)
-val tuples2 : 'a generator -> 'b generator -> ('a * 'b) generator
+(** [tuples2 g1 g2] creates a generator for 2-element tuples of printable
+    components. *)
+val tuples2
+  :  ('a, printable) generator
+  -> ('b, printable) generator
+  -> ('a * 'b, printable) generator
 
-(** [tuples3 g1 g2 g3] creates a generator for 3-element tuples. *)
-val tuples3 : 'a generator -> 'b generator -> 'c generator -> ('a * 'b * 'c) generator
+(** [tuples3 g1 g2 g3] creates a generator for 3-element tuples of printable
+    components. *)
+val tuples3
+  :  ('a, printable) generator
+  -> ('b, printable) generator
+  -> ('c, printable) generator
+  -> ('a * 'b * 'c, printable) generator
 
-(** [tuples4 g1 g2 g3 g4] creates a generator for 4-element tuples. *)
+(** [tuples4 g1 g2 g3 g4] creates a generator for 4-element tuples of printable
+    components. *)
 val tuples4
-  :  'a generator
-  -> 'b generator
-  -> 'c generator
-  -> 'd generator
-  -> ('a * 'b * 'c * 'd) generator
+  :  ('a, printable) generator
+  -> ('b, printable) generator
+  -> ('c, printable) generator
+  -> ('d, printable) generator
+  -> ('a * 'b * 'c * 'd, printable) generator
 
 (** {2 Format generators} *)
 
 (** [emails ()] creates a generator for valid email address strings. *)
-val emails : unit -> string generator
+val emails : unit -> (string, printable) generator
 
 (** [urls ()] creates a generator for valid URL strings. *)
-val urls : unit -> string generator
+val urls : unit -> (string, printable) generator
 
 (** [domains ?max_length ()] creates a generator for domain name strings. *)
-val domains : ?max_length:int -> unit -> string generator
+val domains : ?max_length:int -> unit -> (string, printable) generator
 
 (** [dates ()] creates a generator for ISO 8601 date strings (YYYY-MM-DD). *)
-val dates : unit -> string generator
+val dates : unit -> (string, printable) generator
 
 (** [times ()] creates a generator for time strings. *)
-val times : unit -> string generator
+val times : unit -> (string, printable) generator
 
 (** [datetimes ()] creates a generator for ISO 8601 datetime strings. *)
-val datetimes : unit -> string generator
+val datetimes : unit -> (string, printable) generator
 
 (** [ip_addresses ?version ()] creates a generator for IP address strings. *)
-val ip_addresses : ?version:int -> unit -> string generator
+val ip_addresses : ?version:int -> unit -> (string, printable) generator
 
 (** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
     a regular expression [pattern]. *)
-val from_regex : string -> ?fullmatch:bool -> unit -> string generator
+val from_regex : string -> ?fullmatch:bool -> unit -> (string, printable) generator
