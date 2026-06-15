@@ -66,38 +66,26 @@ let run ~init ~rules ?(invariants = []) tc =
       | Client.Single_test_case -> true
       | Test_run -> false
     in
-    let rule_generator = Generators.sampled_from rules in
+    let rule_array = Array.of_list rules in
+    let invariant_names =
+      List.mapi invariants ~f:(fun i _ -> Printf.sprintf "invariant_%d" i)
+    in
+    let state_machine_id =
+      Client.new_state_machine
+        tc
+        ~rule_names:(List.map rules ~f:Rule.name)
+        ~invariant_names
+    in
     let run_invariants state = List.iter invariants ~f:(fun inv -> inv state) in
     run_invariants init;
     let max_steps = tc.Client.stateful_step_count in
-    let try_step ~state ~steps_run =
-      Client.start_span ~label:Generators.Labels.stateful_rule tc;
-      try
-        let rule = Generators.draw tc rule_generator in
-        if tc.Client.is_final
-        then
-          Client.note tc (Printf.sprintf "    Step %d: %s" (steps_run + 1) rule.Rule.name);
-        let new_state = rule.Rule.step tc state in
-        run_invariants new_state;
-        Client.stop_span tc;
-        `Stepped new_state
-      with
-      | Client.Assume_rejected ->
-        Client.note tc "Rule stopped early due to violated assumption.";
-        Client.stop_span ~discard:true tc;
-        `Rejected
-      | e ->
-        Client.stop_span tc;
-        raise e
-    in
-    (* We basically always want to run the maximum number of steps,
-    but need to leave a small probability of terminating early
-    in order to allow for reducing the number of steps once we
-    find a failing test case, so we stop with probability of
-    2 ** -16 during normal operation but force a stop when we've
-    generated enough steps. *)
-    let p_stop = 2.0 ** -16.0 in
+    (* We basically always want to run the maximum number of steps, but leave a
+       small probability of terminating early so the shrinker can reduce the
+       step count once a failing case is found: stop with probability 2^-16
+       during normal operation, and force a stop once enough steps have run. *)
     let rec loop ~state ~num_steps_succeeded ~steps_run =
+      Client.start_span ~label:Generators.Labels.stateful_rule tc;
+      let p_stop = 2.0 ** -16.0 in
       let must_stop =
         if is_single
         then Some false
@@ -107,16 +95,34 @@ let run ~init ~rules ?(invariants = []) tc =
         then Some false
         else None
       in
-      if not (Client.primitive_boolean tc p_stop must_stop)
-      then (
+      (* Stop: mirror Hypothesis, which breaks out of the loop leaving this span
+         open (the engine freezes it on completion), so the terminating stop
+         boolean stays recorded inside its own span. *)
+      if Client.primitive_boolean tc p_stop must_stop
+      then (if num_steps_succeeded = 0 then Client.assume tc false)
+      else (
         let next_state, num_steps_succeeded =
-          match try_step ~state ~steps_run with
-          | `Stepped new_state -> new_state, num_steps_succeeded + 1
-          | `Rejected -> state, num_steps_succeeded
+          try
+            let rule = rule_array.(Client.state_machine_next_rule tc ~state_machine_id) in
+            if tc.Client.is_final
+            then
+              Client.note
+                tc
+                (Printf.sprintf "    Step %d: %s" (steps_run + 1) rule.Rule.name);
+            let new_state = rule.Rule.step tc state in
+            run_invariants new_state;
+            Client.stop_span tc;
+            new_state, num_steps_succeeded + 1
+          with
+          | Client.Assume_rejected ->
+            Client.note tc "Rule stopped early due to violated assumption.";
+            Client.stop_span ~discard:true tc;
+            state, num_steps_succeeded
+          | e ->
+            Client.stop_span tc;
+            raise e
         in
         loop ~state:next_state ~num_steps_succeeded ~steps_run:(steps_run + 1))
-      else if num_steps_succeeded = 0
-      then Client.assume tc false
     in
     loop ~state:init ~num_steps_succeeded:0 ~steps_run:0
 ;;

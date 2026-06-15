@@ -208,6 +208,22 @@ val pool_add : test_case -> pool_id:int -> int
     from the pool. Drawing from an empty pool raises {!Data_exhausted}. *)
 val pool_generate : test_case -> pool_id:int -> ?consume:bool -> unit -> int
 
+(** [new_state_machine tc ~rule_names ~invariant_names] registers an
+    engine-owned state machine with the named rules and invariants and returns
+    its id. The engine owns rule selection, including swarm testing (each test
+    case enables a random subset of rules). *)
+val new_state_machine
+  :  test_case
+  -> rule_names:string list
+  -> invariant_names:string list
+  -> int
+
+(** [state_machine_next_rule tc ~state_machine_id] draws the index (in
+    [\[0, num_rules)]) of the next rule to run, letting the engine choose and
+    shrink the rule sequence. Raises {!Data_exhausted} when the engine's choice
+    budget is exhausted. *)
+val state_machine_next_rule : test_case -> state_machine_id:int -> int
+
 (** [run_test ~settings ?test_location ?database_key test_fn] runs a property
     test using the given settings against the native engine.
 

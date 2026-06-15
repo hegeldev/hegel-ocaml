@@ -133,9 +133,9 @@ let c_new_state_machine =
   foreign
     "hegel_new_state_machine"
     (ptr void
-     @-> ptr string
+     @-> ptr (ptr char)
      @-> size_t
-     @-> ptr string
+     @-> ptr (ptr char)
      @-> size_t
      @-> ptr int64_t
      @-> returning int)
@@ -408,32 +408,39 @@ let pool_generate tc ~pool_id ~consume =
   Int64.to_int !@out
 ;;
 
-(* Build a [const char *const *] argument from an OCaml string list, returning
-   the pointer to its first element (or a null pointer when empty). The backing
-   [CArray] is returned alongside so the caller can keep it alive for the
-   duration of the C call. *)
-let string_array strs =
-  match strs with
-  | [] -> from_voidp string null, None
+(* Marshal an OCaml string list into a [const char *const *] paired with a GC
+   root that pins its backing memory. The caller MUST {!Ctypes.Root.release} the
+   returned root once the C side has copied the names; until then the root keeps
+   the name buffers and the pointer table alive.
+
+   The explicit root is necessary because [CArray.of_list string] stores only
+   the raw [char *] pointers and leaves each name's buffer unrooted, so the GC
+   may free the names out from under the engine and cause flaky tests *)
+let to_string_array names =
+  match names with
+  | [] -> from_voidp (ptr char) null, Root.create ()
   | _ ->
-    let arr = CArray.of_list string strs in
-    CArray.start arr, Some arr
+    let buffers = List.map CArray.of_string names in
+    let table = CArray.of_list (ptr char) (List.map CArray.start buffers) in
+    CArray.start table, Root.create (buffers, table)
 ;;
 
 let new_state_machine tc ~rule_names ~invariant_names =
-  let rules_ptr, rules_arr = string_array rule_names in
-  let invs_ptr, invs_arr = string_array invariant_names in
+  let rules_ptr, rules_root = to_string_array rule_names in
+  let invs_ptr, invs_root = to_string_array invariant_names in
   let out = allocate int64_t 0L in
-  check_rc
-    (c_new_state_machine
-       tc
-       rules_ptr
-       (Unsigned.Size_t.of_int (List.length rule_names))
-       invs_ptr
-       (Unsigned.Size_t.of_int (List.length invariant_names))
-       out);
-  (* Keep the backing arrays alive until the call has returned. *)
-  ignore (Sys.opaque_identity (rules_arr, invs_arr));
+  let rc =
+    c_new_state_machine
+      tc
+      rules_ptr
+      (Unsigned.Size_t.of_int (List.length rule_names))
+      invs_ptr
+      (Unsigned.Size_t.of_int (List.length invariant_names))
+      out
+  in
+  Root.release rules_root;
+  Root.release invs_root;
+  check_rc rc;
   Int64.to_int !@out
 ;;
 

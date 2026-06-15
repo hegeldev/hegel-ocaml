@@ -322,6 +322,21 @@ let pool_generate tc ~pool_id ?(consume = false) () =
   with_stop_guard tc (fun () -> Ffi.pool_generate tc.handle ~pool_id ~consume)
 ;;
 
+(** [new_state_machine tc ~rule_names ~invariant_names] registers an
+    engine-owned state machine and returns its id. The engine owns rule
+    selection (including swarm testing). *)
+let new_state_machine tc ~rule_names ~invariant_names =
+  with_stop_guard tc (fun () ->
+    Ffi.new_state_machine tc.handle ~rule_names ~invariant_names)
+;;
+
+(** [state_machine_next_rule tc ~state_machine_id] draws the index of the next
+    rule to run. Raises {!Data_exhausted} when the engine's choice budget is
+    exhausted. *)
+let state_machine_next_rule tc ~state_machine_id =
+  with_stop_guard tc (fun () -> Ffi.state_machine_next_rule tc.handle ~state_machine_id)
+;;
+
 (* ------------------------------------------------------------------ *)
 (* Settings translation                                                *)
 (* ------------------------------------------------------------------ *)
