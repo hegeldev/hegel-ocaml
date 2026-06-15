@@ -7,11 +7,12 @@ module Variables = struct
     { tc : Client.test_case
     ; pool_id : int
     ; values : (int, 'a) Hashtbl.t
+    ; sexp_of : ('a -> Sexp.t) option
     }
 
-  let create tc =
+  let create ?sexp_of tc =
     let pool_id = Client.new_pool tc in
-    { tc; pool_id; values = Hashtbl.create (module Int) }
+    { tc; pool_id; values = Hashtbl.create (module Int); sexp_of }
   ;;
 
   let add t value =
@@ -40,7 +41,10 @@ module Variables = struct
   let pick t ~consume =
     Client.assume t.tc (not (is_empty t));
     let variable_id = Client.pool_generate t.tc ~pool_id:t.pool_id ~consume () in
-    resolve_drawn t.values ~consume variable_id
+    let value = resolve_drawn t.values ~consume variable_id in
+    Option.iter t.sexp_of ~f:(fun f ->
+      Client.note t.tc (Printf.sprintf "v%d = %s" variable_id (Sexp.to_string (f value))));
+    value
   ;;
 
   let draw t = pick t ~consume:false
@@ -77,8 +81,7 @@ let run ~init ~rules ?(invariants = []) tc =
         ~invariant_names
     in
     let run_invariants state = List.iter invariants ~f:(fun inv -> inv state) in
-    run_invariants init;
-    let max_steps = tc.Client.stateful_step_count in
+    let max_steps = if is_single then Int.max_value else tc.Client.stateful_step_count in
     (* We basically always want to run the maximum number of steps, but leave a
        small probability of terminating early so the shrinker can reduce the
        step count once a failing case is found: stop with probability 2^-16
@@ -104,9 +107,7 @@ let run ~init ~rules ?(invariants = []) tc =
         let next_state, num_steps_succeeded =
           try
             let rule = rule_array.(Client.state_machine_next_rule tc ~state_machine_id) in
-            Client.note
-              tc
-              (Printf.sprintf "    Step %d: %s" (steps_run + 1) rule.Rule.name);
+            Client.note tc (Printf.sprintf "Step %d: %s" (steps_run + 1) rule.Rule.name);
             let new_state = rule.Rule.step tc state in
             run_invariants new_state;
             Client.stop_span tc;
