@@ -107,9 +107,7 @@ let run ~init ~rules ?(invariants = []) tc =
         let next_state, num_steps_succeeded =
           try
             let rule = rule_array.(Client.state_machine_next_rule tc ~state_machine_id) in
-            Client.note
-              tc
-              (Printf.sprintf "    Step %d: %s" (steps_run + 1) rule.Rule.name);
+            Client.note tc (Printf.sprintf "Step %d: %s" (steps_run + 1) rule.Rule.name);
             let new_state = rule.Rule.step tc state in
             run_invariants new_state;
             Client.stop_span tc;

@@ -15,7 +15,7 @@ open Generators
 (* Quiet, deterministic run; swallow the failure the property raises so the
    expect block only sees what we printed. *)
 let run_failing
-      ?(settings = Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Quiet))
+      ?(settings = Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal))
       body
   =
   try Hegel.run_hegel_test ~settings body with
@@ -24,7 +24,7 @@ let run_failing
 
 let%expect_test "draw_silent returns the value and prints nothing" =
   Hegel.run_hegel_test
-    ~settings:Client.(settings ~test_cases:1 () |> with_verbosity Quiet)
+    ~settings:Client.(settings ~test_cases:1 () |> with_verbosity Normal)
     (fun tc ->
        let v = Hegel.draw_silent tc (integers ~min_value:3 ~max_value:3 ()) in
        printf "got=%d" v);
@@ -254,7 +254,7 @@ let%hegel_test label_injection_from_binding (tc : Hegel.Client.test_case) =
   let x = Hegel.draw tc (integers ~min_value:7 ~max_value:7 ()) in
   ignore (x : int);
   assert false
-[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Quiet)]
+[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal)]
 ;;
 
 let%expect_test "ppx injects ~label from the binding name" =
@@ -274,7 +274,7 @@ let%hegel_test qualified_generators_draw (tc : Hegel.Client.test_case) =
   let g = Generators.draw tc (integers ~min_value:9 ~max_value:9 ()) in
   ignore (g : int);
   assert false
-[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Quiet)]
+[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal)]
 ;;
 
 let%expect_test "a Generators-qualified draw is labeled (prefix preserved)" =
@@ -299,7 +299,7 @@ let%hegel_test local_draw_not_on_tc_untouched (tc : Hegel.Client.test_case) =
   let z = Hegel.draw tc (integers ~min_value:1 ~max_value:1 ()) in
   ignore (z : int);
   assert false
-[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Quiet)]
+[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal)]
 ;;
 
 let%expect_test "a local non-Hegel draw (not on tc) is not rewritten" =
@@ -325,7 +325,7 @@ let%hegel_test repeated_binding_numbers (tc : Hegel.Client.test_case) =
   let x = Hegel.draw tc (integers ~min_value:3 ~max_value:3 ()) in
   ignore (x : int);
   assert false
-[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Quiet)]
+[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal)]
 ;;
 
 let%expect_test "a reused binding name numbers x_1, x_2, x_3" =
@@ -348,7 +348,7 @@ let%hegel_test looped_binding_numbers (tc : Hegel.Client.test_case) =
     ignore (x : int)
   done;
   assert false
-[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Quiet)]
+[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal)]
 ;;
 
 let%expect_test "a draw inside a loop numbers x_1, x_2" =
