@@ -185,8 +185,7 @@ let test_stateful_bounded_steps () =
 
 (* Swarm testing: with many rules, the engine enables a random subset (at least
    one) per test case, so some test cases leave a single rule enabled and every
-   step picks that survivor. This is how Hegel achieves what QuickCheck does with
-   rule weights / a repeated [append; append; ...]: a long consecutive chain of
+   step picks that survivor. A long consecutive chain of
    one rule arises naturally, without the caller weighting anything. With 11
    rules under uniform selection a run of 20 identical choices is astronomically
    unlikely ((1/11)^19); under swarm it shows up readily across test cases. *)
