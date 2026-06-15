@@ -20,7 +20,7 @@ just check       # Run lint + docs + test (the full CI check)
 - **Formatter**: OCamlFormat 0.28.1 (version pinned in .ocamlformat)
 - **Documentation**: odoc 3.1.0
 - **Package manager**: opam 2.1.5
-- **PPX derivation**: ppxlib 0.35.0 (for `[@@deriving generator]`)
+- **PPX derivation**: ppxlib 0.35.0 (for `[@@deriving hegel]`)
 
 ## Project Structure
 
@@ -34,7 +34,7 @@ lib/                         # Library source
   cbor_helpers.ml            # CBOR encoding/decoding with type-safe extractors
   client.ml                  # Test runner + run lifecycle on top of Hegel_ffi.Ffi
   generators.ml              # Generator combinators (booleans, integers, lists, …)
-  derive.ml                  # Runtime support for [@@deriving generator]
+  derive.ml                  # Runtime support for [@@deriving hegel]
   test_runtime/              # Inline-test registry + runner for [let%hegel_test]
     hegel_test_runtime.ml    # Registry, run_all, test_main (called by dune-generated runner)
 
@@ -62,7 +62,7 @@ examples/                    # Example programs demonstrating the library
   basic_properties.ml        # Primitive generators: integers, booleans, floats
   collections.ml             # Collections and combinators: lists, filter, map
   real_world.ml              # Real-world scenario: sorted-merge property test
-  derived_types.ml           # Derived generators via [@@deriving generator]
+  derived_types.ml           # Derived generators via [@@deriving hegel]
 
 scripts/
   check-coverage.py          # Parses bisect-ppx-report, enforces 100%
@@ -133,20 +133,22 @@ binary directly.
 
 ### Type-Directed Derivation (ppx/ + lib/derive.ml)
 
-The `ppx_hegel_generator` PPX deriver synthesizes `unit -> 'a` generator functions
-from type declarations annotated with `[@@deriving generator]`. The generated code:
+The `ppx_hegel_generator` PPX deriver synthesizes a `(<t>, unprintable) generator`
+value named `<t>_generator` from type declarations annotated with
+`[@@deriving hegel]`. The generated code:
 
 1. For **records**: generates each field by calling the appropriate primitive
    generator, then constructs the record value.
 2. For **variants**: picks a constructor index uniformly at random via
    `sampled_from`, then generates arguments for the chosen constructor.
 3. For **type aliases**: delegates to the generator for the aliased type.
-4. For **nested types**: calls `<type>_generator ()` (user-defined generators
-   must exist in scope).
+4. For **nested types**: draws `<type>_generator` via `draw_silent` (user-defined
+   generators must exist in scope).
 
-The PPX emits code that calls `Hegel.Generators.generate` directly — no
-intermediate `generator` value is produced. The `Hegel.Derive` module provides
-runtime helpers for option and list types.
+The PPX emits a `test_case -> t` field-drawing thunk and wraps it with
+`Hegel.Generators.composite`, producing an `(t, unprintable) generator` value —
+no printer is attached, so a bare `[@@deriving hegel]` always compiles. The
+`Hegel.Derive` module provides runtime helpers for option and list types.
 
 **Usage example:**
 
@@ -155,20 +157,25 @@ runtime helpers for option and list types.
      (inline_tests (backend ppx_hegel_test))
      (preprocess (pps ppx_hegel_generator ppx_hegel_test)) *)
 
-type point = { x : int; y : int } [@@deriving generator]
-type color = Red | Green | Blue [@@deriving generator]
+type point = { x : int; y : int } [@@deriving hegel]
+type color = Red | Green | Blue [@@deriving hegel]
 type entity = { name : string; tag : int option; active : bool }
-[@@deriving generator]
+[@@deriving hegel]
 
-(* Use inside a let%hegel_test body: *)
-let%hegel_test derived_types_smoke _tc =
-  let p = point_generator () in
-  let c = color_generator () in
-  let e = entity_generator () in
+(* Use inside a let%hegel_test body. The derived generators are
+   (t, unprintable) generator values, drawn with draw_silent: *)
+let%hegel_test derived_types_smoke tc =
+  let p = Hegel.draw_silent tc point_generator in
+  let c = Hegel.draw_silent tc color_generator in
+  let e = Hegel.draw_silent tc entity_generator in
   (* p.x, p.y are ints; c is Red|Green|Blue; e has typed fields *)
   ignore (p, c, e)
 ;;
 ```
+
+To print a derived value on a failing replay, add `[@@deriving sexp_of]` and draw
+through `with_printer`:
+`Hegel.draw tc (Hegel.with_printer sexp_of_point point_generator)`.
 
 **Supported field types:**
 - `int` — bounded integers (±1073741823 to fit OCaml native int)
@@ -177,7 +184,7 @@ let%hegel_test derived_types_smoke _tc =
 - `string` — text strings
 - `t list` — lists of derived elements (max size 20)
 - `t option` — `Some v` or `None`
-- Named types `t` — calls `t_generator ()` (must be in scope)
+- Named types `t` — draws `t_generator` via `draw_silent` (must be in scope)
 - Tuples `(t1 * t2 * ...)` — generates each component
 
 ### Collection Protocol
@@ -266,11 +273,15 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
 
 ### PPX Deriver Implementation
 
-1. **PPX generates `unit -> 'a` functions, not `generator` values**: The Hegel generator
-   system operates at the CBOR level — `generate gen` returns `Cbor.t`. For
-   type-directed derivation to be ergonomic, the PPX generates functions that call
-   `generate` internally and extract typed OCaml values. This means derived generators
-   are `unit -> my_type` thunks, not `Hegel.Generators.generator` values.
+1. **PPX generates `(t, unprintable) generator` values**: The deriver builds a
+   `test_case -> t` field-drawing thunk and wraps it with
+   `Hegel.Generators.composite`, yielding a `(t, unprintable) generator` value
+   named `<t>_generator`. It carries no printer (the output type is the user's),
+   so a bare `[@@deriving hegel]` always compiles; draw it with `draw_silent`, or
+   pair it with `[@@deriving sexp_of]` and `with_printer` to print on a failing
+   replay. (Earlier revisions emitted a `test_case -> t` thunk drawn by calling
+   it directly; the `composite` wrapper replaced that so derived generators
+   compose with the other combinators.)
 
 2. **Unbounded integers cause CBOR bigint issues**: `integers()` without bounds can
    generate numbers too large for OCaml's native int. The CBOR library encodes these
@@ -279,7 +290,7 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
    the manual `Generators.integers ~min_value ~max_value ()` API.
 
 3. **PPX tests need a separate executable**: Because the PPX needs
-   `(preprocess (pps ppx_hegel_generator))`, the test file using `[@@deriving generator]`
+   `(preprocess (pps ppx_hegel_generator))`, the test file using `[@@deriving hegel]`
    must be in a separate `(test ...)` stanza from the main test suite. Both test
    executables are run by `dune runtest`.
 
