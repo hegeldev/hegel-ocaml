@@ -197,6 +197,7 @@ type test_case =
   ; mode : mode
   ; stateful_step_count : int
   ; is_final : bool
+  ; verbosity : verbosity
   ; mutable test_aborted : bool
   }
 
@@ -265,9 +266,18 @@ let primitive_boolean tc p forced =
     [false]. *)
 let assume _tc condition = if not condition then raise Assume_rejected
 
-(** [note tc message] records a message that will be printed on the final
-    (failing) replay. *)
-let note tc message = if tc.is_final then eprintf "%s\n%!" message
+(** [note tc message] prints [message] to stderr subject to the run's
+    {!type:verbosity}: never under [Quiet], only on the final (failing) replay
+    under [Normal], and on every test case under [Verbose] or [Debug]. *)
+let note tc message =
+  let should_print =
+    match tc.verbosity with
+    | Quiet -> false
+    | Normal -> tc.is_final
+    | Verbose | Debug -> true
+  in
+  if should_print then eprintf "%s\n%!" message
+;;
 
 (** [target tc value label] records a targeting observation to guide the search
     engine toward higher values. *)
@@ -405,6 +415,7 @@ let run_test_case ~(settings : settings) ~test_fn handle =
     ; mode = settings.mode
     ; stateful_step_count = settings.stateful_step_count
     ; is_final
+    ; verbosity = settings.verbosity
     ; test_aborted = false
     }
   in

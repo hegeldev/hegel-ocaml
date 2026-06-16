@@ -30,8 +30,9 @@ let run_hegel_test = Client.run_hegel_test
     [false]. *)
 let assume = Client.assume
 
-(** [note tc message] records a message that will be printed on the final
-    (failing) run. *)
+(** [note tc message] prints [message] to stderr subject to the run's verbosity:
+    never under [Quiet], only on the final (failing) replay under [Normal], and
+    on every test case under [Verbose] or [Debug]. *)
 let note = Client.note
 
 (** [target tc value label] sends a target command to guide the search engine

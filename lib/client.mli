@@ -133,6 +133,7 @@ type test_case =
   ; mode : mode
   ; stateful_step_count : int
   ; is_final : bool
+  ; verbosity : verbosity
   ; mutable test_aborted : bool
   }
 
@@ -158,8 +159,9 @@ val primitive_boolean : test_case -> float -> bool option -> bool
     [false]. *)
 val assume : test_case -> bool -> unit
 
-(** [note tc message] records a message that will be printed on the final
-    (failing) replay. *)
+(** [note tc message] prints [message] to stderr subject to the run's
+    {!type:verbosity}: never under [Quiet], only on the final (failing) replay
+    under [Normal], and on every test case under [Verbose] or [Debug]. *)
 val note : test_case -> string -> unit
 
 (** [target tc value label] records a targeting observation to guide the search
