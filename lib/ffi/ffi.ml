@@ -38,6 +38,10 @@ let c_settings_new = foreign "hegel_settings_new" (void @-> returning (ptr void)
 let c_settings_free = foreign "hegel_settings_free" (ptr void @-> returning void)
 let c_settings_mode = foreign "hegel_settings_mode" (ptr void @-> int @-> returning void)
 
+let c_settings_backend =
+  foreign "hegel_settings_backend" (ptr void @-> int @-> returning void)
+;;
+
 let c_settings_test_cases =
   foreign "hegel_settings_test_cases" (ptr void @-> uint64_t @-> returning void)
 ;;
@@ -194,6 +198,11 @@ type mode =
   | Test_run
   | Single_test_case
 
+type backend =
+  | Auto
+  | Default
+  | Urandom
+
 type verbosity =
   | Quiet
   | Normal
@@ -215,12 +224,26 @@ exception Stop_test
 exception Assume_rejected
 exception Backend_error of string
 
+(* Status codes returned by the C primitives [HEGEL_OK] / [HEGEL_E_*]. *)
+let ok = 0
+let e_stop_test = -1
+let e_assume = -2
+let e_backend = -3
+let e_invalid_handle = -4
+let e_invalid_arg = -5
+let e_already_complete = -6
+let e_not_complete = -7
+let e_internal = -8
+
 (* Phase bitmask values [HEGEL_PHASE_*]. *)
 let phase_explicit = 1
 let phase_reuse = 1 lsl 1
 let phase_generate = 1 lsl 2
 let phase_target = 1 lsl 3
 let phase_shrink = 1 lsl 4
+
+(* [HEGEL_PHASE_ALL]: all five phases enabled (the engine default). *)
+let phase_all = 31
 
 (* Health-check bitmask values [HEGEL_HC_*]. *)
 let hc_filter_too_much = 1
@@ -237,6 +260,12 @@ let mode_to_int = function
   | Single_test_case -> 1
 ;;
 
+let backend_to_int = function
+  | Auto -> 0
+  | Default -> 1
+  | Urandom -> 2
+;;
+
 let verbosity_to_int = function
   | Quiet -> 0
   | Normal -> 1
@@ -251,20 +280,33 @@ let status_to_int = function
   | Interesting -> 3
 ;;
 
-(* Translate a C return code: [HEGEL_OK] succeeds, [HEGEL_E_STOP_TEST]
-   raises {!Stop_test}, [HEGEL_E_ASSUME] raises {!Assume_rejected} (the engine
-   rejected the case as invalid — e.g. an impossible uniqueness constraint hits
-   the collection reject limit), anything else raises {!Backend_error} with the
-   thread-local diagnostic. [HEGEL_E_ASSUME] carries no diagnostic, so it must
-   be matched before the catch-all. *)
+(* Translate a libhegel return code into success or an exception. *)
 let check_rc rc =
-  if rc = 0
+  if rc = ok
   then ()
-  else if rc = -1
+  else if rc = e_stop_test
   then raise Stop_test
-  else if rc = -2
+  else if rc = e_assume
   then raise Assume_rejected
-  else raise (Backend_error (c_last_error_message ()))
+  else (
+    let label =
+      if rc = e_backend
+      then "backend error"
+      else if rc = e_invalid_handle
+      then "invalid handle"
+      else if rc = e_invalid_arg
+      then "invalid argument"
+      else if rc = e_already_complete
+      then "test case already complete"
+      else if rc = e_not_complete
+      then "previous test case not complete"
+      else if rc = e_internal
+      then "internal error"
+      else Printf.sprintf "unknown error code %d" rc
+    in
+    let msg = c_last_error_message () in
+    let detail = if String.length msg = 0 then "" else ": " ^ msg in
+    raise (Backend_error (label ^ detail)))
 ;;
 
 (* ------------------------------------------------------------------ *)
@@ -281,6 +323,7 @@ let last_error_message () = c_last_error_message ()
 let settings_new () = c_settings_new ()
 let settings_free s = c_settings_free s
 let settings_mode s m = c_settings_mode s (mode_to_int m)
+let settings_backend s b = c_settings_backend s (backend_to_int b)
 let settings_test_cases s n = c_settings_test_cases s (Unsigned.UInt64.of_int n)
 let settings_verbosity s v = c_settings_verbosity s (verbosity_to_int v)
 

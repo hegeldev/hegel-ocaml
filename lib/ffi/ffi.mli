@@ -29,6 +29,19 @@ type mode =
   | Test_run
   | Single_test_case
 
+(** Randomness backend ([hegel_backend_t]), selected via {!settings_backend}.
+
+    - [Auto]: choose automatically (the default) — urandom under Antithesis,
+      otherwise the seeded PRNG.
+    - [Default]: expand a single seeded PRNG; runs are reproducible and
+      shrinking / replay work as usual.
+    - [Urandom]: read fresh entropy on every draw (for running under
+      Antithesis); you almost certainly don't want it otherwise. *)
+type backend =
+  | Auto
+  | Default
+  | Urandom
+
 (** Engine output verbosity ([hegel_verbosity_t]). *)
 type verbosity =
   | Quiet
@@ -66,8 +79,11 @@ exception Stop_test
     exceeds the collection reject limit). Carries no diagnostic. *)
 exception Assume_rejected
 
-(** Raised when a libhegel call fails with any other negative status code; the
-    payload is {!last_error_message}. *)
+(** Raised when a libhegel call fails with any other negative status code
+    ([HEGEL_E_BACKEND], [HEGEL_E_INVALID_HANDLE], [HEGEL_E_INVALID_ARG],
+    [HEGEL_E_ALREADY_COMPLETE], [HEGEL_E_NOT_COMPLETE], [HEGEL_E_INTERNAL], or an
+    unrecognised code). The payload is a static label identifying the code,
+    followed by {!last_error_message} when the engine set one. *)
 exception Backend_error of string
 
 (** {2 Phase bitmask values}
@@ -79,6 +95,10 @@ val phase_reuse : int
 val phase_generate : int
 val phase_target : int
 val phase_shrink : int
+
+(** [phase_all] ([HEGEL_PHASE_ALL]) is all five phases enabled, the engine
+    default. *)
+val phase_all : int
 
 (** {2 Health-check bitmask values}
 
@@ -108,6 +128,11 @@ val settings_new : unit -> settings
 val settings_free : settings -> unit
 
 val settings_mode : settings -> mode -> unit
+
+(** [settings_backend s b] pins the engine's randomness backend. Pinning is
+    one-way: there is no way to return a handle to [Auto] once set. *)
+val settings_backend : settings -> backend -> unit
+
 val settings_test_cases : settings -> int -> unit
 val settings_verbosity : settings -> verbosity -> unit
 
