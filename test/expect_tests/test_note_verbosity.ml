@@ -41,7 +41,8 @@ let%expect_test "Normal notes only on the final failing replay" =
 
 let%expect_test "Verbose notes on every case (not just the final replay)" =
   run_passing Verbose;
-  [%expect {|
+  [%expect
+    {|
     NOTE_MARKER
     Running test case
     NOTE_MARKER
@@ -56,7 +57,8 @@ let%expect_test "Verbose notes on every case (not just the final replay)" =
 
 let%expect_test "Debug notes on every case (not just the final replay)" =
   run_passing Debug;
-  [%expect {|
+  [%expect
+    {|
     NOTE_MARKER
     NOTE_MARKER
     test case #2: status = Valid, choices = 1
