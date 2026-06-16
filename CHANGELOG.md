@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.5 - 2026-06-16
+
+This patch fixes a bug where `note` ignored the `verbosity` setting.
+
 ## 0.5.4 - 2026-06-15
 
 Adds `with_stateful_step_count` to allow controlling the number of steps in a stateful test
