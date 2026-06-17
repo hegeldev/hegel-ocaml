@@ -52,7 +52,10 @@ let%hegel_test commutative_addition tc =
 ```
 
 Run `dune runtest`. Hegel generates 100 random input pairs and reports the
-minimal counterexample if it finds one.
+minimal counterexample if it finds one. When a test fails, Hegel prints each
+value you drew from the failing case, named after the `let` binding it was
+bound to (`a = …`, `b = …`). See [Debugging failures](docs/getting-started.md#debug-your-failing-test-cases)
+for details.
 
 To override the default settings, attach a `[@@settings ...]` attribute:
 

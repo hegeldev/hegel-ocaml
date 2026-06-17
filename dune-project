@@ -2,7 +2,7 @@
 
 (name hegel)
 
-(version 0.5.5)
+(version 0.6.0)
 
 (generate_opam_files true)
 
@@ -15,7 +15,7 @@
  (name hegel)
  (synopsis "Hegel property-based testing library for OCaml")
  (description
-  "A property-based testing library that communicates with the Hegel server to enable universal property-based testing from OCaml.")
+  "A property-based testing library that communicates with the Hegel engine to enable universal property-based testing from OCaml.")
  (depends
   (ocaml
    (>= 5.2))
@@ -66,7 +66,7 @@
  (name ppx_hegel_generator)
  (synopsis "PPX deriver for Hegel generator derivation")
  (description
-  "Automatically derives Hegel generators for OCaml types annotated with [@@deriving generator].")
+  "Automatically derives Hegel generators for OCaml types annotated with [@@deriving hegel_generator].")
  (depends
   (ocaml
    (>= 5.2))

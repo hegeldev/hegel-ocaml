@@ -33,8 +33,10 @@ module Variables : sig
   type 'a t
 
   (** Creates an empty {!Variables.t}. Variables are tied to a test case; do not
-      reuse one across test cases. *)
-  val create : Client.test_case -> 'a t
+      reuse one across test cases. When [sexp_of] is given, each drawn/consumed
+      variable is printed as [v<id> = <sexp>] on the final replay of a failing
+      test; without it, variable picks print nothing. *)
+  val create : ?sexp_of:('a -> Core.Sexp.t) -> Client.test_case -> 'a t
 
   (** Records [value] in [variables] for later draws. *)
   val add : 'a t -> 'a -> unit

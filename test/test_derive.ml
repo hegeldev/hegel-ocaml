@@ -1,6 +1,6 @@
 (** Tests for the {!Hegel.Derive} runtime support module.
 
-    These tests verify the runtime helpers used by the [@@deriving generator]
+    These tests verify the runtime helpers used by the [@@deriving hegel_generator]
     PPX:
     - {!Hegel.Derive.generate_option}: generates [Some v] or [None]
     - {!Hegel.Derive.generate_list}: generates a list of values *)

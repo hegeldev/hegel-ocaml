@@ -41,13 +41,13 @@ The opening verb should tell the reader what *kind* of change this is:
 
 Bad: `"Refactored the socket handling code to use a shared connection pool."`
 
-Good: `"This patch changes the way the client manages the server to run a single persistent process for the whole test run. This should improve the performance of running many hegel tests."`
+Good: `"This patch changes the way the client manages the engine to run a single persistent process for the whole test run. This should improve the performance of running many hegel tests."`
 
 For **bug fixes**, describe the bug (what went wrong from the user's perspective), not just "fixed a bug":
 
-Bad: `"Fix bug in server crash detection."`
+Bad: `"Fix bug in engine crash detection."`
 
-Good: `"Fix server crash detection. The client now properly detects when the hegel server process exits unexpectedly, instead of hanging indefinitely."`
+Good: `"Fix engine crash detection. The client now properly detects when the hegel engine process exits unexpectedly, instead of hanging indefinitely."`
 
 ## Length calibration
 

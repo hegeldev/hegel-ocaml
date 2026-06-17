@@ -9,7 +9,9 @@ let test_one_of_empty () =
 ;;
 
 (** Test: one_of with a single generator is accepted. *)
-let test_one_of_single_accepted () = ignore (one_of [ booleans () ] : bool generator)
+let test_one_of_single_accepted () =
+  ignore (one_of [ booleans () ] : (bool, printable) generator)
+;;
 
 (** Test: sampled_from raises when given an empty list. *)
 let test_sampled_from_empty () =
@@ -23,7 +25,10 @@ let test_sampled_from_empty () =
     schemas so any partial tuple-wrapping regression would be visible. *)
 let test_one_of_basic_schema () =
   let gen =
-    one_of [ integers ~min_value:0 ~max_value:10 (); map (fun _ -> 0) (booleans ()) ]
+    one_of
+      [ integers ~min_value:0 ~max_value:10 ()
+      ; with_printer Core.Int.sexp_of_t (map (fun _ -> 0) (booleans ()))
+      ]
   in
   Alcotest.(check bool) "is_basic" true (is_basic gen);
   match schema gen with
@@ -61,17 +66,20 @@ let test_one_of_non_basic () =
 (** Test: one_of [index, value] dispatch transform. *)
 let test_one_of_dispatch () =
   let gen =
-    one_of [ map (fun x -> x * 2) (integers ()); map (fun x -> x + 100) (integers ()) ]
+    one_of
+      [ with_printer Core.Int.sexp_of_t (map (fun x -> x * 2) (integers ()))
+      ; with_printer Core.Int.sexp_of_t (map (fun x -> x + 100) (integers ()))
+      ]
   in
-  match gen with
-  | Basic { transform; _ } ->
+  match as_basic gen with
+  | Some (_, transform) ->
     (* index 0 → first branch, value 5 → 5 * 2 = 10 *)
     let result = transform (`Array [ `Int 0; `Int 5 ]) in
     Alcotest.(check int) "dispatched first" 10 result;
     (* index 1 → second branch, value 7 → 7 + 100 = 107 *)
     let result2 = transform (`Array [ `Int 1; `Int 7 ]) in
     Alcotest.(check int) "dispatched second" 107 result2
-  | _ -> Alcotest.fail "expected Basic"
+  | None -> Alcotest.fail "expected Basic"
 ;;
 
 (** Test: one_of dispatch bad format raises. *)
@@ -82,13 +90,13 @@ let test_one_of_dispatch_bad_format () =
       ; integers ~min_value:100 ~max_value:200 ()
       ]
   in
-  match gen with
-  | Basic { transform; _ } ->
+  match as_basic gen with
+  | Some (_, transform) ->
     let raised = ref false in
     (try ignore (transform (`Int 42)) with
      | Failure _ -> raised := true);
     Alcotest.(check bool) "bad format raised" true !raised
-  | _ -> Alcotest.fail "expected Basic"
+  | None -> Alcotest.fail "expected Basic"
 ;;
 
 (** Test: optional creates one_of-based generator. *)
@@ -152,24 +160,24 @@ let test_tuples2_basic_schema () =
 (** Test: tuples2 basic transform. *)
 let test_tuples2_basic_transform () =
   let gen = tuples2 (integers ()) (booleans ()) in
-  match gen with
-  | Basic { transform; _ } ->
+  match as_basic gen with
+  | Some (_, transform) ->
     let a, b = transform (`Array [ `Int 5; `Bool true ]) in
     Alcotest.(check int) "first" 5 a;
     Alcotest.(check bool) "second" true b
-  | _ -> Alcotest.fail "expected Basic"
+  | None -> Alcotest.fail "expected Basic"
 ;;
 
 (** Test: tuples2 basic transform bad format raises. *)
 let test_tuples2_bad_format () =
   let gen = tuples2 (integers ()) (booleans ()) in
-  match gen with
-  | Basic { transform; _ } ->
+  match as_basic gen with
+  | Some (_, transform) ->
     let raised = ref false in
     (try ignore (transform (`Int 42)) with
      | Failure _ -> raised := true);
     Alcotest.(check bool) "raised" true !raised
-  | _ -> Alcotest.fail "expected Basic"
+  | None -> Alcotest.fail "expected Basic"
 ;;
 
 (** Test: tuples2 non-basic is not basic. *)
@@ -194,25 +202,25 @@ let test_tuples3_basic_schema () =
 (** Test: tuples3 basic transform. *)
 let test_tuples3_basic_transform () =
   let gen = tuples3 (integers ()) (booleans ()) (integers ~min_value:0 ~max_value:5 ()) in
-  match gen with
-  | Basic { transform; _ } ->
+  match as_basic gen with
+  | Some (_, transform) ->
     let a, b, c = transform (`Array [ `Int 1; `Bool false; `Int 3 ]) in
     Alcotest.(check int) "first" 1 a;
     Alcotest.(check bool) "second" false b;
     Alcotest.(check int) "third" 3 c
-  | _ -> Alcotest.fail "expected Basic"
+  | None -> Alcotest.fail "expected Basic"
 ;;
 
 (** Test: tuples3 bad format raises. *)
 let test_tuples3_bad_format () =
   let gen = tuples3 (integers ()) (booleans ()) (integers ~min_value:0 ~max_value:5 ()) in
-  match gen with
-  | Basic { transform; _ } ->
+  match as_basic gen with
+  | Some (_, transform) ->
     let raised = ref false in
     (try ignore (transform (`Int 42)) with
      | Failure _ -> raised := true);
     Alcotest.(check bool) "raised" true !raised
-  | _ -> Alcotest.fail "expected Basic"
+  | None -> Alcotest.fail "expected Basic"
 ;;
 
 (** Test: tuples3 non-basic is not basic. *)
@@ -243,14 +251,14 @@ let test_tuples4_basic_transform () =
       (integers ~min_value:0 ~max_value:5 ())
       (floats ())
   in
-  match gen with
-  | Basic { transform; _ } ->
+  match as_basic gen with
+  | Some (_, transform) ->
     let a, b, c, d = transform (`Array [ `Int 1; `Bool true; `Int 3; `Float 3.14 ]) in
     Alcotest.(check int) "first" 1 a;
     Alcotest.(check bool) "second" true b;
     Alcotest.(check int) "third" 3 c;
     Alcotest.(check (float 0.01)) "fourth" 3.14 d
-  | _ -> Alcotest.fail "expected Basic"
+  | None -> Alcotest.fail "expected Basic"
 ;;
 
 (** Test: tuples4 bad format raises. *)
@@ -262,13 +270,13 @@ let test_tuples4_bad_format () =
       (integers ~min_value:0 ~max_value:5 ())
       (floats ())
   in
-  match gen with
-  | Basic { transform; _ } ->
+  match as_basic gen with
+  | Some (_, transform) ->
     let raised = ref false in
     (try ignore (transform (`Int 42)) with
      | Failure _ -> raised := true);
     Alcotest.(check bool) "raised" true !raised
-  | _ -> Alcotest.fail "expected Basic"
+  | None -> Alcotest.fail "expected Basic"
 ;;
 
 (** Test: tuples4 non-basic is not basic. *)
@@ -283,7 +291,12 @@ let test_tuples4_non_basic () =
 (** Test: one_of with basic generators works e2e. *)
 let test_one_of_e2e () =
   Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
-    let gen = one_of [ integers ~min_value:0 ~max_value:10 (); just 99 ] in
+    let gen =
+      one_of
+        [ integers ~min_value:0 ~max_value:10 ()
+        ; with_printer Core.Int.sexp_of_t (just 99)
+        ]
+    in
     let v = Hegel.draw tc gen in
     assert ((v >= 0 && v <= 10) || v = 99))
 ;;
