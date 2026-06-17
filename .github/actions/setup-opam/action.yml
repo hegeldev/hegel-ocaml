@@ -76,6 +76,18 @@ runs:
         echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
         echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
 
+    - name: Ensure GNU patch on macOS
+      if: runner.os == 'macOS'
+      shell: bash
+      run: | # zizmor: ignore[github-env] static PATH entry, no untrusted input
+        # Some Jane Street packages (e.g. gel, a transitive dep of core) apply a
+        # source patch at build time. macOS ships BSD patch, which silently
+        # mis-applies these, leaving dangling references and failures like
+        # "Bin_prot.Shape.Location ... which is missing". Install GNU patch and
+        # put it ahead of BSD patch on PATH so opam builds patch correctly.
+        brew install gpatch
+        echo "$(brew --prefix gpatch)/libexec/gnubin" >> "$GITHUB_PATH"
+
     - name: Install OCaml dependencies
       shell: bash
       env:
