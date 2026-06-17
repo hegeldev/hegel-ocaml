@@ -8,7 +8,8 @@ let integers ?(min_value = Int.min_value) ?(max_value = Int.max_value) () =
   if min_value > max_value
   then
     raise
-      (Invalid_argument (sprintf "Cannot have max_value=%d < min_value=%d" max_value min_value));
+      (Invalid_argument
+         (sprintf "Cannot have max_value=%d < min_value=%d" max_value min_value));
   let pairs =
     [ `Text "type", `Text "integer"
     ; `Text "min_value", `Int min_value
