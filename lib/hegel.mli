@@ -10,7 +10,7 @@ module Client = Client
 (** Generator combinators for composable test data generation. *)
 module Generators = Generators
 
-(** Runtime support for [@@deriving generator]. *)
+(** Runtime support for [@@deriving hegel_generator]. *)
 module Derive = Derive
 
 (** Stateful property-based testing on top of {!Generators}. *)
@@ -43,9 +43,38 @@ val note : Client.test_case -> string -> unit
     toward higher values. *)
 val target : Client.test_case -> float -> string -> unit
 
-(** [draw tc gen] produces a typed value from generator [gen] using test case
-    [tc]. *)
-val draw : Client.test_case -> 'a Generators.generator -> 'a
+(** [draw ?label tc gen] produces a typed value from the printable generator
+    [gen] using test case [tc]. On the final replay of a failing test (or on
+    every case under verbose output), an outermost draw prints its value as
+    [name = value], where [name] is [label] (else ["draw"]); an unlabeled draw is
+    numbered ([draw_1], [draw_2], …) while a [label] is printed bare. See
+    {!Generators.draw}. *)
+val draw
+  :  ?label:string
+  -> Client.test_case
+  -> ('a, Generators.printable) Generators.generator
+  -> 'a
+
+(** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
+    [let%hegel_test] PPX rewrites bindings to; not intended for direct use
+    (prefer {!draw}). See {!Generators.draw_named}. *)
+val draw_named
+  :  label:string
+  -> repeatable:bool
+  -> Client.test_case
+  -> ('a, Generators.printable) Generators.generator
+  -> 'a
+
+(** [draw_silent tc gen] is {!draw} without printing the value on the final
+    replay, and accepts a generator with no printer. *)
+val draw_silent : Client.test_case -> ('a, 'p) Generators.generator -> 'a
+
+(** [with_printer sexp_of gen] attaches [sexp_of] as [gen]'s printer so it can
+    be drawn with {!draw}. See {!Generators.with_printer}. *)
+val with_printer
+  :  ('a -> Core.Sexp.t)
+  -> ('a, 'p) Generators.generator
+  -> ('a, Generators.printable) Generators.generator
 
 (** [default_settings ()] creates default test settings with CI auto-detection.
 *)

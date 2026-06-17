@@ -1,7 +1,7 @@
 open Hegel
 open Generators
 
-(* ==== Unit tests (no server needed) ==== *)
+(* ==== Unit tests (no engine needed) ==== *)
 
 let test_span_label_constants () =
   let open Labels in
@@ -194,7 +194,7 @@ let test_map_doubles_e2e () =
   Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
     let gen = integers ~min_value:1 ~max_value:5 () |> map (fun v -> v * 2) in
     Alcotest.(check bool) "still basic" true (is_basic gen);
-    let v = Hegel.draw tc gen in
+    let v = Hegel.draw_silent tc gen in
     assert (v >= 2 && v <= 10);
     assert (v mod 2 = 0))
 ;;
@@ -215,7 +215,7 @@ let test_double_map_e2e () =
        let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
        Alcotest.(check string) "schema type" "integer" typ
      | None -> Alcotest.fail "expected schema");
-    let v = Hegel.draw tc gen in
+    let v = Hegel.draw_silent tc gen in
     assert (List.mem v [ 3; 5; 7; 9; 11 ]))
 ;;
 
@@ -226,11 +226,11 @@ let test_map_on_filtered_e2e () =
       filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ())
       |> map (fun v -> v * 2)
     in
-    let v = Hegel.draw tc gen in
+    let v = Hegel.draw_silent tc gen in
     assert (v > 10 && v <= 20))
 ;;
 
-(** Test: flat_map through server. *)
+(** Test: flat_map through engine. *)
 let test_flat_map_e2e () =
   Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
     let gen =
@@ -239,11 +239,11 @@ let test_flat_map_e2e () =
         (integers ~min_value:1 ~max_value:5 ())
     in
     Alcotest.(check bool) "not basic" false (is_basic gen);
-    let v = Hegel.draw tc gen in
+    let v = Hegel.draw_silent tc gen in
     assert (v >= 0))
 ;;
 
-(** Test: filter through server. *)
+(** Test: filter through engine. *)
 let test_filter_e2e () =
   Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
     let gen = filter (fun v -> v mod 2 = 0) (integers ~min_value:0 ~max_value:100 ()) in
@@ -252,7 +252,7 @@ let test_filter_e2e () =
     assert (v mod 2 = 0))
 ;;
 
-(** Test: filter exhaustion through server (always false → assume false). *)
+(** Test: filter exhaustion through engine (always false → assume false). *)
 let test_filter_exhaustion_e2e () =
   Hegel.run_hegel_test
     ~settings:
@@ -263,7 +263,7 @@ let test_filter_exhaustion_e2e () =
        ignore (Hegel.draw tc gen))
 ;;
 
-(** Test: group helper through server. *)
+(** Test: group helper through engine. *)
 let test_group_e2e () =
   Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
     let v =
@@ -280,7 +280,7 @@ let test_group_e2e () =
     assert (n >= 0 && n <= 10))
 ;;
 
-(** Test: discardable_group through server — success path. *)
+(** Test: discardable_group through engine — success path. *)
 let test_discardable_group_e2e () =
   Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
     let v =
@@ -295,6 +295,145 @@ let test_discardable_group_e2e () =
     in
     let n = Cbor_helpers.extract_int v in
     assert (n >= 0 && n <= 10))
+;;
+
+(** [printer gen] renders [value] to [expected]. ([gen] is printable, so its
+    printer is total — no [option].) *)
+let check_printer name gen value expected =
+  Alcotest.(check string) name expected (Core.Sexp.to_string (printer gen value))
+;;
+
+let test_printer_int () = check_printer "int" (integers ()) 42 "42"
+let test_printer_bool () = check_printer "bool" (booleans ()) true "true"
+let test_printer_text () = check_printer "text" (text ()) "hi" "hi"
+
+(* [filter] is type-preserving, so it delegates to the source's printer. *)
+let test_printer_filter_delegates () =
+  check_printer "filter" (filter (fun _ -> true) (integers ())) 5 "5"
+;;
+
+(* [with_printer] upgrades an unprintable generator (here [map] over a [Basic])
+   to printable using the supplied printer. *)
+let test_with_printer () =
+  check_printer
+    "with_printer"
+    (with_printer Core.Int.sexp_of_t (map (fun v -> v * 2) (integers ())))
+    21
+    "21"
+;;
+
+(* [filter] over an unprintable generator stays unprintable; it can still be
+   drawn via [draw_silent] and reports a non-basic core. *)
+let test_filter_on_unprintable () =
+  let gen = filter (fun _ -> true) (sampled_from [ 1; 2; 3 ]) in
+  Alcotest.(check bool) "not basic" false (is_basic gen)
+;;
+
+(* Lists render via both the engine-side path (basic elements) and the
+   collection path (non-basic but printable elements). *)
+let test_printer_list_basic () =
+  check_printer "list" (lists (integers ()) ()) [ 1; 2; 3 ] "(1 2 3)"
+;;
+
+let test_printer_list_composite () =
+  check_printer
+    "list composite"
+    (lists (filter (fun _ -> true) (integers ())) ())
+    [ 1; 2 ]
+    "(1 2)"
+;;
+
+let test_printer_list_unique_composite () =
+  check_printer
+    "list unique"
+    (lists (filter (fun _ -> true) (integers ())) ~unique:true ())
+    [ 1; 2 ]
+    "(1 2)"
+;;
+
+(* Tuples render via both the all-basic (single schema) and composite paths. *)
+let test_printer_tuple2 () =
+  check_printer "tuple2" (tuples2 (integers ()) (integers ())) (1, 2) "(1 2)"
+;;
+
+let test_printer_tuple2_composite () =
+  check_printer
+    "tuple2 composite"
+    (tuples2 (filter (fun _ -> true) (integers ())) (integers ()))
+    (1, 2)
+    "(1 2)"
+;;
+
+let test_printer_tuple3 () =
+  check_printer
+    "tuple3"
+    (tuples3 (integers ()) (integers ()) (integers ()))
+    (1, 2, 3)
+    "(1 2 3)"
+;;
+
+let test_printer_tuple4 () =
+  check_printer
+    "tuple4"
+    (tuples4 (integers ()) (integers ()) (integers ()) (integers ()))
+    (1, 2, 3, 4)
+    "(1 2 3 4)"
+;;
+
+(* one_of branches share a type, so any branch's printer renders the result. *)
+let test_printer_one_of_basic () =
+  check_printer
+    "one_of basic"
+    (one_of
+       [ integers ~min_value:0 ~max_value:5 (); integers ~min_value:6 ~max_value:9 () ])
+    3
+    "3"
+;;
+
+let test_printer_one_of_composite () =
+  check_printer
+    "one_of composite"
+    (one_of [ filter (fun _ -> true) (integers ()); integers () ])
+    3
+    "3"
+;;
+
+(* Hashmaps render via both the dict-schema (basic) and collection paths. *)
+let test_printer_hashmap_basic () =
+  check_printer
+    "hashmap"
+    (hashmaps (integers ()) (integers ()) ())
+    [ 1, 2; 3, 4 ]
+    "((1 2)(3 4))"
+;;
+
+let test_printer_hashmap_composite () =
+  check_printer
+    "hashmap composite"
+    (hashmaps (filter (fun _ -> true) (integers ())) (integers ()) ())
+    [ 1, 2 ]
+    "((1 2))"
+;;
+
+(* optional composes an ['a option] printer from the element's, rendering
+   [None] / [(Some v)] via [Option.sexp_of_t]. The element being non-basic
+   (here filtered) exercises optional's composite [one_of] path. *)
+(* [Option.sexp_of_t]'s round-trippable form: [(v)] for [Some v], [()] for
+   [None]. *)
+let test_printer_optional_some () =
+  check_printer "optional some" (optional (integers ())) (Some 5) "(5)"
+;;
+
+let test_printer_optional_none () =
+  check_printer "optional none" (optional (integers ())) None "()"
+;;
+
+let test_printer_optional_composite () =
+  check_printer
+    "optional composite"
+    (optional (filter (fun _ -> true) (integers ())))
+    (Some 7)
+    "(7)"
 ;;
 
 let tests =
@@ -351,5 +490,28 @@ let tests =
   ; Alcotest.test_case "filter exhaustion e2e" `Quick test_filter_exhaustion_e2e
   ; Alcotest.test_case "group e2e" `Quick test_group_e2e
   ; Alcotest.test_case "discardable_group e2e" `Quick test_discardable_group_e2e
+  ; Alcotest.test_case "printer int" `Quick test_printer_int
+  ; Alcotest.test_case "printer bool" `Quick test_printer_bool
+  ; Alcotest.test_case "printer text" `Quick test_printer_text
+  ; Alcotest.test_case "printer filter delegates" `Quick test_printer_filter_delegates
+  ; Alcotest.test_case "with_printer" `Quick test_with_printer
+  ; Alcotest.test_case "filter on unprintable" `Quick test_filter_on_unprintable
+  ; Alcotest.test_case "printer list basic" `Quick test_printer_list_basic
+  ; Alcotest.test_case "printer list composite" `Quick test_printer_list_composite
+  ; Alcotest.test_case
+      "printer list unique composite"
+      `Quick
+      test_printer_list_unique_composite
+  ; Alcotest.test_case "printer tuple2" `Quick test_printer_tuple2
+  ; Alcotest.test_case "printer tuple2 composite" `Quick test_printer_tuple2_composite
+  ; Alcotest.test_case "printer tuple3" `Quick test_printer_tuple3
+  ; Alcotest.test_case "printer tuple4" `Quick test_printer_tuple4
+  ; Alcotest.test_case "printer one_of basic" `Quick test_printer_one_of_basic
+  ; Alcotest.test_case "printer one_of composite" `Quick test_printer_one_of_composite
+  ; Alcotest.test_case "printer hashmap basic" `Quick test_printer_hashmap_basic
+  ; Alcotest.test_case "printer hashmap composite" `Quick test_printer_hashmap_composite
+  ; Alcotest.test_case "printer optional some" `Quick test_printer_optional_some
+  ; Alcotest.test_case "printer optional none" `Quick test_printer_optional_none
+  ; Alcotest.test_case "printer optional composite" `Quick test_printer_optional_composite
   ]
 ;;

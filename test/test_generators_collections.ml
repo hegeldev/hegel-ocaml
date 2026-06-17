@@ -38,8 +38,9 @@ let test_lists_basic_no_max_schema () =
 (** Test: lists(basic_elem_with_transform) produces a Basic generator whose
     transform applies the element transform to every item in the result list. *)
 let test_lists_basic_with_element_transform () =
-  (* Build a basic generator with a transform (doubles the value) *)
-  let elem = map (fun v -> v * 2) (integers ()) in
+  (* Build a basic generator with a transform (doubles the value); [with_printer]
+     makes the mapped element drawable/composable while preserving its core. *)
+  let elem = with_printer Core.Int.sexp_of_t (map (fun v -> v * 2) (integers ())) in
   Alcotest.(check bool) "elem is_basic" true (is_basic elem);
   let gen = lists elem () in
   Alcotest.(check bool) "gen is_basic" true (is_basic gen);
@@ -61,13 +62,13 @@ let test_lists_non_basic_is_not_basic () =
 (** Test: lists basic transform raises on non-array input. *)
 let test_lists_basic_non_array_raises () =
   let gen = lists (integers ()) () in
-  match gen with
-  | Basic { transform; _ } ->
+  match as_basic gen with
+  | Some (_, transform) ->
     let raised = ref false in
     (try ignore (transform (`Int 42) : _) with
      | Failure _ -> raised := true);
     Alcotest.(check bool) "raised" true !raised
-  | _ -> Alcotest.fail "expected Basic"
+  | None -> Alcotest.fail "expected Basic"
 ;;
 
 (* ==== Validation tests ==== *)
@@ -223,12 +224,12 @@ let%hegel_test test_lists_non_basic_unique_e2e tc =
 ;;
 
 (** Test: lists(non-basic, unique=true) with impossible constraints terminates
-    via the server's rejection limit instead of hanging. Uses
+    via the engine's rejection limit instead of hanging. Uses
     min_value=max_value=0 so every second element is a guaranteed duplicate,
-    which causes the server to send StopTest after its rejection threshold. *)
+    which causes the engine to send StopTest after its rejection threshold. *)
 let%hegel_test test_lists_non_basic_unique_exhaustion_e2e tc =
   let elem = filter (fun _ -> true) (integers ~min_value:0 ~max_value:0 ()) in
-  (* Asking for ≥2 unique elements from {0} — impossible. The server's
+  (* Asking for ≥2 unique elements from {0} — impossible. The engine's
      many.reject() limit will fire and send StopTest, which
      collection_reject converts to Data_exhausted. *)
   let gen = lists elem ~min_size:2 ~unique:true () in
@@ -260,7 +261,7 @@ let%hegel_test test_hashmaps_non_basic_values_e2e tc =
 ;;
 
 (** Regression: [lists ~unique:true] over a [map] that collapses distinct raw
-    values must not return duplicates post-transform. The server enforces
+    values must not return duplicates post-transform. The engine enforces
     uniqueness on raw values, so a non-injective [map] would yield duplicate
     OCaml values if we took the fast path. The fix routes [unique=true] to
     the dedup path when the element transform isn't known to preserve
@@ -268,7 +269,9 @@ let%hegel_test test_hashmaps_non_basic_values_e2e tc =
 let%hegel_test test_lists_unique_under_map_e2e tc =
   let gen =
     lists
-      (map (fun _ -> 0) (integers ~min_value:0 ~max_value:1 ()))
+      (with_printer
+         Core.Int.sexp_of_t
+         (map (fun _ -> 0) (integers ~min_value:0 ~max_value:1 ())))
       ~min_size:2
       ~max_size:2
       ~unique:true
@@ -287,7 +290,7 @@ let%hegel_test test_lists_unique_under_map_e2e tc =
 
 (** Regression: [hashmaps] with a non-basic key generator must still enforce
     key uniqueness. With keys constrained to a single value, the dedup loop
-    rejects every duplicate; the server's reject limit eventually fires
+    rejects every duplicate; the engine's reject limit eventually fires
     StopTest, which is caught by the test runner and skips the case.*)
 let%hegel_test test_hashmaps_unique_keys_under_filter_e2e tc =
   let gen =

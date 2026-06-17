@@ -1,11 +1,13 @@
-(** PPX deriver for [@@deriving generator].
+(** PPX deriver for [@@deriving hegel_generator].
 
-    Reads OCaml type declarations annotated with [@@deriving generator] and
-    synthesizes generator functions of type [Hegel.Client.test_case -> t].
+    Reads OCaml type declarations annotated with [@@deriving hegel_generator] and
+    synthesizes a value [<t>_generator : (<t>, unprintable) generator].
 
-    When called inside a Hegel test body, these functions generate a value of
-    the declared type by calling [Hegel.draw] with appropriate generators and
-    returning typed OCaml values directly.
+    The generator carries no printer, so a bare [@@deriving hegel_generator] always
+    compiles. Inside a test body, draw it with [Hegel.draw_silent tc
+    <t>_generator]; to print the whole value on a failing replay, add
+    [@@deriving sexp_of] and draw [Hegel.draw tc (Hegel.with_printer
+    sexp_of_<t> <t>_generator)].
 
     Supported types:
     - Records: generates all fields, then constructs the record
@@ -22,8 +24,7 @@
     - [string] -> generates via [text()]
     - [t list] -> generates a list length, then generates each element
     - [t option] -> generates [Some v] or [None]
-    - Named type [t] -> calls [t_generator _hegel_tc] (assumes it exists in
-      scope) *)
+    - Named type [t] -> draws [t_generator] (assumes it exists in scope) *)
 
 open Ppxlib
 
@@ -58,7 +59,7 @@ let rec generate_expr_of_core_type (ct : core_type) : expression =
     let gen_fn =
       Ast_builder.Default.pexp_ident ~loc { txt = Lident (tname ^ "_generator"); loc }
     in
-    [%expr fun _hegel_tc -> [%e gen_fn] _hegel_tc]
+    [%expr fun _hegel_tc -> Hegel.draw_silent _hegel_tc [%e gen_fn]]
   | Ptyp_constr ({ txt = Ldot (modpath, tname); _ }, []) ->
     let rec longident_to_parts = function
       | Longident.Lident s -> [ s ]
@@ -76,14 +77,14 @@ let rec generate_expr_of_core_type (ct : core_type) : expression =
         (List.tl parts @ [ tname ^ "_generator" ])
     in
     let gen_fn = Ast_builder.Default.pexp_ident ~loc { txt = full_lid; loc } in
-    [%expr fun _hegel_tc -> [%e gen_fn] _hegel_tc]
+    [%expr fun _hegel_tc -> Hegel.draw_silent _hegel_tc [%e gen_fn]]
   | _ ->
     (match Ppx_compat.extract_tuple_types ct with
      | Some components -> generate_expr_of_tuple ~loc components
      | None ->
        Location.raise_errorf
          ~loc
-         "ppx_hegel_generator: unsupported type in [@@deriving generator]")
+         "ppx_hegel_generator: unsupported type in [@@deriving hegel_generator]")
 
 (** Generate a [test_case -> (t1 * t2 * ...)] function for a tuple type. *)
 and generate_expr_of_tuple ~loc components =
@@ -248,7 +249,10 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) : express
   [%expr
     fun _hegel_tc ->
       let _variant_idx =
-        Hegel.draw
+        (* [sampled_from] carries no printer; the whole derived value is printed
+           separately below, and these inner draws are nested in a [group] span
+           anyway, so the index draw is silent. *)
+        Hegel.draw_silent
           _hegel_tc
           (Hegel.Generators.sampled_from
              [%e Ast_builder.Default.elist ~loc index_options])
@@ -282,12 +286,17 @@ let generate_impl ~ctxt ((_rec_flag, type_decls) : rec_flag * type_declaration l
          | _, _ ->
            Location.raise_errorf
              ~loc
-             "ppx_hegel_generator: unsupported type kind in [@@deriving generator]"
+             "ppx_hegel_generator: unsupported type kind in [@@deriving hegel_generator]"
        in
-       [%stri let [%p Ast_builder.Default.pvar ~loc gen_name] = [%e gen_expr]])
+       (* [gen_expr] is a [test_case -> t] field-drawing thunk; [composite] wraps it
+          as an unprintable generator (and supplies the surrounding span). *)
+       let generator_expr = [%expr Hegel.Generators.composite [%e gen_expr]] in
+       [%stri let [%p Ast_builder.Default.pvar ~loc gen_name] = [%e generator_expr]])
     type_decls
 ;;
 
 let _deriver =
-  Deriving.add "generator" ~str_type_decl:(Deriving.Generator.V2.make_noarg generate_impl)
+  Deriving.add
+    "hegel_generator"
+    ~str_type_decl:(Deriving.Generator.V2.make_noarg generate_impl)
 ;;
