@@ -123,7 +123,7 @@ val printer : ('a, printable) generator -> 'a -> Core.Sexp.t
     that draws sub-values from the test case and assembles a result — the
     OCaml/imperative counterpart to the schema-driven combinators, useful when a
     value is easiest to describe by drawing its parts in sequence (this is also
-    the form [@@deriving hegel] emits). Carries no printer (the output type
+    the form [@@deriving hegel_generator] emits). Carries no printer (the output type
     is the caller's), so it is {!unprintable}: draw it with {!draw_silent}, or
     {!with_printer} it to draw with {!draw}. *)
 val composite : (Client.test_case -> 'a) -> ('a, unprintable) generator
@@ -161,7 +161,7 @@ val as_basic : ('a, 'p) generator -> (Cbor.t * (Cbor.t -> 'a)) option
 
 (** [basic_unique_safe gen] returns [true] iff [gen] has a [Basic] core whose
     transform is known to preserve distinctness over the schema's value space.
-    Used to decide whether [lists ~unique:true] can take the server-side fast
+    Used to decide whether [lists ~unique:true] can take the engine-side fast
     path or must fall back to client-side dedup. *)
 val basic_unique_safe : ('a, 'p) generator -> bool
 
@@ -261,7 +261,7 @@ val lists
 
 (** [hashmaps keys values ?min_size ?max_size ()] creates a generator for
     dictionaries (hash maps) over printable [keys] and [values]. When both are
-    basic generators, uses the server-side dict schema; when either is
+    basic generators, uses the engine-side dict schema; when either is
     non-basic, falls back to the collection protocol. *)
 val hashmaps
   :  ('a, printable) generator

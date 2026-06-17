@@ -224,12 +224,12 @@ let%hegel_test test_lists_non_basic_unique_e2e tc =
 ;;
 
 (** Test: lists(non-basic, unique=true) with impossible constraints terminates
-    via the server's rejection limit instead of hanging. Uses
+    via the engine's rejection limit instead of hanging. Uses
     min_value=max_value=0 so every second element is a guaranteed duplicate,
-    which causes the server to send StopTest after its rejection threshold. *)
+    which causes the engine to send StopTest after its rejection threshold. *)
 let%hegel_test test_lists_non_basic_unique_exhaustion_e2e tc =
   let elem = filter (fun _ -> true) (integers ~min_value:0 ~max_value:0 ()) in
-  (* Asking for ≥2 unique elements from {0} — impossible. The server's
+  (* Asking for ≥2 unique elements from {0} — impossible. The engine's
      many.reject() limit will fire and send StopTest, which
      collection_reject converts to Data_exhausted. *)
   let gen = lists elem ~min_size:2 ~unique:true () in
@@ -261,7 +261,7 @@ let%hegel_test test_hashmaps_non_basic_values_e2e tc =
 ;;
 
 (** Regression: [lists ~unique:true] over a [map] that collapses distinct raw
-    values must not return duplicates post-transform. The server enforces
+    values must not return duplicates post-transform. The engine enforces
     uniqueness on raw values, so a non-injective [map] would yield duplicate
     OCaml values if we took the fast path. The fix routes [unique=true] to
     the dedup path when the element transform isn't known to preserve
@@ -290,7 +290,7 @@ let%hegel_test test_lists_unique_under_map_e2e tc =
 
 (** Regression: [hashmaps] with a non-basic key generator must still enforce
     key uniqueness. With keys constrained to a single value, the dedup loop
-    rejects every duplicate; the server's reject limit eventually fires
+    rejects every duplicate; the engine's reject limit eventually fires
     StopTest, which is caught by the test runner and skips the case.*)
 let%hegel_test test_hashmaps_unique_keys_under_filter_e2e tc =
   let gen =

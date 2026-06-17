@@ -10,7 +10,7 @@ module Client = Client
 (** Generator combinators for composable test data generation. *)
 module Generators = Generators
 
-(** Runtime support for [@@deriving hegel]. *)
+(** Runtime support for [@@deriving hegel_generator]. *)
 module Derive = Derive
 
 (** Stateful property-based testing on top of {!Generators}. *)

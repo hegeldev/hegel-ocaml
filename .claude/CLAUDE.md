@@ -20,7 +20,7 @@ just check       # Run lint + docs + test (the full CI check)
 - **Formatter**: OCamlFormat 0.28.1 (version pinned in .ocamlformat)
 - **Documentation**: odoc 3.1.0
 - **Package manager**: opam 2.1.5
-- **PPX derivation**: ppxlib 0.35.0 (for `[@@deriving hegel]`)
+- **PPX derivation**: ppxlib 0.35.0 (for `[@@deriving hegel_generator]`)
 
 ## Project Structure
 
@@ -34,7 +34,7 @@ lib/                         # Library source
   cbor_helpers.ml            # CBOR encoding/decoding with type-safe extractors
   client.ml                  # Test runner + run lifecycle on top of Hegel_ffi.Ffi
   generators.ml              # Generator combinators (booleans, integers, lists, …)
-  derive.ml                  # Runtime support for [@@deriving hegel]
+  derive.ml                  # Runtime support for [@@deriving hegel_generator]
   test_runtime/              # Inline-test registry + runner for [let%hegel_test]
     hegel_test_runtime.ml    # Registry, run_all, test_main (called by dune-generated runner)
 
@@ -62,7 +62,7 @@ examples/                    # Example programs demonstrating the library
   basic_properties.ml        # Primitive generators: integers, booleans, floats
   collections.ml             # Collections and combinators: lists, filter, map
   real_world.ml              # Real-world scenario: sorted-merge property test
-  derived_types.ml           # Derived generators via [@@deriving hegel]
+  derived_types.ml           # Derived generators via [@@deriving hegel_generator]
 
 scripts/
   check-coverage.py          # Parses bisect-ppx-report, enforces 100%
@@ -96,7 +96,7 @@ flow were removed in the native-backend migration.
 ### Generator System (generators.ml)
 
 Generators are a discriminated union:
-- **Basic** — holds a raw CBOR schema + optional transform. Calling `map` on a Basic preserves the schema (composes transforms). The server generates the value in one round-trip.
+- **Basic** — holds a raw CBOR schema + optional transform. Calling `map` on a Basic preserves the schema (composes transforms). The engine generates the value in one round-trip.
 - **Mapped** — wraps source + transform function (non-schema-preserving map).
 - **FlatMapped** — wraps source + a function returning a generator. Evaluated recursively inside a `flat_map` span.
 - **Filtered** — wraps source + predicate. Up to `max_filter_attempts` retries before `assume false`.
@@ -135,7 +135,7 @@ binary directly.
 
 The `ppx_hegel_generator` PPX deriver synthesizes a `(<t>, unprintable) generator`
 value named `<t>_generator` from type declarations annotated with
-`[@@deriving hegel]`. The generated code:
+`[@@deriving hegel_generator]`. The generated code:
 
 1. For **records**: generates each field by calling the appropriate primitive
    generator, then constructs the record value.
@@ -147,7 +147,7 @@ value named `<t>_generator` from type declarations annotated with
 
 The PPX emits a `test_case -> t` field-drawing thunk and wraps it with
 `Hegel.Generators.composite`, producing an `(t, unprintable) generator` value —
-no printer is attached, so a bare `[@@deriving hegel]` always compiles. The
+no printer is attached, so a bare `[@@deriving hegel_generator]` always compiles. The
 `Hegel.Derive` module provides runtime helpers for option and list types.
 
 **Usage example:**
@@ -157,10 +157,10 @@ no printer is attached, so a bare `[@@deriving hegel]` always compiles. The
      (inline_tests (backend ppx_hegel_test))
      (preprocess (pps ppx_hegel_generator ppx_hegel_test)) *)
 
-type point = { x : int; y : int } [@@deriving hegel]
-type color = Red | Green | Blue [@@deriving hegel]
+type point = { x : int; y : int } [@@deriving hegel_generator]
+type color = Red | Green | Blue [@@deriving hegel_generator]
 type entity = { name : string; tag : int option; active : bool }
-[@@deriving hegel]
+[@@deriving hegel_generator]
 
 (* Use inside a let%hegel_test body. The derived generators are
    (t, unprintable) generator values, drawn with draw_silent: *)
@@ -189,9 +189,9 @@ through `with_printer`:
 
 ### Collection Protocol
 
-Non-basic list elements use a server-side collection handle:
-1. `new_collection` → server assigns a collection name
-2. `collection_more` → server returns true/false (should we generate another element?)
+Non-basic list elements use a engine-side collection handle:
+1. `new_collection` → engine assigns a collection name
+2. `collection_more` → engine returns true/false (should we generate another element?)
 3. `collection_reject` → undo the last element (used by filter)
 
 ### Entry point
@@ -231,7 +231,7 @@ in an `Exn.protect ~finally`.
 ### Testing
 
 - Every lib module has a corresponding `test/test_<module>.ml`
-- Unit tests use socketpair-based fake servers to avoid depending on the real hegel binary
+- Unit tests use socketpair-based fake engines to avoid depending on the real hegel binary
 - End-to-end tests (tagged `_e2e`) require the real binary and live under the same test file
 - PPX-derived tests live in `test/test_ppx_derive.ml` (separate executable with PPX preprocessing)
 - 100% branch and line coverage is mandatory — no exceptions, no `[@coverage off]`
@@ -240,11 +240,11 @@ in an `Exn.protect ~finally`.
 
 - `Client.Assume_rejected` — raised by `assume false`; mapped to `mark_complete INVALID`
 - `Client.Data_exhausted` — raised when StopTest is received; skips `mark_complete`
-- `Connection.Request_error` — raised on protocol-level errors from the server
+- `Connection.Request_error` — raised on protocol-level errors from the engine
 
 ### Schema Format
 
-The Hegel server speaks CBOR. Generator schemas are CBOR maps:
+The Hegel engine speaks CBOR. Generator schemas are CBOR maps:
 - `{"type": "boolean"}` — booleans
 - `{"type": "integer", "min_value"?: N, "max_value"?: N}` — integers
 - `{"type": "float", "allow_nan": bool, "allow_infinity": bool, "width": 64, "exclude_min": bool, "exclude_max": bool, "min_value"?: f, "max_value"?: f}` — floats
@@ -252,8 +252,8 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
 - `{"type": "binary", "min_size": N, "max_size"?: N}` — binary
 - sampled_from: uses `{"type": "integer", "min_value": 0, "max_value": N-1}` with a map transform to index into the values array
 - `{"type": "list", "elements": schema, "min_size": N, "max_size"?: N}` — lists
-- `{"type": "dict", "keys": schema, "values": schema, "min_size": N, "max_size"?: N}` — dicts (server returns `[[k,v],...]`)
-- `{"constant": null}` — just (constant value; transform ignores server result)
+- `{"type": "dict", "keys": schema, "values": schema, "min_size": N, "max_size"?: N}` — dicts (engine returns `[[k,v],...]`)
+- `{"constant": null}` — just (constant value; transform ignores engine result)
 - `{"type": "regex", "pattern": str, "fullmatch": bool}` — from_regex
 - `{"type": "email"}`, `{"type": "url"}`, `{"type": "domain", "max_length"?: N}` — format generators
 - `{"type": "date"}`, `{"type": "time"}`, `{"type": "datetime"}` — date/time generators
@@ -265,7 +265,7 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
 
 - 100% line coverage is mandatory on library code
 - `scripts/check-coverage.py` parses `bisect-ppx-report summary` output
-- Unreachable server-contract violations use `failwith "..."` (tested via unit tests on the transform)
+- Unreachable engine-contract violations use `failwith "..."` (tested via unit tests on the transform)
 - `[@coverage off]` annotations are never used
 - Only the instrumented `hegel` library is measured; the `hegel_ffi` bindings, examples, and PPX code are not
 
@@ -277,7 +277,7 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
    `test_case -> t` field-drawing thunk and wraps it with
    `Hegel.Generators.composite`, yielding a `(t, unprintable) generator` value
    named `<t>_generator`. It carries no printer (the output type is the user's),
-   so a bare `[@@deriving hegel]` always compiles; draw it with `draw_silent`, or
+   so a bare `[@@deriving hegel_generator]` always compiles; draw it with `draw_silent`, or
    pair it with `[@@deriving sexp_of]` and `with_printer` to print on a failing
    replay. (Earlier revisions emitted a `test_case -> t` thunk drawn by calling
    it directly; the `composite` wrapper replaced that so derived generators
@@ -290,7 +290,7 @@ The Hegel server speaks CBOR. Generator schemas are CBOR maps:
    the manual `Generators.integers ~min_value ~max_value ()` API.
 
 3. **PPX tests need a separate executable**: Because the PPX needs
-   `(preprocess (pps ppx_hegel_generator))`, the test file using `[@@deriving hegel]`
+   `(preprocess (pps ppx_hegel_generator))`, the test file using `[@@deriving hegel_generator]`
    must be in a separate `(test ...)` stanza from the main test suite. Both test
    executables are run by `dune runtest`.
 

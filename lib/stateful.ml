@@ -24,7 +24,7 @@ module Variables = struct
   let is_empty t = Hashtbl.is_empty t.values
 
   (* Resolve a drawn variable id against the local table, removing it when
-     [consume]. The [None] case is a server-contract violation (the engine
+     [consume]. The [None] case is a engine-contract violation (the engine
      returned an id we never registered) and is unreachable through the normal
      engine-driven path, so it is split out here to be unit-testable. *)
   let resolve_drawn values ~consume variable_id =

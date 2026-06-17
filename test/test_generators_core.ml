@@ -1,7 +1,7 @@
 open Hegel
 open Generators
 
-(* ==== Unit tests (no server needed) ==== *)
+(* ==== Unit tests (no engine needed) ==== *)
 
 let test_span_label_constants () =
   let open Labels in
@@ -230,7 +230,7 @@ let test_map_on_filtered_e2e () =
     assert (v > 10 && v <= 20))
 ;;
 
-(** Test: flat_map through server. *)
+(** Test: flat_map through engine. *)
 let test_flat_map_e2e () =
   Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
     let gen =
@@ -243,7 +243,7 @@ let test_flat_map_e2e () =
     assert (v >= 0))
 ;;
 
-(** Test: filter through server. *)
+(** Test: filter through engine. *)
 let test_filter_e2e () =
   Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
     let gen = filter (fun v -> v mod 2 = 0) (integers ~min_value:0 ~max_value:100 ()) in
@@ -252,7 +252,7 @@ let test_filter_e2e () =
     assert (v mod 2 = 0))
 ;;
 
-(** Test: filter exhaustion through server (always false → assume false). *)
+(** Test: filter exhaustion through engine (always false → assume false). *)
 let test_filter_exhaustion_e2e () =
   Hegel.run_hegel_test
     ~settings:
@@ -263,7 +263,7 @@ let test_filter_exhaustion_e2e () =
        ignore (Hegel.draw tc gen))
 ;;
 
-(** Test: group helper through server. *)
+(** Test: group helper through engine. *)
 let test_group_e2e () =
   Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
     let v =
@@ -280,7 +280,7 @@ let test_group_e2e () =
     assert (n >= 0 && n <= 10))
 ;;
 
-(** Test: discardable_group through server — success path. *)
+(** Test: discardable_group through engine — success path. *)
 let test_discardable_group_e2e () =
   Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
     let v =
@@ -329,7 +329,7 @@ let test_filter_on_unprintable () =
   Alcotest.(check bool) "not basic" false (is_basic gen)
 ;;
 
-(* Lists render via both the server-side path (basic elements) and the
+(* Lists render via both the engine-side path (basic elements) and the
    collection path (non-basic but printable elements). *)
 let test_printer_list_basic () =
   check_printer "list" (lists (integers ()) ()) [ 1; 2; 3 ] "(1 2 3)"

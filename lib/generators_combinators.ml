@@ -17,7 +17,7 @@ let sampled_from options =
 
 (** [one_of_core cores] builds the generation structure that picks among
     [cores]. When every core is [Basic], a single [one_of] schema is used and
-    the server's [[index, value]] response selects the branch transform.
+    the engine's [[index, value]] response selects the branch transform.
     Otherwise an index is drawn inside a {!Labels.one_of} span and that branch
     is generated compositionally. *)
 let one_of_core : type a. a core list -> a core =
@@ -45,16 +45,16 @@ let one_of_core : type a. a core list -> a core =
             do_draw gens.(idx) data)
       })
   else (
-    (* Basic path: one_of schema with raw child schemas. The server returns
+    (* Basic path: one_of schema with raw child schemas. The engine returns
        [index, value]; dispatch through the per-branch transform table. *)
     let child_schemas = List.map basics ~f:fst in
     let transforms = Array.of_list (List.map basics ~f:snd) in
     let dispatch raw =
       match raw with
       | `Array [ raw_idx; value ] -> transforms.(Cbor_helpers.extract_int raw_idx) value
-      | _ -> failwith "one_of: expected [index, value] from server"
+      | _ -> failwith "one_of: expected [index, value] from engine"
     in
-    (* Distinct raw [index, value] pairs from the server can map to the same
+    (* Distinct raw [index, value] pairs from the engine can map to the same
        OCaml value when two branches produce overlapping outputs, so the
        dispatch transform is not known to preserve uniqueness. *)
     Basic
@@ -133,7 +133,7 @@ let tuples2 (type a b) (g1 : (a, printable) generator) (g2 : (b, printable) gene
             (fun raw ->
               match raw with
               | `Array [ v1; v2 ] -> t1 v1, t2 v2
-              | _ -> failwith "tuples2: expected 2-element array from server")
+              | _ -> failwith "tuples2: expected 2-element array from engine")
         ; unique_safe = basic_unique_safe g1 && basic_unique_safe g2
         }
     | _ ->
@@ -174,7 +174,7 @@ let tuples3
             (fun raw ->
               match raw with
               | `Array [ v1; v2; v3 ] -> t1 v1, t2 v2, t3 v3
-              | _ -> failwith "tuples3: expected 3-element array from server")
+              | _ -> failwith "tuples3: expected 3-element array from engine")
         ; unique_safe =
             basic_unique_safe g1 && basic_unique_safe g2 && basic_unique_safe g3
         }
@@ -223,7 +223,7 @@ let tuples4
             (fun raw ->
               match raw with
               | `Array [ v1; v2; v3; v4 ] -> t1 v1, t2 v2, t3 v3, t4 v4
-              | _ -> failwith "tuples4: expected 4-element array from server")
+              | _ -> failwith "tuples4: expected 4-element array from engine")
         ; unique_safe =
             basic_unique_safe g1
             && basic_unique_safe g2

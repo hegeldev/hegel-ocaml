@@ -1,4 +1,4 @@
-(** Tests for the [@@deriving hegel] PPX.
+(** Tests for the [@@deriving hegel_generator] PPX.
 
     These tests exercise the PPX-generated code for:
     - Record types (product types)
@@ -18,7 +18,7 @@ type point =
   { x : int
   ; y : int
   }
-[@@deriving hegel]
+[@@deriving hegel_generator]
 
 (** A record with three different-typed fields. *)
 type person =
@@ -26,55 +26,55 @@ type person =
   ; age : int
   ; active : bool
   }
-[@@deriving hegel]
+[@@deriving hegel_generator]
 
 (** A variant with no-arg constructors. *)
 type color =
   | Red
   | Green
   | Blue
-[@@deriving hegel]
+[@@deriving hegel_generator]
 
 (** A variant with arguments. *)
 type shape =
   | Circle of float
   | Rectangle of int * int
   | Point
-[@@deriving hegel]
+[@@deriving hegel_generator]
 
 (** A type alias to int. *)
-type score = int [@@deriving hegel]
+type score = int [@@deriving hegel_generator]
 
 (** A single-field record. *)
-type wrapper = { value : int } [@@deriving hegel]
+type wrapper = { value : int } [@@deriving hegel_generator]
 
 (** A type with an option field. *)
-type maybe_int = { data : int option } [@@deriving hegel]
+type maybe_int = { data : int option } [@@deriving hegel_generator]
 
 (** A nested derived type: record containing another derived record. *)
 type line_segment =
   { start_pt : point
   ; end_pt : point
   }
-[@@deriving hegel]
+[@@deriving hegel_generator]
 
 (** A variant with a tuple argument. *)
 type pair_or_single =
   | Pair of int * int
   | Single of int
-[@@deriving hegel]
+[@@deriving hegel_generator]
 
 (** A type alias to bool. *)
-type flag = bool [@@deriving hegel]
+type flag = bool [@@deriving hegel_generator]
 
 (** A type alias to float. *)
-type temperature = float [@@deriving hegel]
+type temperature = float [@@deriving hegel_generator]
 
 (** A type alias to string. *)
-type label = string [@@deriving hegel]
+type label = string [@@deriving hegel_generator]
 
 (** A type with a list field. *)
-type int_list_wrapper = { items : int list } [@@deriving hegel]
+type int_list_wrapper = { items : int list } [@@deriving hegel_generator]
 
 (* ==== Tests ==== *)
 

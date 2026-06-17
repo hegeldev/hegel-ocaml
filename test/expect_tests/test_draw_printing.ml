@@ -205,14 +205,14 @@ let%expect_test
 
 (* indent inner draws in a step *)
 
-(* [@@deriving hegel] emits an unprintable generator value. Adding
+(* [@@deriving hegel_generator] emits an unprintable generator value. Adding
    [@@deriving sexp_of] and drawing through [with_printer] prints the whole value
-   as one sexp; a bare [@@deriving hegel] drawn with [draw_silent] prints
+   as one sexp; a bare [@@deriving hegel_generator] drawn with [draw_silent] prints
    nothing. *)
 
-type only = Only [@@deriving sexp_of, hegel]
-type wrap = { tag : only } [@@deriving sexp_of, hegel]
-type bare = Bare [@@deriving hegel]
+type only = Only [@@deriving sexp_of, hegel_generator]
+type wrap = { tag : only } [@@deriving sexp_of, hegel_generator]
+type bare = Bare [@@deriving hegel_generator]
 
 let%expect_test "a derived value prints as one sexp via with_printer" =
   run_failing (fun tc ->
@@ -234,7 +234,9 @@ let%expect_test "a nested derived record prints as one sexp via with_printer" =
     |}]
 ;;
 
-let%expect_test "a bare [@@deriving hegel] drawn with draw_silent prints nothing" =
+let%expect_test
+    "a bare [@@deriving hegel_generator] drawn with draw_silent prints nothing"
+  =
   run_failing (fun tc ->
     let _ = Hegel.draw_silent tc bare_generator in
     assert false);

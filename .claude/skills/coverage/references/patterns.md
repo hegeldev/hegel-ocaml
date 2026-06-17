@@ -25,7 +25,7 @@ let process state =
 ```
 
 `failwith "unreachable: ..."` documents intent and will raise `Failure` if your
-assumption is wrong. This project uses `failwith "..."` for server-contract
+assumption is wrong. This project uses `failwith "..."` for engine-contract
 violations that are unreachable under correct behavior — see `cbor_helpers.ml`
 for the canonical pattern. Never use `[@coverage off]` to silence these branches.
 

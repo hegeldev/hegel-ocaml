@@ -5,7 +5,7 @@ open Generators_core
     dictionaries (hash maps) over printable [keys] and [values].
 
     When both [keys] and [values] are basic generators, sends a [dict] schema to
-    the server (fast path). When either is non-basic, uses the collection
+    the engine (fast path). When either is non-basic, uses the collection
     protocol to generate key-value pairs one at a time. *)
 let hashmaps
       (keys : ('a, printable) generator)
@@ -46,8 +46,8 @@ let hashmaps
         | `Array kv_pairs ->
           List.map kv_pairs ~f:(function
             | `Array [ k; v ] -> key_transform k, val_transform v
-            | _ -> failwith "hashmaps: expected [k, v] pair from server")
-        | _ -> failwith "hashmaps: expected array from server"
+            | _ -> failwith "hashmaps: expected [k, v] pair from engine")
+        | _ -> failwith "hashmaps: expected array from engine"
       in
       Basic
         { schema = `Map pairs
@@ -84,13 +84,13 @@ let hashmaps
 (** [lists elements ?min_size ?max_size ?unique ()] creates a generator for
     lists of printable [elements].
 
-    When [elements] is a [Basic] generator, sends a [list] schema to the server
+    When [elements] is a [Basic] generator, sends a [list] schema to the engine
     and lets it generate the entire list (fast path). When [elements] is
     non-basic (e.g. filtered or flat-mapped), uses the collection protocol
     inside a {!Labels.list} span to generate elements one at a time.
 
     When [unique] is [true], the generated list will contain only distinct
-    elements. For basic elements this is handled server-side; for non-basic
+    elements. For basic elements this is handled engine-side; for non-basic
     elements, duplicates are rejected via the collection protocol. *)
 let lists
       (elements : ('a, printable) generator)
@@ -115,9 +115,9 @@ let lists
     match as_basic_core (core_of elements) with
     | Some (elem_schema, elem_transform) when (not unique) || basic_unique_safe elements
       ->
-      (* Server-side uniqueness is only safe when the element transform
+      (* engine-side uniqueness is only safe when the element transform
          preserves distinctness (i.e. is injective). Otherwise distinct raw
-         values from the server can collapse to the same OCaml value, leaving
+         values from the engine can collapse to the same OCaml value, leaving
          the post-transform list with duplicates. When that happens we fall
          through to the [unique]-aware dedup path below. *)
       let pairs =
@@ -132,7 +132,7 @@ let lists
       let list_transform raw_list =
         match raw_list with
         | `Array items -> List.map items ~f:elem_transform
-        | _ -> failwith "Internal error: server returned non-array for list schema"
+        | _ -> failwith "Internal error: engine returned non-array for list schema"
       in
       Basic
         { schema = `Map pairs
@@ -146,7 +146,7 @@ let lists
         CompositeList { elements = core_of elements; min_size; max_size }
       else
         (* Non-basic with uniqueness: use Composite with collection protocol
-           and duplicate rejection. The server's own rejection limit (via
+           and duplicate rejection. The engine's own rejection limit (via
            [many.reject]) will send StopTest when too many duplicates occur,
            which [collection_reject] converts to [Data_exhausted]. *)
         Composite

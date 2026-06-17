@@ -44,12 +44,12 @@ let v =
   Hegel.draw tc (with_printer sexp_of_int (sampled_from [ 10; 20; 30 ]))
 ```
 
-**`[@@deriving generator]` is now `[@@deriving hegel]`, and emits a generator
+**`[@@deriving generator]` is now `[@@deriving hegel_generator]`, and emits a generator
 value.** The deriver previously produced a `test_case -> t` function; it now
 produces a `(t, unprintable) generator` value named `<t>_generator`.
 
 ```ocaml
-type point = { x : int; y : int } [@@deriving hegel]
+type point = { x : int; y : int } [@@deriving hegel_generator]
 
 (* before: let p = point_generator tc *)
 let p = Hegel.draw_silent tc point_generator
@@ -58,7 +58,7 @@ let p = Hegel.draw_silent tc point_generator
 To print a value from a derived generator:
 
 ```ocaml
-type point = { x : int; y : int } [@@deriving hegel]
+type point = { x : int; y : int } [@@deriving hegel_generator]
 
 let sexp_of_point p = ...
 

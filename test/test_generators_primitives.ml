@@ -40,12 +40,12 @@ let test_just_schema () =
   | None -> Alcotest.fail "expected schema"
 ;;
 
-(** Test: just transform ignores server value. *)
+(** Test: just transform ignores engine value. *)
 let test_just_transform () =
   let gen = just "hello" in
   match as_basic gen with
   | Some (_, transform) ->
-    Alcotest.(check string) "ignores server" "hello" (transform (`Int 999))
+    Alcotest.(check string) "ignores engine" "hello" (transform (`Int 999))
   | None -> Alcotest.fail "expected Basic"
 ;;
 

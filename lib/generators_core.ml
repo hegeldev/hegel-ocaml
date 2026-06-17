@@ -135,7 +135,7 @@ let printer : type a. (a, printable) generator -> a -> Sexp.t =
     The draws run inside a span, so they are suppressed on the final replay and
     only an outer [draw] of the whole value prints. Carries no printer (the
     output type is the caller's); use {!with_printer} to draw it with {!draw}.
-    This is the form [@@deriving hegel] emits. *)
+    This is the form [@@deriving hegel_generator] emits. *)
 let composite generate_fn =
   Unprintable { core = Composite { label = Labels.fixed_dict; generate_fn } }
 ;;
@@ -398,7 +398,7 @@ let as_basic : type a p. (a, p) generator -> (Cbor.t * (Cbor.t -> a)) option =
 (** [basic_unique_safe gen] returns [true] iff [gen] has a [Basic] core whose
     transform is known to preserve distinctness (i.e. is injective over the
     schema's value space). Used by [lists ~unique:true] to decide between the
-    server-side fast path and the client-side dedup fallback. *)
+    engine-side fast path and the client-side dedup fallback. *)
 let basic_unique_safe : type a p. (a, p) generator -> bool =
   fun gen ->
   match core_of gen with

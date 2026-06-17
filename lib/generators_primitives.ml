@@ -30,9 +30,9 @@ let booleans () =
 (** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
      ?allow_infinity ()] creates a generator for floating-point values.
 
-    Uses schema type ["float"] as required by the Hegel server. The fields
+    Uses schema type ["float"] as required by the Hegel engine. The fields
     [allow_nan], [allow_infinity], [exclude_min], [exclude_max], and [width] are
-    always sent (required by the server). Defaults follow Hypothesis:
+    always sent (required by the engine). Defaults follow Hypothesis:
     - [allow_nan]: [true] only when no bounds are set
     - [allow_infinity]: [true] when at most one bound is set *)
 let floats
@@ -151,7 +151,7 @@ let char_filter_schema_pairs
      ?exclude_categories ?include_characters ?exclude_characters ?alphabet ()]
     creates a generator for Unicode text strings.
 
-    Uses schema type ["string"] as required by the Hegel server. Character
+    Uses schema type ["string"] as required by the Hegel engine. Character
     filtering options restrict which characters may appear. The [alphabet]
     parameter is mutually exclusive with all individual character filtering
     parameters. Surrogate codepoints (category Cs) are always excluded since
@@ -291,7 +291,7 @@ let binary ?(min_size = 0) ?max_size () =
 
 (** [just value] creates a generator that always produces [value].
 
-    The schema uses [{"constant": null}] and the transform ignores the server
+    The schema uses [{"constant": null}] and the transform ignores the engine
     result, returning the constant [value]. The output type is chosen by the
     caller, so no printer is carried. *)
 let just value =
