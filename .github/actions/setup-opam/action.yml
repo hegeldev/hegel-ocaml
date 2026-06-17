@@ -82,4 +82,8 @@ runs:
         DEPS_FLAGS: ${{ inputs.deps-flags }}
       run: |
         eval $(opam env)
-        opam install . --deps-only $DEPS_FLAGS --yes
+        # --confirm-level=unsafe-yes lets opam run the system package manager
+        # (e.g. brew on macOS, to install libffi for ctypes) non-interactively;
+        # plain --yes refuses to invoke it and aborts with exit 10. It implies
+        # "yes", so --yes is dropped. No-op when no depexts are missing (Linux).
+        opam install . --deps-only $DEPS_FLAGS --confirm-level=unsafe-yes
