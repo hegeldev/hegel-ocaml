@@ -21,6 +21,16 @@ let test_integers_in_range () =
     assert (v >= 0 && v <= 100))
 ;;
 
+(** Test: unbounded integers() E2E — the engine requires a [min_value], so the
+    generator must supply default bounds; values stay within OCaml's native int. *)
+let test_integers_unbounded_e2e () =
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:20 ()) (fun tc ->
+    let v = Hegel.draw tc (integers ()) in
+    assert (v >= Core.Int.min_value && v <= Core.Int.max_value);
+    let xs = Hegel.draw tc (lists (integers ()) ()) in
+    assert (List.for_all (fun n -> n >= Core.Int.min_value && n <= Core.Int.max_value) xs))
+;;
+
 (** Test: just schema is constant null. *)
 let test_just_schema () =
   let gen = just 42 in
@@ -455,6 +465,29 @@ let test_characters_with_categories () =
 
 (* ==== E2E tests ==== *)
 
+(** Test: default floats() E2E — the unbounded default (where allow_nan and
+    allow_infinity default to true) produces a valid schema the engine accepts.
+    The value may be NaN/infinity, so we only require that a draw succeeds. *)
+let test_floats_default_e2e () =
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:20 ()) (fun tc ->
+    let (_ : float) = Hegel.draw tc (floats ()) in
+    ())
+;;
+
+(** Test: default text() E2E — the default form omits max_size *)
+let test_text_default_e2e () =
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:20 ()) (fun tc ->
+    let s = Hegel.draw tc (text ()) in
+    assert (String.length s >= 0))
+;;
+
+(** Test: default binary() E2E — the default form omits max_size *)
+let test_binary_default_e2e () =
+  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:20 ()) (fun tc ->
+    let b = Hegel.draw tc (binary ()) in
+    assert (String.length b >= 0))
+;;
+
 (** Test: just always returns the constant. *)
 let test_just_e2e () =
   Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
@@ -516,6 +549,7 @@ let test_datetimes_e2e () =
 let tests =
   [ Alcotest.test_case "booleans schema" `Quick test_booleans_schema
   ; Alcotest.test_case "integers in range" `Quick test_integers_in_range
+  ; Alcotest.test_case "integers unbounded e2e" `Quick test_integers_unbounded_e2e
   ; Alcotest.test_case "just schema" `Quick test_just_schema
   ; Alcotest.test_case "just transform" `Quick test_just_transform
   ; Alcotest.test_case "from_regex schema" `Quick test_from_regex_schema
@@ -589,6 +623,9 @@ let tests =
   ; Alcotest.test_case "characters schema" `Quick test_characters_schema
   ; Alcotest.test_case "characters with codec" `Quick test_characters_with_codec
   ; Alcotest.test_case "characters with categories" `Quick test_characters_with_categories
+  ; Alcotest.test_case "floats default e2e" `Quick test_floats_default_e2e
+  ; Alcotest.test_case "text default e2e" `Quick test_text_default_e2e
+  ; Alcotest.test_case "binary default e2e" `Quick test_binary_default_e2e
   ; Alcotest.test_case "just e2e" `Quick test_just_e2e
   ; Alcotest.test_case "from_regex e2e" `Quick test_from_regex_e2e
   ; Alcotest.test_case "emails e2e" `Quick test_emails_e2e

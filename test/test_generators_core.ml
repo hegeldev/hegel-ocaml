@@ -43,7 +43,13 @@ let test_basic_generator_no_bounds () =
   match schema gen with
   | Some s ->
     let pairs = Cbor_helpers.extract_dict s in
-    Alcotest.(check int) "pairs count" 1 (List.length pairs)
+    (* Unbounded integers still carry default min/max bounds (required by the
+       engine), so the schema has type + min_value + max_value. *)
+    Alcotest.(check int) "pairs count" 3 (List.length pairs);
+    let min_v = Cbor_helpers.extract_int (List.assoc (`Text "min_value") pairs) in
+    Alcotest.(check int) "default min_value" Core.Int.min_value min_v;
+    let max_v = Cbor_helpers.extract_int (List.assoc (`Text "max_value") pairs) in
+    Alcotest.(check int) "default max_value" Core.Int.max_value max_v
   | None -> Alcotest.fail "expected schema"
 ;;
 

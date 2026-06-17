@@ -2,18 +2,19 @@ open! Core
 open Generators_core
 
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
-    the given bounds. *)
-let integers ?min_value ?max_value () =
-  (match min_value, max_value with
-   | Some min, Some max when min > max ->
-     raise (Invalid_argument (sprintf "Cannot have max_value=%d < min_value=%d" max min))
-   | _ -> ());
+    the given bounds. When a bound is omitted it defaults to the corresponding
+    OCaml native [int] limit. *)
+let integers ?(min_value = Int.min_value) ?(max_value = Int.max_value) () =
+  if min_value > max_value
+  then
+    raise
+      (Invalid_argument
+         (sprintf "Cannot have max_value=%d < min_value=%d" max_value min_value));
   let pairs =
-    List.filter_opt
-      [ Some (`Text "type", `Text "integer")
-      ; Option.map min_value ~f:(fun v -> `Text "min_value", `Int v)
-      ; Option.map max_value ~f:(fun v -> `Text "max_value", `Int v)
-      ]
+    [ `Text "type", `Text "integer"
+    ; `Text "min_value", `Int min_value
+    ; `Text "max_value", `Int max_value
+    ]
   in
   basic ~schema:(`Map pairs) ~transform:Cbor_helpers.extract_int ~sexp_of:sexp_of_int ()
 ;;
