@@ -28,45 +28,11 @@ jobs:
         with:
           tools: just
 
-      - name: Install opam
-        run: |
-          OPAM_VERSION="2.2.1"
-          curl -fsSL \
-            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-x86_64-linux" \
-            -o /usr/local/bin/opam
-          chmod +x /usr/local/bin/opam
-          opam --version
-
-      - name: Cache opam
-        id: cache-opam
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: ./.github/actions/setup-opam
         with:
-          path: ~/.opam
-          key: opam-${{ runner.os }}-lint-${{ hashFiles('*.opam', '.ocamlformat') }}
-          restore-keys: |
+          cache-key: opam-${{ runner.os }}-lint-${{ hashFiles('*.opam', '.ocamlformat') }}
+          cache-restore-keys: |
             opam-${{ runner.os }}-lint-
-
-      - name: Set up OCaml
-        if: steps.cache-opam.outputs.cache-hit != 'true'
-        run: |
-          # Cache may be partially restored via restore-keys (a different key
-          # prefix matched); guard each step so it's idempotent.
-          if [ ! -d "$HOME/.opam" ]; then
-            opam init --disable-sandboxing --yes
-          fi
-          if ! opam switch list --short 2>/dev/null | grep -q '^5.2.1$'; then
-            opam switch create 5.2.1 --yes
-          fi
-
-      - name: Set opam environment
-        run: |
-          echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
-          echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
-
-      - name: Install OCaml dependencies
-        run: |
-          eval $(opam env)
-          opam install . --deps-only --yes
 
       - name: Install ocamlformat
         run: |
@@ -101,45 +67,12 @@ jobs:
         with:
           tools: just
 
-      - name: Install opam
-        run: |
-          OPAM_VERSION="2.2.1"
-          curl -fsSL \
-            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-x86_64-linux" \
-            -o /usr/local/bin/opam
-          chmod +x /usr/local/bin/opam
-          opam --version
-
-      - name: Cache opam
-        id: cache-opam
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: ./.github/actions/setup-opam
         with:
-          path: ~/.opam
-          key: opam-${{ runner.os }}-with-test-${{ hashFiles('*.opam') }}
-          restore-keys: |
+          cache-key: opam-${{ runner.os }}-with-test-${{ hashFiles('*.opam') }}
+          cache-restore-keys: |
             opam-${{ runner.os }}-with-test-
-
-      - name: Set up OCaml
-        if: steps.cache-opam.outputs.cache-hit != 'true'
-        run: |
-          # Cache may be partially restored via restore-keys (a different key
-          # prefix matched); guard each step so it's idempotent.
-          if [ ! -d "$HOME/.opam" ]; then
-            opam init --disable-sandboxing --yes
-          fi
-          if ! opam switch list --short 2>/dev/null | grep -q '^5.2.1$'; then
-            opam switch create 5.2.1 --yes
-          fi
-
-      - name: Set opam environment
-        run: |
-          echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
-          echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
-
-      - name: Install OCaml dependencies
-        run: |
-          eval $(opam env)
-          opam install . --deps-only --with-test --yes
+          deps-flags: --with-test
 
       - name: Stage libhegel from the matching GitHub release
         id: libhegel
@@ -174,45 +107,12 @@ jobs:
         with:
           tools: just
 
-      - name: Install opam
-        run: |
-          OPAM_VERSION="2.2.1"
-          curl -fsSL \
-            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-x86_64-linux" \
-            -o /usr/local/bin/opam
-          chmod +x /usr/local/bin/opam
-          opam --version
-
-      - name: Cache opam
-        id: cache-opam
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: ./.github/actions/setup-opam
         with:
-          path: ~/.opam
-          key: opam-${{ runner.os }}-with-doc-${{ hashFiles('*.opam') }}
-          restore-keys: |
+          cache-key: opam-${{ runner.os }}-with-doc-${{ hashFiles('*.opam') }}
+          cache-restore-keys: |
             opam-${{ runner.os }}-with-doc-
-
-      - name: Set up OCaml
-        if: steps.cache-opam.outputs.cache-hit != 'true'
-        run: |
-          # Cache may be partially restored via restore-keys (a different key
-          # prefix matched); guard each step so it's idempotent.
-          if [ ! -d "$HOME/.opam" ]; then
-            opam init --disable-sandboxing --yes
-          fi
-          if ! opam switch list --short 2>/dev/null | grep -q '^5.2.1$'; then
-            opam switch create 5.2.1 --yes
-          fi
-
-      - name: Set opam environment
-        run: |
-          echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
-          echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
-
-      - name: Install OCaml dependencies
-        run: |
-          eval $(opam env)
-          opam install . --deps-only --with-doc --yes
+          deps-flags: --with-doc
 
       - name: Check docs
         run: just check-docs
@@ -258,51 +158,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install opam
-        shell: bash
-        run: |
-          OPAM_VERSION="2.2.1"
-          ARCH=$(uname -m)
-          mkdir -p "$HOME/.local/bin"
-          curl -fsSL \
-            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-${ARCH}-macos" \
-            -o "$HOME/.local/bin/opam"
-          chmod +x "$HOME/.local/bin/opam"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/opam" --version
-
-      - name: Cache opam
-        id: cache-opam
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: ./.github/actions/setup-opam
         with:
-          path: ~/.opam
-          key: opam-${{ runner.os }}-smoke-${{ hashFiles('*.opam') }}
-          restore-keys: |
+          cache-key: opam-${{ runner.os }}-smoke-${{ hashFiles('*.opam') }}
+          cache-restore-keys: |
             opam-${{ runner.os }}-smoke-
-
-      - name: Set up OCaml
-        if: steps.cache-opam.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          # Cache may be partially restored via restore-keys (a different key
-          # prefix matched); guard each step so it's idempotent.
-          if [ ! -d "$HOME/.opam" ]; then
-            opam init --bare --disable-sandboxing --yes
-          fi
-          if ! opam switch list --short 2>/dev/null | grep -q '^5.2.1$'; then
-            opam switch create 5.2.1 --yes
-          fi
-
-      - name: Set opam environment
-        run: |
-          echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
-          echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
-
-      - name: Install OCaml dependencies
-        shell: bash
-        run: |
-          eval $(opam env)
-          opam install . --deps-only --with-test --yes
+          deps-flags: --with-test
+          bare: "true"
 
       - name: Stage libhegel from the matching GitHub release
         id: libhegel
