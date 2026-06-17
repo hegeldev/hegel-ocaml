@@ -64,6 +64,10 @@ check-tests-no-coverage:
     ./_build/default/test/test_ppx_derive.exe
     ./_build/default/test/test_ppx_hegel_test.exe
     ./_build/default/test/test_hegel.exe
+    # ppx_expect tests are an inline-tests library (no standalone exe), so run
+    # them through dune. --force ensures they execute even if dune considers
+    # them cached.
+    dune runtest test/expect_tests --force
 
 # these aliases are provided as ux improvements for local developers. CI should use the longer
 # forms.
