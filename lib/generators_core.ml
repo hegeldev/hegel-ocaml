@@ -17,7 +17,16 @@ module Labels = struct
   let mapped = 13
   let sampled_from = 14
   let enum_variant = 15
-  let stateful_rule = 16
+
+  (* Labels 1-15 above mirror the engine's `HEGEL_LABEL_*` generator
+     constants. 16 is the engine's internal `HEGEL_LABEL_FEATURE_FLAG` (swarm
+     rule-enable flags), so the stateful-rule span must avoid it: sharing a
+     label makes span mutation lump per-step spans together with per-flag spans
+     into one mixed-length group, whose length-changing mutations shift the
+     replayed choice sequence and misalign stop signals. Use 17, the first free
+     label past the engine's range. *)
+  let _feature_flag = 16
+  let stateful_rule = 17
 end
 
 (** The pure generation structure of a generator, carrying no printer. A
