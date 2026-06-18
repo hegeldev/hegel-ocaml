@@ -81,6 +81,7 @@ let run ~init ~rules ?(invariants = []) tc =
         ~invariant_names
     in
     let run_invariants state = List.iter invariants ~f:(fun inv -> inv state) in
+    run_invariants init;
     let max_steps = if is_single then Int.max_value else tc.Client.stateful_step_count in
     (* We basically always want to run the maximum number of steps, but leave a
        small probability of terminating early so the shrinker can reduce the

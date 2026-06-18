@@ -185,30 +185,38 @@ let test_stateful_bounded_steps () =
 
 (* Swarm testing: with many rules, the engine enables a random subset (at least
    one) per test case, so some test cases leave a single rule enabled and every
-   step picks that survivor. A long consecutive chain of
-   one rule arises naturally, without the caller weighting anything. With 11
+   step picks that survivor — a chain as long as the whole step budget. With 11
    rules under uniform selection a run of 20 identical choices is astronomically
-   unlikely ((1/11)^19); under swarm it shows up readily across test cases. *)
+   unlikely ((1/11)^19); under swarm it shows up across test cases.
+ *)
 let test_swarm_long_single_rule_run () =
   let module S = Hegel.Stateful in
-  let longest_run = ref 0 in
+  (* Per-test-case state: the longest run of one identical rule choice in the
+     current case. *)
+  let case_longest = ref 0 in
   let last_rule = ref None in
   let current_run = ref 0 in
+  let long_run_cases = ref 0 in
   let make i =
     S.Rule.create ~name:(Printf.sprintf "rule_%d" i) ~step:(fun _tc () ->
       (match !last_rule with
        | Some j when j = i -> incr current_run
        | _ -> current_run := 1);
       last_rule := Some i;
-      if !current_run > !longest_run then longest_run := !current_run)
+      if !current_run > !case_longest then case_longest := !current_run)
   in
   let rules = List.init 11 ~f:make in
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:200 ~seed:0 ()) (fun tc ->
     (* Reset per test case so a run can't bleed across cases. *)
     last_rule := None;
     current_run := 0;
-    S.run ~init:() ~rules tc);
-  Alcotest.(check bool) "swarm produces a long single-rule chain" true (!longest_run >= 20)
+    case_longest := 0;
+    S.run ~init:() ~rules tc;
+    if !case_longest >= 20 then incr long_run_cases);
+  Alcotest.(check bool)
+    "swarm produces a recurring long single-rule chain"
+    true
+    (!long_run_cases >= 5)
 ;;
 
 let tests =
