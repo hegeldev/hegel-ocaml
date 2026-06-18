@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 - 2026-06-17
+
+This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.19.1](https://github.com/hegeldev/hegel-rust/releases/tag/v0.19.1) to [0.19.2](https://github.com/hegeldev/hegel-rust/releases/tag/v0.19.2).
+
 ## 0.6.0 - 2026-06-17
 
 This release makes Hegel print the values it drew as s-expressions when a test fails. 
