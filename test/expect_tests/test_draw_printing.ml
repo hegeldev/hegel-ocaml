@@ -378,7 +378,8 @@ let%expect_test "verbose prints draws on a passing run" =
     (fun tc ->
        let _ = Hegel.draw tc (integers ~min_value:5 ~max_value:5 ()) in
        ());
-  [%expect {|
+  [%expect
+    {|
     Starting phase: Generate
     draw_1 = 5
     Ending phase: Generate
