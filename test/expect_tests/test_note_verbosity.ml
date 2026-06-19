@@ -43,6 +43,7 @@ let%expect_test "Verbose notes on every case (not just the final replay)" =
   run_passing Verbose;
   [%expect
     {|
+    Starting phase: Generate
     draw_1 = 0
     NOTE_MARKER
     Running test case
@@ -57,6 +58,7 @@ let%expect_test "Verbose notes on every case (not just the final replay)" =
     Running test case
     draw_1 = 41
     NOTE_MARKER
+    Ending phase: Generate
     |}]
 ;;
 
@@ -64,6 +66,7 @@ let%expect_test "Debug notes on every case (not just the final replay)" =
   run_passing Debug;
   [%expect
     {|
+    Starting phase: Generate
     draw_1 = 0
     NOTE_MARKER
     draw_1 = 59
@@ -78,6 +81,7 @@ let%expect_test "Debug notes on every case (not just the final replay)" =
     draw_1 = 41
     NOTE_MARKER
     test case #5: status = Valid, choices = 1
+    Ending phase: Generate
     Test done. interesting_test_cases=0
     |}]
 ;;
