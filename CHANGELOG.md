@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.3 - 2026-06-19
+
+This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.19.2](https://github.com/hegeldev/hegel-rust/releases/tag/v0.19.2) to [0.21.2](https://github.com/hegeldev/hegel-rust/releases/tag/v0.21.2).
+
 ## 0.6.2 - 2026-06-18
 
 This patch fixes a bug that caused stateful test generation to terminate early.
