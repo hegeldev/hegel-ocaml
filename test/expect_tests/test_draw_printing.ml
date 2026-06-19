@@ -194,9 +194,11 @@ let%expect_test
        Stateful.run ~init:() ~rules:[ rule ] tc);
   [%expect
     {|
+    Starting phase: Generate
     v1 = 42
     Step 1: push
     n = 7
+    Ending phase: Generate
     v1 = 42
     Step 1: push
     n = 7
@@ -376,5 +378,10 @@ let%expect_test "verbose prints draws on a passing run" =
     (fun tc ->
        let _ = Hegel.draw tc (integers ~min_value:5 ~max_value:5 ()) in
        ());
-  [%expect {| draw_1 = 5 |}]
+  [%expect
+    {|
+    Starting phase: Generate
+    draw_1 = 5
+    Ending phase: Generate
+    |}]
 ;;

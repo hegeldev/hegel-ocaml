@@ -6,6 +6,9 @@
    OCaml-native wrappers that copy borrowed C buffers into OCaml strings and
    translate negative status codes into exceptions. *)
 
+(** Opaque context handle ([hegel_context_t]). *)
+type context
+
 (** Opaque settings handle ([hegel_settings_t]). *)
 type settings
 
@@ -116,7 +119,12 @@ val version : unit -> string
 
 (** [last_error_message ()] returns the most recent error on the calling
     thread, or the empty string if the last call succeeded. *)
-val last_error_message : unit -> string
+val last_error_message : context -> string
+
+(** {2 Context} *)
+
+val context_new : unit -> context
+val context_free : context -> unit
 
 (** {2 Settings} *)
 
@@ -143,13 +151,13 @@ val settings_seed : settings -> int option -> unit
 val settings_derandomize : settings -> bool -> unit
 val settings_report_multiple_failures : settings -> bool -> unit
 
-(** [settings_database s db] configures the on-disk example database:
+(** [settings_database ctx s db] configures the on-disk example database:
     [None] leaves the default, [Some ""] disables it, [Some dir] uses [dir]. *)
-val settings_database : settings -> string option -> unit
+val settings_database : context -> settings -> string option -> unit
 
-(** [settings_database_key s key] scopes stored/replayed examples; [None]
+(** [settings_database_key ctx s key] scopes stored/replayed examples; [None]
     clears it. *)
-val settings_database_key : settings -> string option -> unit
+val settings_database_key : context -> settings -> string option -> unit
 
 (** [settings_phases s mask] enables exactly the phases in the bitmask. *)
 val settings_phases : settings -> int -> unit
@@ -160,85 +168,86 @@ val settings_suppress_health_check : settings -> int -> unit
 
 (** {2 Run lifecycle} *)
 
-(** [run_start s] starts a run with the given settings. Raises
+(** [run_start ctx s] starts a run with the given settings. Raises
     {!Backend_error} on failure. The handle must be freed with {!run_free}. *)
-val run_start : settings -> run
+val run_start : context -> settings -> run
 
-(** [next_test_case run] blocks until the engine produces the next test case,
+(** [next_test_case ctx run] blocks until the engine produces the next test case,
     or returns [None] when the run is finished. Raises {!Backend_error} on
     engine error or caller misuse. *)
-val next_test_case : run -> test_case option
+val next_test_case : context -> run -> test_case option
 
-(** [test_case_from_blob settings blob] builds a standalone test case that
+(** [test_case_from_blob ctx settings blob] builds a standalone test case that
     replays the example encoded in a base64 failure [blob]. Raises
     {!Backend_error} (with the engine's diagnostic) when the blob is missing,
     not UTF-8, or cannot be decoded — the engine never returns a null handle
     without setting an error. The handle must be freed with
     {!blob_test_case_free}. *)
-val test_case_from_blob : settings -> string option -> test_case
+val test_case_from_blob : context -> settings -> string option -> test_case
 
-(** [run_result run] returns the aggregated result of a finished run. Raises
+(** [run_result ctx run] returns the aggregated result of a finished run. Raises
     {!Backend_error} if the run has not finished. *)
-val run_result : run -> run_result
+val run_result : context -> run -> run_result
 
 (** [run_free run] frees a run handle, draining the worker thread. *)
 val run_free : run -> unit
 
-(** [blob_test_case_free run] frees a test case created by a failure_blob *)
-val blob_test_case_free : test_case -> unit
+(** [blob_test_case_free ctx tc] frees a test case created by a failure_blob *)
+val blob_test_case_free : context -> test_case -> unit
 
 (** {2 Per-test-case primitives} *)
 
-(** [generate tc schema] draws a value described by the CBOR-encoded [schema],
+(** [generate ctx tc schema] draws a value described by the CBOR-encoded [schema],
     returning the CBOR-encoded value bytes. Raises {!Stop_test} when the
     choice budget is exhausted, {!Backend_error} on a malformed schema. *)
-val generate : test_case -> string -> string
+val generate : context -> test_case -> string -> string
 
-val primitive_boolean : test_case -> float -> bool option -> bool
-val start_span : test_case -> int -> unit
-val stop_span : test_case -> bool -> unit
+val primitive_boolean : context -> test_case -> float -> bool option -> bool
+val start_span : context -> test_case -> int -> unit
+val stop_span : context -> test_case -> bool -> unit
 
-(** [new_collection tc ~min_size ~max_size] starts an engine-managed
+(** [new_collection ctx tc ~min_size ~max_size] starts an engine-managed
     collection ([max_size = None] means unbounded) and returns its id. *)
-val new_collection : test_case -> min_size:int -> max_size:int option -> int
+val new_collection : context -> test_case -> min_size:int -> max_size:int option -> int
 
-(** [collection_more tc id] returns whether the engine wants another element. *)
-val collection_more : test_case -> int -> bool
+(** [collection_more ctx tc id] returns whether the engine wants another element. *)
+val collection_more : context -> test_case -> int -> bool
 
-(** [collection_reject tc id why] rejects the collection's last element. *)
-val collection_reject : test_case -> int -> string option -> unit
+(** [collection_reject ctx tc id why] rejects the collection's last element. *)
+val collection_reject : context -> test_case -> int -> string option -> unit
 
-(** [new_pool tc] creates a variable pool and returns its id. *)
-val new_pool : test_case -> int
+(** [new_pool ctx tc] creates a variable pool and returns its id. *)
+val new_pool : context -> test_case -> int
 
-(** [pool_add tc ~pool_id] registers a fresh variable and returns its id. *)
-val pool_add : test_case -> pool_id:int -> int
+(** [pool_add ctx tc ~pool_id] registers a fresh variable and returns its id. *)
+val pool_add : context -> test_case -> pool_id:int -> int
 
-(** [pool_generate tc ~pool_id ~consume] draws (and optionally consumes) a
+(** [pool_generate ctx tc ~pool_id ~consume] draws (and optionally consumes) a
     variable id from the pool. Raises {!Stop_test} if the pool is empty. *)
-val pool_generate : test_case -> pool_id:int -> consume:bool -> int
+val pool_generate : context -> test_case -> pool_id:int -> consume:bool -> int
 
-(** [new_state_machine tc ~rule_names ~invariant_names] registers an
+(** [new_state_machine ctx tc ~rule_names ~invariant_names] registers an
     engine-owned state machine with the named rules and invariants and returns
     its id. The engine owns rule selection (including swarm testing). Raises
     {!Backend_error} if [rule_names] is empty. *)
 val new_state_machine
-  :  test_case
+  :  context
+  -> test_case
   -> rule_names:string list
   -> invariant_names:string list
   -> int
 
-(** [state_machine_next_rule tc ~state_machine_id] draws the index of the next
+(** [state_machine_next_rule ctx tc ~state_machine_id] draws the index of the next
     rule to run, in [\[0, num_rules)]. Raises {!Stop_test} when the engine's
     choice budget is exhausted. *)
-val state_machine_next_rule : test_case -> state_machine_id:int -> int
+val state_machine_next_rule : context -> test_case -> state_machine_id:int -> int
 
-(** [target tc value label] records a targeting observation. *)
-val target : test_case -> float -> string -> unit
+(** [target ctx tc value label] records a targeting observation. *)
+val target : context -> test_case -> float -> string -> unit
 
-(** [mark_complete tc status origin] reports the test case's outcome. [origin]
+(** [mark_complete ctx tc status origin] reports the test case's outcome. [origin]
     is used only for {!Interesting} and must be stable per bug. *)
-val mark_complete : test_case -> status -> string option -> unit
+val mark_complete : context -> test_case -> status -> string option -> unit
 
 (** [is_final_replay tc] is [true] iff this is the engine's final replay of a
     minimal failing example. *)
