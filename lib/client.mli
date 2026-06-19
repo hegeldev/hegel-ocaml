@@ -133,6 +133,7 @@ val with_report_multiple_failures : bool -> settings -> settings
     repeatable draws. *)
 type test_case =
   { handle : Hegel_ffi.Ffi.test_case
+  ; context : Hegel_ffi.Ffi.context
   ; mode : mode
   ; stateful_step_count : int
   ; is_final : bool

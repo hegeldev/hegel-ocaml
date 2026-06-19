@@ -31,6 +31,13 @@ let foreign_blocking name typ =
 ;;
 
 (* ------------------------------------------------------------------ *)
+(* Test context                                                        *)
+(* ------------------------------------------------------------------ *)
+
+let c_context_new = foreign "hegel_context_new" (void @-> returning (ptr void))
+let c_context_free = foreign "hegel_context_free" (ptr void @-> returning void)
+
+(* ------------------------------------------------------------------ *)
 (* Raw bindings                                                        *)
 (* ------------------------------------------------------------------ *)
 
@@ -63,11 +70,15 @@ let c_settings_report_multiple_failures =
 ;;
 
 let c_settings_database =
-  foreign "hegel_settings_database" (ptr void @-> string_opt @-> returning void)
+  foreign
+    "hegel_settings_database"
+    (ptr void @-> ptr void @-> string_opt @-> returning void)
 ;;
 
 let c_settings_database_key =
-  foreign "hegel_settings_database_key" (ptr void @-> string_opt @-> returning void)
+  foreign
+    "hegel_settings_database_key"
+    (ptr void @-> ptr void @-> string_opt @-> returning void)
 ;;
 
 let c_settings_phases =
@@ -78,65 +89,95 @@ let c_settings_suppress_health_check =
   foreign "hegel_settings_suppress_health_check" (ptr void @-> uint32_t @-> returning void)
 ;;
 
-let c_run_start = foreign "hegel_run_start" (ptr void @-> returning (ptr void))
-
-let c_next_test_case =
-  foreign_blocking "hegel_next_test_case" (ptr void @-> returning (ptr void))
+let c_run_start =
+  foreign "hegel_run_start" (ptr void @-> ptr void @-> returning (ptr void))
 ;;
 
-let c_run_result = foreign "hegel_run_result" (ptr void @-> returning (ptr void))
+let c_next_test_case =
+  foreign_blocking "hegel_next_test_case" (ptr void @-> ptr void @-> returning (ptr void))
+;;
+
+let c_run_result =
+  foreign "hegel_run_result" (ptr void @-> ptr void @-> returning (ptr void))
+;;
+
 let c_run_free = foreign "hegel_run_free" (ptr void @-> returning void)
-let c_test_case_free = foreign "hegel_test_case_free" (ptr void @-> returning void)
+
+let c_test_case_free =
+  foreign "hegel_test_case_free" (ptr void @-> ptr void @-> returning void)
+;;
 
 let c_generate =
   foreign
     "hegel_generate"
-    (ptr void @-> ptr char @-> size_t @-> ptr (ptr char) @-> ptr size_t @-> returning int)
+    (ptr void
+     @-> ptr void
+     @-> ptr char
+     @-> size_t
+     @-> ptr (ptr char)
+     @-> ptr size_t
+     @-> returning int)
 ;;
 
 let c_primitive_boolean =
   foreign
     "hegel_primitive_boolean"
-    (ptr void @-> double @-> bool @-> bool @-> ptr bool @-> returning int)
+    (ptr void @-> ptr void @-> double @-> bool @-> bool @-> ptr bool @-> returning int)
 ;;
 
 let c_test_case_from_blob =
-  foreign "hegel_test_case_from_blob" (ptr void @-> string_opt @-> returning (ptr void))
+  foreign
+    "hegel_test_case_from_blob"
+    (ptr void @-> ptr void @-> string_opt @-> returning (ptr void))
 ;;
 
-let c_start_span = foreign "hegel_start_span" (ptr void @-> uint64_t @-> returning int)
-let c_stop_span = foreign "hegel_stop_span" (ptr void @-> bool @-> returning int)
+let c_start_span =
+  foreign "hegel_start_span" (ptr void @-> ptr void @-> uint64_t @-> returning int)
+;;
+
+let c_stop_span =
+  foreign "hegel_stop_span" (ptr void @-> ptr void @-> bool @-> returning int)
+;;
 
 let c_new_collection =
   foreign
     "hegel_new_collection"
-    (ptr void @-> uint64_t @-> uint64_t @-> ptr int64_t @-> returning int)
+    (ptr void @-> ptr void @-> uint64_t @-> uint64_t @-> ptr int64_t @-> returning int)
 ;;
 
 let c_collection_more =
-  foreign "hegel_collection_more" (ptr void @-> int64_t @-> ptr bool @-> returning int)
+  foreign
+    "hegel_collection_more"
+    (ptr void @-> ptr void @-> int64_t @-> ptr bool @-> returning int)
 ;;
 
 let c_collection_reject =
-  foreign "hegel_collection_reject" (ptr void @-> int64_t @-> string_opt @-> returning int)
+  foreign
+    "hegel_collection_reject"
+    (ptr void @-> ptr void @-> int64_t @-> string_opt @-> returning int)
 ;;
 
-let c_new_pool = foreign "hegel_new_pool" (ptr void @-> ptr int64_t @-> returning int)
+let c_new_pool =
+  foreign "hegel_new_pool" (ptr void @-> ptr void @-> ptr int64_t @-> returning int)
+;;
 
 let c_pool_add =
-  foreign "hegel_pool_add" (ptr void @-> int64_t @-> ptr int64_t @-> returning int)
+  foreign
+    "hegel_pool_add"
+    (ptr void @-> ptr void @-> int64_t @-> ptr int64_t @-> returning int)
 ;;
 
 let c_pool_generate =
   foreign
     "hegel_pool_generate"
-    (ptr void @-> int64_t @-> bool @-> ptr int64_t @-> returning int)
+    (ptr void @-> ptr void @-> int64_t @-> bool @-> ptr int64_t @-> returning int)
 ;;
 
 let c_new_state_machine =
   foreign
     "hegel_new_state_machine"
     (ptr void
+     @-> ptr void
      @-> ptr (ptr char)
      @-> size_t
      @-> ptr (ptr char)
@@ -148,13 +189,17 @@ let c_new_state_machine =
 let c_state_machine_next_rule =
   foreign
     "hegel_state_machine_next_rule"
-    (ptr void @-> int64_t @-> ptr int64_t @-> returning int)
+    (ptr void @-> ptr void @-> int64_t @-> ptr int64_t @-> returning int)
 ;;
 
-let c_target = foreign "hegel_target" (ptr void @-> double @-> string @-> returning int)
+let c_target =
+  foreign "hegel_target" (ptr void @-> ptr void @-> double @-> string @-> returning int)
+;;
 
 let c_mark_complete =
-  foreign "hegel_mark_complete" (ptr void @-> int @-> string_opt @-> returning int)
+  foreign
+    "hegel_mark_complete"
+    (ptr void @-> ptr void @-> int @-> string_opt @-> returning int)
 ;;
 
 let c_is_final_replay =
@@ -181,13 +226,18 @@ let c_failure_blob =
 ;;
 
 let c_failure_origin = foreign "hegel_failure_origin" (ptr void @-> returning string_opt)
-let c_last_error_message = foreign "hegel_last_error_message" (void @-> returning string)
+
+let c_last_error_message =
+  foreign "hegel_context_last_error" (ptr void @-> returning string)
+;;
+
 let c_version = foreign "hegel_version" (void @-> returning string)
 
 (* ------------------------------------------------------------------ *)
 (* Public types                                                        *)
 (* ------------------------------------------------------------------ *)
 
+type context = unit Ctypes.ptr
 type settings = unit Ctypes.ptr
 type run = unit Ctypes.ptr
 type test_case = unit Ctypes.ptr
@@ -281,7 +331,7 @@ let status_to_int = function
 ;;
 
 (* Translate a libhegel return code into success or an exception. *)
-let check_rc rc =
+let check_rc ctx rc =
   if rc = ok
   then ()
   else if rc = e_stop_test
@@ -304,7 +354,7 @@ let check_rc rc =
       then "internal error"
       else Printf.sprintf "unknown error code %d" rc
     in
-    let msg = c_last_error_message () in
+    let msg = c_last_error_message ctx in
     let detail = if String.length msg = 0 then "" else ": " ^ msg in
     raise (Backend_error (label ^ detail)))
 ;;
@@ -314,7 +364,14 @@ let check_rc rc =
 (* ------------------------------------------------------------------ *)
 
 let version () = c_version ()
-let last_error_message () = c_last_error_message ()
+let last_error_message ctx = c_last_error_message ctx
+
+(* ------------------------------------------------------------------ *)
+(* Test context                                                       *)
+(* ------------------------------------------------------------------ *)
+
+let context_new () = c_context_new ()
+let context_free ctx = c_context_free ctx
 
 (* ------------------------------------------------------------------ *)
 (* Settings                                                            *)
@@ -334,8 +391,8 @@ let settings_seed s = function
 
 let settings_derandomize s b = c_settings_derandomize s b
 let settings_report_multiple_failures s b = c_settings_report_multiple_failures s b
-let settings_database s d = c_settings_database s d
-let settings_database_key s k = c_settings_database_key s k
+let settings_database ctx s d = c_settings_database ctx s d
+let settings_database_key ctx s k = c_settings_database_key ctx s k
 let settings_phases s mask = c_settings_phases s (Unsigned.UInt32.of_int mask)
 
 let settings_suppress_health_check s mask =
@@ -346,108 +403,113 @@ let settings_suppress_health_check s mask =
 (* Run lifecycle                                                       *)
 (* ------------------------------------------------------------------ *)
 
-let run_start s =
-  let r = c_run_start s in
-  if is_null r then raise (Backend_error (c_last_error_message ()));
+let run_start ctx s =
+  let r = c_run_start ctx s in
+  if is_null r then raise (Backend_error (c_last_error_message ctx));
   r
 ;;
 
-let next_test_case run =
-  let tc = c_next_test_case run in
+let next_test_case ctx run =
+  let tc = c_next_test_case ctx run in
   if is_null tc
   then (
-    let msg = c_last_error_message () in
+    let msg = c_last_error_message ctx in
     if String.length msg = 0 then None else raise (Backend_error msg))
   else Some tc
 ;;
 
-let test_case_from_blob s b =
-  let tc = c_test_case_from_blob s b in
+let test_case_from_blob ctx s b =
+  let tc = c_test_case_from_blob ctx s b in
   (* hegel_test_case_from_blob sets a non-empty last error on every null-return
      path (bad pointer, non-UTF-8 blob, undecodable blob), so a failure always
      surfaces as [Backend_error] — it never yields a [None]-like handle. *)
   if is_null tc
   then (
-    let msg = c_last_error_message () in
+    let msg = c_last_error_message ctx in
     raise
       (Backend_error
          (if String.length msg = 0 then "hegel_test_case_from_blob failed" else msg)))
   else tc
 ;;
 
-let run_result run =
-  let r = c_run_result run in
-  if is_null r then raise (Backend_error (c_last_error_message ()));
+let run_result ctx run =
+  let r = c_run_result ctx run in
+  if is_null r then raise (Backend_error (c_last_error_message ctx));
   r
 ;;
 
 let run_free run = c_run_free run
-let blob_test_case_free tc = c_test_case_free tc
+let blob_test_case_free ctx tc = c_test_case_free ctx tc
 
 (* ------------------------------------------------------------------ *)
 (* Per-test-case primitives                                            *)
 (* ------------------------------------------------------------------ *)
 
-let generate tc schema =
+let generate ctx tc schema =
   let len = String.length schema in
   let arr = CArray.of_string schema in
   let p = CArray.start arr in
   let out_ptr = allocate (ptr char) (from_voidp char null) in
   let out_len = allocate size_t (Unsigned.Size_t.of_int 0) in
-  let rc = c_generate tc p (Unsigned.Size_t.of_int len) out_ptr out_len in
-  check_rc rc;
+  let rc = c_generate ctx tc p (Unsigned.Size_t.of_int len) out_ptr out_len in
+  check_rc ctx rc;
   let n = Unsigned.Size_t.to_int !@out_len in
   string_from_ptr !@out_ptr ~length:n
 ;;
 
-let primitive_boolean tc p forced =
+let primitive_boolean ctx tc p forced =
   let out_ptr = allocate bool false in
   let rc =
     match forced with
-    | Some b -> c_primitive_boolean tc p b true out_ptr
-    | None -> c_primitive_boolean tc p false false out_ptr
+    | Some b -> c_primitive_boolean ctx tc p b true out_ptr
+    | None -> c_primitive_boolean ctx tc p false false out_ptr
   in
-  check_rc rc;
+  check_rc ctx rc;
   !@out_ptr
 ;;
 
-let start_span tc label = check_rc (c_start_span tc (Unsigned.UInt64.of_int label))
-let stop_span tc discard = check_rc (c_stop_span tc discard)
+let start_span ctx tc label =
+  check_rc ctx (c_start_span ctx tc (Unsigned.UInt64.of_int label))
+;;
 
-let new_collection tc ~min_size ~max_size =
+let stop_span ctx tc discard = check_rc ctx (c_stop_span ctx tc discard)
+
+let new_collection ctx tc ~min_size ~max_size =
   let out = allocate int64_t 0L in
   let max_u =
     match max_size with
     | Some m -> Unsigned.UInt64.of_int m
     | None -> Unsigned.UInt64.max_int
   in
-  check_rc (c_new_collection tc (Unsigned.UInt64.of_int min_size) max_u out);
+  check_rc ctx (c_new_collection ctx tc (Unsigned.UInt64.of_int min_size) max_u out);
   Int64.to_int !@out
 ;;
 
-let collection_more tc id =
+let collection_more ctx tc id =
   let out = allocate bool false in
-  check_rc (c_collection_more tc (Int64.of_int id) out);
+  check_rc ctx (c_collection_more ctx tc (Int64.of_int id) out);
   !@out
 ;;
 
-let collection_reject tc id why = check_rc (c_collection_reject tc (Int64.of_int id) why)
+let collection_reject ctx tc id why =
+  check_rc ctx (c_collection_reject ctx tc (Int64.of_int id) why)
+;;
 
-let new_pool tc =
+let new_pool ctx tc =
   let out = allocate int64_t 0L in
-  check_rc (c_new_pool tc out);
+  check_rc ctx (c_new_pool ctx tc out);
   Int64.to_int !@out
 ;;
 
-let pool_add tc ~pool_id =
+let pool_add ctx tc ~pool_id =
   let out = allocate int64_t 0L in
-  check_rc (c_pool_add tc (Int64.of_int pool_id) out);
+  check_rc ctx (c_pool_add ctx tc (Int64.of_int pool_id) out);
   Int64.to_int !@out
 ;;
 
-let pool_generate tc ~pool_id ~consume =
+let pool_generate ctx tc ~pool_id ~consume =
   let out = allocate int64_t 0L in
-  check_rc (c_pool_generate tc (Int64.of_int pool_id) consume out);
+  check_rc ctx (c_pool_generate ctx tc (Int64.of_int pool_id) consume out);
   Int64.to_int !@out
 ;;
 
@@ -468,12 +530,13 @@ let to_string_array names =
     CArray.start table, Root.create (buffers, table)
 ;;
 
-let new_state_machine tc ~rule_names ~invariant_names =
+let new_state_machine ctx tc ~rule_names ~invariant_names =
   let rules_ptr, rules_root = to_string_array rule_names in
   let invs_ptr, invs_root = to_string_array invariant_names in
   let out = allocate int64_t 0L in
   let rc =
     c_new_state_machine
+      ctx
       tc
       rules_ptr
       (Unsigned.Size_t.of_int (List.length rule_names))
@@ -483,20 +546,20 @@ let new_state_machine tc ~rule_names ~invariant_names =
   in
   Root.release rules_root;
   Root.release invs_root;
-  check_rc rc;
+  check_rc ctx rc;
   Int64.to_int !@out
 ;;
 
-let state_machine_next_rule tc ~state_machine_id =
+let state_machine_next_rule ctx tc ~state_machine_id =
   let out = allocate int64_t 0L in
-  check_rc (c_state_machine_next_rule tc (Int64.of_int state_machine_id) out);
+  check_rc ctx (c_state_machine_next_rule ctx tc (Int64.of_int state_machine_id) out);
   Int64.to_int !@out
 ;;
 
-let target tc value label = check_rc (c_target tc value label)
+let target ctx tc value label = check_rc ctx (c_target ctx tc value label)
 
-let mark_complete tc status origin =
-  check_rc (c_mark_complete tc (status_to_int status) origin)
+let mark_complete ctx tc status origin =
+  check_rc ctx (c_mark_complete ctx tc (status_to_int status) origin)
 ;;
 
 let is_final_replay tc = c_is_final_replay tc
