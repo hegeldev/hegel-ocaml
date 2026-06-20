@@ -206,7 +206,7 @@ val collection_reject : test_case -> collection_id:int -> unit
 (** {2 Variable pools}
 
     Pools are the engine-side primitive backing variables in stateful testing
-    (see {!Stateful.Variables}). A pool is a set of integer "variable ids" that
+    (see {!Stateful.Pool}). A pool is a set of integer "variable ids" that
     the engine can sample from. *)
 
 (** [new_pool tc] creates a new engine-managed variable pool and returns its id.

@@ -2,17 +2,16 @@
 
 open! Core
 
-module Variables = struct
+module Pool = struct
   type 'a t =
     { tc : Client.test_case
     ; pool_id : int
     ; values : (int, 'a) Hashtbl.t
-    ; sexp_of : ('a -> Sexp.t) option
     }
 
-  let create ?sexp_of tc =
+  let create tc =
     let pool_id = Client.new_pool tc in
-    { tc; pool_id; values = Hashtbl.create (module Int); sexp_of }
+    { tc; pool_id; values = Hashtbl.create (module Int) }
   ;;
 
   let add t value =
@@ -23,32 +22,13 @@ module Variables = struct
   let size t = Hashtbl.length t.values
   let is_empty t = Hashtbl.is_empty t.values
 
-  (* Resolve a drawn variable id against the local table, removing it when
-     [consume]. The [None] case is a engine-contract violation (the engine
-     returned an id we never registered) and is unreachable through the normal
-     engine-driven path, so it is split out here to be unit-testable. *)
-  let resolve_drawn values ~consume variable_id =
-    match Hashtbl.find values variable_id with
-    | Some v ->
-      if consume then Hashtbl.remove values variable_id;
-      v
-    | None ->
-      (* State diverged between the engine and the client, or a bug in the
-         variables bookkeeping. *)
-      raise Client.Flaky_strategy
+  let values_consumed t =
+    Generators.pool_values ~pool_id:t.pool_id ~values:t.values ~consume:true
   ;;
 
-  let pick t ~consume =
-    Client.assume t.tc (not (is_empty t));
-    let variable_id = Client.pool_generate t.tc ~pool_id:t.pool_id ~consume () in
-    let value = resolve_drawn t.values ~consume variable_id in
-    Option.iter t.sexp_of ~f:(fun f ->
-      Client.note t.tc (Printf.sprintf "v%d = %s" variable_id (Sexp.to_string (f value))));
-    value
+  let values_reusable t =
+    Generators.pool_values ~pool_id:t.pool_id ~values:t.values ~consume:false
   ;;
-
-  let draw t = pick t ~consume:false
-  let consume t = pick t ~consume:true
 end
 
 module Rule = struct

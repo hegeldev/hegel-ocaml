@@ -137,25 +137,13 @@ let%expect_test "a list draw prints as one sexp" =
     |}]
 ;;
 
-let%expect_test "Variables.draw prints the binding (with ~sexp_of)" =
+let%expect_test "a pool pick prints no binding" =
   run_failing (fun tc ->
-    let vars = Stateful.Variables.create ~sexp_of:Int.sexp_of_t tc in
-    Stateful.Variables.add vars 42;
-    let _ = Stateful.Variables.draw vars in
+    let vars = Stateful.Pool.create tc in
+    Stateful.Pool.add vars 42;
+    let _ = Hegel.draw_silent tc (Stateful.Pool.values_reusable vars) in
     assert false);
-  [%expect
-    {|
-    v1 = 42
-    |}]
-;;
-
-let%expect_test "Variables.draw without ~sexp_of prints no binding" =
-  run_failing (fun tc ->
-    let vars = Stateful.Variables.create tc in
-    Stateful.Variables.add vars 42;
-    let _ = Stateful.Variables.draw vars in
-    assert false);
-  (* Header only — no [v<id>] line, since no printer was supplied. *)
+  (* Header only — pool picks are drawn through an unprintable generator. *)
   [%expect {|  |}]
 ;;
 
@@ -173,35 +161,40 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
     |}]
 ;;
 
-let%expect_test
-    "stateful tests prints drawn data across all test cases when verbosity is verbose"
-  =
+let%hegel_test stateful_print tc =
   let rule =
     Stateful.Rule.create ~name:"push" ~step:(fun tc _state ->
-      let _ = Hegel.draw ~label:"n" tc (integers ~min_value:7 ~max_value:7 ()) in
-      assert false)
+      let _n = Hegel.draw tc (integers ~min_value:7 ~max_value:7 ()) in
+      ())
   in
-  run_failing
-    ~settings:
-      Client.(
-        settings ~test_cases:1 ~seed:0 ()
-        |> with_verbosity Verbose
-        |> with_phases [ Client.Generate ])
-    (fun tc ->
-       let vars = Stateful.Variables.create ~sexp_of:Int.sexp_of_t tc in
-       Stateful.Variables.add vars 42;
-       let _ = Stateful.Variables.draw vars in
-       Stateful.run ~init:() ~rules:[ rule ] tc);
+  let vars = Stateful.Pool.create tc in
+  Stateful.Pool.add vars 42;
+  let val_gen = with_printer sexp_of_int (Stateful.Pool.values_reusable vars) in
+  let _x = Hegel.draw tc val_gen in
+  Stateful.run ~init:() ~rules:[ rule ] tc
+[@@settings
+  Client.(
+    settings ~test_cases:1 ~seed:0 ()
+    |> with_verbosity Verbose
+    |> with_phases [ Generate ]
+    |> with_stateful_step_count 3)]
+;;
+
+let%expect_test
+    "stateful tests prints drawn data on passing test verbosity is verbose"
+  =
+  stateful_print ();
   [%expect
     {|
     Starting phase: Generate
-    v1 = 42
+    _x = 42
     Step 1: push
-    n = 7
+    _n_1 = 7
+    Step 2: push
+    _n_2 = 7
+    Step 3: push
+    _n_3 = 7
     Ending phase: Generate
-    v1 = 42
-    Step 1: push
-    n = 7
     |}]
 ;;
 
