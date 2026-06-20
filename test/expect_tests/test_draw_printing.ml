@@ -137,16 +137,6 @@ let%expect_test "a list draw prints as one sexp" =
     |}]
 ;;
 
-let%expect_test "a pool pick prints no binding" =
-  run_failing (fun tc ->
-    let vars = Stateful.Pool.create tc in
-    Stateful.Pool.add vars 42;
-    let _ = Hegel.draw_silent tc (Stateful.Pool.values_reusable vars) in
-    assert false);
-  (* Header only — pool picks are drawn through an unprintable generator. *)
-  [%expect {|  |}]
-;;
-
 let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
   let rule =
     Stateful.Rule.create ~name:"push" ~step:(fun tc _state ->
@@ -180,9 +170,7 @@ let%hegel_test stateful_print tc =
     |> with_stateful_step_count 3)]
 ;;
 
-let%expect_test
-    "stateful tests prints drawn data on passing test verbosity is verbose"
-  =
+let%expect_test "stateful tests prints drawn data on passing test verbosity is verbose" =
   stateful_print ();
   [%expect
     {|

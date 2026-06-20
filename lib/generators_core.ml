@@ -253,19 +253,22 @@ let collection_reject coll data =
     Client.collection_reject data ~collection_id)
 ;;
 
+(* separated out for unit testing *)
+let resolve_draw values ~consume variable_id =
+  match Hashtbl.find values variable_id with
+  | Some v ->
+    if consume then Hashtbl.remove values variable_id;
+    v
+  | None ->
+    (* State diverged between the engine and the client, or a bug in the
+        pool bookkeeping. *)
+    raise Client.Flaky_strategy
+;;
+
 let pick tc values pool_id ~consume =
   Client.assume tc (not (Hashtbl.is_empty values));
   let variable_id = Client.pool_generate tc ~pool_id ~consume () in
-  let value =
-    match Hashtbl.find values variable_id with
-    | Some v ->
-      if consume then Hashtbl.remove values variable_id;
-      v
-    | None ->
-      (* State diverged between the engine and the client, or a bug in the
-        pool bookkeeping. *)
-      raise Client.Flaky_strategy
-  in
+  let value = resolve_draw values ~consume variable_id in
   value
 ;;
 

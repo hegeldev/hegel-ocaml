@@ -55,6 +55,13 @@ val group : int -> Client.test_case -> (unit -> 'a) -> 'a
     [discard:false]. *)
 val discardable_group : int -> Client.test_case -> (unit -> 'a) -> 'a
 
+(** [resolve_draw values ~consume id] resolves a drawn pool [id] against the
+    local [values] table, removing it when [consume]. Raises
+    {!Client.Flaky_strategy} on an unknown id (an engine-contract violation,
+    unreachable through the normal engine-driven path). Exposed only so that
+    branch can be unit-tested. *)
+val resolve_draw : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
+
 (** A collection handle for generating variable-length sequences. *)
 type collection =
   { mutable finished : bool

@@ -44,9 +44,6 @@ module Pool : sig
   (** Returns the number of variables in the pool. *)
   val size : _ t -> int
 
-  (** Returns [true] if no variables are in the pool *)
-  val is_empty : _ t -> bool
-
   (** Create an unprintable generator that returns a variable from the [pool] without removing it. 
       Calls [assume false] if the [pool] is empty. *)
   val values_reusable : 'a t -> ('a, Generators.unprintable) Generators.generator

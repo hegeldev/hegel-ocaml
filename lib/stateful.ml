@@ -20,7 +20,6 @@ module Pool = struct
   ;;
 
   let size t = Hashtbl.length t.values
-  let is_empty t = Hashtbl.is_empty t.values
 
   let values_consumed t =
     Generators.pool_values ~pool_id:t.pool_id ~values:t.values ~consume:true

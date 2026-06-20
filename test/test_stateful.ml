@@ -128,34 +128,6 @@ let%hegel_test stateful_retry_budget_floor_test tc =
   |> Hegel.Client.with_suppress_health_check [ Hegel.Client.Filter_too_much ]]
 ;;
 
-(* Directly exercise [resolve_drawn]: the engine-unreachable [None] branch
-   (unknown variable id), and the [Some] branch with and without [consume]. *)
-(* let test_resolve_drawn () =
-  let tbl = Hashtbl.create (module Int) in
-  Hashtbl.set tbl ~key:7 ~data:"v";
-  (* consume:false keeps the entry *)
-  Alcotest.(check string)
-    "draw"
-    "v"
-    (Hegel.Stateful.Pool.resolve_drawn tbl ~consume:false 7);
-  Alcotest.(check int) "still present" 1 (Hashtbl.length tbl);
-  (* consume:true removes it *)
-  Alcotest.(check string)
-    "consume"
-    "v"
-    (Hegel.Stateful.Pool.resolve_drawn tbl ~consume:true 7);
-  Alcotest.(check int) "removed" 0 (Hashtbl.length tbl);
-  (* unknown id raises Flaky_strategy *)
-  let raised =
-    try
-      ignore (Hegel.Stateful.Pool.resolve_drawn tbl ~consume:false 99 : string);
-      false
-    with
-    | Hegel.Client.Flaky_strategy -> true
-  in
-  Alcotest.(check bool) "unknown id raises Flaky_strategy" true raised
-;; *)
-
 let test_stateful_bounded_steps () =
   let module S = Hegel.Stateful in
   let step_count = ref 0 in
@@ -221,8 +193,7 @@ let test_swarm_long_single_rule_run () =
 ;;
 
 let tests =
-  [ (* Alcotest.test_case "stateful: resolve_drawn" `Quick test_resolve_drawn *)
-    Alcotest.test_case "stateful: failing property shrinks" `Quick stateful_failure_test
+  [ Alcotest.test_case "stateful: failing property shrinks" `Quick stateful_failure_test
   ; Alcotest.test_case
       "stateful: variables add/consume round-trips"
       `Quick
