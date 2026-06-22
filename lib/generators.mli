@@ -55,6 +55,13 @@ val group : int -> Client.test_case -> (unit -> 'a) -> 'a
     [discard:false]. *)
 val discardable_group : int -> Client.test_case -> (unit -> 'a) -> 'a
 
+(** [resolve_draw values ~consume id] resolves a drawn pool [id] against the
+    local [values] table, removing it when [consume]. Raises
+    {!Client.Flaky_strategy} on an unknown id (an engine-contract violation,
+    unreachable through the normal engine-driven path). Exposed only so that
+    branch can be unit-tested. *)
+val resolve_draw : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
+
 (** A collection handle for generating variable-length sequences. *)
 type collection =
   { mutable finished : bool
@@ -127,6 +134,16 @@ val printer : ('a, printable) generator -> 'a -> Core.Sexp.t
     is the caller's), so it is {!unprintable}: draw it with {!draw_silent}, or
     {!with_printer} it to draw with {!draw}. *)
 val composite : (Client.test_case -> 'a) -> ('a, unprintable) generator
+
+(** [pool_values ~pool_id ~values ~consume] builds a generator that picks a value
+    from the engine pool [pool_id], resolving the drawn id against the local
+    [values] table. When [consume], the picked value is removed from the pool.
+    Carries no printer, so it is {!unprintable}. *)
+val pool_values
+  :  pool_id:int
+  -> values:(int, 'a) Core.Hashtbl.t
+  -> consume:bool
+  -> ('a, unprintable) generator
 
 (** [map f gen] transforms values from [gen] using [f]. The result carries no
     printer (the output type is the user's); use {!with_printer} to draw it with

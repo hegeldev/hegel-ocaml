@@ -28,15 +28,15 @@
       Stateful.run ~init:[] ~rules:[ push; pop ] tc
     ]} *)
 
-module Variables : sig
+module Pool : sig
   (** A typed handle for a per-test case pool of variables. *)
   type 'a t
 
-  (** Creates an empty {!Variables.t}. Variables are tied to a test case; do not
+  (** Creates an empty {!Pool.t}. Pools are tied to a test case; do not
       reuse one across test cases. When [sexp_of] is given, each drawn/consumed
       variable is printed as [v<id> = <sexp>] on the final replay of a failing
       test; without it, variable picks print nothing. *)
-  val create : ?sexp_of:('a -> Core.Sexp.t) -> Client.test_case -> 'a t
+  val create : Client.test_case -> 'a t
 
   (** Records [value] in [variables] for later draws. *)
   val add : 'a t -> 'a -> unit
@@ -44,24 +44,13 @@ module Variables : sig
   (** Returns the number of variables in the pool. *)
   val size : _ t -> int
 
-  (** Returns [true] if no variables are in the pool *)
-  val is_empty : _ t -> bool
+  (** Create an unprintable generator that returns a variable from the [pool] without removing it. 
+      Calls [assume false] if the [pool] is empty. *)
+  val values_reusable : 'a t -> ('a, Generators.unprintable) Generators.generator
 
-  (** Draws a variable from the [variables] without removing it. Calls
-      [assume false] if the [variables] is empty. *)
-  val draw : 'a t -> 'a
-
-  (** Removes and returns a variable from the [variables]. Calls [assume false]
-      if the [variables] is empty. *)
-  val consume : 'a t -> 'a
-
-  (**/**)
-
-  (** Internal: resolve a drawn variable id against a local value table,
-      removing it when [consume]. Raises {!Client.Flaky_strategy} on an
-      unknown id. Exposed only so the engine-unreachable contract-violation
-      branch can be unit-tested. *)
-  val resolve_drawn : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
+  (** Create an unprintable generator that removes and returns a variable from the [pool]. 
+      Calls [assume false] if the [pool] is empty. *)
+  val values_consumed : 'a t -> ('a, Generators.unprintable) Generators.generator
 end
 
 module Rule : sig

@@ -442,8 +442,29 @@ let test_printer_optional_composite () =
     "(7)"
 ;;
 
+let test_resolve_draw () =
+  let tbl = Core.Hashtbl.create (module Core.Int) in
+  Core.Hashtbl.set tbl ~key:7 ~data:"v";
+  (* consume:false keeps the entry *)
+  Alcotest.(check string) "draw" "v" (resolve_draw tbl ~consume:false 7);
+  Alcotest.(check int) "still present" 1 (Core.Hashtbl.length tbl);
+  (* consume:true removes it *)
+  Alcotest.(check string) "consume" "v" (resolve_draw tbl ~consume:true 7);
+  Alcotest.(check int) "removed" 0 (Core.Hashtbl.length tbl);
+  (* unknown id raises Flaky_strategy *)
+  let raised =
+    try
+      ignore (resolve_draw tbl ~consume:false 99 : string);
+      false
+    with
+    | Hegel.Client.Flaky_strategy -> true
+  in
+  Alcotest.(check bool) "unknown id raises Flaky_strategy" true raised
+;;
+
 let tests =
-  [ Alcotest.test_case "span label constants" `Quick test_span_label_constants
+  [ Alcotest.test_case "stateful: resolve_draw" `Quick test_resolve_draw
+  ; Alcotest.test_case "span label constants" `Quick test_span_label_constants
   ; Alcotest.test_case "basic generator schema" `Quick test_basic_generator_schema
   ; Alcotest.test_case "basic generator no bounds" `Quick test_basic_generator_no_bounds
   ; Alcotest.test_case

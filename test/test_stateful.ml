@@ -33,14 +33,14 @@ let stateful_failure_test () =
    draws a fresh integer id, deposits it in the variables, and records it in a
    "live" set; [free] consumes an id from the variables and removes it from
    the set. Variables size must match the size of the live set. Empty-variables
-   draws are rejected by [Variables.consume]'s internal [assume] call. *)
+   draws are rejected by [Pool.consume]'s internal [assume] call. *)
 
 module Var_state = struct
   module S = Hegel.Stateful
 
   type t =
     { live : Int.Set.t
-    ; variables : int S.Variables.t
+    ; variables : int S.Pool.t
     }
 end
 
@@ -51,22 +51,24 @@ let var_alloc_rule =
   S.Rule.create ~name:"alloc" ~step:(fun _tc state ->
     let id = !var_next_id in
     incr var_next_id;
-    S.Variables.add state.Var_state.variables id;
+    S.Pool.add state.Var_state.variables id;
     { state with Var_state.live = Set.add state.Var_state.live id })
 ;;
 
 let var_free_rule =
   let module S = Hegel.Stateful in
-  S.Rule.create ~name:"free" ~step:(fun _tc state ->
-    let id = S.Variables.consume state.Var_state.variables in
+  S.Rule.create ~name:"free" ~step:(fun tc state ->
+    let var_gen = S.Pool.values_consumed state.Var_state.variables in
+    let id = Hegel.draw_silent tc var_gen in
     assert (Set.mem state.Var_state.live id);
     { state with Var_state.live = Set.remove state.Var_state.live id })
 ;;
 
 let var_use_rule =
   let module S = Hegel.Stateful in
-  S.Rule.create ~name:"use" ~step:(fun _tc state ->
-    let id = S.Variables.draw state.Var_state.variables in
+  S.Rule.create ~name:"use" ~step:(fun tc state ->
+    let var_gen = S.Pool.values_consumed state.Var_state.variables in
+    let id = Hegel.draw_silent tc var_gen in
     assert (Set.mem state.Var_state.live id);
     state)
 ;;
@@ -75,12 +77,11 @@ let%hegel_test stateful_variables_test tc =
   let module S = Hegel.Stateful in
   var_next_id := 0;
   S.run
-    ~init:{ Var_state.live = Int.Set.empty; variables = S.Variables.create tc }
+    ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc }
     ~rules:[ var_alloc_rule; var_free_rule ]
     ~invariants:
       [ (fun state ->
-          assert (
-            S.Variables.size state.Var_state.variables = Set.length state.Var_state.live))
+          assert (S.Pool.size state.Var_state.variables = Set.length state.Var_state.live))
       ]
     tc
 [@@settings Hegel.settings ~test_cases:10 ~seed:0 ()]
@@ -90,7 +91,7 @@ let%hegel_test stateful_variables_draw_test tc =
   let module S = Hegel.Stateful in
   var_next_id := 0;
   S.run
-    ~init:{ Var_state.live = Int.Set.empty; variables = S.Variables.create tc }
+    ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc }
     ~rules:[ var_alloc_rule; var_use_rule ]
     tc
 [@@settings Hegel.settings ~test_cases:5 ~seed:0 ()]
@@ -125,34 +126,6 @@ let%hegel_test stateful_retry_budget_floor_test tc =
 [@@settings
   Hegel.settings ~test_cases:1 ~seed:0 ()
   |> Hegel.Client.with_suppress_health_check [ Hegel.Client.Filter_too_much ]]
-;;
-
-(* Directly exercise [resolve_drawn]: the engine-unreachable [None] branch
-   (unknown variable id), and the [Some] branch with and without [consume]. *)
-let test_resolve_drawn () =
-  let tbl = Hashtbl.create (module Int) in
-  Hashtbl.set tbl ~key:7 ~data:"v";
-  (* consume:false keeps the entry *)
-  Alcotest.(check string)
-    "draw"
-    "v"
-    (Hegel.Stateful.Variables.resolve_drawn tbl ~consume:false 7);
-  Alcotest.(check int) "still present" 1 (Hashtbl.length tbl);
-  (* consume:true removes it *)
-  Alcotest.(check string)
-    "consume"
-    "v"
-    (Hegel.Stateful.Variables.resolve_drawn tbl ~consume:true 7);
-  Alcotest.(check int) "removed" 0 (Hashtbl.length tbl);
-  (* unknown id raises Flaky_strategy *)
-  let raised =
-    try
-      ignore (Hegel.Stateful.Variables.resolve_drawn tbl ~consume:false 99 : string);
-      false
-    with
-    | Hegel.Client.Flaky_strategy -> true
-  in
-  Alcotest.(check bool) "unknown id raises Flaky_strategy" true raised
 ;;
 
 let test_stateful_bounded_steps () =
@@ -220,8 +193,7 @@ let test_swarm_long_single_rule_run () =
 ;;
 
 let tests =
-  [ Alcotest.test_case "stateful: resolve_drawn" `Quick test_resolve_drawn
-  ; Alcotest.test_case "stateful: failing property shrinks" `Quick stateful_failure_test
+  [ Alcotest.test_case "stateful: failing property shrinks" `Quick stateful_failure_test
   ; Alcotest.test_case
       "stateful: variables add/consume round-trips"
       `Quick

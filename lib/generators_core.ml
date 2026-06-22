@@ -78,6 +78,12 @@ type 'a core =
       ; generate_fn : Client.test_case -> 'a
       }
       -> 'a core
+  | Values :
+      { pool_id : int
+      ; values : (int, 'a) Base.Hashtbl.t
+      ; consume : bool
+      }
+      -> 'a core
 
 (** Phantom witness that a generator carries a printer and so may be drawn with
     {!draw}. *)
@@ -147,6 +153,14 @@ let printer : type a. (a, printable) generator -> a -> Sexp.t =
     This is the form [@@deriving hegel_generator] emits. *)
 let composite generate_fn =
   Unprintable { core = Composite { label = Labels.fixed_dict; generate_fn } }
+;;
+
+(** [pool_values ~pool_id ~values ~consume] builds an unprintable generator that
+    picks a value from the engine pool [pool_id], resolving the drawn id against
+    the local [values] table. When [consume], the picked value is removed from
+    the pool. Carries no printer (the output type is the caller's). *)
+let pool_values ~pool_id ~values ~consume =
+  Unprintable { core = Values { pool_id; values; consume } }
 ;;
 
 (** Maximum number of filter attempts before calling [assume false]. *)
@@ -239,6 +253,25 @@ let collection_reject coll data =
     Client.collection_reject data ~collection_id)
 ;;
 
+(* separated out for unit testing *)
+let resolve_draw values ~consume variable_id =
+  match Hashtbl.find values variable_id with
+  | Some v ->
+    if consume then Hashtbl.remove values variable_id;
+    v
+  | None ->
+    (* State diverged between the engine and the client, or a bug in the
+        pool bookkeeping. *)
+    raise Client.Flaky_strategy
+;;
+
+let pick tc values pool_id ~consume =
+  Client.assume tc (not (Hashtbl.is_empty values));
+  let variable_id = Client.pool_generate tc ~pool_id ~consume () in
+  let value = resolve_draw values ~consume variable_id in
+  value
+;;
+
 (** [do_draw core data] produces a typed value from generation structure [core]
     using the given test case [data]. *)
 let rec do_draw : type a. a core -> Client.test_case -> a =
@@ -280,6 +313,7 @@ let rec do_draw : type a. a core -> Client.test_case -> a =
       in
       collect [])
   | Composite { label; generate_fn } -> group label data (fun () -> generate_fn data)
+  | Values { pool_id; values; consume } -> pick data values pool_id ~consume
 ;;
 
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
