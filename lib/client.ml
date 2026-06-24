@@ -537,15 +537,13 @@ let handle_result
        if settings.print_blob then eprintf "failure blob: \"%s\"" blob;
        raise exn
      | failures ->
-       let details =
-         List.mapi failures ~f:(fun i failure ->
-           let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
-           sprintf "  %d: %s" i (Exn.to_string exn)
-           ^ if settings.print_blob then sprintf "\n  failure blob: \"%s\"" blob else "")
-         |> String.concat ~sep:"\n"
-       in
-       raise
-         (Failure (sprintf "Multiple failures (%d):\n%s" (List.length failures) details)))
+       let count = List.length failures in
+       List.iteri failures ~f:(fun i failure ->
+         eprintf "\nFailure %d:\n%!" (i + 1);
+         let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
+         eprintf "Exception: %s\n%!" (Exn.to_string exn);
+         if settings.print_blob then eprintf "Failure blob: \"%s\"\n%!" blob);
+       raise (Failure (sprintf "\n%d failures found!" count)))
 ;;
 
 (** [run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location] drives a

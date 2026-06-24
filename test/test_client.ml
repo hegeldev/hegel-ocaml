@@ -334,7 +334,7 @@ let test_run_multiple_failures () =
     Alcotest.(check bool)
       "reports multiple failures"
       true
-      (Test_helpers.contains_substring m "Multiple failures")
+      (Test_helpers.contains_substring m "failures found")
   | None -> Alcotest.fail "expected multiple failures"
 ;;
 
