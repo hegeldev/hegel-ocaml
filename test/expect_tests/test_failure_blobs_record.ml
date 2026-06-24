@@ -36,6 +36,29 @@ let count ~needle s =
   if nl = 0 then 0 else go 0 0
 ;;
 
+let replace_all ~sub ~by s =
+  let sl = String.length s in
+  let subl = String.length sub in
+  let buf = Buffer.create sl in
+  let rec go i =
+    if i + subl <= sl && String.equal (String.sub s i subl) sub
+    then (
+      Buffer.add_string buf by;
+      go (i + subl))
+    else if i < sl
+    then (
+      Buffer.add_char buf s.[i];
+      go (i + 1))
+  in
+  go 0;
+  Buffer.contents buf
+;;
+
+(* The stock OCaml compiler renders the wrapped-library path with a dot
+   ([Expect_tests.Test_failure_blobs_record.A]); the oxcaml compiler keeps the
+   mangled form ([Expect_tests__Test_failure_blobs_record.A]). *)
+let normalize out = replace_all ~sub:"__" ~by:"." out
+
 (* Round-trip: recording mode prints a blob on failure; that exact blob, fed
    back through replay mode, must reproduce the original failure. *)
 let%expect_test "recording then replay round-trips the failure blob" =
@@ -111,24 +134,24 @@ let%hegel_test multi_fail_test tc =
 ;;
 
 let%expect_test "recording groups each failure's draws with its diagnostic" =
-  match multi_fail_test () with
-  | () -> assert false
-  | exception Failure msg ->
-    Printf.printf "%s" msg;
-    [%expect
-      {|
-      Failure 1:
-      v = 60
-      Exception: (Expect_tests.Test_failure_blobs_record.A)
-      Failure blob: "AAEAAAAACgEAAAA8"
+  (match multi_fail_test () with
+   | () -> assert false
+   | exception Failure msg -> Printf.printf "%s" msg);
+  Printf.printf "%s" (normalize [%expect.output]);
+  [%expect
+    {|
+    Failure 1:
+    v = 60
+    Exception: (Expect_tests.Test_failure_blobs_record.A)
+    Failure blob: "AAEAAAAACgEAAAA8"
 
-      Failure 2:
-      v = 0
-      Exception: (Expect_tests.Test_failure_blobs_record.B)
-      Failure blob: "AAEAAAAACgEAAAAA"
+    Failure 2:
+    v = 0
+    Exception: (Expect_tests.Test_failure_blobs_record.B)
+    Failure blob: "AAEAAAAACgEAAAAA"
 
-      2 failures found!
-      |}]
+    2 failures found!
+    |}]
 ;;
 
 (* With [print_blob] off the per-failure blocks still print, but without the
@@ -141,6 +164,7 @@ let%expect_test "the multi-failure report omits blobs when print_blob is off" =
   (match Hegel.run_hegel_test ~settings multi_prop with
    | () -> assert false
    | exception Failure msg -> Printf.printf "%s" msg);
+  Printf.printf "%s" (normalize [%expect.output]);
   [%expect
     {|
     Failure 1:
