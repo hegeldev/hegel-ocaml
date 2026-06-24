@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.2 - 2026-06-24
+
+Fixes formatting when reporting multiple failures.
+
 ## 0.7.1 - 2026-06-24
 
 This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.21.2](https://github.com/hegeldev/hegel-rust/releases/tag/v0.21.2) to [0.23.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.23.0).
