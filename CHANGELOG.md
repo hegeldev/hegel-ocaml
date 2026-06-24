@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1 - 2026-06-24
+
+This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.21.2](https://github.com/hegeldev/hegel-rust/releases/tag/v0.21.2) to [0.23.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.23.0).
+
 ## 0.7.0 - 2026-06-22
 
 This release reworks the stateful-testing value-pool API. The `Stateful.Variables`
