@@ -404,33 +404,32 @@ let bitmask bit_of items = List.fold items ~init:0 ~f:(fun acc x -> acc lor bit_
 (** [build_ffi_settings ctx settings ~database_key] allocates and populates a native
     settings handle from the OCaml [settings]. The caller must free it. *)
 let build_ffi_settings ctx (settings : settings) ~database_key =
-  let s = Ffi.settings_new () in
-  Ffi.settings_mode s (ffi_mode settings.mode);
-  Ffi.settings_test_cases s settings.test_cases;
-  Ffi.settings_verbosity s (ffi_verbosity settings.verbosity);
-  Ffi.settings_seed s settings.seed;
-  Ffi.settings_derandomize s settings.derandomize;
-  Ffi.settings_report_multiple_failures s settings.report_multiple_failures;
+  let s = Ffi.settings_new ctx in
+  Ffi.settings_mode ctx s (ffi_mode settings.mode);
+  Ffi.settings_test_cases ctx s settings.test_cases;
+  Ffi.settings_verbosity ctx s (ffi_verbosity settings.verbosity);
+  Ffi.settings_seed ctx s settings.seed;
+  Ffi.settings_derandomize ctx s settings.derandomize;
+  Ffi.settings_report_multiple_failures ctx s settings.report_multiple_failures;
   (match settings.database with
    | Unset -> ()
    | Disabled -> Ffi.settings_database ctx s (Some "")
    | Path p -> Ffi.settings_database ctx s (Some p));
   Option.iter database_key ~f:(fun k -> Ffi.settings_database_key ctx s (Some k));
   Option.iter settings.phases ~f:(fun phases ->
-    Ffi.settings_phases s (bitmask phase_bit phases));
+    Ffi.settings_phases ctx s (bitmask phase_bit phases));
   (match settings.suppress_health_check with
    | [] -> ()
-   | checks -> Ffi.settings_suppress_health_check s (bitmask health_check_bit checks));
+   | checks -> Ffi.settings_suppress_health_check ctx s (bitmask health_check_bit checks));
   s
 ;;
 
-(** [run_test_case ~mode ~verbose ~test_fn handle] runs [test_fn] over a single 
+(** [run_test_case ~mode ~verbose ~test_fn handle is_final] runs [test_fn] over a single 
     native test-case [handle], maps the outcome to a {!Ffi.status}, and marks 
     the case complete. Returns [Some (origin, exn)] when the case was {e interesting}
     (the body raised an unexpected exception), otherwise [None]. Shared by the
     engine-run and failure-blob replay paths. *)
-let run_test_case ~(settings : settings) ~test_fn ctx handle =
-  let is_final = Ffi.is_final_replay handle in
+let run_test_case ~(settings : settings) ~test_fn ctx handle is_final =
   let (tc : test_case) =
     { handle
     ; context = ctx
@@ -457,89 +456,137 @@ let run_test_case ~(settings : settings) ~test_fn ctx handle =
   captured
 ;;
 
-(** [failure_exn ~captured_exn ~panic_message] is the exception to raise for
-    one engine-reported failure: the OCaml exception captured for the failure's
-    origin when there is one, otherwise a [Failure] carrying the engine's panic
-    message. *)
-let failure_exn ~captured_exn ~panic_message =
-  match captured_exn with
-  | Some e -> e
-  | None ->
-    Failure
-      (Option.value panic_message ~default:"hegel: failing example (no panic message)")
+(** Diagnostic raised when the engine's shrunk counterexample no longer fails on
+    the client-driven final replay: the test produced a different outcome for the
+    same generated data and is therefore non-deterministic. *)
+let flaky_diagnostic =
+  "Flaky test detected: Your test produced different outcomes when run with the same \
+   generated data — it failed when it previously succeeded, or succeeded when it \
+   previously failed. This usually means your test depends on external state such as \
+   global variables, system time, or external random number generators."
 ;;
 
-(** [handle_result ~settings ~captured result] inspects a finished run's
-    [result]. A clean run returns [unit]. On a run-level error (a failed health
-    check, a nondeterministic test, an engine panic) it raises [Failure] with
-    the engine's message — there is no counterexample to report. On a failed
-    property it prints the replay blob for each failure (when
-    [settings.print_blob]), then raises the single captured exception, or an
-    aggregated [Failure] for multiple distinct failures. *)
-let handle_result ~(settings : settings) ~captured ~test_location result =
+(** [final_replay ~settings ~ffi_settings ~test_fn ctx failure] performs the
+    client-owned {e final replay} of one engine-discovered [failure]: a libhegel
+    run only explores (generation, shrinking) and never replays a counterexample
+    itself, so the client reads the counterexample's reproduction blob and
+    replays it as a standalone final test case — re-running the body so its
+    notes and drawn values print for the minimal example. Returns the blob and
+    the test's own exception. The engine just produced the blob, so it always
+    decodes; a replay that no longer fails means the test is non-deterministic
+    and raises {!flaky_diagnostic}. *)
+let final_replay ~(settings : settings) ~ffi_settings ~test_fn ctx failure =
+  let blob = Option.value_exn (Ffi.failure_blob ctx failure) in
+  let tc = Ffi.test_case_from_blob ctx ffi_settings (Some blob) in
+  let outcome =
+    Exn.protect
+      ~finally:(fun () -> Ffi.blob_test_case_free ctx tc)
+      ~f:(fun () -> run_test_case ~settings ~test_fn ctx tc true)
+  in
+  match outcome with
+  | Some (_origin, exn) -> blob, exn
+  | None -> raise (Failure flaky_diagnostic)
+;;
+
+(** [handle_result ~settings ~ffi_settings ~test_fn ~test_location ~single
+    ~single_outcome ctx result] inspects a finished run's [result]. A clean run
+    returns [unit]. On a run-level error (a failed health check, a
+    nondeterministic test, an engine panic) it raises [Failure] with the
+    engine's message — there is no counterexample to report.
+
+    On a failed property the engine only explored, so the client owns the final
+    replay. In {!Single_test_case} mode the one emitted case already ran as its
+    own final case and its [single_outcome] exception is re-raised directly.
+    Otherwise each discovered counterexample's blob is replayed via
+    {!final_replay} (printing the blob when [settings.print_blob]); a single
+    failure re-raises the test's own exception, several distinct failures raise
+    an aggregated [Failure]. *)
+let handle_result
+      ~(settings : settings)
+      ~ffi_settings
+      ~test_fn
+      ~test_location
+      ~single
+      ~single_outcome
+      ctx
+      result
+  =
   let emit ~passed =
     Option.iter test_location ~f:(fun loc -> Antithesis.emit_assertion loc ~passed)
   in
-  match Ffi.result_status result with
+  match Ffi.result_status ctx result with
   | Run_passed -> emit ~passed:true
   | Run_error ->
     emit ~passed:false;
     raise
       (Failure
-         (Option.value (Ffi.result_error result) ~default:"hegel: run error (no message)"))
+         (Option.value
+            (Ffi.result_error ctx result)
+            ~default:"hegel: run error (no message)"))
+  | Run_failed when single ->
+    emit ~passed:false;
+    (* The single emitted case already ran as its own final case; re-raise the
+       test's own exception. An interesting result always carries one. *)
+    let _origin, exn = Option.value_exn single_outcome in
+    raise exn
   | Run_failed ->
     emit ~passed:false;
-    let engine_failure_exn ~captured failure =
-      let origin = Option.value (Ffi.failure_origin failure) ~default:"" in
-      failure_exn
-        ~captured_exn:(Hashtbl.find captured origin)
-        ~panic_message:(Ffi.failure_panic_message failure)
-    in
-    (match Ffi.result_failures result with
+    (match Ffi.result_failures ctx result with
      | [ failure ] ->
-       if settings.print_blob
-       then eprintf "failure blob: \"%s\"" (Option.value_exn (Ffi.failure_blob failure));
-       raise (engine_failure_exn ~captured failure)
+       let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
+       if settings.print_blob then eprintf "failure blob: \"%s\"" blob;
+       raise exn
      | failures ->
        let details =
          List.mapi failures ~f:(fun i failure ->
-           sprintf "  %d: %s" i (Exn.to_string (engine_failure_exn ~captured failure))
-           ^
-           if settings.print_blob
-           then
-             sprintf
-               "\n  failure blob: \"%s\""
-               (Option.value_exn (Ffi.failure_blob failure))
-           else "")
+           let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
+           sprintf "  %d: %s" i (Exn.to_string exn)
+           ^ if settings.print_blob then sprintf "\n  failure blob: \"%s\"" blob else "")
          |> String.concat ~sep:"\n"
        in
        raise
          (Failure (sprintf "Multiple failures (%d):\n%s" (List.length failures) details)))
 ;;
 
-(** [run_from_engine ~settings ~ffi_settings ~test_fn ~test_location ctx] drives a full property
-    run: it starts the engine worker, loops over generated test cases, and
-    raises on failure. The engine [run] handle is always freed. *)
+(** [run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location] drives a
+    full property run: it starts the engine worker and pulls every scheduled test
+    case. The engine only explores (generation, shrinking), so every pumped case
+    is non-final — except in {!Single_test_case} mode, where the one emitted case
+    is the whole run and is run as final, its outcome kept for the report.
+    Discovered counterexamples are replayed from their blobs by {!handle_result}.
+    The engine [run] handle is always freed. *)
 let run_from_engine ctx ~(settings : settings) ~ffi_settings ~test_fn ~test_location =
-  (* OCaml exceptions captured from interesting test cases, keyed by origin. For
-     a given bug the engine's final replay is the last interesting case, so
-     overwriting by origin leaves us with the shrunk counterexample. *)
-  let captured : (string, exn) Hashtbl.t = String.Table.create () in
+  let single =
+    match settings.mode with
+    | Single_test_case -> true
+    | Test_run -> false
+  in
+  let single_outcome = ref None in
   let run = Ffi.run_start ctx ffi_settings in
   Exn.protect
-    ~finally:(fun () -> Ffi.run_free run)
+    ~finally:(fun () -> Ffi.run_free ctx run)
     ~f:(fun () ->
       let rec loop () =
         match Ffi.next_test_case ctx run with
         | None -> ()
         | Some handle ->
-          Option.iter
-            (run_test_case ~settings ~test_fn ctx handle)
-            ~f:(fun (origin, exn) -> Hashtbl.set captured ~key:origin ~data:exn);
+          if single
+          then single_outcome := run_test_case ~settings ~test_fn ctx handle true
+          else
+            ignore
+              (run_test_case ~settings ~test_fn ctx handle false : (string * exn) option);
           loop ()
       in
       loop ();
-      handle_result ~settings ~captured ~test_location (Ffi.run_result ctx run))
+      handle_result
+        ~settings
+        ~ffi_settings
+        ~test_fn
+        ~test_location
+        ~single
+        ~single_outcome:!single_outcome
+        ctx
+        (Ffi.run_result ctx run))
 ;;
 
 (** [replay_from_blob ~settings ~ffi_settings ~test_fn blob] replays a single failure
@@ -553,7 +600,7 @@ let replay_from_blob ~(settings : settings) ~ffi_settings ~test_fn blob ctx =
     Exn.protect
       ~finally:(fun () -> Ffi.blob_test_case_free ctx tc)
       ~f:(fun () ->
-        match run_test_case ~settings ~test_fn ctx tc with
+        match run_test_case ~settings ~test_fn ctx tc true with
         | None -> Did_not_reproduce
         | Some (_, exn) -> Reproduced exn)
 ;;
@@ -604,7 +651,7 @@ let run_test
   in
   Exn.protect
     ~finally:(fun () ->
-      Ffi.settings_free ffi_settings;
+      Ffi.settings_free ctx ffi_settings;
       Ffi.context_free ctx)
     ~f:run_body
 ;;

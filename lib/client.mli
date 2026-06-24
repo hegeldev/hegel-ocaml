@@ -148,12 +148,6 @@ type test_case =
     the shrinker can group probes for the same bug. *)
 val extract_origin : exn -> string
 
-(** [failure_exn ~captured_exn ~panic_message] is the exception to raise for
-    one engine-reported failure: the OCaml exception captured for the failure's
-    origin when there is one, otherwise a [Failure] carrying the engine's panic
-    message. *)
-val failure_exn : captured_exn:exn option -> panic_message:string option -> exn
-
 (** [generate_from_schema schema tc] generates a value from a schema by drawing
     from the native engine. Raises {!Data_exhausted} if the engine signals
     StopTest. *)
