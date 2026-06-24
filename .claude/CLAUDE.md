@@ -210,8 +210,8 @@ and replaying failing examples across runs, use `database` / `database_key`.
 
 `run_test` builds an `Ffi.settings` from the OCaml settings, calls
 `Ffi.run_start`, then loops on `Ffi.next_test_case` until it returns `None`. Each
-test case handle is wrapped in a `test_case` record (with `is_final` from
-`Ffi.is_final_replay`) and passed to the user's function. Exceptions map to
+test case handle is wrapped in a `test_case` record and passed to the user's function. 
+The client controls when a final run occurs. Exceptions map to
 `Ffi.mark_complete` statuses: VALID, INVALID (`Assume_rejected`/`Flaky_strategy`),
 OVERRUN (`Data_exhausted` from a `Stop_test` during a primitive), INTERESTING
 (any other exception, with a location-derived origin from `extract_origin`).

@@ -114,8 +114,8 @@ val hc_large_initial_test_case : int
 
 (** {2 Diagnostics} *)
 
-(** [version ()] returns libhegel's version string. *)
-val version : unit -> string
+(** [version ctx] returns libhegel's version string. *)
+val version : context -> string
 
 (** [last_error_message ()] returns the most recent error on the calling
     thread, or the empty string if the last call succeeded. *)
@@ -128,28 +128,28 @@ val context_free : context -> unit
 
 (** {2 Settings} *)
 
-(** [settings_new ()] allocates a settings handle with libhegel's defaults.
+(** [settings_new ctx] allocates a settings handle with libhegel's defaults.
     Must be released with {!settings_free}. *)
-val settings_new : unit -> settings
+val settings_new : context -> settings
 
-(** [settings_free s] frees a settings handle. *)
-val settings_free : settings -> unit
+(** [settings_free ctx s] frees a settings handle. *)
+val settings_free : context -> settings -> unit
 
-val settings_mode : settings -> mode -> unit
+val settings_mode : context -> settings -> mode -> unit
 
-(** [settings_backend s b] pins the engine's randomness backend. Pinning is
+(** [settings_backend ctx s b] pins the engine's randomness backend. Pinning is
     one-way: there is no way to return a handle to [Auto] once set. *)
-val settings_backend : settings -> backend -> unit
+val settings_backend : context -> settings -> backend -> unit
 
-val settings_test_cases : settings -> int -> unit
-val settings_verbosity : settings -> verbosity -> unit
+val settings_test_cases : context -> settings -> int -> unit
+val settings_verbosity : context -> settings -> verbosity -> unit
 
-(** [settings_seed s seed] sets the RNG seed ([None] picks a fresh random
+(** [settings_seed ctx s seed] sets the RNG seed ([None] picks a fresh random
     seed at run start). *)
-val settings_seed : settings -> int option -> unit
+val settings_seed : context -> settings -> int option -> unit
 
-val settings_derandomize : settings -> bool -> unit
-val settings_report_multiple_failures : settings -> bool -> unit
+val settings_derandomize : context -> settings -> bool -> unit
+val settings_report_multiple_failures : context -> settings -> bool -> unit
 
 (** [settings_database ctx s db] configures the on-disk example database:
     [None] leaves the default, [Some ""] disables it, [Some dir] uses [dir]. *)
@@ -159,12 +159,12 @@ val settings_database : context -> settings -> string option -> unit
     clears it. *)
 val settings_database_key : context -> settings -> string option -> unit
 
-(** [settings_phases s mask] enables exactly the phases in the bitmask. *)
-val settings_phases : settings -> int -> unit
+(** [settings_phases ctx s mask] enables exactly the phases in the bitmask. *)
+val settings_phases : context -> settings -> int -> unit
 
-(** [settings_suppress_health_check s mask] disables the health checks in the
+(** [settings_suppress_health_check ctx s mask] disables the health checks in the
     bitmask. *)
-val settings_suppress_health_check : settings -> int -> unit
+val settings_suppress_health_check : context -> settings -> int -> unit
 
 (** {2 Run lifecycle} *)
 
@@ -189,8 +189,8 @@ val test_case_from_blob : context -> settings -> string option -> test_case
     {!Backend_error} if the run has not finished. *)
 val run_result : context -> run -> run_result
 
-(** [run_free run] frees a run handle, draining the worker thread. *)
-val run_free : run -> unit
+(** [run_free ctx run] frees a run handle, draining the worker thread. *)
+val run_free : context -> run -> unit
 
 (** [blob_test_case_free ctx tc] frees a test case created by a failure_blob *)
 val blob_test_case_free : context -> test_case -> unit
@@ -249,30 +249,25 @@ val target : context -> test_case -> float -> string -> unit
     is used only for {!Interesting} and must be stable per bug. *)
 val mark_complete : context -> test_case -> status -> string option -> unit
 
-(** [is_final_replay tc] is [true] iff this is the engine's final replay of a
-    minimal failing example. *)
-val is_final_replay : test_case -> bool
-
 (** {2 Result inspection} *)
 
-(** [result_status r] is the run's aggregate status: passed, failed, or
+(** [result_status ctx r] is the run's aggregate status: passed, failed, or
     errored. *)
-val result_status : run_result -> run_status
+val result_status : context -> run_result -> run_status
 
-(** [result_error r] is the run-level error message when the run ended in
+(** [result_error ctx r] is the run-level error message when the run ended in
     {!Run_error} — a failed health check, a nondeterministic test, or an
     engine panic — or [None] when it completed normally. *)
-val result_error : run_result -> string option
+val result_error : context -> run_result -> string option
 
-val result_failure_count : run_result -> int
+val result_failure_count : context -> run_result -> int
 
-(** [result_failure r i] returns the [i]-th distinct failure, or [None] if out
-    of range. *)
-val result_failure : run_result -> int -> failure option
+(** [result_failure ctx r i] returns the [i]-th distinct failure, or [None] if
+    out of range. *)
+val result_failure : context -> run_result -> int -> failure option
 
-(** [result_failures r] returns all distinct failures in order. *)
-val result_failures : run_result -> failure list
+(** [result_failures ctx r] returns all distinct failures in order. *)
+val result_failures : context -> run_result -> failure list
 
-val failure_panic_message : failure -> string option
-val failure_blob : failure -> string option
-val failure_origin : failure -> string option
+val failure_blob : context -> failure -> string option
+val failure_origin : context -> failure -> string option
