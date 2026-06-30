@@ -58,11 +58,15 @@ jobs:
           zizmor --format plain .github/
 
   test:
-    name: test
+    name: test (ocaml ${{ matrix.ocaml }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        ocaml: ["5.1.1", "5.4.1"]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -74,9 +78,12 @@ jobs:
 
       - uses: ./.github/actions/setup-opam
         with:
-          cache-key: opam-${{ runner.os }}-with-test-${{ hashFiles('*.opam') }}
+          ocaml-version: ${{ matrix.ocaml }}
+          # The OCaml version is part of the cache key so the matrix legs don't
+          # share (and clobber) one ~/.opam.
+          cache-key: opam-${{ runner.os }}-${{ matrix.ocaml }}-with-test-${{ hashFiles('*.opam') }}
           cache-restore-keys: |
-            opam-${{ runner.os }}-with-test-
+            opam-${{ runner.os }}-${{ matrix.ocaml }}-with-test-
           deps-flags: --with-test
 
       - name: Stage libhegel from the matching GitHub release

@@ -45,9 +45,13 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.opam
-          key: opam-oxcaml-${{ runner.os }}-with-test-${{ hashFiles('*.opam') }}
+          # The compiler variant is part of the key: bumping the OxCaml version
+          # below must bust the cache, otherwise the restored ~/.opam keeps the
+          # old switch and "opam switch create" is skipped by the guard. Keep
+          # this version in sync with the ocaml-variants line in "Set up OxCaml".
+          key: opam-oxcaml-${{ runner.os }}-5.4.0+ox-with-test-${{ hashFiles('*.opam') }}
           restore-keys: |
-            opam-oxcaml-${{ runner.os }}-with-test-
+            opam-oxcaml-${{ runner.os }}-5.4.0+ox-with-test-
 
       - name: Set up OxCaml
         if: steps.cache-opam.outputs.cache-hit != 'true'

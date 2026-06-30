@@ -26,7 +26,7 @@
   "A property-based testing library that communicates with the Hegel engine to enable universal property-based testing from OCaml.")
  (depends
   (ocaml
-   (>= 5.2))
+   (>= 5.1))
   (core
    (>= 0.17))
   (core_unix
@@ -68,11 +68,9 @@
   "Abstracts over the differences between standard OCaml's ppxlib AST and OxCaml's ppxlib AST (labeled tuples, constructor modalities) so the Hegel PPX deriver and test rewriter can share a single implementation. Not intended for direct use.")
  (depends
   (ocaml
-   (>= 5.2))
+   (>= 5.1))
   (ppxlib
-   (and
-    (>= 0.28)
-    (< 0.36.0)))))
+   (>= 0.28))))
 
 (package
  (name ppx_hegel_generator)
@@ -81,11 +79,9 @@
   "Automatically derives Hegel generators for OCaml types annotated with [@@deriving hegel_generator].")
  (depends
   (ocaml
-   (>= 5.2))
+   (>= 5.1))
   (ppxlib
-   (and
-    (>= 0.28)
-    (< 0.36.0)))
+   (>= 0.28))
   (ppx_js_style
    (>= v0.17))
   (ppx_hegel_compat
@@ -100,11 +96,9 @@
   "Provides the [let%hegel_test] extension.")
  (depends
   (ocaml
-   (>= 5.2))
+   (>= 5.1))
   (ppxlib
-   (and
-    (>= 0.28)
-    (< 0.36.0)))
+   (>= 0.28))
   (ppx_js_style
    (>= v0.17))
   (ppx_hegel_compat

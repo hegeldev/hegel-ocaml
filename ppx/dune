@@ -32,14 +32,10 @@
   (generate_runner
    (echo "let () = Hegel_test_runtime.test_main ();;"))))
 
-; Select the ppx_compat implementation based on whether we are building on
-; OxCaml (ppxlib AST has labeled tuples and constructor modalities) or
-; standard OCaml.
-
 (rule
  (target ppx_compat.ml)
  (action
   (with-stdout-to
    %{target}
    (bash
-    "case '%{ocaml_version}' in *+ox*) cat %{dep:ppx_compat_oxcaml.ml};; *) cat %{dep:ppx_compat_standard.ml};; esac"))))
+    "case '%{ocaml_version}' in *+ox*) cat %{dep:ppx_compat_oxcaml.ml};; *) ver=$(ocamlfind query ppxlib -format '%v'); if [ \"$(echo $ver | cut -d. -f1)\" -gt 0 ] || [ \"$(echo $ver | cut -d. -f2)\" -ge 36 ]; then cat %{dep:ppx_compat_post-53.ml}; else cat %{dep:ppx_compat_pre-53.ml}; fi;; esac"))))
