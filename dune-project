@@ -55,7 +55,7 @@
     (>= 2.8)))
   (ocamlformat
    (and
-    :with-test
+    :with-dev-setup
     (= 0.29.0)))
   (yojson
    (>= 1.7))
@@ -70,7 +70,9 @@
   (ocaml
    (>= 5.2))
   (ppxlib
-   (>= 0.28))))
+   (and
+    (>= 0.28)
+    (< 0.36.0)))))
 
 (package
  (name ppx_hegel_generator)
@@ -81,7 +83,9 @@
   (ocaml
    (>= 5.2))
   (ppxlib
-   (>= 0.28))
+   (and
+    (>= 0.28)
+    (< 0.36.0)))
   (ppx_js_style
    (>= v0.17))
   (ppx_hegel_compat
@@ -98,7 +102,9 @@
   (ocaml
    (>= 5.2))
   (ppxlib
-   (>= 0.28))
+   (and
+    (>= 0.28)
+    (< 0.36.0)))
   (ppx_js_style
    (>= v0.17))
   (ppx_hegel_compat
