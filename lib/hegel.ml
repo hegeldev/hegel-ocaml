@@ -1,5 +1,5 @@
 (** The current version of Hegel for OCaml. *)
-let version = "0.7.4"
+let version = "0.7.5"
 
 (** CBOR encoding/decoding with type-safe extractor helpers. *)
 module Cbor_helpers = Cbor_helpers

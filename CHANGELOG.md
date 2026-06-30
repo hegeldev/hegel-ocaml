@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.5 - 2026-06-30
+
+Add support for using ppx_hegel_test with OCaml 5.3+.
+
 ## 0.7.4 - 2026-06-30
 
 This release publishes Hegel for OCaml to the opam repository, with the native 
