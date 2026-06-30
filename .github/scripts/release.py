@@ -69,17 +69,26 @@ def set_version_dune_project(new_version: str) -> None:
     path.write_text(new_text)
 
 
+OPAM_FILES = [
+    "hegel.opam",
+    "ppx_hegel_compat.opam",
+    "ppx_hegel_generator.opam",
+    "ppx_hegel_test.opam",
+]
+
+
 def set_version_opam(new_version: str) -> None:
-    path = ROOT / "hegel.opam"
-    text = path.read_text()
-    new_text = re.sub(
-        r'^version: "[^"]+"',
-        f'version: "{new_version}"',
-        text,
-        count=1,
-        flags=re.MULTILINE,
-    )
-    path.write_text(new_text)
+    for name in OPAM_FILES:
+        path = ROOT / name
+        text = path.read_text()
+        new_text = re.sub(
+            r'^version: "[^"]+"',
+            f'version: "{new_version}"',
+            text,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        path.write_text(new_text)
 
 
 def set_version_hegel_ml(new_version: str) -> None:
@@ -177,7 +186,7 @@ def release() -> None:
     git(
         "add",
         "dune-project",
-        "hegel.opam",
+        *OPAM_FILES,
         "lib/hegel.ml",
         "CHANGELOG.md",
         cwd=ROOT,

@@ -4,6 +4,7 @@
 .vscode/
 __pycache__/
 *.pyc
+.DS_Store
 # whitelist .claude files, rather than blacklist. Some local claude files
 # (skills, agents) have to live in .claude - as opposed to eg CLAUDE.local.md,
 # which we gitignore at the top level.
@@ -26,9 +27,6 @@ _coverage/
 *.native
 *.o
 *.a
-ppx_hegel_generator.opam
-ppx_hegel_test.opam
-ppx_hegel_compat.opam
 .hegelator/
 
 bench/
