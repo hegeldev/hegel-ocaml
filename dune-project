@@ -13,6 +13,10 @@
 
 (license MIT)
 
+(maintainers "Ethan Chou <ethan.chou@antithesis.com>")
+
+(authors "Hegel Developers <https://github.com/hegeldev>")
+
 (package
  (name hegel)
  (sites
