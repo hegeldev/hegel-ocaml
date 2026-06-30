@@ -11,7 +11,7 @@ homepage: "https://github.com/hegeldev/hegel-ocaml"
 bug-reports: "https://github.com/hegeldev/hegel-ocaml/issues"
 depends: [
   "dune" {>= "3.16"}
-  "ocaml" {>= "5.2"}
+  "ocaml" {>= "5.1"}
   "ppxlib" {>= "0.28"}
   "odoc" {with-doc}
 ]

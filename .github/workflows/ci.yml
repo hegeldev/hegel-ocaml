@@ -57,6 +57,58 @@ jobs:
           pipx install zizmor==1.23.1
           zizmor --format plain .github/
 
+  compat:
+    name: compat (ocaml ${{ matrix.ocaml }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        ocaml: ["5.1.1", "5.4.1"]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/install-tools
+        with:
+          tools: just
+
+      - uses: ./.github/actions/setup-opam
+        with:
+          ocaml-version: ${{ matrix.ocaml }}
+          # The OCaml version is part of the cache key so the matrix legs don't
+          # share (and clobber) one ~/.opam.
+          cache-key: opam-${{ runner.os }}-${{ matrix.ocaml }}-with-test-${{ hashFiles('*.opam') }}
+          cache-restore-keys: |
+            opam-${{ runner.os }}-${{ matrix.ocaml }}-with-test-
+          deps-flags: --with-test
+
+      - name: Stage libhegel from the matching GitHub release
+        id: libhegel
+        run: |
+          VERSION=$(awk -F'"' '/let version =/{print $2}' lib/ffi/loader.ml)
+          ASSET="libhegel-linux-amd64.so"
+          URL_BASE="https://github.com/hegeldev/hegel-rust/releases/download/v${VERSION}"
+          DEST="${RUNNER_TEMP}/libhegel.so"
+          curl -fsSL -o "${DEST}" "${URL_BASE}/${ASSET}"
+          curl -fsSL -o "${DEST}.sha256" "${URL_BASE}/${ASSET}.sha256"
+          WANT=$(awk '{print $1}' "${DEST}.sha256")
+          echo "${WANT}  ${DEST}" | sha256sum -c -
+          echo "path=${DEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Run tests (no coverage)
+        env:
+          HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
+        run: just check-tests-no-coverage
+
+      - name: Mirror opam-repo-ci (isolated release build + tests)
+        run: |
+          eval $(opam env)
+          opam install ./*.opam --with-test --confirm-level=unsafe-yes
+
   test:
     name: test
     runs-on: ubuntu-latest
@@ -79,6 +131,11 @@ jobs:
             opam-${{ runner.os }}-with-test-
           deps-flags: --with-test
 
+      - name: Install bisect_ppx
+        run: |
+          eval $(opam env)
+          opam install bisect_ppx.2.8.3 --yes
+
       - name: Stage libhegel from the matching GitHub release
         id: libhegel
         run: |
@@ -92,7 +149,7 @@ jobs:
           echo "${WANT}  ${DEST}" | sha256sum -c -
           echo "path=${DEST}" >> "$GITHUB_OUTPUT"
 
-      - name: Run tests
+      - name: Run tests with coverage
         env:
           HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
         run: just check-tests
@@ -205,7 +262,7 @@ jobs:
   release:
     name: release
     if: github.event_name == 'push' && github.repository == 'hegeldev/hegel-ocaml'
-    needs: [lint, test, docs, nix]
+    needs: [lint, test, compat, docs, nix]
     runs-on: ubuntu-latest
     permissions:
       contents: write

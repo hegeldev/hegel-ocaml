@@ -1,6 +1,10 @@
 name: Set up opam
-description: Install opam, restore/save the opam cache, create the 5.2.1 switch, and install dependencies.
+description: Install opam, restore/save the opam cache, create the requested OCaml switch, and install dependencies.
 inputs:
+  ocaml-version:
+    description: OCaml compiler version to create the switch for (also used as the switch name).
+    required: false
+    default: "5.2.1"
   cache-key:
     description: Full key for the opam cache (e.g. opam-Linux-lint-<hash>).
     required: true
@@ -56,6 +60,7 @@ runs:
       shell: bash
       env:
         BARE: ${{ inputs.bare }}
+        OCAML_VERSION: ${{ inputs.ocaml-version }}
       run: |
         # Cache may be partially restored via restore-keys (a different key
         # prefix matched); guard each step so it's idempotent.
@@ -66,15 +71,17 @@ runs:
             opam init --disable-sandboxing --yes
           fi
         fi
-        if ! opam switch list --short 2>/dev/null | grep -q '^5.2.1$'; then
-          opam switch create 5.2.1 --yes
+        if ! opam switch list --short 2>/dev/null | grep -q "^${OCAML_VERSION}$"; then
+          opam switch create "$OCAML_VERSION" --yes
         fi
 
     - name: Set opam environment
       shell: bash
+      env:
+        OCAML_VERSION: ${{ inputs.ocaml-version }}
       run: | # zizmor: ignore[github-env] static PATH/switch values, no untrusted input
-        echo "$HOME/.opam/5.2.1/bin" >> $GITHUB_PATH
-        echo "OPAMSWITCH=5.2.1" >> $GITHUB_ENV
+        echo "$HOME/.opam/${OCAML_VERSION}/bin" >> $GITHUB_PATH
+        echo "OPAMSWITCH=${OCAML_VERSION}" >> $GITHUB_ENV
 
     - name: Ensure GNU patch on macOS
       if: runner.os == 'macOS'
