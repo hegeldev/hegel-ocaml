@@ -11,6 +11,8 @@
 
 (test
  (name test_hegel)
+ (enabled_if
+  (<> %{profile} release))
  (modules
   test_hegel
   test_helpers
@@ -45,6 +47,8 @@
 
 (test
  (name test_ppx_derive)
+ (enabled_if
+  (<> %{profile} release))
  (modules test_ppx_derive)
  (libraries hegel hegel_test_runtime alcotest core core_unix threads.posix)
  (preprocess
@@ -57,6 +61,8 @@
 
 (test
  (name test_ppx_hegel_test)
+ (enabled_if
+  (<> %{profile} release))
  (modules test_ppx_hegel_test)
  (libraries hegel alcotest core core_unix threads.posix yojson)
  (preprocess
