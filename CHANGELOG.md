@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.4 - 2026-06-30
+
+This release publishes Hegel for OCaml to the opam repository, with the native 
+Hegel engine (`libhegel`) bundled into the package. Installing through opam also
+installs the prebuilt `libhegel` matching your platform.
+
 ## 0.7.3 - 2026-06-26
 
 This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.23.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.23.0) to [0.23.1](https://github.com/hegeldev/hegel-rust/releases/tag/v0.23.1).
