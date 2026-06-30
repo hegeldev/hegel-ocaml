@@ -1,0 +1,136 @@
+name: opam release
+
+# Publish hegel-ocaml to the central opam-repository whenever a GitHub release
+# is published. The release itself is cut by the `release` job in ci.yml (which
+# tags vX.Y.Z and runs `gh release create`); this workflow then opens a PR to
+# ocaml/opam-repository for the new version via `opam publish`.
+#
+# Prerequisites (one-time setup):
+#   * A repository secret `OPAM_PUBLISH_TOKEN`: a GitHub personal access token
+#     (classic) with the `public_repo` and `workflow` scopes, owned by the
+#     account that should appear as the author of the opam-repository PR. opam
+#     publish forks ocaml/opam-repository under that account and opens the PR
+#     from the fork.
+
+on:
+  release:
+    types: [published]
+  # Manual re-run / first-time publish for a tag that already exists.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Git tag to publish (e.g. v0.7.1).
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: opam-release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  opam-publish:
+    name: publish to opam-repository
+    if: github.repository == 'hegeldev/hegel-ocaml'
+    runs-on: ubuntu-latest
+    permissions:
+      # Needed to upload the bundled source archive as a release asset.
+      contents: write
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      # Prebuilt libhegel artifacts (from the hegel-rust release) to bundle into
+      # the opam source archive, one per platform the loader's dune-site supports.
+      PREBUILT_ASSETS: libhegel-linux-amd64.so libhegel-linux-arm64.so libhegel-darwin-arm64.dylib
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Install opam
+        run: |
+          OPAM_VERSION="2.2.1"
+          curl -fsSL \
+            "https://github.com/ocaml/opam/releases/download/${OPAM_VERSION}/opam-${OPAM_VERSION}-x86_64-linux" \
+            -o /usr/local/bin/opam
+          chmod +x /usr/local/bin/opam
+          opam --version
+
+      - name: Cache opam
+        id: cache-opam
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.opam
+          key: opam-publish-${{ runner.os }}-5.2.1
+          restore-keys: |
+            opam-publish-${{ runner.os }}-
+
+      - name: Set up switch and opam-publish
+        run: |
+          # Idempotent: a restored cache may already have the switch.
+          if [ ! -d "$HOME/.opam" ]; then
+            opam init --bare --disable-sandboxing --yes
+          fi
+          if ! opam switch list --short 2>/dev/null | grep -q '^5.2.1$'; then
+            opam switch create 5.2.1 --yes
+          fi
+          eval $(opam env --switch=5.2.1)
+          opam install opam-publish --yes
+
+      - name: Build bundled source archive
+        id: archive
+        run: |
+          PKG_VERSION="${TAG#v}"
+          LIBHEGEL_VERSION=$(awk -F'"' '/let version =/{print $2}' lib/ffi/loader.ml)
+          STAGE_DIR="hegel-${PKG_VERSION}"
+          STAGE="${RUNNER_TEMP}/${STAGE_DIR}"
+
+          # Clean source tree at the tag (tracked files only, no .git).
+          mkdir -p "$STAGE"
+          git archive --format=tar HEAD | tar -x -C "$STAGE"
+
+          # Download + checksum-verify each platform's libhegel into prebuilt/,
+          # then drop in the dune rules that select & install the matching one.
+          mkdir -p "$STAGE/prebuilt"
+          URL_BASE="https://github.com/hegeldev/hegel-rust/releases/download/v${LIBHEGEL_VERSION}"
+          for asset in $PREBUILT_ASSETS; do
+            curl -fsSL -o "$STAGE/prebuilt/$asset" "$URL_BASE/$asset"
+            curl -fsSL -o "${RUNNER_TEMP}/$asset.sha256" "$URL_BASE/$asset.sha256"
+            WANT=$(awk '{print $1}' "${RUNNER_TEMP}/$asset.sha256")
+            echo "${WANT}  $STAGE/prebuilt/$asset" | sha256sum -c -
+          done
+          cp .github/release-files/prebuilt.dune "$STAGE/prebuilt/dune"
+
+          ASSET_NAME="hegel-${PKG_VERSION}-opam.tar.gz"
+          TARBALL="${RUNNER_TEMP}/${ASSET_NAME}"
+          tar -C "${RUNNER_TEMP}" -czf "$TARBALL" "$STAGE_DIR"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          echo "asset_name=$ASSET_NAME" >> "$GITHUB_OUTPUT"
+          echo "asset_url=https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ASSET_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Attach bundled archive to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARBALL: ${{ steps.archive.outputs.tarball }}
+        run: gh release upload "$TAG" "$TARBALL" --clobber
+
+      - name: Publish to opam-repository
+        env:
+          # opam publish reads the token from this env var; it forks
+          # ocaml/opam-repository and opens the PR as the token owner.
+          OPAM_PUBLISH_GH_TOKEN: ${{ secrets.OPAM_PUBLISH_TOKEN }}
+          ASSET_URL: ${{ steps.archive.outputs.asset_url }}
+        run: |
+          eval $(opam env --switch=5.2.1)
+          # Submits every opam package found in the checkout (hegel,
+          # ppx_hegel_compat, ppx_hegel_generator, ppx_hegel_test) in a single
+          # opam-repository PR. The positional URL overrides the source archive
+          # with our bundled tarball (libhegel baked in); "." supplies the opam
+          # files plus the source repo/tag. opam computes the archive checksum
+          # by downloading ASSET_URL, so the upload step must run first.
+          opam publish \
+            --repo ocaml/opam-repository \
+            --tag "$TAG" \
+            --no-browser \
+            --no-confirmation \
+            "$ASSET_URL" .

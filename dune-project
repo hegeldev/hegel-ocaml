@@ -6,6 +6,8 @@
 
 (generate_opam_files true)
 
+(using dune_site 0.1)
+
 (source
  (github hegeldev/hegel-ocaml))
 
@@ -13,6 +15,8 @@
 
 (package
  (name hegel)
+ (sites
+  (lib libhegel))
  (synopsis "Hegel property-based testing library for OCaml")
  (description
   "A property-based testing library that communicates with the Hegel engine to enable universal property-based testing from OCaml.")
@@ -27,6 +31,8 @@
    (>= 0.20))
   (ctypes-foreign
    (>= 0.20))
+  (dune-site
+   (>= 3.16))
   (alcotest
    (and
     :with-test

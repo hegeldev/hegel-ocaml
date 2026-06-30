@@ -1,0 +1,59 @@
+; Copied to `prebuilt/dune` inside the published opam release tarball by
+; .github/workflows/opam-release.yml (alongside the prebuilt libhegel-<os>-<arch>
+; binaries). It is intentionally NOT named `dune` and lives outside the source
+; tree so dune does not process it in a dev checkout (where no prebuilt binaries
+; exist and the loader falls back to its download path).
+;
+; The rules select the binary matching the build platform, rename it to the
+; extension-less `libhegel_bundled` (the loader opens it by absolute path, so the
+; missing extension is irrelevant to dlopen), and install it into the `libhegel`
+; dune-site declared in dune-project. lib/ffi/loader.ml (`from_site`) then finds
+; it at runtime and during the sandboxed `@runtest` that opam-repo-ci performs,
+; with no network download.
+
+(rule
+ (enabled_if
+  (and
+   (= %{system} linux)
+   (= %{architecture} amd64)))
+ (target libhegel_bundled)
+ (action
+  (copy libhegel-linux-amd64.so libhegel_bundled)))
+
+(rule
+ (enabled_if
+  (and
+   (= %{system} linux)
+   (= %{architecture} arm64)))
+ (target libhegel_bundled)
+ (action
+  (copy libhegel-linux-arm64.so libhegel_bundled)))
+
+(rule
+ (enabled_if
+  (and
+   (= %{system} macosx)
+   (= %{architecture} arm64)))
+ (target libhegel_bundled)
+ (action
+  (copy libhegel-darwin-arm64.dylib libhegel_bundled)))
+
+; Install only on the platforms we ship a prebuilt for; elsewhere nothing is
+; installed and the loader falls back to its download path.
+(install
+ (package hegel)
+ (enabled_if
+  (or
+   (and
+    (= %{system} linux)
+    (= %{architecture} amd64))
+   (and
+    (= %{system} linux)
+    (= %{architecture} arm64))
+   (and
+    (= %{system} macosx)
+    (= %{architecture} arm64))))
+ (section
+  (site
+   (hegel libhegel)))
+ (files libhegel_bundled))

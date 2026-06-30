@@ -3,9 +3,11 @@
    Search order:
    1. [$HEGEL_LIBHEGEL_PATH] — an explicit path to the library file (or a
       directory containing [libhegel.<ext>]).
-   2. A sibling [../hegel-rust/target/release/] (then [.../debug/]) checkout
+   2. A prebuilt libhegel bundled into the installed package via the [libhegel]
+      dune-site (release tarballs ship the matching-platform binary there).
+   3. A sibling [../hegel-rust/target/release/] (then [.../debug/]) checkout
       relative to the current working directory.
-   3. A SHA-256-verified copy downloaded from the hegel-rust GitHub release,
+   4. A SHA-256-verified copy downloaded from the hegel-rust GitHub release,
       cached under [$XDG_CACHE_HOME|~/.cache]/hegel-ocaml/libhegel/<version>/.
       Set [HEGEL_LIBHEGEL_NO_DOWNLOAD=1] to opt out of the download fallback.
 
@@ -149,7 +151,19 @@ let from_env ext =
     (getenv_nonempty "HEGEL_LIBHEGEL_PATH")
 ;;
 
-(* 2. Sibling hegel-rust checkout relative to the working directory. *)
+(* 2. A libhegel bundled into the installed package. Release tarballs install
+   the matching-platform binary into the [libhegel] dune-site under the fixed
+   name [libhegel_bundled] (the loader opens it by path, so the missing
+   extension is irrelevant to [dlopen]). *)
+let from_site () =
+  List.find_opt
+    is_file
+    (List.map
+       (fun dir -> Filename.concat dir "libhegel_bundled")
+       Hegel_sites.Sites.libhegel)
+;;
+
+(* 3. Sibling hegel-rust checkout relative to the working directory. *)
 let from_sibling ext =
   let cwd = Sys.getcwd () in
   let candidate sub =
@@ -161,7 +175,7 @@ let from_sibling ext =
   List.find_opt is_file [ candidate "release"; candidate "debug" ]
 ;;
 
-(* 3. Cached download (fetching + verifying on first use). *)
+(* 4. Cached download (fetching + verifying on first use). *)
 let from_cache_or_download os_id ext =
   let key = os_id ^ "-" ^ arch_id () in
   let expected =
@@ -226,7 +240,10 @@ let locate () =
   match from_env ext with
   | Some p -> p
   | None ->
-    (match from_sibling ext with
+    (match from_site () with
      | Some p -> p
-     | None -> from_cache_or_download os_id ext)
+     | None ->
+       (match from_sibling ext with
+        | Some p -> p
+        | None -> from_cache_or_download os_id ext))
 ;;
