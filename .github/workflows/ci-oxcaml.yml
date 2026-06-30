@@ -49,9 +49,9 @@ jobs:
           # below must bust the cache, otherwise the restored ~/.opam keeps the
           # old switch and "opam switch create" is skipped by the guard. Keep
           # this version in sync with the ocaml-variants line in "Set up OxCaml".
-          key: opam-oxcaml-${{ runner.os }}-5.4.0+ox-with-test-${{ hashFiles('*.opam') }}
+          key: opam-oxcaml-${{ runner.os }}-5.2.0+ox-with-test-${{ hashFiles('*.opam') }}
           restore-keys: |
-            opam-oxcaml-${{ runner.os }}-5.4.0+ox-with-test-
+            opam-oxcaml-${{ runner.os }}-5.2.0+ox-with-test-
 
       - name: Set up OxCaml
         if: steps.cache-opam.outputs.cache-hit != 'true'
@@ -63,7 +63,7 @@ jobs:
           fi
           if ! opam switch list --short 2>/dev/null | grep -q '^oxcaml$'; then
             opam switch create oxcaml \
-              --packages "ocaml-variants.5.4.0+ox" \
+              --packages "ocaml-variants.5.2.0+ox" \
               --repos "oxcaml=git+https://github.com/oxcaml/opam-repository.git,default" \
               --yes
           fi
