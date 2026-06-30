@@ -51,7 +51,7 @@
    (>= v0.17))
   (bisect_ppx
    (and
-    :with-test
+    :with-dev-setup
     (>= 2.8)))
   (ocamlformat
    (and
