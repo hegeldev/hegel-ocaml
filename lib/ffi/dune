@@ -7,4 +7,14 @@
 (library
  (name hegel_ffi)
  (public_name hegel.ffi)
- (libraries ctypes ctypes-foreign unix))
+ (libraries ctypes ctypes-foreign unix dune-site))
+
+; Generates the `Hegel_sites` module exposing `Hegel_sites.Sites.libhegel`: the
+; directories of the `libhegel` site. Release tarballs install the matching
+; prebuilt libhegel there (see prebuilt/dune, added to the tarball by CI), so
+; the loader finds it without a download. In a dev checkout the site is empty
+; and the loader falls back to the sibling checkout / download.
+
+(generate_sites_module
+ (module hegel_sites)
+ (sites hegel))

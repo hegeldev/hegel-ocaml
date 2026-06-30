@@ -35,3 +35,6 @@ bench/
 bstrun/
 rbtrun/
 stlcrun/
+# Prebuilt libhegel binaries are bundled into the opam release tarball by CI
+# (.github/workflows/opam-release.yml); they must never be committed.
+/prebuilt/

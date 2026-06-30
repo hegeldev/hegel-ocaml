@@ -14,6 +14,7 @@ depends: [
   "core_unix" {>= "0.17"}
   "ctypes" {>= "0.20"}
   "ctypes-foreign" {>= "0.20"}
+  "dune-site" {>= "3.16"}
   "alcotest" {with-test & >= "1.7"}
   "ppx_expect" {with-test & >= "v0.17"}
   "ocplib-endian" {>= "1.2"}
@@ -32,9 +33,11 @@ build: [
     name
     "-j"
     jobs
+    "--promote-install-files=false"
     "@install"
     "@runtest" {with-test}
     "@doc" {with-doc}
   ]
+  ["dune" "install" "-p" name "--create-install-files" name]
 ]
 dev-repo: "git+https://github.com/hegeldev/hegel-ocaml.git"
