@@ -45,7 +45,12 @@ jobs:
       - name: Check opam files are up to date
         run: |
           eval $(opam env)
-          opam exec -- dune build hegel.opam && git diff --exit-code '*.opam'
+          opam exec -- dune build ./*.opam && git diff --exit-code '*.opam'
+
+      - name: Lint opam metadata
+        run: |
+          eval $(opam env)
+          opam lint ./*.opam
 
       - name: Check zizmor
         run: |
@@ -91,6 +96,11 @@ jobs:
         env:
           HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
         run: just check-tests
+
+      - name: Mirror opam-repo-ci (isolated release build + tests)
+        run: |
+          eval $(opam env)
+          opam install ./*.opam --with-test --confirm-level=unsafe-yes
 
   docs:
     name: docs

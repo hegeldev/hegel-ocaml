@@ -4,6 +4,8 @@
 
 (library
  (name expect_tests)
+ (enabled_if
+  (<> %{profile} release))
  (libraries hegel hegel_test_runtime core core_unix)
  (inline_tests
   (backend ppx_inline_test))
