@@ -38,4 +38,4 @@
   (with-stdout-to
    %{target}
    (bash
-    "case '%{ocaml_version}' in *+ox*) cat %{dep:ppx_compat_oxcaml.ml};; *) ver=$(ocamlfind query ppxlib -format '%v'); if [ \"$(echo $ver | cut -d. -f1)\" -gt 0 ] || [ \"$(echo $ver | cut -d. -f2)\" -ge 36 ]; then cat %{dep:ppx_compat_post-53.ml}; else cat %{dep:ppx_compat_pre-53.ml}; fi;; esac"))))
+    "case '%{ocaml_version}' in *+ox*) cat %{dep:ppx_compat_oxcaml.ml};; *) ver=$(grep '^version' %{lib:ppxlib:META} | head -1 | cut -d'\"' -f2); if [ \"$(echo $ver | cut -d. -f1)\" -gt 0 ] || [ \"$(echo $ver | cut -d. -f2)\" -ge 36 ]; then cat %{dep:ppx_compat_post-53.ml}; else cat %{dep:ppx_compat_pre-53.ml}; fi;; esac"))))
