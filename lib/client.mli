@@ -232,6 +232,8 @@ val new_state_machine
     budget is exhausted. *)
 val state_machine_next_rule : test_case -> state_machine_id:int -> int
 
+(**/**)
+
 (** [run_test ~settings ?test_location ?database_key test_fn] runs a property
     test using the given settings against the native engine.
 
@@ -240,7 +242,11 @@ val state_machine_next_rule : test_case -> state_machine_id:int -> int
       Provided automatically by the [let%hegel_test] PPX. When omitted, no
       Antithesis assertion is emitted.
     @param database_key
-      optional key scoping persisted/replayed failing examples. *)
+      key scoping persisted/replayed failing examples and, under [derandomize],
+      the per-test seed. Defaults to the test's [test_location] (as
+      [file:function_name]) so each [let%hegel_test] gets a stable, distinct
+      key; pass an explicit key to override. When both are absent, the engine
+      uses its own default key. *)
 val run_test
   :  settings:settings
   -> ?test_location:Antithesis.test_location
@@ -249,12 +255,21 @@ val run_test
   -> (test_case -> unit)
   -> unit
 
-(** [run_hegel_test ?settings ?test_location test_fn] is {!run_test} with
-    [settings] defaulting to {!default_settings}. The entry point the
-    [let%hegel_test] PPX targets; re-exported as [Hegel.run_hegel_test]. *)
+(**/**)
+
+(** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
+    runs a property test against the native engine, with [settings] defaulting to
+    {!default_settings}. This is the entry point the [let%hegel_test] PPX targets;
+    re-exported as [Hegel.run_hegel_test].
+
+    @param database_key
+      overrides the per-test database key / [derandomize] seed. Defaults to the
+      test's [test_location] so each [let%hegel_test] is scoped by its own
+      identity. *)
 val run_hegel_test
   :  ?settings:settings
   -> ?test_location:Antithesis.test_location
+  -> ?database_key:string
   -> ?failure_blobs:string list
   -> (test_case -> unit)
   -> unit

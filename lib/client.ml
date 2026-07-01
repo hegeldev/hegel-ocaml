@@ -630,7 +630,11 @@ let run_from_blob ctx ~(settings : settings) ~ffi_settings ~test_fn blob =
       Provided automatically by the [let%hegel_test] PPX. When omitted, no
       Antithesis assertion is emitted.
     @param database_key
-      optional key scoping persisted/replayed failing examples. *)
+      key scoping persisted/replayed failing examples and, under [derandomize],
+      the per-test seed. Defaults to the test's [test_location] (as
+      [file:function_name]) so each [let%hegel_test] gets a stable, distinct
+      key; pass an explicit key to override. When both are absent, the engine
+      uses its own default key. *)
 let run_test
       ~(settings : settings)
       ?test_location
@@ -640,6 +644,16 @@ let run_test
   =
   if Stdlib.Domain.DLS.get in_test_context
   then failwith "Cannot nest test cases - already inside a test case";
+  (* Default the database key to the test's identity so each [let%hegel_test]
+     gets a stable, distinct key: this scopes its persisted corpus and, under
+     [derandomize], its per-test seed. An explicit [database_key] wins. *)
+  let database_key =
+    match database_key with
+    | Some _ as k -> k
+    | None ->
+      Option.map test_location ~f:(fun (loc : Antithesis.test_location) ->
+        sprintf "%s:%s" loc.file loc.function_name)
+  in
   let ctx = Ffi.context_new () in
   let ffi_settings = build_ffi_settings ctx settings ~database_key in
   let run_body () =
@@ -654,10 +668,21 @@ let run_test
     ~f:run_body
 ;;
 
-(** [run_hegel_test ?settings ?test_location test_fn] is {!run_test} with
-    [settings] defaulting to {!default_settings}. This is the entry point the
-    [let%hegel_test] PPX targets and is re-exported as [Hegel.run_hegel_test]. *)
-let run_hegel_test ?(settings = default_settings ()) ?test_location ?failure_blobs test_fn
+(** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
+    is {!run_test} with [settings] defaulting to {!default_settings}. This is the
+    public entry point the [let%hegel_test] PPX targets and is re-exported as
+    [Hegel.run_hegel_test].
+
+    @param database_key
+      overrides the key scoping this test's persisted corpus and [derandomize]
+      seed. When omitted it defaults to the test's [test_location] (see
+      {!run_test}), so each [let%hegel_test] is scoped by its own identity. *)
+let run_hegel_test
+      ?(settings = default_settings ())
+      ?test_location
+      ?database_key
+      ?failure_blobs
+      test_fn
   =
-  run_test ~settings ?test_location ?failure_blobs test_fn
+  run_test ~settings ?test_location ?database_key ?failure_blobs test_fn
 ;;

@@ -21,12 +21,18 @@ module Antithesis = Antithesis
 
 (** {2 Convenience re-exports} *)
 
-(** [run_hegel_test ?settings ?test_location test_fn] runs a property test
-    against the native engine, defaulting to {!default_settings}. This is the
-    entry point the [let%hegel_test] PPX targets. *)
+(** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
+    runs a property test against the native engine, defaulting to
+    {!default_settings}. This is the entry point the [let%hegel_test] PPX targets.
+
+    @param database_key
+      overrides the key scoping this test's persisted corpus and [derandomize]
+      seed; defaults to the test's [test_location] so each [let%hegel_test] is
+      scoped by its own identity. *)
 val run_hegel_test
   :  ?settings:Client.settings
   -> ?test_location:Antithesis.test_location
+  -> ?database_key:string
   -> ?failure_blobs:string list
   -> (Client.test_case -> unit)
   -> unit
