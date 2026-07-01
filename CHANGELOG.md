@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.6 - 2026-07-01
+
+Adds database key as an optional argument to `Hegel.run_hegel_test`. If `ppx_hegel_test` 
+is used, the key "file_name:test_name" is automatically passed in by let%hegel_test.
+
 ## 0.7.5 - 2026-06-30
 
 Add support for using ppx_hegel_test with OCaml 5.3+.
