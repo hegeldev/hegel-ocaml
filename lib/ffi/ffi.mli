@@ -117,7 +117,7 @@ val hc_large_initial_test_case : int
 (** [version ctx] returns libhegel's version string. *)
 val version : context -> string
 
-(** [last_error_message ()] returns the most recent error on the calling
+(** [last_error_message ctx] returns the most recent error on the calling
     thread, or the empty string if the last call succeeded. *)
 val last_error_message : context -> string
 

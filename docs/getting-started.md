@@ -80,7 +80,7 @@ Run `dune runtest` again. It should now pass.
 Hegel provides a rich library of generators that you can use out of the box.
 There are primitive generators, such as `integers`, `floats`, and `text`, and
 combinators that allow you to make generators out of other generators, such as
-`lists` and `tuples`.
+`lists` and `tuples2`.
 
 For example, you can use `lists` to generate a list of integers:
 
@@ -96,32 +96,63 @@ let%hegel_test prepend_increases_length tc =
 This test checks that prepending an element to a random list of integers should
 always increase its length.
 
-You can also define custom generators as regular functions. For example, say you
-have a `person` record that you want to generate:
+You can also build up compound values by writing a plain function that takes the
+test case and draws its parts. For example, say you have a `person` record that
+you want to generate:
 
 ```ocaml
 type person = { age : int; name : string }
 
 let generate_person tc =
-  let age = draw tc (integers ()) in
+  let age = draw tc (integers ~min_value:0 ~max_value:120 ()) in
   let name = draw tc (text ()) in
   { age; name }
 ```
 
-Note that you can feed the results of a `draw` to subsequent calls. For example,
-say that you extend the `person` record to include a `driving_license` field:
+`generate_person` has type `test_case -> person`. It is *not* a `generator`
+value, so you do not pass it to `draw` — you call it directly with the same `tc`,
+and it draws its fields for you:
+
+```ocaml
+let%hegel_test person_has_nonnegative_age tc =
+  let p = generate_person tc in
+  assert (p.age >= 0)
+;;
+```
+
+Because it's an ordinary function, you can feed the result of one `draw` into a
+later one. For example, say you extend the `person` record with a
+`driving_license` field that only adults can have:
 
 ```ocaml
 type person = { age : int; name : string; driving_license : bool }
 
 let generate_person tc =
-  let age = draw tc (integers ()) in
+  let age = draw tc (integers ~min_value:0 ~max_value:120 ()) in
   let name = draw tc (text ()) in
   let driving_license =
     if age >= 18 then draw tc (booleans ()) else false
   in
   { age; name; driving_license }
 ```
+
+If you instead want a first-class `generator` value — one you can draw with
+`draw` rather than call by hand — wrap the function with `composite`:
+
+```ocaml
+let person_generator = composite generate_person
+(* person_generator : (person, unprintable) generator *)
+
+let%hegel_test people_are_generatable tc =
+  let p = draw_silent tc person_generator in
+  assert (p.age >= 0)
+;;
+```
+
+`composite` carries no printer (the value type is yours), so draw it with
+`draw_silent`. To print it on a failing replay — or to feed it into combinators
+like `lists` that expect a *printable* element generator — attach a printer with
+`with_printer` (see [Debugging failures](#debug-your-failing-test-cases)).
 
 ## Debug your failing test cases
 
@@ -146,12 +177,13 @@ and you can override the name with `~label`: `draw ~label:"seed" tc (integers ()
 
 Some combinators hand the result type to your own code and so carry no printer —
 `map`, `flat_map`, `sampled_from`, `just`, and generators from `[@@deriving
-hegel]`. Either draw it with `draw_silent` (which prints nothing):
+hegel_generator]`. Either draw it with `draw_silent` (which prints nothing):
 
 ```ocaml
-let parity = draw_silent tc (map (fun n -> n mod 2) (integers ())) 
+let parity = draw_silent tc (map (fun n -> n mod 2) (integers ()))
 ```
-or attach a printer with `with_printer`. The printer is any `'a -> Sexp.t`:
+or attach a printer with `with_printer`. The printer is any `'a -> Sexp.t`. 
+Note that `Sexp` requires `open Core`.
 ```ocaml
 let parity =
   draw tc (with_printer (fun n -> Sexp.Atom (Int.to_string n))
@@ -194,4 +226,3 @@ let%hegel_test integer_self_equality tc =
 
 - Run `just docs` to build the full odoc API documentation.
 - Browse the [`examples/`](../examples/) directory for runnable programs.
-- See `Client.settings` for more configuration options to customise how your test runs.

@@ -1,27 +1,29 @@
 (** The current version of Hegel for OCaml. *)
 val version : string
 
-(** CBOR encoding/decoding with type-safe extractor helpers. *)
-module Cbor_helpers = Cbor_helpers
-
 (** Test runner and lifecycle management. *)
 module Client = Client
 
 (** Generator combinators for composable test data generation. *)
 module Generators = Generators
 
-(** Runtime support for [@@deriving hegel_generator]. *)
-module Derive = Derive
-
 (** Stateful property-based testing on top of {!Generators}. *)
 module Stateful = Stateful
 
-(** Antithesis integration. *)
+(**/**)
+
+(* Internal modules: accessible (used by generated code and tests) but excluded
+   from the generated documentation. *)
+
+module Cbor_helpers = Cbor_helpers
+module Derive = Derive
 module Antithesis = Antithesis
+
+(**/**)
 
 (** {2 Convenience re-exports} *)
 
-(** [run_hegel_test ?settings ?test_location test_fn] runs a property test
+(** [run_hegel_test ?settings ?test_location ?failure_blobs test_fn] runs a property test
     against the native engine, defaulting to {!default_settings}. This is the
     entry point the [let%hegel_test] PPX targets. *)
 val run_hegel_test
@@ -35,8 +37,9 @@ val run_hegel_test
     [false]. *)
 val assume : Client.test_case -> bool -> unit
 
-(** [note tc message] records a message that will be printed on the final
-    (failing) run. *)
+(** [note tc message] prints [message] to stderr subject to the run's verbosity:
+    never under [Quiet], only on the final (failing) replay under [Normal], and
+    on every test case under [Verbose] or [Debug]. *)
 val note : Client.test_case -> string -> unit
 
 (** [target tc value label] sends a target command to guide the search engine

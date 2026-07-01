@@ -1,16 +1,10 @@
-(** Generator combinators for Hegel.
-
-    This module provides a composable generator API for property-based testing.
+(** This module provides a composable generator API for property-based testing.
     Generators produce typed OCaml values and can be combined using {!map},
     {!flat_map}, and {!filter}.
 
     Every generator carries a phantom ['p] recording whether it holds a printer.
-    Primitive and composite generators are {!printable} and may be drawn with
-    {!draw}, which prints the drawn value on a failing replay. {!map},
-    {!flat_map}, {!sampled_from}, and {!just} hand the output type to user code
-    and so are {!unprintable}: they can be drawn with {!draw_silent}, or made
-    printable with {!with_printer}. Composite combinators ({!lists}, {!tuples2},
-    {!one_of}, …) require printable components and produce printable results. *)
+    Primitive generators are {!printable} and may be drawn with
+    {!draw}, which prints the drawn value on a failing replay. *)
 
 (** Constants for span labels used in generation tracking. *)
 module Labels : sig
@@ -188,11 +182,18 @@ val basic_unique_safe : ('a, 'p) generator -> bool
 val booleans : unit -> (bool, printable) generator
 
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
-    the given bounds. *)
+    the given bounds. When a bound is omitted it defaults to the corresponding
+    OCaml native [int] limit. *)
 val integers : ?min_value:int -> ?max_value:int -> unit -> (int, printable) generator
 
 (** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
-     ?allow_infinity ()] creates a generator for floating-point values. *)
+     ?allow_infinity ()] creates a generator for floating-point values.
+
+    Uses schema type ["float"] as required by the Hegel engine. The fields
+    [allow_nan], [allow_infinity], [exclude_min], [exclude_max], and [width] are
+    always sent (required by the engine). Defaults follow Hypothesis:
+    - [allow_nan]: [true] only when no bounds are set
+    - [allow_infinity]: [true] when at most one bound is set *)
 val floats
   :  ?min_value:float
   -> ?max_value:float

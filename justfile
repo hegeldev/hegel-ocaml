@@ -47,13 +47,15 @@ check-docs:
     #!/usr/bin/env bash
     set -euo pipefail
     eval $(opam env)
-    dune build @doc 2>&1
+    # Scope to the `hegel` package so the internal ppx_hegel_* packages (and the
+    # unpublished vendored `cbor` library) are excluded from the generated docs.
+    dune build @doc --only-packages hegel 2>&1
 
 docs:
     #!/usr/bin/env bash
     set -euo pipefail
     eval $(opam env)
-    dune build @doc 2>&1
+    dune build @doc --only-packages hegel 2>&1
     open _build/default/_doc/_html/index.html
 
 check-tests-no-coverage:

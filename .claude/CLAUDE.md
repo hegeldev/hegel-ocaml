@@ -27,32 +27,52 @@ just check       # Run lint + docs + test (the full CI check)
 ```
 lib/                         # Library source
   dune                       # Library build config (bisect_ppx instrumented)
-  hegel.ml                   # Main module — re-exports all sub-modules
+  hegel.ml / hegel.mli       # Main module — re-exports the public API
   ffi/                       # ctypes bindings to native libhegel (NOT instrumented)
     ffi.ml                   # dlopen + 1:1 C-ABI wrappers; settings/run/test_case handles
     loader.ml                # locate/download libhegel at runtime (env > sibling > release)
-  cbor_helpers.ml            # CBOR encoding/decoding with type-safe extractors
+  cbor/cbor.ml               # Vendored CBOR encoder/decoder (RFC 7049; mirage/ocaml-cbor)
+  cbor_helpers.ml            # Type-safe CBOR extractors on top of cbor
   client.ml                  # Test runner + run lifecycle on top of Hegel_ffi.Ffi
-  generators.ml              # Generator combinators (booleans, integers, lists, …)
+  generators.ml              # Re-export shim: include the four generators_* modules
+  generators_core.ml         # generator type; draw/draw_silent, map/flat_map/filter,
+                             #   composite, span labels — the discriminated union
+  generators_primitives.ml   # integers, booleans, floats, text, binary, just, formats
+  generators_collections.ml  # lists, hashmaps, sets, and the collection protocol
+  generators_combinators.ml  # sampled_from, one_of, tuples2/3/4
   derive.ml                  # Runtime support for [@@deriving hegel_generator]
+  stateful.ml                # Stateful testing: Rule.create + run over action sequences
+  antithesis.ml              # Antithesis integration (emits an always-typed assertion)
   test_runtime/              # Inline-test registry + runner for [let%hegel_test]
     hegel_test_runtime.ml    # Registry, run_all, test_main (called by dune-generated runner)
 
 ppx/                         # PPX rewriters and derivers
   dune                       # PPX library build configs; ppx_hegel_test declares
-                             # (inline_tests.backend ...) + (ppx_runtime_libraries hegel_test_runtime)
+                             # (inline_tests.backend ...) + (ppx_runtime_libraries hegel_test_runtime);
+                             # a rule generates ppx_compat.ml from one variant below
   ppx_hegel_generator.ml     # Deriver: reads type decls, emits generator functions
   ppx_hegel_test.ml          # Expander: rewrites [let%hegel_test name tc = body]
                              # into a callable function plus a Hegel_test_runtime.register call
+  ppx_compat_pre-53.ml       # AST compat shim for ppxlib < 0.36 (OCaml < 5.3)
+  ppx_compat_post-53.ml      # AST compat shim for ppxlib >= 0.36 (OCaml >= 5.3)
+  ppx_compat_oxcaml.ml       # AST compat shim for the OxCaml compiler
+                             # (one of the three is copied to ppx_compat.ml = ppx_hegel_compat lib)
 
-test/                        # Alcotest test suite
-  dune                       # Test build config (two executables: test_hegel, test_ppx_derive)
+test/                        # Test suite (three executables: test_hegel [Alcotest],
+  dune                       #   test_ppx_derive, test_ppx_hegel_test)
   test_hegel.ml              # Top-level Alcotest runner
+  test_helpers.ml            # Shared test utilities
   test_cbor_helpers.ml       # CBOR helper tests
+  test_cbor_vectors.ml       # CBOR round-trip vector tests
   test_client.ml             # Client config + run lifecycle tests (real engine)
-  test_generators_*.ml       # Generator combinator / collection / schema tests
+  test_generators_*.ml       # Generator core / primitives / collections / combinators / schema
   test_derive.ml             # Derive module runtime helper tests
+  test_stateful.ml           # Stateful testing tests
+  test_antithesis.ml         # Antithesis integration tests
+  test_single_test_case.ml   # Single-case / failure-blob replay tests
+  test_hegel_test_runtime.ml # Inline-test runner behavior (re-spawns test_hegel.exe)
   test_ppx_derive.ml         # PPX deriver E2E tests (uses ppx_hegel_generator)
+  test_ppx_hegel_test.ml     # ppx_hegel_test expander E2E tests
 
 docs/                        # Tutorial and guide documents
   getting-started.md         # Getting Started tutorial (OCaml translation)
@@ -93,7 +113,12 @@ mechanical marshalling out of the 100%-coverage gate (no `[@coverage off]`).
 `lib/protocol.ml`, `lib/connection.ml`, and the old Python-subprocess install
 flow were removed in the native-backend migration.
 
-### Generator System (generators.ml)
+### Generator System (generators_core.ml + generators_{primitives,collections,combinators}.ml)
+
+The generator type and combinators (`draw`, `map`, `flat_map`, `composite`, …)
+live in `generators_core.ml`; the primitives, collections, and combinators are
+split across the sibling `generators_*.ml` files. `generators.ml` is a thin shim
+that `include`s all four so they surface as one `Hegel.Generators` module.
 
 Generators are a discriminated union:
 - **Basic** — holds a raw CBOR schema + optional transform. Calling `map` on a Basic preserves the schema (composes transforms). The engine generates the value in one round-trip.
@@ -283,26 +308,20 @@ The Hegel engine speaks CBOR. Generator schemas are CBOR maps:
    it directly; the `composite` wrapper replaced that so derived generators
    compose with the other combinators.)
 
-2. **Unbounded integers cause CBOR bigint issues**: `integers()` without bounds can
-   generate numbers too large for OCaml's native int. The CBOR library encodes these
-   as tagged bigints that `extract_int` can't decode. The PPX bounds ints to
-   ±1073741823 (30-bit) to avoid this. Users needing different ranges should use
-   the manual `Generators.integers ~min_value ~max_value ()` API.
-
-3. **PPX tests need a separate executable**: Because the PPX needs
+2. **PPX tests need a separate executable**: Because the PPX needs
    `(preprocess (pps ppx_hegel_generator))`, the test file using `[@@deriving hegel_generator]`
    must be in a separate `(test ...)` stanza from the main test suite. Both test
    executables are run by `dune runtest`.
 
-4. **ppxlib.metaquot is essential**: The PPX uses `[%expr ...]` and `[%stri ...]`
+3. **ppxlib.metaquot is essential**: The PPX uses `[%expr ...]` and `[%stri ...]`
    metaquot syntax for readable AST construction. This requires
    `(preprocess (pps ppxlib.metaquot))` in the PPX's own dune file.
 
-5. **Runtime helpers in lib/derive.ml**: For option and list types, the PPX delegates
+4. **Runtime helpers in lib/derive.ml**: For option and list types, the PPX delegates
    to runtime helpers `Hegel.Derive.generate_option` and `Hegel.Derive.generate_list`.
    These live in the main library (not the PPX) so they're covered by bisect_ppx.
 
-6. **Floats default to finite**: The PPX generates `floats ~allow_nan:false ~allow_infinity:false ()`
+5. **Floats default to finite**: The PPX generates `floats ~allow_nan:false ~allow_infinity:false ()`
    to avoid NaN/infinity in derived types, which would cause issues in most user code.
 
 ### Documentation and Polish Stage

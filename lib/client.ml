@@ -17,7 +17,8 @@ exception Assume_rejected
     (StopTest). *)
 exception Data_exhausted
 
-(** Raised when the engine detects a flaky strategy definition. *)
+(** Raised when the engine detects a flaky strategy definition or when 
+the client side pool diverges from the engine side pool. *)
 exception Flaky_strategy
 
 (** Health checks that can be suppressed during test execution. *)
@@ -264,6 +265,8 @@ let generate_from_schema schema tc =
     Cbor_helpers.decode (Ffi.generate tc.context tc.handle (Cbor_helpers.encode schema)))
 ;;
 
+(** [primitive_boolean tc p forced] generates a boolean with probability [p] of 
+[true]. If [forced] is not [None], then the value is forced to be [b] for [Some b] *)
 let primitive_boolean tc p forced =
   with_stop_guard tc (fun () -> Ffi.primitive_boolean tc.context tc.handle p forced)
 ;;
@@ -630,7 +633,12 @@ let run_from_blob ctx ~(settings : settings) ~ffi_settings ~test_fn blob =
       Provided automatically by the [let%hegel_test] PPX. When omitted, no
       Antithesis assertion is emitted.
     @param database_key
-      optional key scoping persisted/replayed failing examples. *)
+      optional key scoping persisted/replayed failing examples.
+    @param failure_blobs
+      a list of base64 encoded strings (blobs), where each string encodes the choices 
+      made in a failing test run. When the list is nonempty, only the first blob 
+      is decoded and run. The blob is only guaranteed to reproduce a failure within 
+      a specific version of Hegel *)
 let run_test
       ~(settings : settings)
       ?test_location
@@ -654,7 +662,7 @@ let run_test
     ~f:run_body
 ;;
 
-(** [run_hegel_test ?settings ?test_location test_fn] is {!run_test} with
+(** [run_hegel_test ?settings ?test_location ?failure_blobs test_fn] is {!run_test} with
     [settings] defaulting to {!default_settings}. This is the entry point the
     [let%hegel_test] PPX targets and is re-exported as [Hegel.run_hegel_test]. *)
 let run_hegel_test ?(settings = default_settings ()) ?test_location ?failure_blobs test_fn

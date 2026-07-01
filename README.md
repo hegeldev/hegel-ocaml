@@ -1,7 +1,7 @@
 # Hegel for OCaml
 
-Hegel is a property-based testing library for OCaml. Hegel is based on
-[Hypothesis](https://github.com/hypothesisworks/hypothesis) and runs the native
+Hegel is a property-based testing library for OCaml based on
+[Hypothesis](https://github.com/hypothesisworks/hypothesis), and runs the native
 [Hegel](https://hegel.dev/) engine in-process via the `libhegel` C library.
 
 ## Install Hegel
@@ -38,6 +38,10 @@ Add `hegel` to your dune library dependencies:
  (preprocess (pps ppx_hegel_test)))
 ```
 
+`ppx_hegel_test` is not required to use Hegel, but strongly recommended as it 
+adds many convenience features and integration with `dune runtest`. The examples
+below assume `ppx_hegel_test` is used.
+
 Write a property test using `let%hegel_test`:
 
 ```ocaml
@@ -51,7 +55,7 @@ let%hegel_test commutative_addition tc =
 ;;
 ```
 
-Run `dune runtest`. Hegel generates 100 random input pairs and reports the
+Run `dune runtest`. Hegel generates up to 100 random input pairs and reports the
 minimal counterexample if it finds one. When a test fails, Hegel prints each
 value you drew from the failing case, named after the `let` binding it was
 bound to (`a = …`, `b = …`). See [Debugging failures](docs/getting-started.md#debug-your-failing-test-cases)

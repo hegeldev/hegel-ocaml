@@ -4,10 +4,9 @@
     [condition] is [true] iff the property test passed. Each Hegel test pass/fail 
     appears in the triage report.
 
-    Outside of Antithesis, all functions in this module are
-    no-ops. 
+    Outside of Antithesis, [emit_assertion loc ~passed] is a no-op.
 
-    See <https://antithesis.com/docs/using_antithesis/sdk/fallback/assert/>
+    See <https://antithesis.com/docs/reference/sdk/fallback/assert/>
     for the assertion schema. *)
 
 (** A source location identifying a single Hegel test. Used to build the
@@ -19,7 +18,8 @@ type test_location =
   }
 
 (** [is_running_in_antithesis ()] returns [true] iff [ANTITHESIS_OUTPUT_DIR]
-    is set in the environment and points to an existing directory. *)
+    is set in the environment and points to an existing directory. Fails if
+    [ANTITHESIS_OUTPUT_DIR] does not point to a valid directory. *)
 val is_running_in_antithesis : unit -> bool
 
 (** [extract_file_base path] returns the basename of [path] with the extension

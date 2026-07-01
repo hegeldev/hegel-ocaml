@@ -1,6 +1,4 @@
-(** Test runner and lifecycle management for Hegel.
-
-    This module implements the client-side logic for running property-based
+(** This module implements the client-side logic for running property-based
     tests against the native libhegel engine (via {!Hegel_ffi.Ffi}). *)
 
 (** Raised when {!assume} condition is [false]. *)
@@ -10,7 +8,8 @@ exception Assume_rejected
     (StopTest). *)
 exception Data_exhausted
 
-(** Raised when the engine detects a flaky strategy definition. *)
+(** Raised when the engine detects a flaky strategy definition or when 
+the client side pool diverges from the engine side pool. *)
 exception Flaky_strategy
 
 (** Health checks that can be suppressed during test execution. *)
@@ -67,12 +66,14 @@ type settings =
   ; seed : int option
   ; derandomize : bool
   ; database : database
+    (** stores previous failures. when set, Hegel replays test cases from previously
+  failed runs and adds new failures when they occur. *)
   ; suppress_health_check : health_check list
   ; phases : phase list option
     (** [None] uses the engine's default phase list (all phases); [Some xs]
           restricts execution to [xs]. *)
-  ; print_blob : bool
-  ; report_multiple_failures : bool
+  ; print_blob : bool (** print blob for a failure *)
+  ; report_multiple_failures : bool (** false by default *)
   }
 
 (** [default_settings ()] creates settings with defaults. Detects CI
@@ -126,21 +127,18 @@ val with_print_blob : bool -> settings -> settings
     set to [b]. When [true], a failing run reports all the failures it found *)
 val with_report_multiple_failures : bool -> settings -> settings
 
-(** Per-test-case state passed explicitly to the test function. Holds the
-    native test-case handle, the final-replay flag, whether verbose output is
-    on, abort state, the current generation-span depth (used to print only the
-    outermost drawn value), and the per-name occurrence counter that numbers
-    repeatable draws. *)
 type test_case =
-  { handle : Hegel_ffi.Ffi.test_case
-  ; context : Hegel_ffi.Ffi.context
-  ; mode : mode
-  ; stateful_step_count : int
-  ; is_final : bool
+  { handle : Hegel_ffi.Ffi.test_case (** native test-case handle *)
+  ; context : Hegel_ffi.Ffi.context (** the libhegel FFI context handle *)
+  ; mode : mode (** standard test run of multiple test cases or single long run *)
+  ; stateful_step_count : int (** max number of steps in a stateful test *)
+  ; is_final : bool (** if the test case is on its final replay *)
   ; verbosity : verbosity
   ; mutable test_aborted : bool
   ; mutable draw_depth : int
+    (** current generation-span depth (used to print only the outermost drawn value) *)
   ; draw_counts : int Core.String.Table.t
+    (** per-name occurrence counter for numbering repeatable draws *)
   }
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
@@ -153,6 +151,8 @@ val extract_origin : exn -> string
     StopTest. *)
 val generate_from_schema : Cbor.t -> test_case -> Cbor.t
 
+(** [primitive_boolean tc p forced] generates a boolean with probability [p] of 
+    [true]. If [forced] is not [None], then the value is forced to be [b] for [Some b] *)
 val primitive_boolean : test_case -> float -> bool option -> bool
 
 (** [assume tc condition] rejects the current test case if [condition] is
@@ -232,15 +232,21 @@ val new_state_machine
     budget is exhausted. *)
 val state_machine_next_rule : test_case -> state_machine_id:int -> int
 
-(** [run_test ~settings ?test_location ?database_key test_fn] runs a property
-    test using the given settings against the native engine.
+(** [run_test ~settings ?test_location ?database_key ?failure_blobs test_fn] runs
+    a property test using the given settings against the native engine.
 
     @param test_location
       source location of the test, used by the Antithesis integration.
       Provided automatically by the [let%hegel_test] PPX. When omitted, no
       Antithesis assertion is emitted.
     @param database_key
-      optional key scoping persisted/replayed failing examples. *)
+      optional key scoping persisted/replayed failing examples. 
+    @param failure_blobs
+      a list of base64 encoded strings (blobs), where each string encodes the choices 
+      made in a failing test run. When the list is nonempty, only the first blob 
+      is decoded and run. The blob is only guaranteed to reproduce a failure within 
+      a specific version of Hegel
+*)
 val run_test
   :  settings:settings
   -> ?test_location:Antithesis.test_location
@@ -249,8 +255,8 @@ val run_test
   -> (test_case -> unit)
   -> unit
 
-(** [run_hegel_test ?settings ?test_location test_fn] is {!run_test} with
-    [settings] defaulting to {!default_settings}. The entry point the
+(** [run_hegel_test ?settings ?test_location ?failure_blobs test_fn] is
+    {!run_test} with [settings] defaulting to {!default_settings}. The entry point the
     [let%hegel_test] PPX targets; re-exported as [Hegel.run_hegel_test]. *)
 val run_hegel_test
   :  ?settings:settings

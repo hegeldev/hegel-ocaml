@@ -3,7 +3,7 @@
     {!Rule.create} from a [name] and a [step] function that performs one
     application of the rule — drawing any arguments it needs from the test case
     and returning the new state. Invariants are ['state -> unit] functions
-    evaluated after every successful step.
+    evaluated before any step is run and after every successful step.
 
     To run a state machine, call {!run} inside a Hegel test.
 
@@ -33,9 +33,7 @@ module Pool : sig
   type 'a t
 
   (** Creates an empty {!Pool.t}. Pools are tied to a test case; do not
-      reuse one across test cases. When [sexp_of] is given, each drawn/consumed
-      variable is printed as [v<id> = <sexp>] on the final replay of a failing
-      test; without it, variable picks print nothing. *)
+      reuse one across test cases. *)
   val create : Client.test_case -> 'a t
 
   (** Records [value] in [variables] for later draws. *)
@@ -64,6 +62,7 @@ module Rule : sig
         arguments it needs from [tc] and returning the new state. *)
   val create : name:string -> step:(Client.test_case -> 'state -> 'state) -> 'state t
 
+  (** Returns the name of the rule *)
   val name : _ t -> string
 end
 
