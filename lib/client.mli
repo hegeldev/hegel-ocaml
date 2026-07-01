@@ -14,7 +14,9 @@ exception Data_exhausted
 the client side pool diverges from the engine side pool. *)
 exception Flaky_strategy
 
-(** Health checks that can be suppressed during test execution. *)
+(** Health checks that can be suppressed during test execution.
+
+    @canonical Hegel.health_check *)
 type health_check =
   | Filter_too_much
   | Too_slow
@@ -28,20 +30,26 @@ val health_check_to_string : health_check -> string
 
 (**/**)
 
-(** Controls how much output Hegel produces during test runs. *)
+(** Controls how much output Hegel produces during test runs.
+
+    @canonical Hegel.verbosity *)
 type verbosity =
   | Quiet
   | Normal
   | Verbose
   | Debug
 
-(** The database setting: unset, disabled, or a path. *)
+(** The database setting: unset, disabled, or a path.
+
+    @canonical Hegel.database *)
 type database =
   | Unset
   | Disabled
   | Path of string
 
-(** Controls the test execution mode. *)
+(** Controls the test execution mode.
+
+    @canonical Hegel.mode *)
 type mode =
   | Test_run
   (** Run a full property test: many test cases, shrinking, database
@@ -51,7 +59,9 @@ type mode =
         database. Useful when you want pure data generation without
         property-testing overhead. *)
 
-(** Phases of the test that can be enabled or disabled. *)
+(** Phases of the test that can be enabled or disabled.
+
+    @canonical Hegel.phase *)
 type phase =
   | Explicit
   | Reuse
@@ -78,7 +88,9 @@ val phase_to_string : phase -> string
         |> Client.with_verbosity Client.Verbose
         |> Client.with_database (Client.Path "_hegel_db")]
       ;;
-    ]} *)
+    ]}
+
+    @canonical Hegel.settings *)
 type settings =
   { mode : mode
   ; test_cases : int
@@ -161,7 +173,9 @@ val with_print_blob : bool -> settings -> settings
 val with_report_multiple_failures : bool -> settings -> settings
 
 (** An opaque per-test-case handle, threaded to the test function and to the
-    drawing primitives. Created and owned by the run loop. *)
+    drawing primitives. Created and owned by the run loop.
+
+    @canonical Hegel.test_case *)
 type test_case
 
 (**/**)

@@ -39,9 +39,11 @@ module Cbor_helpers = Cbor_helpers
 module Derive = Derive
 module Antithesis = Antithesis
 
-type test_case = Client.test_case
-
 (**/**)
+
+(** An opaque handle for the current test case, passed to your test function and
+    threaded to {!draw} and the other drawing primitives. *)
+type test_case = Client.test_case
 
 (** {2 Settings}
 
