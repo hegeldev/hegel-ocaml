@@ -15,7 +15,7 @@ let test_booleans_schema () =
 
 (** Test: integers(0, 100) generates values in range. *)
 let test_integers_in_range () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let gen = integers ~min_value:0 ~max_value:100 () in
     let v = Hegel.draw tc gen in
     assert (v >= 0 && v <= 100))
@@ -24,7 +24,7 @@ let test_integers_in_range () =
 (** Test: unbounded integers() E2E — the engine requires a [min_value], so the
     generator must supply default bounds; values stay within OCaml's native int. *)
 let test_integers_unbounded_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:20 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
     let v = Hegel.draw tc (integers ()) in
     assert (v >= Core.Int.min_value && v <= Core.Int.max_value);
     let xs = Hegel.draw tc (lists (integers ()) ()) in
@@ -469,49 +469,49 @@ let test_characters_with_categories () =
     allow_infinity default to true) produces a valid schema the engine accepts.
     The value may be NaN/infinity, so we only require that a draw succeeds. *)
 let test_floats_default_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:20 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
     let (_ : float) = Hegel.draw tc (floats ()) in
     ())
 ;;
 
 (** Test: default text() E2E — the default form omits max_size *)
 let test_text_default_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:20 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
     let s = Hegel.draw tc (text ()) in
     assert (String.length s >= 0))
 ;;
 
 (** Test: default binary() E2E — the default form omits max_size *)
 let test_binary_default_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:20 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
     let b = Hegel.draw tc (binary ()) in
     assert (String.length b >= 0))
 ;;
 
 (** Test: just always returns the constant. *)
 let test_just_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw_silent tc (just 42) in
     Alcotest.(check int) "always 42" 42 v)
 ;;
 
 (** Test: from_regex generates matching strings. *)
 let test_from_regex_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (from_regex "[0-9]+" ()) in
     assert (String.length v > 0))
 ;;
 
 (** Test: emails generates strings containing at-sign. *)
 let test_emails_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (emails ()) in
     assert (String.contains v '@'))
 ;;
 
 (** Test: urls generates strings starting with http. *)
 let test_urls_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (urls ()) in
     assert (
       String.length v >= 7
@@ -520,28 +520,28 @@ let test_urls_e2e () =
 
 (** Test: domains generates non-empty strings. *)
 let test_domains_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (domains ()) in
     assert (String.length v > 0))
 ;;
 
 (** Test: dates generates YYYY-MM-DD strings. *)
 let test_dates_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (dates ()) in
     assert (String.contains v '-'))
 ;;
 
 (** Test: times generates strings with colons. *)
 let test_times_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (times ()) in
     assert (String.contains v ':'))
 ;;
 
 (** Test: datetimes generates strings with T. *)
 let test_datetimes_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (datetimes ()) in
     assert (String.contains v 'T'))
 ;;

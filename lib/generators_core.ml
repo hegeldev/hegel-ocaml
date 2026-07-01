@@ -320,7 +320,7 @@ let rec do_draw : type a. a core -> Client.test_case -> a =
     [let%hegel_test] PPX rewrites bindings to; it is not intended for direct use
     (prefer {!draw}). On the final replay of a failing test (or on every case
     under verbose output), an outermost draw prints its value through
-    {!Client.note} as [name = value], where [name] is [label], printed bare on
+    {!note} as [name = value], where [name] is [label], printed bare on
     its sole use and numbered ([label_1], [label_2], …) when [repeatable] is set
     — which the PPX does for a binding name that is reused or drawn in a loop.
     Draws nested inside a span (e.g. composite elements) are suppressed so only

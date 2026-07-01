@@ -124,7 +124,7 @@ let%hegel_test test_lists_of_integers_e2e tc =
   let items = Hegel.draw tc gen in
   Alcotest.(check bool) "max 3" true (List.length items <= 3);
   List.iter (fun n -> assert (n >= 0 && n <= 100)) items
-[@@settings Client.settings ~test_cases:50 ()]
+[@@settings Hegel.settings ~test_cases:50 ()]
 ;;
 
 (** Test: lists(booleans, min_size=3, max_size=5) → length in [3,5]. *)
@@ -134,7 +134,7 @@ let%hegel_test test_lists_booleans_bounds_e2e tc =
   let items = Hegel.draw tc gen in
   let n = List.length items in
   assert (n >= 3 && n <= 5)
-[@@settings Client.settings ~test_cases:50 ()]
+[@@settings Hegel.settings ~test_cases:50 ()]
 ;;
 
 (** Test: lists(filtered integers) → all elements satisfy predicate. *)
@@ -146,7 +146,7 @@ let%hegel_test test_lists_non_basic_e2e tc =
   let n = List.length items in
   assert (n >= 1 && n <= 3);
   List.iter (fun x -> assert (x > 5)) items
-[@@settings Client.settings ~test_cases:50 ()]
+[@@settings Hegel.settings ~test_cases:50 ()]
 ;;
 
 (** Test: lists(non-basic) without max_size (max_size=None in collection). *)
@@ -155,7 +155,7 @@ let%hegel_test test_lists_non_basic_no_max_e2e tc =
   let gen = lists elem () in
   let items = Hegel.draw tc gen in
   List.iter (fun x -> assert (x >= 0 && x <= 10)) items
-[@@settings Client.settings ~test_cases:10 ()]
+[@@settings Hegel.settings ~test_cases:10 ()]
 ;;
 
 (** Test: lists(lists(booleans)) → nested lists work. *)
@@ -166,7 +166,7 @@ let%hegel_test test_lists_nested_e2e tc =
   let outer_items = Hegel.draw tc gen in
   assert (List.length outer_items <= 3);
   List.iter (fun inner_items -> assert (List.length inner_items <= 3)) outer_items
-[@@settings Client.settings ~test_cases:50 ()]
+[@@settings Hegel.settings ~test_cases:50 ()]
 ;;
 
 (** Test: lists(basic, unique=true) has unique=true in schema. *)
@@ -207,7 +207,7 @@ let%hegel_test test_lists_unique_e2e tc =
   assert (n >= 3 && n <= 10);
   let uniq = List.sort_uniq compare items |> List.length in
   Alcotest.(check int) "all unique" n uniq
-[@@settings Client.settings ~test_cases:50 ()]
+[@@settings Hegel.settings ~test_cases:50 ()]
 ;;
 
 (** Test: lists(non-basic, unique=true) E2E — elements are distinct. *)
@@ -220,7 +220,7 @@ let%hegel_test test_lists_non_basic_unique_e2e tc =
   assert (n >= 1 && n <= 5);
   let uniq = List.sort_uniq compare items |> List.length in
   Alcotest.(check int) "all unique" n uniq
-[@@settings Client.settings ~test_cases:50 ()]
+[@@settings Hegel.settings ~test_cases:50 ()]
 ;;
 
 (** Test: lists(non-basic, unique=true) with impossible constraints terminates
@@ -235,7 +235,7 @@ let%hegel_test test_lists_non_basic_unique_exhaustion_e2e tc =
   let gen = lists elem ~min_size:2 ~unique:true () in
   ignore (Hegel.draw tc gen)
 [@@settings
-  Client.settings ~test_cases:10 ()
+  Hegel.settings ~test_cases:10 ()
   |> Client.with_suppress_health_check [ Client.Filter_too_much ]]
 ;;
 
@@ -247,7 +247,7 @@ let%hegel_test test_hashmaps_non_basic_keys_e2e tc =
   Alcotest.(check bool) "not basic" false (is_basic gen);
   let pairs = Hegel.draw tc gen in
   assert (List.length pairs <= 5)
-[@@settings Client.settings ~test_cases:10 ()]
+[@@settings Hegel.settings ~test_cases:10 ()]
 ;;
 
 (** Test: hashmaps(non-basic values) E2E — generates pairs. *)
@@ -257,7 +257,7 @@ let%hegel_test test_hashmaps_non_basic_values_e2e tc =
   let gen = hashmaps key_gen val_gen ~min_size:0 ~max_size:5 () in
   let pairs = Hegel.draw tc gen in
   assert (List.length pairs <= 5)
-[@@settings Client.settings ~test_cases:10 ()]
+[@@settings Hegel.settings ~test_cases:10 ()]
 ;;
 
 (** Regression: [lists ~unique:true] over a [map] that collapses distinct raw
@@ -284,7 +284,7 @@ let%hegel_test test_lists_unique_under_map_e2e tc =
   let uniq = List.sort_uniq compare xs |> List.length in
   Alcotest.(check int) "all unique" n uniq
 [@@settings
-  Client.settings ~test_cases:5 ()
+  Hegel.settings ~test_cases:5 ()
   |> Client.with_suppress_health_check [ Client.Filter_too_much ]]
 ;;
 
@@ -306,7 +306,7 @@ let%hegel_test test_hashmaps_unique_keys_under_filter_e2e tc =
   let uniq = List.sort_uniq compare keys |> List.length in
   Alcotest.(check int) "keys all unique" (List.length keys) uniq
 [@@settings
-  Client.settings ~test_cases:5 ()
+  Hegel.settings ~test_cases:5 ()
   |> Client.with_suppress_health_check [ Client.Filter_too_much ]]
 ;;
 

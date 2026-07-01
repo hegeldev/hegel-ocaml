@@ -9,7 +9,6 @@
     - Variants with tuple arguments *)
 
 open! Core
-open Hegel
 
 (* ==== Type declarations with derived generators ==== *)
 
@@ -82,56 +81,56 @@ type int_list_wrapper = { items : int list } [@@deriving hegel_generator]
 let%hegel_test test_point_e2e tc =
   let p = Hegel.draw_silent tc point_generator in
   ignore ((p.x, p.y) : int * int)
-[@@settings Client.settings ~test_cases:20 ()]
+[@@settings Hegel.settings ~test_cases:20 ()]
 ;;
 
 (** Test: derived person generator produces valid persons. *)
 let%hegel_test test_person_e2e tc =
   let p = Hegel.draw_silent tc person_generator in
   ignore ((p.name, p.age, p.active) : string * int * bool)
-[@@settings Client.settings ~test_cases:20 ()]
+[@@settings Hegel.settings ~test_cases:20 ()]
 ;;
 
 (** Test: derived score (type alias to int) generates integers. *)
 let%hegel_test test_score_e2e tc =
   let _v : score = Hegel.draw_silent tc score_generator in
   ()
-[@@settings Client.settings ~test_cases:20 ()]
+[@@settings Hegel.settings ~test_cases:20 ()]
 ;;
 
 (** Test: derived wrapper (single-field record) generates values. *)
 let%hegel_test test_wrapper_e2e tc =
   let w = Hegel.draw_silent tc wrapper_generator in
   ignore w.value
-[@@settings Client.settings ~test_cases:20 ()]
+[@@settings Hegel.settings ~test_cases:20 ()]
 ;;
 
 (** Test: derived line_segment (nested record) generates values. *)
 let%hegel_test test_line_segment_e2e tc =
   let ls = Hegel.draw_silent tc line_segment_generator in
   ignore (ls.start_pt.x, ls.start_pt.y, ls.end_pt.x, ls.end_pt.y)
-[@@settings Client.settings ~test_cases:20 ()]
+[@@settings Hegel.settings ~test_cases:20 ()]
 ;;
 
 (** Test: derived temperature (type alias to float) generates floats. *)
 let%hegel_test test_temperature_e2e tc =
   let f : temperature = Hegel.draw_silent tc temperature_generator in
   assert (Float.is_finite f)
-[@@settings Client.settings ~test_cases:20 ()]
+[@@settings Hegel.settings ~test_cases:20 ()]
 ;;
 
 (** Test: derived label (type alias to string) generates strings. *)
 let%hegel_test test_label_e2e tc =
   let s : label = Hegel.draw_silent tc label_generator in
   ignore (String.length s)
-[@@settings Client.settings ~test_cases:20 ()]
+[@@settings Hegel.settings ~test_cases:20 ()]
 ;;
 
 (** Test: derived int_list_wrapper (list field) generates values. *)
 let%hegel_test test_int_list_wrapper_e2e tc =
   let w = Hegel.draw_silent tc int_list_wrapper_generator in
   ignore (List.length w.items)
-[@@settings Client.settings ~test_cases:20 ()]
+[@@settings Hegel.settings ~test_cases:20 ()]
 ;;
 
 (** Test: derived color generator covers all constructors. *)
@@ -139,7 +138,7 @@ let test_color_e2e () =
   let saw_red = ref false in
   let saw_green = ref false in
   let saw_blue = ref false in
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
     match Hegel.draw_silent tc color_generator with
     | Red -> saw_red := true
     | Green -> saw_green := true
@@ -154,7 +153,7 @@ let test_shape_e2e () =
   let saw_circle = ref false in
   let saw_rectangle = ref false in
   let saw_point = ref false in
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
     match Hegel.draw_silent tc shape_generator with
     | Circle f ->
       assert (Float.is_finite f);
@@ -172,7 +171,7 @@ let test_shape_e2e () =
 let test_maybe_int_e2e () =
   let saw_some = ref false in
   let saw_none = ref false in
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
     match (Hegel.draw_silent tc maybe_int_generator).data with
     | Some _ -> saw_some := true
     | None -> saw_none := true);
@@ -184,7 +183,7 @@ let test_maybe_int_e2e () =
 let test_pair_or_single_e2e () =
   let saw_pair = ref false in
   let saw_single = ref false in
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
     match Hegel.draw_silent tc pair_or_single_generator with
     | Pair (a, b) ->
       ignore (a, b);
@@ -200,7 +199,7 @@ let test_pair_or_single_e2e () =
 let test_flag_e2e () =
   let saw_true = ref false in
   let saw_false = ref false in
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
     let b : flag = Hegel.draw_silent tc flag_generator in
     if b then saw_true := true else saw_false := true);
   assert !saw_true;

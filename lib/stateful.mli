@@ -46,7 +46,7 @@ module Pool : sig
   (** Returns the number of variables in the pool.
 
       {[
-      let () = Client.assume tc (Stateful.Pool.size pool > 0)
+      assume tc (Stateful.Pool.size pool > 0)
       ]} *)
   val size : _ t -> int
 

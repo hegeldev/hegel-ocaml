@@ -76,7 +76,7 @@ let%hegel_test commutative_addition tc =
 `unit -> unit` function, so you can still call it directly from an
 executable or hand it to another test harness like Alcotest.
 
-For a full walkthrough, see [docs/getting-started.md](docs/getting-started.md).
+For a full walkthrough, see [docs/getting-started.md](docs/gettin() g-started.md).
 
 ## Development
 

@@ -95,7 +95,7 @@ type health_check = Client.health_check =
 (** Configuration for a test run. Build one with {!default_settings} or
     {!val:settings} and refine it with the [with_*] functions below. *)
 
-type settings =
+type settings = Client.settings =
   { mode : mode
   ; test_cases : int
   ; stateful_step_count : int
@@ -167,8 +167,8 @@ val with_phases : phase list -> settings -> settings
 (** [with_mode mode s] sets the execution mode. *)
 val with_mode : mode -> settings -> settings
 
-(** [with_print_blob b s] makes a failing run print a replay blob (and replay
-    runs report which blobs reproduced the failure). *)
+(** [with_print_blob b s] makes a failing run print the string(s) representing the 
+engine choices that led to a failure *)
 val with_print_blob : bool -> settings -> settings
 
 (** [with_report_multiple_failures b s] makes a failing run report every distinct
@@ -184,16 +184,27 @@ val with_report_multiple_failures : bool -> settings -> settings
     executable or another test harness:
 
     {[
+      let my_settings = settings ~test_cases:50 ~seed:5 () in
       let () =
-        run_hegel_test (fun tc ->
+        run_hegel_test my_settings (fun tc ->
           let n = draw tc (integers ~min_value:0 ~max_value:9 ()) in
           assert (n >= 0 && n <= 9))
     ]}
-
+    @param test_location
+    source location of the test, used by the Antithesis integration.
+    Provided automatically by the [let%hegel_test] PPX. When omitted, no
+    Antithesis assertion is emitted.
     @param database_key
-      overrides the key scoping this test's persisted corpus and [derandomize]
-      seed; defaults to the test's [test_location] so each [let%hegel_test] is
-      scoped by its own identity. *)
+    optional key scoping persisted/replayed failing examples and, under [derandomize],
+    the per-test seed. Defaults to the test's [test_location] (as
+    [file:function_name]) so each [let%hegel_test] gets a stable, distinct
+    key; pass an explicit key to override. When both are absent, the engine
+    uses its own default key.
+    @param failure_blobs
+    a list of base64 encoded strings (blobs), where each string encodes the choices 
+    made in a failing test run. When the list is nonempty, only the first blob 
+    is decoded and run. The blob is only guaranteed to reproduce a failure within 
+    a specific version of Hegel *)
 val run_hegel_test
   :  ?settings:settings
   -> ?test_location:Antithesis.test_location
@@ -203,7 +214,7 @@ val run_hegel_test
   -> unit
 
 (** Raised by {!assume} when its condition is [false] (rejecting the current test
-    case). The runner catches it, so you rarely handle it directly. *)
+    case). *)
 exception Assume_rejected
 
 (** [assume tc condition] rejects the current test case if [condition] is
@@ -212,8 +223,7 @@ exception Assume_rejected
     {[
       let%hegel_test only_even tc =
         let n = draw tc (integers ~min_value:0 ~max_value:99 ()) in
-        assume tc (n mod 2 = 0);
-        assert (n mod 2 = 0)
+        assume tc (n mod 2 = 0); (* false assumption *)
       ;;
     ]} *)
 val assume : test_case -> bool -> unit
@@ -225,7 +235,7 @@ val assume : test_case -> bool -> unit
     {[
       let%hegel_test note_value tc =
         let n = draw tc (integers ~min_value:0 ~max_value:99 ()) in
-        note tc (Printf.sprintf "n = %d" n);
+        note tc (Printf.sprintf "n is %d" n);
         assert (n < 100)
       ;;
     ]} *)
@@ -287,8 +297,9 @@ val draw_silent : test_case -> ('a, 'p) Generators.generator -> 'a
 
     {[
       let%hegel_test parity_printed tc =
-        let bit =
-          draw tc (with_printer Core.Int.sexp_of_t (map (fun n -> n mod 2) (integers ~min_value:0 ~max_value:99 ())))
+        let unprintable_gen = map (fun n -> n mod 2) (integers ~min_value:0 ~max_value:99 () in
+        let printable_gen = with_printer Core.Int.sexp_of_t unprintable_gen in 
+        let bit = draw tc printable_gen
         in
         assert (bit = 0 || bit = 1)
       ;;

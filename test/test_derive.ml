@@ -5,13 +5,11 @@
     - {!Hegel.Derive.generate_option}: generates [Some v] or [None]
     - {!Hegel.Derive.generate_list}: generates a list of values *)
 
-open Hegel
-
 (** Test: generate_option E2E — generates both Some and None. *)
 let test_generate_option_e2e () =
   let saw_some = ref false in
   let saw_none = ref false in
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
     let gen_fn tc =
       Hegel.draw tc (Hegel.Generators.integers ~min_value:0 ~max_value:10 ())
     in
@@ -32,7 +30,7 @@ let%hegel_test test_generate_list_e2e tc =
   let result = Hegel.Derive.generate_list tc gen_fn in
   assert (List.length result >= 0 && List.length result <= 20);
   List.iter (fun n -> assert (n >= 0 && n <= 100)) result
-[@@settings Client.settings ~test_cases:20 ()]
+[@@settings Hegel.settings ~test_cases:20 ()]
 ;;
 
 let tests =
