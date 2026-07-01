@@ -6,7 +6,7 @@
 
 (library
  (name hegel_ffi)
- (public_name hegel.ffi)
+ (package hegel)
  (libraries ctypes ctypes-foreign unix dune-site))
 
 ; Generates the `Hegel_sites` module exposing `Hegel_sites.Sites.libhegel`: the
