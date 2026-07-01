@@ -23,7 +23,6 @@ module Antithesis = Antithesis
    lives directly under Hegel. *)
 
 type test_case = Client.test_case
-type settings = Client.settings
 
 type verbosity = Client.verbosity =
   | Quiet
@@ -52,6 +51,20 @@ type health_check = Client.health_check =
   | Too_slow
   | Test_cases_too_large
   | Large_initial_test_case
+
+type settings = Client.settings =
+  { mode : mode
+  ; test_cases : int
+  ; stateful_step_count : int
+  ; verbosity : verbosity
+  ; seed : int option
+  ; derandomize : bool
+  ; database : database
+  ; suppress_health_check : health_check list
+  ; phases : phase list option
+  ; print_blob : bool
+  ; report_multiple_failures : bool
+  }
 
 exception Assume_rejected = Client.Assume_rejected
 

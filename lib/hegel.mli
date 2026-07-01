@@ -59,10 +59,6 @@ type test_case = Client.test_case
       ;;
     ]} *)
 
-(** Configuration for a test run. Build one with {!default_settings} or
-    {!val:settings} and refine it with the [with_*] functions below. *)
-type settings = Client.settings
-
 (** How much output Hegel produces during a run. *)
 type verbosity = Client.verbosity =
   | Quiet
@@ -95,6 +91,28 @@ type health_check = Client.health_check =
   | Too_slow
   | Test_cases_too_large
   | Large_initial_test_case
+
+(** Configuration for a test run. Build one with {!default_settings} or
+    {!val:settings} and refine it with the [with_*] functions below. *)
+
+type settings =
+  { mode : mode
+  ; test_cases : int
+  ; stateful_step_count : int
+  ; verbosity : verbosity
+  ; seed : int option
+  ; derandomize : bool
+  ; database : database
+    (** stores previous failures. when set, Hegel replays test cases from previously
+  failed runs and adds new failures when they occur. *)
+  ; suppress_health_check : health_check list
+  ; phases : phase list option
+    (** [None] uses the engine's default phase list (all phases); [Some xs]
+          restricts execution to [xs]. *)
+  ; print_blob : bool
+    (** print string representing the engine choices that led to a failure *)
+  ; report_multiple_failures : bool (** false by default *)
+  }
 
 (** [default_settings ()] creates default test settings, auto-detecting CI: in
     CI, [derandomize] is [true] and the [database] is [Disabled]. *)
