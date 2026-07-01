@@ -5,13 +5,12 @@
     and returning the new state. Invariants are ['state -> unit] functions
     evaluated before any step is run and after every successful step.
 
-    To run a state machine, call {!run} inside a Hegel test.
+    To run a state machine, call {!run} inside a Hegel test. Examples in this
+    documentation assume [open Hegel].
 
     Example: an integer stack.
 
     {[
-    open Hegel
-
     let push =
       Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
           let n =
@@ -36,18 +35,35 @@ module Pool : sig
       reuse one across test cases. *)
   val create : Client.test_case -> 'a t
 
-  (** Records [value] in [variables] for later draws. *)
+  (** Records [value] in [variables] for later draws.
+
+      {[
+      let n = draw tc (Generators.integers ~min_value:0 ~max_value:100 ()) in
+      Stateful.Pool.add pool n
+      ]} *)
   val add : 'a t -> 'a -> unit
 
-  (** Returns the number of variables in the pool. *)
+  (** Returns the number of variables in the pool.
+
+      {[
+      let () = Client.assume tc (Stateful.Pool.size pool > 0)
+      ]} *)
   val size : _ t -> int
 
-  (** Create an unprintable generator that returns a variable from the [pool] without removing it. 
-      Calls [assume false] if the [pool] is empty. *)
+  (** Create an unprintable generator that returns a variable from the [pool] without removing it.
+      Calls [assume false] if the [pool] is empty.
+
+      {[
+      let existing = draw_silent tc (Stateful.Pool.values_reusable pool)
+      ]} *)
   val values_reusable : 'a t -> ('a, Generators.unprintable) Generators.generator
 
-  (** Create an unprintable generator that removes and returns a variable from the [pool]. 
-      Calls [assume false] if the [pool] is empty. *)
+  (** Create an unprintable generator that removes and returns a variable from the [pool].
+      Calls [assume false] if the [pool] is empty.
+
+      {[
+      let taken = draw_silent tc (Stateful.Pool.values_consumed pool)
+      ]} *)
   val values_consumed : 'a t -> ('a, Generators.unprintable) Generators.generator
 end
 
@@ -59,10 +75,21 @@ module Rule : sig
 
       - [name] is printed in the final output when the rule is run
       - [step tc state] performs one application of the rule, drawing any
-        arguments it needs from [tc] and returning the new state. *)
+        arguments it needs from [tc] and returning the new state.
+
+      {[
+      let push =
+        Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
+            let n = draw tc (Generators.integers ~min_value:0 ~max_value:100 ()) in
+            n :: stack)
+      ]} *)
   val create : name:string -> step:(Client.test_case -> 'state -> 'state) -> 'state t
 
-  (** Returns the name of the rule *)
+  (** Returns the name of the rule
+
+      {[
+      let label = Stateful.Rule.name push
+      ]} *)
   val name : _ t -> string
 end
 

@@ -19,6 +19,42 @@ module Stateful = Stateful
 (** Antithesis integration. *)
 module Antithesis = Antithesis
 
+(* Settings and test-case types re-exported from Client so the whole public API
+   lives directly under Hegel. *)
+
+type test_case = Client.test_case
+type settings = Client.settings
+
+type verbosity = Client.verbosity =
+  | Quiet
+  | Normal
+  | Verbose
+  | Debug
+
+type database = Client.database =
+  | Unset
+  | Disabled
+  | Path of string
+
+type mode = Client.mode =
+  | Test_run
+  | Single_test_case
+
+type phase = Client.phase =
+  | Explicit
+  | Reuse
+  | Generate
+  | Target
+  | Shrink
+
+type health_check = Client.health_check =
+  | Filter_too_much
+  | Too_slow
+  | Test_cases_too_large
+  | Large_initial_test_case
+
+exception Assume_rejected = Client.Assume_rejected
+
 (** {2 Convenience re-exports} *)
 
 (** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
@@ -65,3 +101,15 @@ let default_settings = Client.default_settings
 (** [settings ?test_cases ?seed ()] creates settings with the given overrides
     applied to {!default_settings}. Convenience constructor for common cases. *)
 let settings = Client.settings
+
+let with_test_cases = Client.with_test_cases
+let with_stateful_step_count = Client.with_stateful_step_count
+let with_verbosity = Client.with_verbosity
+let with_seed = Client.with_seed
+let with_derandomize = Client.with_derandomize
+let with_database = Client.with_database
+let with_suppress_health_check = Client.with_suppress_health_check
+let with_phases = Client.with_phases
+let with_mode = Client.with_mode
+let with_print_blob = Client.with_print_blob
+let with_report_multiple_failures = Client.with_report_multiple_failures

@@ -45,7 +45,7 @@ let run ~init ~rules ?(invariants = []) tc =
   | [] -> invalid_arg "Cannot run a state machine with no rules."
   | _ ->
     let is_single =
-      match tc.Client.mode with
+      match Client.mode tc with
       | Client.Single_test_case -> true
       | Test_run -> false
     in
@@ -61,7 +61,7 @@ let run ~init ~rules ?(invariants = []) tc =
     in
     let run_invariants state = List.iter invariants ~f:(fun inv -> inv state) in
     run_invariants init;
-    let max_steps = if is_single then Int.max_value else tc.Client.stateful_step_count in
+    let max_steps = if is_single then Int.max_value else Client.stateful_step_count tc in
     (* We basically always want to run the maximum number of steps, but leave a
        small probability of terminating early so the shrinker can reduce the
        step count once a failing case is found: stop with probability 2^-16

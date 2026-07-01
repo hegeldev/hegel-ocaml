@@ -1,11 +1,14 @@
-(** Runtime registry and runner for [let%hegel_test] tests.
+(** Internal — runtime registry and runner for the [let%hegel_test] PPX. Not
+    part of the public API.
 
     The [ppx_hegel_test] PPX emits a registration call for every
     [let%hegel_test] definition. When a library opts in to the dune
     [(inline_tests (backend ppx_hegel_test))] stanza, dune synthesises an
-    executable whose entry point calls {!test_main}, which iterates the
+    executable whose entry point calls [test_main], which iterates the
     registry, runs each test, prints pass/fail status, and exits non-zero
     if any test failed. *)
+
+(**/**)
 
 (** Metadata captured by the PPX for a single registered test. *)
 type test =

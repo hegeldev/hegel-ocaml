@@ -1,3 +1,8 @@
+(** Internal — locates the native [libhegel] shared library at runtime. Not part
+    of the public API; used by the Hegel library internally. *)
+
+(**/**)
+
 (* Locates the native libhegel shared library at runtime
 
    Search order:

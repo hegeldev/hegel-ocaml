@@ -1,3 +1,6 @@
+(** Internal — 1:1 ctypes bindings to the native [libhegel] C ABI. Not part of
+    the public API; used by the Hegel library internally. *)
+
 (* Low-level ctypes bindings to libhegel, the native property-based testing
    engine exposed as a C library by hegel-rust (hegel-c/include/hegel.h).
 
@@ -5,6 +8,8 @@
    [dlopen]s the shared library, declares each exported function, and exposes
    OCaml-native wrappers that copy borrowed C buffers into OCaml strings and
    translate negative status codes into exceptions. *)
+
+(**/**)
 
 (** Opaque context handle ([hegel_context_t]). *)
 type context
@@ -15,12 +20,11 @@ type settings
 (** Opaque in-flight run handle ([hegel_run_t]). *)
 type run
 
-(** Opaque per-test-case handle ([hegel_test_case_t]), borrowed from its
-    parent {!run} and valid only until the case is completed. *)
+(** Opaque per-test-case handle ([hegel_test_case_t]). *)
 type test_case
 
 (** Opaque aggregated run result ([hegel_run_result_t]), borrowed from its
-    parent {!run} and valid until {!run_free}. *)
+    parent [run] and valid until [run_free]. *)
 type run_result
 
 (** Opaque single-failure handle ([hegel_failure_t]), borrowed from its

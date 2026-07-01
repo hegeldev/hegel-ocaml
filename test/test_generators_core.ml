@@ -186,7 +186,7 @@ let test_collection_more_when_finished () =
 (** Test: discardable_group exception path — stop_span skipped when aborted. *)
 let test_discardable_group_exception () =
   with_tc (fun data ->
-    data.Client.test_aborted <- true;
+    Client.set_test_aborted data true;
     let raised = ref false in
     (try ignore (discardable_group Labels.flat_map data (fun () -> raise Exit) : _) with
      | Exit -> raised := true);

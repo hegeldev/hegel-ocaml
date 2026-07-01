@@ -208,6 +208,15 @@ type test_case =
   ; draw_counts : int String.Table.t
   }
 
+(* Accessors so other library modules can read the internal fields they need
+   without the record being exposed (the type is abstract in the interface). *)
+let mode (tc : test_case) = tc.mode
+let stateful_step_count (tc : test_case) = tc.stateful_step_count
+let draw_depth (tc : test_case) = tc.draw_depth
+let incr_draw_depth (tc : test_case) = tc.draw_depth <- tc.draw_depth + 1
+let decr_draw_depth (tc : test_case) = tc.draw_depth <- tc.draw_depth - 1
+let set_test_aborted (tc : test_case) v = tc.test_aborted <- v
+
 (** Domain-local flag to detect nested test cases. *)
 let in_test_context : bool Stdlib.Domain.DLS.key =
   Stdlib.Domain.DLS.new_key (fun () -> false)
@@ -629,20 +638,20 @@ let run_from_blob ctx ~(settings : settings) ~ffi_settings ~test_fn blob =
     ignored); no engine worker, shrinking, or database is involved.
 
     @param test_location
-      source location of the test, used by the Antithesis integration.
-      Provided automatically by the [let%hegel_test] PPX. When omitted, no
-      Antithesis assertion is emitted.
+    source location of the test, used by the Antithesis integration.
+    Provided automatically by the [let%hegel_test] PPX. When omitted, no
+    Antithesis assertion is emitted.
     @param database_key
-      optional key scoping persisted/replayed failing examples and, under [derandomize],
-      the per-test seed. Defaults to the test's [test_location] (as
-      [file:function_name]) so each [let%hegel_test] gets a stable, distinct
-      key; pass an explicit key to override. When both are absent, the engine
-      uses its own default key.
+    optional key scoping persisted/replayed failing examples and, under [derandomize],
+    the per-test seed. Defaults to the test's [test_location] (as
+    [file:function_name]) so each [let%hegel_test] gets a stable, distinct
+    key; pass an explicit key to override. When both are absent, the engine
+    uses its own default key.
     @param failure_blobs
-      a list of base64 encoded strings (blobs), where each string encodes the choices 
-      made in a failing test run. When the list is nonempty, only the first blob 
-      is decoded and run. The blob is only guaranteed to reproduce a failure within 
-      a specific version of Hegel *)
+    a list of base64 encoded strings (blobs), where each string encodes the choices 
+    made in a failing test run. When the list is nonempty, only the first blob 
+    is decoded and run. The blob is only guaranteed to reproduce a failure within 
+    a specific version of Hegel *)
 let run_test
       ~(settings : settings)
       ?test_location
@@ -682,9 +691,9 @@ let run_test
     [Hegel.run_hegel_test].
 
     @param database_key
-      overrides the key scoping this test's persisted corpus and [derandomize]
-      seed. When omitted it defaults to the test's [test_location] (see
-      {!run_test}), so each [let%hegel_test] is scoped by its own identity. *)
+    overrides the key scoping this test's persisted corpus and [derandomize]
+    seed. When omitted it defaults to the test's [test_location] (see
+    {!run_test}), so each [let%hegel_test] is scoped by its own identity. *)
 let run_hegel_test
       ?(settings = default_settings ())
       ?test_location

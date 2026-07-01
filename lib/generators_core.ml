@@ -174,10 +174,10 @@ let max_filter_attempts = 3
     counter, not a flag, so nested groups compose.) *)
 let group label data f =
   Client.start_span ~label data;
-  data.Client.draw_depth <- data.Client.draw_depth + 1;
+  Client.incr_draw_depth data;
   Exn.protect
     ~finally:(fun () ->
-      data.Client.draw_depth <- data.Client.draw_depth - 1;
+      Client.decr_draw_depth data;
       Client.stop_span data)
     ~f
 ;;
@@ -187,14 +187,14 @@ let group label data f =
     with [discard:true]; otherwise [discard:false]. *)
 let discardable_group label data f =
   Client.start_span ~label data;
-  data.Client.draw_depth <- data.Client.draw_depth + 1;
+  Client.incr_draw_depth data;
   match f () with
   | v ->
-    data.Client.draw_depth <- data.Client.draw_depth - 1;
+    Client.decr_draw_depth data;
     Client.stop_span data;
     v
   | exception e ->
-    data.Client.draw_depth <- data.Client.draw_depth - 1;
+    Client.decr_draw_depth data;
     Client.stop_span ~discard:true data;
     raise e
 ;;
@@ -331,7 +331,7 @@ let draw_named
   =
   fun ~label ~repeatable tc (Printable { core; sexp_of }) ->
   let value = do_draw core tc in
-  if tc.Client.draw_depth = 0
+  if Client.draw_depth tc = 0
   then (
     let name = Client.draw_display_name tc ~label ~repeatable in
     let rendered = Sexp.to_string_hum (sexp_of value) in

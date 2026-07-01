@@ -1,5 +1,7 @@
 (** This module implements the client-side logic for running property-based
-    tests against the native libhegel engine (via {!Hegel_ffi.Ffi}). *)
+    tests against the native libhegel engine (via {!Hegel_ffi.Ffi}).
+
+    Examples in this documentation assume [open Hegel]. *)
 
 (** Raised when {!assume} condition is [false]. *)
 exception Assume_rejected
@@ -65,7 +67,18 @@ val phase_to_string : phase -> string
 
 (**/**)
 
-(** Configuration for a Hegel test run. *)
+(** Configuration for a Hegel test run.
+
+    {[
+      let%hegel_test example tc =
+        ignore tc
+      [@@settings
+        Client.default_settings ()
+        |> Client.with_test_cases 500
+        |> Client.with_verbosity Client.Verbose
+        |> Client.with_database (Client.Path "_hegel_db")]
+      ;;
+    ]} *)
 type settings =
   { mode : mode
   ; test_cases : int
@@ -90,7 +103,11 @@ type settings =
 val default_settings : unit -> settings
 
 (** [settings ?test_cases ?seed ()] creates settings with the given overrides
-    applied to {!default_settings}. Convenience constructor for common cases. *)
+    applied to {!default_settings}. Convenience constructor for common cases.
+
+    {[
+      let s = Client.settings ~test_cases:500 ~seed:42 ()
+    ]} *)
 val settings : ?test_cases:int -> ?seed:int -> unit -> settings
 
 (**/**)
@@ -124,7 +141,11 @@ val with_database : database -> settings -> settings
 val with_suppress_health_check : health_check list -> settings -> settings
 
 (** [with_phases phases s] returns settings [s] with [phases] set to restrict
-    test execution to those phases. *)
+    test execution to those phases.
+
+    {[
+      let s = Client.with_phases [ Client.Generate; Client.Shrink ] s
+    ]} *)
 val with_phases : phase list -> settings -> settings
 
 (** [with_mode mode s] returns settings [s] with test [mode] set to [mode]. *)
@@ -139,21 +160,18 @@ val with_print_blob : bool -> settings -> settings
     set to [b]. When [true], a failing run reports all the failures it found *)
 val with_report_multiple_failures : bool -> settings -> settings
 
-type test_case =
-  { handle : Hegel_ffi.Ffi.test_case (** native test-case handle *)
-  ; context : Hegel_ffi.Ffi.context (** the libhegel FFI context handle *)
-  ; mode : mode (** standard test run of multiple test cases or single long run *)
-  ; stateful_step_count : int (** max number of steps in a stateful test *)
-  ; is_final : bool (** if the test case is on its final replay *)
-  ; verbosity : verbosity
-  ; mutable test_aborted : bool
-  ; mutable draw_depth : int
-    (** current generation-span depth (used to print only the outermost drawn value) *)
-  ; draw_counts : int Core.String.Table.t
-    (** per-name occurrence counter for numbering repeatable draws *)
-  }
+(** An opaque per-test-case handle, threaded to the test function and to the
+    drawing primitives. Created and owned by the run loop. *)
+type test_case
 
 (**/**)
+
+val mode : test_case -> mode
+val stateful_step_count : test_case -> int
+val draw_depth : test_case -> int
+val incr_draw_depth : test_case -> unit
+val decr_draw_depth : test_case -> unit
+val set_test_aborted : test_case -> bool -> unit
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available; derived from the assertion's location so
@@ -260,20 +278,20 @@ val state_machine_next_rule : test_case -> state_machine_id:int -> int
     a property test using the given settings against the native engine.
 
     @param test_location
-      source location of the test, used by the Antithesis integration.
-      Provided automatically by the [let%hegel_test] PPX. When omitted, no
-      Antithesis assertion is emitted.
+    source location of the test, used by the Antithesis integration.
+    Provided automatically by the [let%hegel_test] PPX. When omitted, no
+    Antithesis assertion is emitted.
     @param database_key
-      optional key scoping persisted/replayed failing examples and, under [derandomize],
-      the per-test seed. Defaults to the test's [test_location] (as
-      [file:function_name]) so each [let%hegel_test] gets a stable, distinct
-      key; pass an explicit key to override. When both are absent, the engine
-      uses its own default key.
+    optional key scoping persisted/replayed failing examples and, under [derandomize],
+    the per-test seed. Defaults to the test's [test_location] (as
+    [file:function_name]) so each [let%hegel_test] gets a stable, distinct
+    key; pass an explicit key to override. When both are absent, the engine
+    uses its own default key.
     @param failure_blobs
-      a list of base64 encoded strings (blobs), where each string encodes the choices 
-      made in a failing test run. When the list is nonempty, only the first blob 
-      is decoded and run. The blob is only guaranteed to reproduce a failure within 
-      a specific version of Hegel *)
+    a list of base64 encoded strings (blobs), where each string encodes the choices 
+    made in a failing test run. When the list is nonempty, only the first blob 
+    is decoded and run. The blob is only guaranteed to reproduce a failure within 
+    a specific version of Hegel *)
 val run_test
   :  settings:settings
   -> ?test_location:Antithesis.test_location
@@ -290,9 +308,9 @@ val run_test
     re-exported as [Hegel.run_hegel_test].
 
     @param database_key
-      overrides the per-test database key / [derandomize] seed. Defaults to the
-      test's [test_location] so each [let%hegel_test] is scoped by its own
-      identity. *)
+    overrides the per-test database key / [derandomize] seed. Defaults to the
+    test's [test_location] so each [let%hegel_test] is scoped by its own
+    identity. *)
 val run_hegel_test
   :  ?settings:settings
   -> ?test_location:Antithesis.test_location
