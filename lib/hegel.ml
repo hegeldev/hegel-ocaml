@@ -21,9 +21,10 @@ module Antithesis = Antithesis
 
 (** {2 Convenience re-exports} *)
 
-(** [run_hegel_test ?settings ?test_location test_fn] runs a property test
-    against the native engine, defaulting to {!default_settings}. This is the
-    entry point the [let%hegel_test] PPX targets. *)
+(** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
+    runs a property test against the native engine, defaulting to
+    {!default_settings}. This is the entry point the [let%hegel_test] PPX
+    targets. *)
 let run_hegel_test = Client.run_hegel_test
 
 (** [assume tc condition] rejects the current test case if [condition] is
