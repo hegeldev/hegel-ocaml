@@ -83,10 +83,10 @@ val phase_to_string : phase -> string
       let%hegel_test example tc =
         ignore tc
       [@@settings
-        Client.default_settings ()
-        |> Client.with_test_cases 500
-        |> Client.with_verbosity Client.Verbose
-        |> Client.with_database (Client.Path "_hegel_db")]
+        Internal.default_settings ()
+        |> Internal.with_test_cases 500
+        |> Internal.with_verbosity Internal.Verbose
+        |> Internal.with_database (Internal.Path "_hegel_db")]
       ;;
     ]}
 
@@ -118,7 +118,7 @@ val default_settings : unit -> settings
     applied to {!default_settings}. Convenience constructor for common cases.
 
     {[
-      let s = Client.settings ~test_cases:500 ~seed:42 ()
+      let s = Internal.settings ~test_cases:500 ~seed:42 ()
     ]} *)
 val settings : ?test_cases:int -> ?seed:int -> unit -> settings
 
@@ -156,7 +156,7 @@ val with_suppress_health_check : health_check list -> settings -> settings
     test execution to those phases.
 
     {[
-      let s = Client.with_phases [ Client.Generate; Client.Shrink ] s
+      let s = Internal.with_phases [ Internal.Generate; Internal.Shrink ] s
     ]} *)
 val with_phases : phase list -> settings -> settings
 

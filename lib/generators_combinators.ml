@@ -34,7 +34,7 @@ let one_of_core : type a. a core list -> a core =
           (fun data ->
             let idx =
               Cbor_helpers.extract_int
-                (Client.generate_from_schema
+                (Internal.generate_from_schema
                    (`Map
                        [ `Text "type", `Text "integer"
                        ; `Text "min_value", `Int 0

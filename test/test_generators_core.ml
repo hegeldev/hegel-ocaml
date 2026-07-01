@@ -186,7 +186,7 @@ let test_collection_more_when_finished () =
 (** Test: discardable_group exception path — stop_span skipped when aborted. *)
 let test_discardable_group_exception () =
   with_tc (fun data ->
-    Client.set_test_aborted data true;
+    Internal.set_test_aborted data true;
     let raised = ref false in
     (try ignore (discardable_group Labels.flat_map data (fun () -> raise Exit) : _) with
      | Exit -> raised := true);
@@ -262,8 +262,7 @@ let test_filter_e2e () =
 let test_filter_exhaustion_e2e () =
   Hegel.run_hegel_test
     ~settings:
-      (Hegel.settings ~test_cases:10 ()
-       |> Hegel.Client.with_suppress_health_check [ Hegel.Client.Filter_too_much ])
+      (Hegel.settings ~test_cases:10 () |> with_suppress_health_check [ Filter_too_much ])
     (fun tc ->
        let gen = filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ()) in
        ignore (Hegel.draw tc gen))
@@ -274,7 +273,7 @@ let test_group_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
     let v =
       group Labels.list tc (fun () ->
-        Client.generate_from_schema
+        Internal.generate_from_schema
           (`Map
               [ `Text "type", `Text "integer"
               ; `Text "min_value", `Int 0
@@ -291,7 +290,7 @@ let test_discardable_group_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
     let v =
       discardable_group Labels.tuple tc (fun () ->
-        Client.generate_from_schema
+        Internal.generate_from_schema
           (`Map
               [ `Text "type", `Text "integer"
               ; `Text "min_value", `Int 0
@@ -457,7 +456,7 @@ let test_resolve_draw () =
       ignore (resolve_draw tbl ~consume:false 99 : string);
       false
     with
-    | Hegel.Client.Flaky_strategy -> true
+    | Hegel.Internal.Flaky_strategy -> true
   in
   Alcotest.(check bool) "unknown id raises Flaky_strategy" true raised
 ;;

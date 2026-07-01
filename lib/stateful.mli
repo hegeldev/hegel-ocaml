@@ -20,7 +20,7 @@
 
     let pop =
       Stateful.Rule.create ~name:"pop" ~step:(fun tc stack ->
-          Client.assume tc (not (List.is_empty stack));
+          assume tc (not (List.is_empty stack));
           List.tl stack)
 
     let%hegel_test test_integer_stack tc =
@@ -33,7 +33,7 @@ module Pool : sig
 
   (** Creates an empty {!Pool.t}. Pools are tied to a test case; do not
       reuse one across test cases. *)
-  val create : Client.test_case -> 'a t
+  val create : Internal.test_case -> 'a t
 
   (** Records [value] in [variables] for later draws.
 
@@ -83,7 +83,7 @@ module Rule : sig
             let n = draw tc (Generators.integers ~min_value:0 ~max_value:100 ()) in
             n :: stack)
       ]} *)
-  val create : name:string -> step:(Client.test_case -> 'state -> 'state) -> 'state t
+  val create : name:string -> step:(Internal.test_case -> 'state -> 'state) -> 'state t
 
   (** Returns the name of the rule
 
@@ -99,5 +99,5 @@ val run
   :  init:'state
   -> rules:'state Rule.t list
   -> ?invariants:('state -> unit) list
-  -> Client.test_case
+  -> Internal.test_case
   -> unit

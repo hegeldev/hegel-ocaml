@@ -235,8 +235,7 @@ let%hegel_test test_lists_non_basic_unique_exhaustion_e2e tc =
   let gen = lists elem ~min_size:2 ~unique:true () in
   ignore (Hegel.draw tc gen)
 [@@settings
-  Hegel.settings ~test_cases:10 ()
-  |> Client.with_suppress_health_check [ Client.Filter_too_much ]]
+  Hegel.settings ~test_cases:10 () |> with_suppress_health_check [ Filter_too_much ]]
 ;;
 
 (** Test: hashmaps(non-basic keys) E2E — generates pairs. *)
@@ -284,8 +283,7 @@ let%hegel_test test_lists_unique_under_map_e2e tc =
   let uniq = List.sort_uniq compare xs |> List.length in
   Alcotest.(check int) "all unique" n uniq
 [@@settings
-  Hegel.settings ~test_cases:5 ()
-  |> Client.with_suppress_health_check [ Client.Filter_too_much ]]
+  Hegel.settings ~test_cases:5 () |> with_suppress_health_check [ Filter_too_much ]]
 ;;
 
 (** Regression: [hashmaps] with a non-basic key generator must still enforce
@@ -306,8 +304,7 @@ let%hegel_test test_hashmaps_unique_keys_under_filter_e2e tc =
   let uniq = List.sort_uniq compare keys |> List.length in
   Alcotest.(check int) "keys all unique" (List.length keys) uniq
 [@@settings
-  Hegel.settings ~test_cases:5 ()
-  |> Client.with_suppress_health_check [ Client.Filter_too_much ]]
+  Hegel.settings ~test_cases:5 () |> with_suppress_health_check [ Filter_too_much ]]
 ;;
 
 let tests =

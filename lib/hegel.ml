@@ -5,7 +5,7 @@ let version = "0.7.5"
 module Cbor_helpers = Cbor_helpers
 
 (** Test runner and lifecycle management. *)
-module Client = Client
+module Internal = Internal
 
 (** Generator combinators for composable test data generation. *)
 module Generators = Generators
@@ -19,40 +19,40 @@ module Stateful = Stateful
 (** Antithesis integration. *)
 module Antithesis = Antithesis
 
-(* Settings and test-case types re-exported from Client so the whole public API
+(* Settings and test-case types re-exported from Internal so the whole public API
    lives directly under Hegel. *)
 
-type test_case = Client.test_case
+type test_case = Internal.test_case
 
-type verbosity = Client.verbosity =
+type verbosity = Internal.verbosity =
   | Quiet
   | Normal
   | Verbose
   | Debug
 
-type database = Client.database =
+type database = Internal.database =
   | Unset
   | Disabled
   | Path of string
 
-type mode = Client.mode =
+type mode = Internal.mode =
   | Test_run
   | Single_test_case
 
-type phase = Client.phase =
+type phase = Internal.phase =
   | Explicit
   | Reuse
   | Generate
   | Target
   | Shrink
 
-type health_check = Client.health_check =
+type health_check = Internal.health_check =
   | Filter_too_much
   | Too_slow
   | Test_cases_too_large
   | Large_initial_test_case
 
-type settings = Client.settings =
+type settings = Internal.settings =
   { mode : mode
   ; test_cases : int
   ; stateful_step_count : int
@@ -66,7 +66,7 @@ type settings = Client.settings =
   ; report_multiple_failures : bool
   }
 
-exception Assume_rejected = Client.Assume_rejected
+exception Assume_rejected = Internal.Assume_rejected
 
 (** {2 Convenience re-exports} *)
 
@@ -74,20 +74,20 @@ exception Assume_rejected = Client.Assume_rejected
     runs a property test against the native engine, defaulting to
     {!default_settings}. This is the entry point the [let%hegel_test] PPX
     targets. *)
-let run_hegel_test = Client.run_hegel_test
+let run_hegel_test = Internal.run_hegel_test
 
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)
-let assume = Client.assume
+let assume = Internal.assume
 
 (** [note tc message] prints [message] to stderr subject to the run's verbosity:
     never under [Quiet], only on the final (failing) replay under [Normal], and
     on every test case under [Verbose] or [Debug]. *)
-let note = Client.note
+let note = Internal.note
 
 (** [target tc value label] sends a target command to guide the search engine
     toward higher values. *)
-let target = Client.target
+let target = Internal.target
 
 (** [draw ?label tc gen] produces a typed value from the printable generator
     [gen]. On the final replay of a failing test, an outermost draw prints its
@@ -109,20 +109,20 @@ let with_printer = Generators.with_printer
 
 (** [default_settings ()] creates default test settings with CI auto-detection.
 *)
-let default_settings = Client.default_settings
+let default_settings = Internal.default_settings
 
 (** [settings ?test_cases ?seed ()] creates settings with the given overrides
     applied to {!default_settings}. Convenience constructor for common cases. *)
-let settings = Client.settings
+let settings = Internal.settings
 
-let with_test_cases = Client.with_test_cases
-let with_stateful_step_count = Client.with_stateful_step_count
-let with_verbosity = Client.with_verbosity
-let with_seed = Client.with_seed
-let with_derandomize = Client.with_derandomize
-let with_database = Client.with_database
-let with_suppress_health_check = Client.with_suppress_health_check
-let with_phases = Client.with_phases
-let with_mode = Client.with_mode
-let with_print_blob = Client.with_print_blob
-let with_report_multiple_failures = Client.with_report_multiple_failures
+let with_test_cases = Internal.with_test_cases
+let with_stateful_step_count = Internal.with_stateful_step_count
+let with_verbosity = Internal.with_verbosity
+let with_seed = Internal.with_seed
+let with_derandomize = Internal.with_derandomize
+let with_database = Internal.with_database
+let with_suppress_health_check = Internal.with_suppress_health_check
+let with_phases = Internal.with_phases
+let with_mode = Internal.with_mode
+let with_print_blob = Internal.with_print_blob
+let with_report_multiple_failures = Internal.with_report_multiple_failures

@@ -29,7 +29,7 @@
 open Ppxlib
 
 (** [generate_expr_of_core_type ct] returns an expression of type
-    [Hegel.Client.test_case -> <t>] that generates a value of core type [ct]. *)
+    [Hegel.Internal.test_case -> <t>] that generates a value of core type [ct]. *)
 let rec generate_expr_of_core_type (ct : core_type) : expression =
   let loc = ct.ptyp_loc in
   match ct.ptyp_desc with

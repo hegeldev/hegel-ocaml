@@ -64,7 +64,7 @@ test/                        # Test suite (three executables: test_hegel [Alcote
   test_helpers.ml            # Shared test utilities
   test_cbor_helpers.ml       # CBOR helper tests
   test_cbor_vectors.ml       # CBOR round-trip vector tests
-  test_client.ml             # Client config + run lifecycle tests (real engine)
+  test_client.ml             # Internal config + run lifecycle tests (real engine)
   test_generators_*.ml       # Generator core / primitives / collections / combinators / schema
   test_derive.ml             # Derive module runtime helper tests
   test_stateful.ml           # Stateful testing tests
@@ -223,7 +223,7 @@ Non-basic list elements use a engine-side collection handle:
 
 The engine runs in-process, so there is no subprocess or session to manage.
 The public entry point is `Hegel.run_hegel_test ?settings ?test_location
-test_fn` — `Client.run_hegel_test`, which is `Client.run_test` with [settings]
+test_fn` — `Internal.run_hegel_test`, which is `Internal.run_test` with [settings]
 defaulting to `default_settings ()`. It is what the `let%hegel_test` PPX
 targets. The `[@@failure_blobs ...]` record/replay workflow is supported: the
 PPX forwards the listed blobs as `~failure_blobs` to `run_hegel_test`, which
@@ -263,8 +263,8 @@ in an `Exn.protect ~finally`.
 
 ### Error Handling
 
-- `Client.Assume_rejected` — raised by `assume false`; mapped to `mark_complete INVALID`
-- `Client.Data_exhausted` — raised when StopTest is received; skips `mark_complete`
+- `Internal.Assume_rejected` — raised by `assume false`; mapped to `mark_complete INVALID`
+- `Internal.Data_exhausted` — raised when StopTest is received; skips `mark_complete`
 - `Connection.Request_error` — raised on protocol-level errors from the engine
 
 ### Schema Format

@@ -34,7 +34,7 @@ module Stateful = Stateful
 (* Internal modules and handles: accessible (used by generated code and tests)
    but excluded from the generated documentation. *)
 
-module Client = Client
+module Internal = Internal
 module Cbor_helpers = Cbor_helpers
 module Derive = Derive
 module Antithesis = Antithesis
@@ -43,7 +43,7 @@ module Antithesis = Antithesis
 
 (** An opaque handle for the current test case, passed to your test function and
     threaded to {!draw} and the other drawing primitives. *)
-type test_case = Client.test_case
+type test_case = Internal.test_case
 
 (** {2 Settings}
 
@@ -60,25 +60,25 @@ type test_case = Client.test_case
     ]} *)
 
 (** How much output Hegel produces during a run. *)
-type verbosity = Client.verbosity =
+type verbosity = Internal.verbosity =
   | Quiet
   | Normal
   | Verbose
   | Debug
 
 (** Where Hegel stores and replays failing examples. *)
-type database = Client.database =
+type database = Internal.database =
   | Unset
   | Disabled
   | Path of string
 
 (** How a test run is executed. *)
-type mode = Client.mode =
+type mode = Internal.mode =
   | Test_run (** the default: many cases, shrinking, database replay *)
   | Single_test_case (** run the body once, with no shrinking or replay *)
 
 (** Phases of a test run that can be enabled or disabled with {!with_phases}. *)
-type phase = Client.phase =
+type phase = Internal.phase =
   | Explicit
   | Reuse
   | Generate
@@ -86,7 +86,7 @@ type phase = Client.phase =
   | Shrink
 
 (** Health checks that can be suppressed with {!with_suppress_health_check}. *)
-type health_check = Client.health_check =
+type health_check = Internal.health_check =
   | Filter_too_much
   | Too_slow
   | Test_cases_too_large
@@ -95,7 +95,7 @@ type health_check = Client.health_check =
 (** Configuration for a test run. Build one with {!default_settings} or
     {!val:settings} and refine it with the [with_*] functions below. *)
 
-type settings = Client.settings =
+type settings = Internal.settings =
   { mode : mode
   ; test_cases : int
   ; stateful_step_count : int

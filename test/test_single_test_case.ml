@@ -1,11 +1,8 @@
 open! Core
 open Hegel
-open Client
 module G = Hegel.Generators
 
-let single_settings () =
-  Client.default_settings () |> Client.with_mode Client.Single_test_case
-;;
+let single_settings () = default_settings () |> with_mode Single_test_case
 
 let test_runs_exactly_one_case () =
   let count = ref 0 in
@@ -67,7 +64,7 @@ let test_with_seed_is_deterministic () =
   for _ = 1 to 3 do
     let value = ref 0 in
     Hegel.run_hegel_test
-      ~settings:(single_settings () |> Client.with_seed (Some 42))
+      ~settings:(single_settings () |> with_seed (Some 42))
       (fun tc ->
          value
          := Hegel.draw
@@ -109,7 +106,7 @@ let test_generation_works () =
 
 let test_debug_verbosity () =
   Hegel.run_hegel_test
-    ~settings:(single_settings () |> Client.with_verbosity Client.Debug)
+    ~settings:(single_settings () |> with_verbosity Debug)
     (fun tc ->
        let (_ : bool) = Hegel.draw tc (G.booleans ()) in
        ())

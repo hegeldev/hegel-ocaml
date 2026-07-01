@@ -75,7 +75,7 @@ type 'a core =
       -> 'a list core
   | Composite :
       { label : int
-      ; generate_fn : Client.test_case -> 'a
+      ; generate_fn : Internal.test_case -> 'a
       }
       -> 'a core
   | Values :
@@ -148,9 +148,7 @@ let printer : type a. (a, printable) generator -> a -> Sexp.t =
 (** [composite generate_fn] builds an unprintable generator from an imperative
     [generate_fn] that draws sub-values from the test case and returns a value.
     The draws run inside a span, so they are suppressed on the final replay and
-    only an outer [draw] of the whole value prints. Carries no printer (the
-    output type is the caller's); use {!with_printer} to draw it with {!draw}.
-    This is the form [@@deriving hegel_generator] emits. *)
+    only an outer [draw] of the whole value prints. *)
 let composite generate_fn =
   Unprintable { core = Composite { label = Labels.fixed_dict; generate_fn } }
 ;;
@@ -173,12 +171,12 @@ let max_filter_attempts = 3
     draws as nested so only the outermost value prints on the final replay. (A
     counter, not a flag, so nested groups compose.) *)
 let group label data f =
-  Client.start_span ~label data;
-  Client.incr_draw_depth data;
+  Internal.start_span ~label data;
+  Internal.incr_draw_depth data;
   Exn.protect
     ~finally:(fun () ->
-      Client.decr_draw_depth data;
-      Client.stop_span data)
+      Internal.decr_draw_depth data;
+      Internal.stop_span data)
     ~f
 ;;
 
@@ -186,16 +184,16 @@ let group label data f =
     incrementing [draw_depth] like {!group}. If [f] raises, the span is stopped
     with [discard:true]; otherwise [discard:false]. *)
 let discardable_group label data f =
-  Client.start_span ~label data;
-  Client.incr_draw_depth data;
+  Internal.start_span ~label data;
+  Internal.incr_draw_depth data;
   match f () with
   | v ->
-    Client.decr_draw_depth data;
-    Client.stop_span data;
+    Internal.decr_draw_depth data;
+    Internal.stop_span data;
     v
   | exception e ->
-    Client.decr_draw_depth data;
-    Client.stop_span ~discard:true data;
+    Internal.decr_draw_depth data;
+    Internal.stop_span ~discard:true data;
     raise e
 ;;
 
@@ -219,38 +217,40 @@ let new_collection ~min_size ?max_size data () =
 ;;
 
 (** [get_collection_id coll data] initializes the engine-side collection
-    and returns its id. Raises {!Client.Data_exhausted} on StopTest. *)
+    and returns its id. Raises {!Internal.Data_exhausted} on StopTest. *)
 let get_collection_id coll data =
   match coll.collection_id with
   | Some id -> id
   | None ->
-    let id = Client.new_collection data ~min_size:coll.min_size ~max_size:coll.max_size in
+    let id =
+      Internal.new_collection data ~min_size:coll.min_size ~max_size:coll.max_size
+    in
     coll.collection_id <- Some id;
     id
 ;;
 
 (** [collection_more coll data] returns [true] if more elements should be
     generated, [false] when the collection is complete. Once it returns [false],
-    subsequent calls return [false] immediately. Raises {!Client.Data_exhausted}
+    subsequent calls return [false] immediately. Raises {!Internal.Data_exhausted}
     on StopTest. *)
 let collection_more coll data =
   if coll.finished
   then false
   else (
     let collection_id = get_collection_id coll data in
-    let more = Client.collection_more data ~collection_id in
+    let more = Internal.collection_more data ~collection_id in
     if not more then coll.finished <- true;
     more)
 ;;
 
 (** [collection_reject coll data] rejects the last element of the collection.
-    No-op if the collection is already finished. Raises {!Client.Data_exhausted}
+    No-op if the collection is already finished. Raises {!Internal.Data_exhausted}
     on StopTest. *)
 let collection_reject coll data =
   if not coll.finished
   then (
     let collection_id = get_collection_id coll data in
-    Client.collection_reject data ~collection_id)
+    Internal.collection_reject data ~collection_id)
 ;;
 
 (* separated out for unit testing *)
@@ -262,22 +262,23 @@ let resolve_draw values ~consume variable_id =
   | None ->
     (* State diverged between the engine and the client, or a bug in the
         pool bookkeeping. *)
-    raise Client.Flaky_strategy
+    raise Internal.Flaky_strategy
 ;;
 
 let pick tc values pool_id ~consume =
-  Client.assume tc (not (Hashtbl.is_empty values));
-  let variable_id = Client.pool_generate tc ~pool_id ~consume () in
+  Internal.assume tc (not (Hashtbl.is_empty values));
+  let variable_id = Internal.pool_generate tc ~pool_id ~consume () in
   let value = resolve_draw values ~consume variable_id in
   value
 ;;
 
 (** [do_draw core data] produces a typed value from generation structure [core]
     using the given test case [data]. *)
-let rec do_draw : type a. a core -> Client.test_case -> a =
+let rec do_draw : type a. a core -> Internal.test_case -> a =
   fun core data ->
   match core with
-  | Basic { schema; transform; _ } -> transform (Client.generate_from_schema schema data)
+  | Basic { schema; transform; _ } ->
+    transform (Internal.generate_from_schema schema data)
   | Mapped { source; f } ->
     group Labels.mapped data (fun () ->
       let value = do_draw source data in
@@ -290,16 +291,16 @@ let rec do_draw : type a. a core -> Client.test_case -> a =
   | Filtered { source; predicate } ->
     let rec attempt i =
       if i > max_filter_attempts
-      then raise Client.Assume_rejected
+      then raise Internal.Assume_rejected
       else (
-        Client.start_span ~label:Labels.filter data;
+        Internal.start_span ~label:Labels.filter data;
         let value = do_draw source data in
         if predicate value
         then (
-          Client.stop_span data;
+          Internal.stop_span data;
           value)
         else (
-          Client.stop_span ~discard:true data;
+          Internal.stop_span ~discard:true data;
           attempt (i + 1)))
     in
     attempt 1
@@ -327,15 +328,15 @@ let rec do_draw : type a. a core -> Client.test_case -> a =
     the outermost value shows. *)
 let draw_named
   : type a.
-    label:string -> repeatable:bool -> Client.test_case -> (a, printable) generator -> a
+    label:string -> repeatable:bool -> Internal.test_case -> (a, printable) generator -> a
   =
   fun ~label ~repeatable tc (Printable { core; sexp_of }) ->
   let value = do_draw core tc in
-  if Client.draw_depth tc = 0
+  if Internal.draw_depth tc = 0
   then (
-    let name = Client.draw_display_name tc ~label ~repeatable in
+    let name = Internal.draw_display_name tc ~label ~repeatable in
     let rendered = Sexp.to_string_hum (sexp_of value) in
-    Client.note tc (sprintf "%s = %s" name rendered));
+    Internal.note tc (sprintf "%s = %s" name rendered));
   value
 ;;
 
@@ -343,7 +344,7 @@ let draw_named
     [gen] using test case [tc].
 
     On the final replay of a failing test (or on every case under verbose
-    output), an outermost draw prints its value through {!Client.note} as
+    output), an outermost draw prints its value through {!Internal.note} as
     [name = value]. The [name] is [label] when given, else ["draw"]; an
     unlabeled draw is numbered ([draw_1], [draw_2], …) while a [label] is printed
     bare. Draws nested inside a span (e.g. composite elements) are suppressed so
@@ -361,7 +362,7 @@ let draw ?label tc gen =
     recording it for the final-replay output. Use it for draws whose value is
     not a useful part of the printed counterexample, or for generators that
     carry no printer. *)
-let draw_silent : type a p. Client.test_case -> (a, p) generator -> a =
+let draw_silent : type a p. Internal.test_case -> (a, p) generator -> a =
   fun tc gen -> do_draw (core_of gen) tc
 ;;
 

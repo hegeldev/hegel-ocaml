@@ -50,16 +50,16 @@ val max_filter_attempts : int
 
 (** [group label data f] runs [f ()] inside a span with the given [label]. The
     span is stopped with [discard:false] regardless of whether [f] raises. *)
-val group : int -> Client.test_case -> (unit -> 'a) -> 'a
+val group : int -> Internal.test_case -> (unit -> 'a) -> 'a
 
 (** [discardable_group label data f] runs [f ()] inside a span with [label]. If
     [f] raises, the span is stopped with [discard:true]; otherwise
     [discard:false]. *)
-val discardable_group : int -> Client.test_case -> (unit -> 'a) -> 'a
+val discardable_group : int -> Internal.test_case -> (unit -> 'a) -> 'a
 
 (** [resolve_draw values ~consume id] resolves a drawn pool [id] against the
     local [values] table, removing it when [consume]. Raises
-    {!Client.Flaky_strategy} on an unknown id (an engine-contract violation,
+    {!Internal.Flaky_strategy} on an unknown id (an engine-contract violation,
     unreachable through the normal engine-driven path). Exposed only so that
     branch can be unit-tested. *)
 val resolve_draw : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
@@ -77,23 +77,23 @@ type collection =
 val new_collection
   :  min_size:int
   -> ?max_size:int
-  -> Client.test_case
+  -> Internal.test_case
   -> unit
   -> collection
 
 (** [collection_more coll data] returns [true] if more elements should be
     generated, [false] when the collection is complete. *)
-val collection_more : collection -> Client.test_case -> bool
+val collection_more : collection -> Internal.test_case -> bool
 
 (** [collection_reject coll data] rejects the last element of the collection.
-    Raises {!Client.Data_exhausted} on StopTest. *)
-val collection_reject : collection -> Client.test_case -> unit
+    Raises {!Internal.Data_exhausted} on StopTest. *)
+val collection_reject : collection -> Internal.test_case -> unit
 
 (** [draw ?label tc gen] produces a typed value from the printable generator
     [gen] using test case [tc].
 
     On the final replay of a failing test (or on every case under verbose
-    output), an outermost draw prints its value through {!Client.note} as
+    output), an outermost draw prints its value through {!Internal.note} as
     [name = value]. The [name] is [label] when given, else ["draw"]; an unlabeled
     draw is numbered ([draw_1], [draw_2], …) while a [label] is printed bare.
     Draws nested inside a span (e.g. composite elements) are suppressed so only
@@ -106,7 +106,7 @@ val collection_reject : collection -> Client.test_case -> unit
         assert (n >= 0)
       ;;
     ]} *)
-val draw : ?label:string -> Client.test_case -> ('a, printable) generator -> 'a
+val draw : ?label:string -> Internal.test_case -> ('a, printable) generator -> 'a
 
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
     [let%hegel_test] PPX rewrites bindings to; not intended for direct use
@@ -116,7 +116,7 @@ val draw : ?label:string -> Client.test_case -> ('a, printable) generator -> 'a
 val draw_named
   :  label:string
   -> repeatable:bool
-  -> Client.test_case
+  -> Internal.test_case
   -> ('a, printable) generator
   -> 'a
 
@@ -131,7 +131,7 @@ val draw_named
         assert (n >= 0)
       ;;
     ]} *)
-val draw_silent : Client.test_case -> ('a, 'p) generator -> 'a
+val draw_silent : Internal.test_case -> ('a, 'p) generator -> 'a
 
 (** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding
     a printable generator that {!draw} accepts. This is how a [map]/[flat_map]/
@@ -179,7 +179,7 @@ val pool_values
           x, y)
       ;;
     ]} *)
-val composite : (Client.test_case -> 'a) -> ('a, unprintable) generator
+val composite : (Internal.test_case -> 'a) -> ('a, unprintable) generator
 
 (** [map f gen] transforms values from [gen] using [f]. The result carries no
     printer (the output type is the user's); use {!Hegel.with_printer} to draw it

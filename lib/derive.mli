@@ -7,10 +7,10 @@
 
     Uses {!Generators.booleans} to decide between [Some] and [None]. When [Some]
     is chosen, calls [gen_fn tc] to produce the inner value. *)
-val generate_option : Client.test_case -> (Client.test_case -> 'a) -> 'a option
+val generate_option : Internal.test_case -> (Internal.test_case -> 'a) -> 'a option
 
 (** [generate_list tc gen_fn] generates a list of values.
 
     Uses {!Generators.integers} to determine the list length (0-20), then calls
     [gen_fn tc] for each element. *)
-val generate_list : Client.test_case -> (Client.test_case -> 'a) -> 'a list
+val generate_list : Internal.test_case -> (Internal.test_case -> 'a) -> 'a list

@@ -125,7 +125,7 @@ let%hegel_test stateful_retry_budget_floor_test tc =
   Hegel.Stateful.run ~init:() ~rules:[ always_reject_rule ] tc
 [@@settings
   Hegel.settings ~test_cases:1 ~seed:0 ()
-  |> Hegel.Client.with_suppress_health_check [ Hegel.Client.Filter_too_much ]]
+  |> Hegel.with_suppress_health_check [ Hegel.Filter_too_much ]]
 ;;
 
 let test_stateful_bounded_steps () =
@@ -140,8 +140,7 @@ let test_stateful_bounded_steps () =
   let raised_msg = ref "" in
   (try
      Hegel.run_hegel_test
-       ~settings:
-         (Hegel.settings ~test_cases:1 () |> Hegel.Client.with_stateful_step_count 10)
+       ~settings:(Hegel.settings ~test_cases:1 () |> Hegel.with_stateful_step_count 10)
        (fun tc ->
           step_count := 0;
           S.run ~init:() ~rules:[ step_rule ] tc)

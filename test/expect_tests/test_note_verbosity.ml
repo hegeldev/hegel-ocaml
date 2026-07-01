@@ -7,7 +7,7 @@ let int_gen = Hegel.Generators.integers ~min_value:0 ~max_value:100 ()
 (** A passing property (5 cases) that notes the marker on every case. *)
 let run_passing verbosity =
   let settings =
-    Hegel.settings ~test_cases:5 ~seed:1 () |> Hegel.Client.with_verbosity verbosity
+    Hegel.settings ~test_cases:5 ~seed:1 () |> Hegel.with_verbosity verbosity
   in
   Hegel.run_hegel_test ~settings (fun tc ->
     ignore (Hegel.draw tc int_gen : int);
@@ -18,7 +18,7 @@ let run_passing verbosity =
     marker on every case. *)
 let run_failing verbosity =
   let settings =
-    Hegel.settings ~test_cases:5 ~seed:1 () |> Hegel.Client.with_verbosity verbosity
+    Hegel.settings ~test_cases:5 ~seed:1 () |> Hegel.with_verbosity verbosity
   in
   try
     Hegel.run_hegel_test ~settings (fun tc ->
