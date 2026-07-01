@@ -19,8 +19,12 @@ type health_check =
   | Test_cases_too_large
   | Large_initial_test_case
 
+(**/**)
+
 (** [health_check_to_string hc] returns the canonical name for [hc]. *)
 val health_check_to_string : health_check -> string
+
+(**/**)
 
 (** Controls how much output Hegel produces during test runs. *)
 type verbosity =
@@ -53,9 +57,13 @@ type phase =
   | Target
   | Shrink
 
+(**/**)
+
 (** [phase_to_string p] returns the lowercase name for [p] (the
     [hypothesis.Phase] value name). *)
 val phase_to_string : phase -> string
+
+(**/**)
 
 (** Configuration for a Hegel test run. *)
 type settings =
@@ -85,8 +93,12 @@ val default_settings : unit -> settings
     applied to {!default_settings}. Convenience constructor for common cases. *)
 val settings : ?test_cases:int -> ?seed:int -> unit -> settings
 
+(**/**)
+
 (** [is_in_ci ()] returns [true] if a CI environment is detected. *)
 val is_in_ci : unit -> bool
+
+(**/**)
 
 (** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
 val with_test_cases : int -> settings -> settings
@@ -141,6 +153,8 @@ type test_case =
     (** per-name occurrence counter for numbering repeatable draws *)
   }
 
+(**/**)
+
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available; derived from the assertion's location so
     the shrinker can group probes for the same bug. *)
@@ -155,6 +169,8 @@ val generate_from_schema : Cbor.t -> test_case -> Cbor.t
     [true]. If [forced] is not [None], then the value is forced to be [b] for [Some b] *)
 val primitive_boolean : test_case -> float -> bool option -> bool
 
+(**/**)
+
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)
 val assume : test_case -> bool -> unit
@@ -164,15 +180,21 @@ val assume : test_case -> bool -> unit
     under [Normal], and on every test case under [Verbose] or [Debug]. *)
 val note : test_case -> string -> unit
 
+(**/**)
+
 (** [draw_display_name tc ~label ~repeatable] returns the display name to print
     for a drawn value, bumping the per-test-case occurrence counter for [label].
     A [repeatable] name is numbered on every occurrence ([label_1], [label_2],
     …), while a non-repeatable name is printed bare. *)
 val draw_display_name : test_case -> label:string -> repeatable:bool -> string
 
+(**/**)
+
 (** [target tc value label] records a targeting observation to guide the search
     engine toward higher values. *)
 val target : test_case -> float -> string -> unit
+
+(**/**)
 
 (** [start_span ?label tc] starts a generation span for better shrinking. *)
 val start_span : ?label:int -> test_case -> unit
@@ -231,6 +253,8 @@ val new_state_machine
     shrink the rule sequence. Raises {!Data_exhausted} when the engine's choice
     budget is exhausted. *)
 val state_machine_next_rule : test_case -> state_machine_id:int -> int
+
+(**/**)
 
 (** [run_test ~settings ?test_location ?database_key ?failure_blobs test_fn] runs
     a property test using the given settings against the native engine.

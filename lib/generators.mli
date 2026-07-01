@@ -6,6 +6,8 @@
     Primitive generators are {!printable} and may be drawn with
     {!draw}, which prints the drawn value on a failing replay. *)
 
+(**/**)
+
 (** Constants for span labels used in generation tracking. *)
 module Labels : sig
   val list : int
@@ -26,6 +28,8 @@ module Labels : sig
   val stateful_rule : int
 end
 
+(**/**)
+
 (** A generator producing values of type ['a]. The phantom ['p] is {!printable}
     when the generator carries a printer (and so may be drawn with {!draw}) and
     {!unprintable} otherwise. *)
@@ -36,6 +40,8 @@ type printable
 
 (** Phantom witness that a generator carries no printer; see {!generator}. *)
 type unprintable
+
+(**/**)
 
 (** Maximum number of filter attempts before calling [assume false]. *)
 val max_filter_attempts : int
@@ -81,6 +87,8 @@ val collection_more : collection -> Client.test_case -> bool
     Raises {!Client.Data_exhausted} on StopTest. *)
 val collection_reject : collection -> Client.test_case -> unit
 
+(**/**)
+
 (** [draw ?label tc gen] produces a typed value from the printable generator
     [gen] using test case [tc].
 
@@ -92,6 +100,8 @@ val collection_reject : collection -> Client.test_case -> unit
     the outermost value shows. To draw a generator with no printer, use
     {!draw_silent} or attach a printer with {!with_printer}. *)
 val draw : ?label:string -> Client.test_case -> ('a, printable) generator -> 'a
+
+(**/**)
 
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
     [let%hegel_test] PPX rewrites bindings to; not intended for direct use
@@ -105,6 +115,8 @@ val draw_named
   -> ('a, printable) generator
   -> 'a
 
+(**/**)
+
 (** [draw_silent tc gen] produces a typed value from any generator without
     recording it for the final-replay output. Use it for draws whose value is
     not a useful part of the printed counterexample, or for generators that
@@ -113,21 +125,13 @@ val draw_silent : Client.test_case -> ('a, 'p) generator -> 'a
 
 (** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding
     a printable generator that {!draw} accepts. This is how a [map]/[flat_map]/
-    [sampled_from]/[just] result is made drawable with {!draw}; the printer is
-    often supplied as [\[%sexp_of: t\]]. *)
+    [sampled_from]/[just] result is made drawable with {!draw} *)
 val with_printer : ('a -> Core.Sexp.t) -> ('a, 'p) generator -> ('a, printable) generator
+
+(**/**)
 
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
 val printer : ('a, printable) generator -> 'a -> Core.Sexp.t
-
-(** [composite generate_fn] builds a generator from an imperative [generate_fn]
-    that draws sub-values from the test case and assembles a result — the
-    OCaml/imperative counterpart to the schema-driven combinators, useful when a
-    value is easiest to describe by drawing its parts in sequence (this is also
-    the form [@@deriving hegel_generator] emits). Carries no printer (the output type
-    is the caller's), so it is {!unprintable}: draw it with {!draw_silent}, or
-    {!with_printer} it to draw with {!draw}. *)
-val composite : (Client.test_case -> 'a) -> ('a, unprintable) generator
 
 (** [pool_values ~pool_id ~values ~consume] builds a generator that picks a value
     from the engine pool [pool_id], resolving the drawn id against the local
@@ -138,6 +142,19 @@ val pool_values
   -> values:(int, 'a) Core.Hashtbl.t
   -> consume:bool
   -> ('a, unprintable) generator
+
+(**/**)
+
+(** {2 Generator combinators} *)
+
+(** [composite generate_fn] builds a generator from an imperative [generate_fn]
+    that draws sub-values from the test case and assembles a result — the
+    OCaml/imperative counterpart to the schema-driven combinators, useful when a
+    value is easiest to describe by drawing its parts in sequence (this is also
+    the form [@@deriving hegel_generator] emits). Carries no printer (the output type
+    is the caller's), so it is {!unprintable}: draw it with {!draw_silent}, or
+    {!with_printer} it to draw with {!draw}. *)
+val composite : (Client.test_case -> 'a) -> ('a, unprintable) generator
 
 (** [map f gen] transforms values from [gen] using [f]. The result carries no
     printer (the output type is the user's); use {!with_printer} to draw it with
@@ -160,6 +177,8 @@ val flat_map
     attempts fail. *)
 val filter : ('a -> bool) -> ('a, 'p) generator -> ('a, 'p) generator
 
+(**/**)
+
 (** [schema gen] returns the schema for a [Basic]-core generator, or [None]. *)
 val schema : ('a, 'p) generator -> Cbor.t option
 
@@ -175,6 +194,8 @@ val as_basic : ('a, 'p) generator -> (Cbor.t * (Cbor.t -> 'a)) option
     Used to decide whether [lists ~unique:true] can take the engine-side fast
     path or must fall back to client-side dedup. *)
 val basic_unique_safe : ('a, 'p) generator -> bool
+
+(**/**)
 
 (** {2 Primitive generators} *)
 

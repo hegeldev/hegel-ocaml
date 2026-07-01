@@ -58,6 +58,8 @@ val draw
   -> ('a, Generators.printable) Generators.generator
   -> 'a
 
+(**/**)
+
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
     [let%hegel_test] PPX rewrites bindings to; not intended for direct use
     (prefer {!draw}). See {!Generators.draw_named}. *)
@@ -67,6 +69,8 @@ val draw_named
   -> Client.test_case
   -> ('a, Generators.printable) Generators.generator
   -> 'a
+
+(**/**)
 
 (** [draw_silent tc gen] is {!draw} without printing the value on the final
     replay, and accepts a generator with no printer. *)
