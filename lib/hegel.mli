@@ -270,7 +270,7 @@ val draw_silent : test_case -> ('a, 'p) Generators.generator -> 'a
     {[
       let%hegel_test parity_printed tc =
         let bit =
-          draw tc (with_printer [%sexp_of: int] (map (fun n -> n mod 2) (integers ~min_value:0 ~max_value:99 ())))
+          draw tc (with_printer Core.Int.sexp_of_t (map (fun n -> n mod 2) (integers ~min_value:0 ~max_value:99 ())))
         in
         assert (bit = 0 || bit = 1)
       ;;
