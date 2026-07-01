@@ -66,8 +66,7 @@ let one_of_core : type a. a core list -> a core =
 ;;
 
 (** [one_of generators] creates a generator that picks from one of the given
-    [generators], all of which must be printable. The drawn value renders with
-    the first branch's printer (branches share a type). Requires at least one
+    [generators], all of which must be printable. Requires at least one
     generator. *)
 let one_of (generators : ('a, printable) generator list) : ('a, printable) generator =
   match generators with

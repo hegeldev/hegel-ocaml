@@ -4,7 +4,7 @@
 
     Every generator carries a phantom ['p] recording whether it holds a printer.
     Primitive generators are {!printable} and may be drawn with
-    {!draw}, which prints the drawn value on a failing replay.
+    {!Hegel.draw}, which prints the drawn value on a failing replay.
     
     All examples in this documentation assume [open Hegel] and [open Hegel.Generators]. *)
 
@@ -33,8 +33,8 @@ end
 (**/**)
 
 (** A generator producing values of type ['a]. The phantom ['p] is {!printable}
-    when the generator carries a printer (and so may be drawn with {!draw}) and
-    {!unprintable} otherwise. *)
+    when the generator carries a printer (and so may be drawn with {!Hegel.draw})
+    and {!unprintable} otherwise. *)
 type ('a, 'p) generator
 
 (** Phantom witness that a generator carries a printer; see {!generator}. *)
@@ -89,8 +89,6 @@ val collection_more : collection -> Client.test_case -> bool
     Raises {!Client.Data_exhausted} on StopTest. *)
 val collection_reject : collection -> Client.test_case -> unit
 
-(**/**)
-
 (** [draw ?label tc gen] produces a typed value from the printable generator
     [gen] using test case [tc].
 
@@ -110,8 +108,6 @@ val collection_reject : collection -> Client.test_case -> unit
     ]} *)
 val draw : ?label:string -> Client.test_case -> ('a, printable) generator -> 'a
 
-(**/**)
-
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
     [let%hegel_test] PPX rewrites bindings to; not intended for direct use
     (prefer {!draw}). It prints [label = value] (bare), or [label_1 = value],
@@ -123,8 +119,6 @@ val draw_named
   -> Client.test_case
   -> ('a, printable) generator
   -> 'a
-
-(**/**)
 
 (** [draw_silent tc gen] produces a typed value from any generator without
     recording it for the final-replay output. Use it for draws whose value is
@@ -152,8 +146,6 @@ val draw_silent : Client.test_case -> ('a, 'p) generator -> 'a
     ]} *)
 val with_printer : ('a -> Core.Sexp.t) -> ('a, 'p) generator -> ('a, printable) generator
 
-(**/**)
-
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
 val printer : ('a, printable) generator -> 'a -> Core.Sexp.t
 
@@ -176,8 +168,8 @@ val pool_values
     OCaml/imperative counterpart to the schema-driven combinators, useful when a
     value is easiest to describe by drawing its parts in sequence (this is also
     the form [@@deriving hegel_generator] emits). Carries no printer (the output type
-    is the caller's), so it is {!unprintable}: draw it with {!draw_silent}, or
-    {!with_printer} it to draw with {!draw}.
+    is the caller's), so it is {!unprintable}: draw it with {!Hegel.draw_silent},
+    or {!Hegel.with_printer} it to draw with {!Hegel.draw}.
 
     {[
       let point =
@@ -190,8 +182,8 @@ val pool_values
 val composite : (Client.test_case -> 'a) -> ('a, unprintable) generator
 
 (** [map f gen] transforms values from [gen] using [f]. The result carries no
-    printer (the output type is the user's); use {!with_printer} to draw it with
-    {!draw}.
+    printer (the output type is the user's); use {!Hegel.with_printer} to draw it
+    with {!Hegel.draw}.
 
     When [gen]'s core is [Basic], the schema is preserved and transforms are
     composed; otherwise a mapped core is created.
@@ -206,7 +198,7 @@ val map : ('a -> 'b) -> ('a, 'p) generator -> ('b, unprintable) generator
 
 (** [flat_map f gen] creates a dependent generator. [f] receives the generated
     value and returns a generator whose value is the final result. The result
-    carries no printer; use {!with_printer} to draw it with {!draw}.
+    carries no printer; use {!Hegel.with_printer} to draw it with {!Hegel.draw}.
 
     {[
       let%hegel_test flat_map_example tc =
@@ -446,8 +438,7 @@ val hashmaps
 val sampled_from : 'a list -> ('a, unprintable) generator
 
 (** [one_of generators] creates a generator that picks from one of the given
-    printable [generators]. Requires at least one generator; the drawn value
-    renders with the first branch's printer.
+    printable [generators]. Requires at least one generator.
 
     {[
       let%hegel_test one_of_example tc =

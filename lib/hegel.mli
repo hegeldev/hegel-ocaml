@@ -254,11 +254,20 @@ val note : test_case -> string -> unit
 val target : test_case -> float -> string -> unit
 
 (** [draw ?label tc gen] produces a typed value from the printable generator
-    [gen] using test case [tc]. On the final replay of a failing test (or on
-    every case under verbose output), an outermost draw prints its value as
-    [name = value], where [name] is [label] (else ["draw"]); an unlabeled draw is
-    numbered ([draw_1], [draw_2], …) while a [label] is printed bare. See
-    {!Generators.draw}. *)
+    [gen] using test case [tc].
+
+    On the final replay of a failing test (or on every case under verbose
+    output), an outermost draw prints its value as [name = value] — where [name]
+    is [label] when given, else ["draw"]. An unlabeled draw is numbered
+    ([draw_1], [draw_2], …) while a [label] is printed bare. To draw a generator 
+    with no printer, use {!draw_silent} or attach a printer with {!with_printer}.
+
+    {[
+      let%hegel_test draw_example tc =
+        let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
+        assert (n >= 0)
+      ;;
+    ]} *)
 val draw
   :  ?label:string
   -> test_case
@@ -279,29 +288,28 @@ val draw_named
 
 (**/**)
 
-(** [draw_silent tc gen] is {!draw} without printing the value on the final
-    replay, and accepts a generator with no printer.
+(** [draw_silent tc gen] produces a typed value from any generator without
+    recording it for the final-replay output. Use it for draws whose value is not
+    a useful part of the printed counterexample, or for generators that carry no
+    printer.
 
     {[
-      let%hegel_test parity tc =
-        let bit =
-          draw_silent tc (map (fun n -> n mod 2) (integers ~min_value:0 ~max_value:99 ()))
-        in
-        assert (bit = 0 || bit = 1)
+      let%hegel_test draw_silent_example tc =
+        let n = draw_silent tc (map (fun x -> x * 2) (integers ~min_value:0 ~max_value:9 ())) in
+        assert (n >= 0)
       ;;
     ]} *)
 val draw_silent : test_case -> ('a, 'p) Generators.generator -> 'a
 
-(** [with_printer sexp_of gen] attaches [sexp_of] as [gen]'s printer so it can
-    be drawn with {!draw}. See {!Generators.with_printer}.
+(** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding a
+    printable generator that {!draw} accepts. This is how a
+    [map]/[flat_map]/[sampled_from]/[just] result is made drawable with {!draw}.
 
     {[
-      let%hegel_test parity_printed tc =
-        let unprintable_gen = map (fun n -> n mod 2) (integers ~min_value:0 ~max_value:99 () in
-        let printable_gen = with_printer Core.Int.sexp_of_t unprintable_gen in 
-        let bit = draw tc printable_gen
-        in
-        assert (bit = 0 || bit = 1)
+      let%hegel_test with_printer_example tc =
+        let doubled = map (fun x -> x * 2) (integers ~min_value:0 ~max_value:9 ()) in
+        let n = draw tc (with_printer Core.Int.sexp_of_t doubled) in
+        assert (n >= 0)
       ;;
     ]} *)
 val with_printer
