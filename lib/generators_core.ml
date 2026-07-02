@@ -86,12 +86,17 @@ type 'a core =
       -> 'a core
 
 (** Phantom witness that a generator carries a printer and so may be drawn with
-    {!draw}. *)
-type printable
+    {!draw}. Defined as a private polymorphic variant (not left abstract) so
+    the two witnesses are provably distinct: since OCaml 5.5 the exhaustiveness
+    checker no longer assumes two module-local abstract types differ
+    (ocaml/ocaml#13712), which would make matches on [(_, printable) generator]
+    partial. *)
+type printable = private [ `Printable ]
 
 (** Phantom witness that a generator carries no printer; such a generator can
-    only be drawn with {!draw_silent} (or upgraded with {!with_printer}). *)
-type unprintable
+    only be drawn with {!draw_silent} (or upgraded with {!with_printer}). See
+    {!printable} for why this is not a bare abstract type. *)
+type unprintable = private [ `Unprintable ]
 
 (** A generator: a {!core} (how to generate) plus a phantom ['p] recording
     whether a printer is present. [Printable] structurally carries the printer,

@@ -105,9 +105,23 @@ jobs:
         run: just check-tests-no-coverage
 
       - name: Mirror opam-repo-ci (isolated release build + tests)
+        env:
+          # Verbosity 2 streams sub-command output so build warnings land in
+          # the log we grep below.
+          OPAMVERBOSE: "2"
         run: |
+          set -o pipefail
           eval $(opam env)
-          opam install ./*.opam --with-test --confirm-level=unsafe-yes
+          opam install ./*.opam --with-test --confirm-level=unsafe-yes 2>&1 \
+            | tee "$RUNNER_TEMP/opam-install.log"
+          # Release-profile builds (dune -p) print warnings but never fail on
+          # them (release flags are just `-w -40`), so a new compiler's
+          # warnings scroll past silently. Only our packages build here (deps
+          # are preinstalled), so any warning is ours: fail on it.
+          if grep -E 'Warning [0-9]+ \[' "$RUNNER_TEMP/opam-install.log"; then
+            echo "::error::OCaml warnings emitted during the release-profile build"
+            exit 1
+          fi
 
   test:
     name: test
@@ -155,9 +169,17 @@ jobs:
         run: just check-tests
 
       - name: Mirror opam-repo-ci (isolated release build + tests)
+        env:
+          OPAMVERBOSE: "2"
         run: |
+          set -o pipefail
           eval $(opam env)
-          opam install ./*.opam --with-test --confirm-level=unsafe-yes
+          opam install ./*.opam --with-test --confirm-level=unsafe-yes 2>&1 \
+            | tee "$RUNNER_TEMP/opam-install.log"
+          if grep -E 'Warning [0-9]+ \[' "$RUNNER_TEMP/opam-install.log"; then
+            echo "::error::OCaml warnings emitted during the release-profile build"
+            exit 1
+          fi
 
   docs:
     name: docs
