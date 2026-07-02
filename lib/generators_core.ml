@@ -86,12 +86,17 @@ type 'a core =
       -> 'a core
 
 (** Phantom witness that a generator carries a printer and so may be drawn with
-    {!draw}. *)
-type printable
+    {!draw}. Defined as a private polymorphic variant (not left abstract) so
+    the two witnesses are provably distinct: since OCaml 5.5 the exhaustiveness
+    checker no longer assumes two module-local abstract types differ
+    (ocaml/ocaml#13712), which would make matches on [(_, printable) generator]
+    partial. *)
+type printable = private [ `Printable ]
 
 (** Phantom witness that a generator carries no printer; such a generator can
-    only be drawn with {!draw_silent} (or upgraded with {!with_printer}). *)
-type unprintable
+    only be drawn with {!draw_silent} (or upgraded with {!with_printer}). See
+    {!printable} for why this is not a bare abstract type. *)
+type unprintable = private [ `Unprintable ]
 
 (** A generator: a {!core} (how to generate) plus a phantom ['p] recording
     whether a printer is present. [Printable] structurally carries the printer,
@@ -141,8 +146,9 @@ let with_printer : type a p. (a -> Sexp.t) -> (a, p) generator -> (a, printable)
 ;;
 
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
-let printer : type a. (a, printable) generator -> a -> Sexp.t =
-  fun (Printable { sexp_of; _ }) -> sexp_of
+let printer : type a. (a, printable) generator -> a -> Sexp.t = function
+  | Printable { sexp_of; _ } -> sexp_of
+  | _ -> .
 ;;
 
 (** [composite generate_fn] builds an unprintable generator from an imperative
@@ -330,14 +336,17 @@ let draw_named
   : type a.
     label:string -> repeatable:bool -> Internal.test_case -> (a, printable) generator -> a
   =
-  fun ~label ~repeatable tc (Printable { core; sexp_of }) ->
-  let value = do_draw core tc in
-  if Internal.draw_depth tc = 0
-  then (
-    let name = Internal.draw_display_name tc ~label ~repeatable in
-    let rendered = Sexp.to_string_hum (sexp_of value) in
-    Internal.note tc (sprintf "%s = %s" name rendered));
-  value
+  fun ~label ~repeatable tc gen ->
+  match gen with
+  | Printable { core; sexp_of } ->
+    let value = do_draw core tc in
+    if Internal.draw_depth tc = 0
+    then (
+      let name = Internal.draw_display_name tc ~label ~repeatable in
+      let rendered = Sexp.to_string_hum (sexp_of value) in
+      Internal.note tc (sprintf "%s = %s" name rendered));
+    value
+  | _ -> .
 ;;
 
 (** [draw ?label tc gen] produces a typed value from the printable generator

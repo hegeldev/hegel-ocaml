@@ -30,7 +30,7 @@ let with_env_unset ~f =
     ~f
 ;;
 
-let with_tempdir ~f = Test_helpers.with_tempdir ~prefix:"/tmp/hegel-antithesis-test-" ~f
+let with_tempdir ~f = Test_helpers.with_tempdir ~prefix:"hegel-antithesis-test-" ~f
 
 let sample_location =
   { A.function_name = "my_test"; file = "tests/test_basic.ml"; begin_line = 42 }
