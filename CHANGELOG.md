@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0 - 2026-07-02
+
+This release reexports many functions from the `Client` module to the `Hegel` module.
+The `Client` module has been renamed to `Internal`. Hegel tests should only use the 
+`Hegel`, `Hegel.Generators`, and `Hegel.Stateful` modules.
+
 ## 0.7.6 - 2026-07-01
 
 Adds database key as an optional argument to `Hegel.run_hegel_test`. If `ppx_hegel_test` 
