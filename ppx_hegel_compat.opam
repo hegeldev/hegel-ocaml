@@ -32,3 +32,4 @@ build: [
   ["dune" "install" "-p" name "--create-install-files" name]
 ]
 dev-repo: "git+https://github.com/hegeldev/hegel-ocaml.git"
+available: [ os != "win32" ]

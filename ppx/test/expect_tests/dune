@@ -1,0 +1,15 @@
+; ppx_expect tests. In their own directory so the coverage recipe can run just
+; these inline tests via [dune runtest ppx/test/expect_tests] without re-running
+; the Alcotest suites. Deliberately not attributed to a package: attributing a
+; library installs it (forcing ppx_expect into the hard deps), so these stay a
+; dev/CI-only suite, disabled in release-profile (opam) builds.
+
+(library
+ (name expect_tests)
+ (enabled_if
+  (<> %{profile} release))
+ (libraries hegel hegel.test_runtime core core_unix)
+ (inline_tests
+  (backend ppx_inline_test))
+ (preprocess
+  (pps ppx_expect ppx_sexp_conv ppx_hegel_generator ppx_hegel_test)))

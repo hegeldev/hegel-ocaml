@@ -15,7 +15,7 @@ open Generators
 (* Quiet, deterministic run; swallow the failure the property raises so the
    expect block only sees what we printed. *)
 let run_failing
-      ?(settings = Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal))
+      ?(settings = settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal)
       body
   =
   try Hegel.run_hegel_test ~settings body with
@@ -24,7 +24,7 @@ let run_failing
 
 let%expect_test "draw_silent returns the value and prints nothing" =
   Hegel.run_hegel_test
-    ~settings:Client.(settings ~test_cases:1 () |> with_verbosity Normal)
+    ~settings:(settings ~test_cases:1 () |> with_verbosity Normal)
     (fun tc ->
        let v = Hegel.draw_silent tc (integers ~min_value:3 ~max_value:3 ()) in
        printf "got=%d" v);
@@ -163,11 +163,10 @@ let%hegel_test stateful_print tc =
   let _x = Hegel.draw tc val_gen in
   Stateful.run ~init:() ~rules:[ rule ] tc
 [@@settings
-  Client.(
-    settings ~test_cases:1 ~seed:0 ()
-    |> with_verbosity Verbose
-    |> with_phases [ Generate ]
-    |> with_stateful_step_count 3)]
+  settings ~test_cases:1 ~seed:0 ()
+  |> with_verbosity Verbose
+  |> with_phases [ Generate ]
+  |> with_stateful_step_count 3]
 ;;
 
 let%expect_test "stateful tests prints drawn data on passing test verbosity is verbose" =
@@ -235,11 +234,11 @@ let%expect_test
    This file enables the [ppx_hegel_test] rewriter, so the test below exercises
    a real expansion. *)
 
-let%hegel_test label_injection_from_binding (tc : Hegel.Client.test_case) =
+let%hegel_test label_injection_from_binding (tc : test_case) =
   let x = Hegel.draw tc (integers ~min_value:7 ~max_value:7 ()) in
   ignore (x : int);
   assert false
-[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal)]
+[@@settings settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal]
 ;;
 
 let%expect_test "ppx injects ~label from the binding name" =
@@ -255,11 +254,11 @@ let%expect_test "ppx injects ~label from the binding name" =
    qualified by any Hegel-exporting module (here [Generators]) is labeled, and
    the rewrite keeps that prefix (targeting [Generators.draw_named]). *)
 
-let%hegel_test qualified_generators_draw (tc : Hegel.Client.test_case) =
+let%hegel_test qualified_generators_draw (tc : test_case) =
   let g = Generators.draw tc (integers ~min_value:9 ~max_value:9 ()) in
   ignore (g : int);
   assert false
-[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal)]
+[@@settings settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal]
 ;;
 
 let%expect_test "a Generators-qualified draw is labeled (prefix preserved)" =
@@ -277,14 +276,14 @@ let%expect_test "a Generators-qualified draw is labeled (prefix preserved)" =
    label and the user's own [draw] runs; only the genuine [Hegel.draw tc] is
    labeled. *)
 
-let%hegel_test local_draw_not_on_tc_untouched (tc : Hegel.Client.test_case) =
+let%hegel_test local_draw_not_on_tc_untouched (tc : test_case) =
   let draw n = n + 100 in
   let y = draw 5 in
   ignore (y : int);
   let z = Hegel.draw tc (integers ~min_value:1 ~max_value:1 ()) in
   ignore (z : int);
   assert false
-[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal)]
+[@@settings settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal]
 ;;
 
 let%expect_test "a local non-Hegel draw (not on tc) is not rewritten" =
@@ -302,7 +301,7 @@ let%expect_test "a local non-Hegel draw (not on tc) is not rewritten" =
    every occurrence is numbered ([x_1], [x_2], …) — including the first — rather
    than the lone-binding bare [x]. *)
 
-let%hegel_test repeated_binding_numbers (tc : Hegel.Client.test_case) =
+let%hegel_test repeated_binding_numbers (tc : test_case) =
   let x = Hegel.draw tc (integers ~min_value:1 ~max_value:1 ()) in
   ignore (x : int);
   let x = Hegel.draw tc (integers ~min_value:2 ~max_value:2 ()) in
@@ -310,7 +309,7 @@ let%hegel_test repeated_binding_numbers (tc : Hegel.Client.test_case) =
   let x = Hegel.draw tc (integers ~min_value:3 ~max_value:3 ()) in
   ignore (x : int);
   assert false
-[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal)]
+[@@settings settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal]
 ;;
 
 let%expect_test "a reused binding name numbers x_1, x_2, x_3" =
@@ -327,13 +326,13 @@ let%expect_test "a reused binding name numbers x_1, x_2, x_3" =
 (* A draw inside a loop (block depth > 0) is flagged repeatable even though the
    name appears once syntactically, so its per-iteration values are numbered. *)
 
-let%hegel_test looped_binding_numbers (tc : Hegel.Client.test_case) =
+let%hegel_test looped_binding_numbers (tc : test_case) =
   for i = 1 to 2 do
     let x = Hegel.draw tc (integers ~min_value:i ~max_value:i ()) in
     ignore (x : int)
   done;
   assert false
-[@@settings Client.(settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal)]
+[@@settings settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal]
 ;;
 
 let%expect_test "a draw inside a loop numbers x_1, x_2" =
@@ -355,7 +354,7 @@ let%expect_test "a draw inside a loop numbers x_1, x_2" =
 
 let%expect_test "verbose prints draws on a passing run" =
   Hegel.run_hegel_test
-    ~settings:Client.(settings ~test_cases:1 ~seed:0 () |> with_verbosity Verbose)
+    ~settings:(settings ~test_cases:1 ~seed:0 () |> with_verbosity Verbose)
     (fun tc ->
        let _ = Hegel.draw tc (integers ~min_value:5 ~max_value:5 ()) in
        ());

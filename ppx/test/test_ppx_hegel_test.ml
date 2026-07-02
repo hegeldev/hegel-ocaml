@@ -35,14 +35,14 @@ let with_tempdir ~f =
 ;;
 
 (** A simple passing test, expected to expand into a unit -> unit wrapper. *)
-let%hegel_test simple_pass (tc : Hegel.Client.test_case) =
+let%hegel_test simple_pass (tc : Hegel.test_case) =
   let _ = Hegel.draw tc (Hegel.Generators.booleans ()) in
   ()
 [@@settings Hegel.settings ~test_cases:3 ()]
 ;;
 
 (** A failing test. The generated wrapper will raise. *)
-let%hegel_test simple_fail (tc : Hegel.Client.test_case) =
+let%hegel_test simple_fail (tc : Hegel.test_case) =
   let _ = Hegel.draw tc (Hegel.Generators.booleans ()) in
   failwith "deliberate failure"
 [@@settings Hegel.settings ~test_cases:3 ()]
@@ -50,7 +50,7 @@ let%hegel_test simple_fail (tc : Hegel.Client.test_case) =
 
 (** A test without an explicit [@@settings] attribute — should fall back to
     default settings. *)
-let%hegel_test no_settings (tc : Hegel.Client.test_case) =
+let%hegel_test no_settings (tc : Hegel.test_case) =
   let _ = Hegel.draw tc (Hegel.Generators.booleans ()) in
   ()
 ;;

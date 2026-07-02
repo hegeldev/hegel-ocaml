@@ -109,13 +109,12 @@ let extract_function_name (pat : pattern) : string =
 ;;
 
 (** [build_location_record ~loc ~function_name] returns an expression of type
-    [Hegel.Antithesis.test_location] populated from the binding's source
-    location. *)
+    [Hegel.test_location] populated from the binding's source location. *)
 let build_location_record ~loc ~function_name : expression =
   let file_str = loc.loc_start.pos_fname in
   let line = loc.loc_start.pos_lnum in
   [%expr
-    { Hegel.Antithesis.function_name = [%e Ast_builder.Default.estring ~loc function_name]
+    { Hegel.function_name = [%e Ast_builder.Default.estring ~loc function_name]
     ; file = [%e Ast_builder.Default.estring ~loc file_str]
     ; begin_line = [%e Ast_builder.Default.eint ~loc line]
     }]

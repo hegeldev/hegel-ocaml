@@ -80,7 +80,7 @@ jobs:
           # alcotest and ppx_expect are with-test deps not pulled by --deps-only;
           # install them explicitly (avoiding --with-test, which also pulls
           # ocamlformat/bisect_ppx that need not build on OxCaml). ppx_expect is
-          # required to build and run test/expect_tests.
+          # required to build and run ppx/test/expect_tests.
           opam install alcotest ppx_expect --yes
 
       - name: Stage libhegel from the matching GitHub release

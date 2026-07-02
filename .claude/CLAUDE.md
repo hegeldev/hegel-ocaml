@@ -27,32 +27,56 @@ just check       # Run lint + docs + test (the full CI check)
 ```
 lib/                         # Library source
   dune                       # Library build config (bisect_ppx instrumented)
-  hegel.ml                   # Main module — re-exports all sub-modules
+  hegel.ml / hegel.mli       # Main module — re-exports the public API
   ffi/                       # ctypes bindings to native libhegel (NOT instrumented)
     ffi.ml                   # dlopen + 1:1 C-ABI wrappers; settings/run/test_case handles
     loader.ml                # locate/download libhegel at runtime (env > sibling > release)
-  cbor_helpers.ml            # CBOR encoding/decoding with type-safe extractors
+  cbor/cbor.ml               # Vendored CBOR encoder/decoder (RFC 7049; mirage/ocaml-cbor)
+  cbor_helpers.ml            # Type-safe CBOR extractors on top of cbor
   client.ml                  # Test runner + run lifecycle on top of Hegel_ffi.Ffi
-  generators.ml              # Generator combinators (booleans, integers, lists, …)
+  generators.ml              # Re-export shim: include the four generators_* modules
+  generators_core.ml         # generator type; draw/draw_silent, map/flat_map/filter,
+                             #   composite, span labels — the discriminated union
+  generators_primitives.ml   # integers, booleans, floats, text, binary, just, formats
+  generators_collections.ml  # lists, hashmaps, sets, and the collection protocol
+  generators_combinators.ml  # sampled_from, one_of, tuples2/3/4
   derive.ml                  # Runtime support for [@@deriving hegel_generator]
+  stateful.ml                # Stateful testing: Rule.create + run over action sequences
+  antithesis.ml              # Antithesis integration (emits an always-typed assertion)
   test_runtime/              # Inline-test registry + runner for [let%hegel_test]
     hegel_test_runtime.ml    # Registry, run_all, test_main (called by dune-generated runner)
 
 ppx/                         # PPX rewriters and derivers
   dune                       # PPX library build configs; ppx_hegel_test declares
-                             # (inline_tests.backend ...) + (ppx_runtime_libraries hegel_test_runtime)
+                             # (inline_tests.backend ...) + (ppx_runtime_libraries hegel_test_runtime);
+                             # a rule generates ppx_compat.ml from one variant below
   ppx_hegel_generator.ml     # Deriver: reads type decls, emits generator functions
   ppx_hegel_test.ml          # Expander: rewrites [let%hegel_test name tc = body]
                              # into a callable function plus a Hegel_test_runtime.register call
+  ppx_compat_pre-53.ml       # AST compat shim for ppxlib < 0.36 (OCaml < 5.3)
+  ppx_compat_post-53.ml      # AST compat shim for ppxlib >= 0.36 (OCaml >= 5.3)
+  ppx_compat_oxcaml.ml       # AST compat shim for the OxCaml compiler
+  test/                      # PPX E2E tests, package-attributed so opam-repo-ci runs them
+    test_ppx_derive.ml       # PPX deriver E2E tests (package ppx_hegel_generator)
+    test_ppx_hegel_test.ml   # ppx_hegel_test expander E2E tests (package ppx_hegel_test)
+    test_hegel_test_runtime.ml # Inline-test runner behavior (re-spawns itself;
+                             #   package ppx_hegel_test)
+    expect_tests/            # ppx_expect tests (dev-only, disabled in release profile)
+                             # (one of the three is copied to ppx_compat.ml = ppx_hegel_compat lib)
 
-test/                        # Alcotest test suite
-  dune                       # Test build config (two executables: test_hegel, test_ppx_derive)
+test/                        # hegel's own test suite (one executable: test_hegel,
+  dune                       #   Alcotest, package hegel — runs under `-p hegel`;
+                             #   no PPX preprocessing beyond the ppx_js_style linter)
   test_hegel.ml              # Top-level Alcotest runner
+  test_helpers.ml            # Shared test utilities
   test_cbor_helpers.ml       # CBOR helper tests
-  test_client.ml             # Client config + run lifecycle tests (real engine)
-  test_generators_*.ml       # Generator combinator / collection / schema tests
+  test_cbor_vectors.ml       # CBOR round-trip vector tests
+  test_client.ml             # Internal config + run lifecycle tests (real engine)
+  test_generators_*.ml       # Generator core / primitives / collections / combinators / schema
   test_derive.ml             # Derive module runtime helper tests
-  test_ppx_derive.ml         # PPX deriver E2E tests (uses ppx_hegel_generator)
+  test_stateful.ml           # Stateful testing tests
+  test_antithesis.ml         # Antithesis integration tests
+  test_single_test_case.ml   # Single-case / failure-blob replay tests
 
 docs/                        # Tutorial and guide documents
   getting-started.md         # Getting Started tutorial (OCaml translation)
@@ -93,7 +117,12 @@ mechanical marshalling out of the 100%-coverage gate (no `[@coverage off]`).
 `lib/protocol.ml`, `lib/connection.ml`, and the old Python-subprocess install
 flow were removed in the native-backend migration.
 
-### Generator System (generators.ml)
+### Generator System (generators_core.ml + generators_{primitives,collections,combinators}.ml)
+
+The generator type and combinators (`draw`, `map`, `flat_map`, `composite`, …)
+live in `generators_core.ml`; the primitives, collections, and combinators are
+split across the sibling `generators_*.ml` files. `generators.ml` is a thin shim
+that `include`s all four so they surface as one `Hegel.Generators` module.
 
 Generators are a discriminated union:
 - **Basic** — holds a raw CBOR schema + optional transform. Calling `map` on a Basic preserves the schema (composes transforms). The engine generates the value in one round-trip.
@@ -123,13 +152,13 @@ Libraries that don't opt in still get the registration side effect (the
 PPX always emits it) — entries just sit unused. That's harmless and lets
 tests built around alternative harnesses (Alcotest, raw `let () = name ()`)
 keep working unchanged. The runner's behavior is verified in
-`test/test_hegel_test_runtime.ml`, which re-spawns the running
-`test_hegel.exe` with a magic `--__hegel_test_runtime_demo MODE` argv that
-the top of `test_hegel.ml` intercepts to register a single test and call
+`ppx/test/test_hegel_test_runtime.ml`, which re-spawns itself with a magic
+`--__hegel_test_runtime_demo MODE` argv that the top of the same file
+intercepts to register a single test and call
 `Hegel_test_runtime.test_main`; the subprocess's exit code is then
-asserted. Folding the demo into `test_hegel.exe` itself sidesteps the
-build-ordering trap that would otherwise hit any recipe invoking the test
-binary directly.
+asserted. Spawning itself (rather than a separate demo executable)
+sidesteps the build-ordering trap that would otherwise hit any recipe
+invoking the test binary directly.
 
 ### Type-Directed Derivation (ppx/ + lib/derive.ml)
 
@@ -148,7 +177,9 @@ value named `<t>_generator` from type declarations annotated with
 The PPX emits a `test_case -> t` field-drawing thunk and wraps it with
 `Hegel.Generators.composite`, producing an `(t, unprintable) generator` value —
 no printer is attached, so a bare `[@@deriving hegel_generator]` always compiles. The
-`Hegel.Derive` module provides runtime helpers for option and list types.
+`Hegel.Derive` module provides runtime helpers for option and list types; it is
+re-exported doc-hidden (the standard public-but-invisible PPX-runtime pattern)
+because generated code in user projects calls it.
 
 **Usage example:**
 
@@ -198,7 +229,7 @@ Non-basic list elements use a engine-side collection handle:
 
 The engine runs in-process, so there is no subprocess or session to manage.
 The public entry point is `Hegel.run_hegel_test ?settings ?test_location
-test_fn` — `Client.run_hegel_test`, which is `Client.run_test` with [settings]
+test_fn` — `Internal.run_hegel_test`, which is `Internal.run_test` with [settings]
 defaulting to `default_settings ()`. It is what the `let%hegel_test` PPX
 targets. The `[@@failure_blobs ...]` record/replay workflow is supported: the
 PPX forwards the listed blobs as `~failure_blobs` to `run_hegel_test`, which
@@ -233,13 +264,23 @@ in an `Exn.protect ~finally`.
 - Every lib module has a corresponding `test/test_<module>.ml`
 - Unit tests use socketpair-based fake engines to avoid depending on the real hegel binary
 - End-to-end tests (tagged `_e2e`) require the real binary and live under the same test file
-- PPX-derived tests live in `test/test_ppx_derive.ml` (separate executable with PPX preprocessing)
+- `test/` must build under `-p hegel` (opam-repo-ci runs it): plain Alcotest
+  functions calling `Hegel.run_hegel_test`, no `let%hegel_test`, no PPX beyond
+  the `ppx_js_style` linter. White-box tests use the doc-hidden `(**/**)`
+  re-exports `Hegel.{Internal,Cbor_helpers,Antithesis}`; `Hegel.Derive` is
+  doc-hidden too because PPX-generated code calls it. Only `Generators`,
+  `Stateful`, and the values/types directly under `Hegel` are documented API
+- PPX E2E tests live under `ppx/test/`, attributed via `(package ...)` to
+  `ppx_hegel_generator` (`test_ppx_derive.ml`) and `ppx_hegel_test`
+  (`test_ppx_hegel_test.ml`, `test_hegel_test_runtime.ml`) so
+  `dune runtest -p <pkg>` runs them; `ppx/test/expect_tests/` stays
+  package-less and dev-only (`enabled_if (<> %{profile} release)`)
 - 100% branch and line coverage is mandatory — no exceptions, no `[@coverage off]`
 
 ### Error Handling
 
-- `Client.Assume_rejected` — raised by `assume false`; mapped to `mark_complete INVALID`
-- `Client.Data_exhausted` — raised when StopTest is received; skips `mark_complete`
+- `Internal.Assume_rejected` — raised by `assume false`; mapped to `mark_complete INVALID`
+- `Internal.Data_exhausted` — raised when StopTest is received; skips `mark_complete`
 - `Connection.Request_error` — raised on protocol-level errors from the engine
 
 ### Schema Format
@@ -283,34 +324,33 @@ The Hegel engine speaks CBOR. Generator schemas are CBOR maps:
    it directly; the `composite` wrapper replaced that so derived generators
    compose with the other combinators.)
 
-2. **Unbounded integers cause CBOR bigint issues**: `integers()` without bounds can
-   generate numbers too large for OCaml's native int. The CBOR library encodes these
-   as tagged bigints that `extract_int` can't decode. The PPX bounds ints to
-   ±1073741823 (30-bit) to avoid this. Users needing different ranges should use
-   the manual `Generators.integers ~min_value ~max_value ()` API.
-
-3. **PPX tests need a separate executable**: Because the PPX needs
+2. **PPX tests need a separate executable**: Because the PPX needs
    `(preprocess (pps ppx_hegel_generator))`, the test file using `[@@deriving hegel_generator]`
    must be in a separate `(test ...)` stanza from the main test suite. Both test
    executables are run by `dune runtest`.
 
-4. **ppxlib.metaquot is essential**: The PPX uses `[%expr ...]` and `[%stri ...]`
+3. **ppxlib.metaquot is essential**: The PPX uses `[%expr ...]` and `[%stri ...]`
    metaquot syntax for readable AST construction. This requires
    `(preprocess (pps ppxlib.metaquot))` in the PPX's own dune file.
 
-5. **Runtime helpers in lib/derive.ml**: For option and list types, the PPX delegates
-   to runtime helpers `Hegel.Derive.generate_option` and `Hegel.Derive.generate_list`.
-   These live in the main library (not the PPX) so they're covered by bisect_ppx.
+4. **Runtime helpers in lib/derive.ml**: For option and list types, the PPX delegates
+   to runtime helpers `Hegel.Derive.generate_option` and `Hegel.Derive.generate_list`
+   (`Derive` is re-exported doc-hidden, exclusively for generated code). These live
+   in the main library (not the PPX) so they're covered by bisect_ppx.
 
-6. **Floats default to finite**: The PPX generates `floats ~allow_nan:false ~allow_infinity:false ()`
+5. **Floats default to finite**: The PPX generates `floats ~allow_nan:false ~allow_infinity:false ()`
    to avoid NaN/infinity in derived types, which would cause issues in most user code.
 
 ### Documentation and Polish Stage
 
-7. **`just docs` already enforces zero warnings**: The `dune build @doc` target is strict — any
-   undocumented public value produces a warning that fails the build. All lib modules must have
-   `(** ... *)` doc comments on every public type, function, constant, and exception. This is
-   enforced in CI via `just check: lint docs test`.
+7. **Zero odoc warnings is enforced by `just check-docs`, not by dune**: `dune build @doc`
+   exits 0 even when odoc emits warnings (bad references, undocumented values), and dune's
+   cache hides the warnings entirely on rebuilds — a warm `dune build @doc` prints nothing
+   even if the doc comments are broken. The `check-docs` recipe therefore removes
+   `_build/default/_doc` first and fails on any output. All lib modules must have
+   `(** ... *)` doc comments on every public type, function, constant, and exception.
+   References to non-public modules (e.g. `Internal`) must be code spans (`[Internal.note]`),
+   not `{!...}` links — the target isn't in the doc tree, so the link can't resolve.
 
 8. **odoc module-level comment must come first**: The module-level `(** ... *)` comment must appear
    before any `open` statements or definitions. odoc picks up only the first doc comment as the

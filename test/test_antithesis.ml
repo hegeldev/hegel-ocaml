@@ -1,4 +1,4 @@
-(** Unit tests for {!Hegel.Antithesis}. *)
+(** Unit tests for the [Hegel.Antithesis] integration module (doc-hidden). *)
 
 open! Core
 module A = Hegel.Antithesis

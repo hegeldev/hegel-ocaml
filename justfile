@@ -12,15 +12,17 @@ check-tests:
     # ../hegel-rust/target build > verified download); see lib/ffi/loader.ml.
     dune build --instrument-with bisect_ppx \
       test/test_hegel.exe \
-      test/test_ppx_derive.exe \
-      test/test_ppx_hegel_test.exe
+      ppx/test/test_ppx_derive.exe \
+      ppx/test/test_ppx_hegel_test.exe \
+      ppx/test/test_hegel_test_runtime.exe
     export BISECT_FILE="$PWD/_build/default/test/bisect"
-    ./_build/default/test/test_ppx_derive.exe
-    ./_build/default/test/test_ppx_hegel_test.exe
+    ./_build/default/ppx/test/test_ppx_derive.exe
+    ./_build/default/ppx/test/test_ppx_hegel_test.exe
+    ./_build/default/ppx/test/test_hegel_test_runtime.exe
     ./_build/default/test/test_hegel.exe
     # The ppx_expect tests are an inline-tests library (no standalone exe), so
     # run them through dune; coverage merges via BISECT_FILE.
-    dune runtest test/expect_tests --instrument-with bisect_ppx --force
+    dune runtest ppx/test/expect_tests --instrument-with bisect_ppx --force
     python3 scripts/check-coverage.py
     
 format:
@@ -47,27 +49,35 @@ check-docs:
     #!/usr/bin/env bash
     set -euo pipefail
     eval $(opam env)
-    dune build @doc 2>&1
+    # Scope to the `hegel` package so the internal ppx_hegel_* packages (and the
+    # unpublished vendored `cbor` library) are excluded from the generated docs.
+    # odoc warnings don't fail the build and are hidden by dune's cache on
+    # rebuilds, so build the doc tree cold and fail on ANY output.
+    rm -rf _build/default/_doc
+    out=$(dune build @doc --only-packages hegel 2>&1)
+    if [ -n "$out" ]; then
+      echo "$out"
+      echo "check-docs: odoc warnings found (see above)" >&2
+      exit 1
+    fi
 
-docs:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    eval $(opam env)
-    dune build @doc 2>&1
+docs: check-docs
     open _build/default/_doc/_html/index.html
 
 check-tests-no-coverage:
     #!/usr/bin/env bash
     set -euo pipefail
     eval $(opam env)
-    dune build test/test_hegel.exe test/test_ppx_derive.exe test/test_ppx_hegel_test.exe
-    ./_build/default/test/test_ppx_derive.exe
-    ./_build/default/test/test_ppx_hegel_test.exe
+    dune build test/test_hegel.exe ppx/test/test_ppx_derive.exe \
+      ppx/test/test_ppx_hegel_test.exe ppx/test/test_hegel_test_runtime.exe
+    ./_build/default/ppx/test/test_ppx_derive.exe
+    ./_build/default/ppx/test/test_ppx_hegel_test.exe
+    ./_build/default/ppx/test/test_hegel_test_runtime.exe
     ./_build/default/test/test_hegel.exe
     # ppx_expect tests are an inline-tests library (no standalone exe), so run
     # them through dune. --force ensures they execute even if dune considers
     # them cached.
-    dune runtest test/expect_tests --force
+    dune runtest ppx/test/expect_tests --force
 
 # these aliases are provided as ux improvements for local developers. CI should use the longer
 # forms.

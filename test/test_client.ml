@@ -1,5 +1,3 @@
-(** Tests for {!Hegel.Client} against the native libhegel engine. *)
-
 open! Core
 open Hegel
 module Unix = Core_unix
@@ -34,96 +32,96 @@ let with_ci_vars_cleared f =
 
 let test_is_in_ci_false () =
   with_ci_vars_cleared (fun () ->
-    Alcotest.(check bool) "not in ci" false (Client.is_in_ci ()))
+    Alcotest.(check bool) "not in ci" false (Internal.is_in_ci ()))
 ;;
 
 let test_is_in_ci_true_any () =
   with_ci_vars_cleared (fun () ->
     Unix.putenv ~key:"CODEBUILD_BUILD_ID" ~data:"anything";
-    Alcotest.(check bool) "in ci (any value)" true (Client.is_in_ci ()))
+    Alcotest.(check bool) "in ci (any value)" true (Internal.is_in_ci ()))
 ;;
 
 let test_is_in_ci_true_expected () =
   with_ci_vars_cleared (fun () ->
     Unix.putenv ~key:"GITHUB_ACTIONS" ~data:"true";
-    Alcotest.(check bool) "in ci (expected value)" true (Client.is_in_ci ()))
+    Alcotest.(check bool) "in ci (expected value)" true (Internal.is_in_ci ()))
 ;;
 
 let test_is_in_ci_false_wrong_value () =
   with_ci_vars_cleared (fun () ->
     Unix.putenv ~key:"GITHUB_ACTIONS" ~data:"false";
-    Alcotest.(check bool) "not in ci (wrong value)" false (Client.is_in_ci ()))
+    Alcotest.(check bool) "not in ci (wrong value)" false (Internal.is_in_ci ()))
 ;;
 
 let test_default_settings_not_ci () =
   with_ci_vars_cleared (fun () ->
-    let s = Client.default_settings () in
+    let s = default_settings () in
     Alcotest.(check bool) "derandomize off" false s.derandomize;
-    Alcotest.(check bool) "database unset" true (Poly.equal s.database Client.Unset))
+    Alcotest.(check bool) "database unset" true (Poly.equal s.database Unset))
 ;;
 
 let test_default_settings_ci () =
   with_ci_vars_cleared (fun () ->
     Unix.putenv ~key:"CI" ~data:"1";
-    let s = Client.default_settings () in
+    let s = default_settings () in
     Alcotest.(check bool) "derandomize on" true s.derandomize;
-    Alcotest.(check bool) "database disabled" true (Poly.equal s.database Client.Disabled))
+    Alcotest.(check bool) "database disabled" true (Poly.equal s.database Disabled))
 ;;
 
 let test_settings_seed () =
-  let s = Client.settings ~test_cases:42 ~seed:7 () in
+  let s = Hegel.settings ~test_cases:42 ~seed:7 () in
   Alcotest.(check int) "test_cases" 42 s.test_cases;
   Alcotest.(check (option int)) "seed" (Some 7) s.seed;
-  let s2 = Client.settings () in
+  let s2 = Hegel.settings () in
   Alcotest.(check (option int)) "no seed" None s2.seed
 ;;
 
 let test_with_builders () =
   let s =
-    Client.default_settings ()
-    |> Client.with_test_cases 5
-    |> Client.with_verbosity Client.Quiet
-    |> Client.with_seed (Some 3)
-    |> Client.with_derandomize true
-    |> Client.with_database (Client.Path "/tmp/hegel-test-db")
-    |> Client.with_suppress_health_check [ Client.Filter_too_much; Client.Too_slow ]
-    |> Client.with_phases [ Client.Generate; Client.Shrink ]
-    |> Client.with_mode Client.Single_test_case
+    default_settings ()
+    |> with_test_cases 5
+    |> with_verbosity Quiet
+    |> with_seed (Some 3)
+    |> with_derandomize true
+    |> with_database (Path "/tmp/hegel-test-db")
+    |> with_suppress_health_check [ Filter_too_much; Too_slow ]
+    |> with_phases [ Generate; Shrink ]
+    |> with_mode Single_test_case
   in
   Alcotest.(check int) "test_cases" 5 s.test_cases;
   Alcotest.(check (option int)) "seed" (Some 3) s.seed;
   Alcotest.(check bool) "derandomize" true s.derandomize;
-  Alcotest.(check bool) "mode" true (Poly.equal s.mode Client.Single_test_case)
+  Alcotest.(check bool) "mode" true (Poly.equal s.mode Single_test_case)
 ;;
 
 let test_health_check_to_string () =
   Alcotest.(check string)
     "filter"
     "filter_too_much"
-    (Client.health_check_to_string Filter_too_much);
-  Alcotest.(check string) "slow" "too_slow" (Client.health_check_to_string Too_slow);
+    (Internal.health_check_to_string Filter_too_much);
+  Alcotest.(check string) "slow" "too_slow" (Internal.health_check_to_string Too_slow);
   Alcotest.(check string)
     "large"
     "test_cases_too_large"
-    (Client.health_check_to_string Test_cases_too_large);
+    (Internal.health_check_to_string Test_cases_too_large);
   Alcotest.(check string)
     "initial"
     "large_initial_test_case"
-    (Client.health_check_to_string Large_initial_test_case)
+    (Internal.health_check_to_string Large_initial_test_case)
 ;;
 
 let test_phase_to_string () =
-  Alcotest.(check string) "explicit" "explicit" (Client.phase_to_string Explicit);
-  Alcotest.(check string) "reuse" "reuse" (Client.phase_to_string Reuse);
-  Alcotest.(check string) "generate" "generate" (Client.phase_to_string Generate);
-  Alcotest.(check string) "target" "target" (Client.phase_to_string Target);
-  Alcotest.(check string) "shrink" "shrink" (Client.phase_to_string Shrink)
+  Alcotest.(check string) "explicit" "explicit" (Internal.phase_to_string Explicit);
+  Alcotest.(check string) "reuse" "reuse" (Internal.phase_to_string Reuse);
+  Alcotest.(check string) "generate" "generate" (Internal.phase_to_string Generate);
+  Alcotest.(check string) "target" "target" (Internal.phase_to_string Target);
+  Alcotest.(check string) "shrink" "shrink" (Internal.phase_to_string Shrink)
 ;;
 
 let test_extract_origin () =
   let origin =
     try failwith "boom" with
-    | e -> Client.extract_origin e
+    | e -> Internal.extract_origin e
   in
   Alcotest.(check bool)
     "origin mentions Failure"
@@ -141,7 +139,7 @@ let test_extract_origin_no_backtrace () =
     ~f:(fun () ->
       let origin =
         try failwith "boom" with
-        | e -> Client.extract_origin e
+        | e -> Internal.extract_origin e
       in
       Alcotest.(check bool)
         "fallback origin mentions Failure"
@@ -157,11 +155,11 @@ let test_extract_origin_no_backtrace () =
 let test_extract_origin_distinct_lines () =
   let a =
     try failwith "boom one" with
-    | e -> Client.extract_origin e
+    | e -> Internal.extract_origin e
   in
   let b =
     try failwith "boom two" with
-    | e -> Client.extract_origin e
+    | e -> Internal.extract_origin e
   in
   Alcotest.(check bool)
     "both origins mention Failure"
@@ -180,7 +178,7 @@ let int_gen = Generators.integers ~min_value:0 ~max_value:100 ()
 
 (** A passing property: drawn ints are always within bounds. *)
 let test_run_passing () =
-  Client.run_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+  run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
     let v = Hegel.draw tc int_gen in
     assert (v >= 0 && v <= 100))
 ;;
@@ -191,7 +189,7 @@ exception Boom
 let test_run_failing_reraises () =
   let raised =
     try
-      Client.run_test ~settings:(Client.settings ~test_cases:200 ~seed:1 ()) (fun tc ->
+      run_hegel_test ~settings:(Hegel.settings ~test_cases:200 ~seed:1 ()) (fun tc ->
         let v = Hegel.draw tc int_gen in
         if v >= 10 then raise Boom);
       None
@@ -206,9 +204,9 @@ let test_run_failing_reraises () =
 
 (** [assume false] rejects cases without failing the run. *)
 let test_run_assume_rejects () =
-  Client.run_test ~settings:(Client.settings ~test_cases:20 ()) (fun tc ->
+  run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
     let v = Hegel.draw tc int_gen in
-    Client.assume tc (v >= 0);
+    assume tc (v >= 0);
     assert (v >= 0))
 ;;
 
@@ -216,8 +214,8 @@ let test_run_assume_rejects () =
 let test_run_nested_guard () =
   let got_failure = ref false in
   (try
-     Client.run_test ~settings:(Client.settings ~test_cases:5 ()) (fun _tc ->
-       Client.run_test ~settings:(Client.settings ~test_cases:1 ()) (fun _ -> ()))
+     run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun _tc ->
+       run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun _ -> ()))
    with
    | Failure msg when Test_helpers.contains_substring msg "nest" -> got_failure := true
    | _ -> ());
@@ -226,10 +224,10 @@ let test_run_nested_guard () =
 
 (** Single-test-case mode runs the body and surfaces a failure. *)
 let test_single_mode_failure () =
-  let settings = Client.default_settings () |> Client.with_mode Client.Single_test_case in
+  let settings = default_settings () |> with_mode Single_test_case in
   let raised =
     try
-      Client.run_test ~settings (fun tc ->
+      run_hegel_test ~settings (fun tc ->
         let _ = Hegel.draw tc int_gen in
         raise Boom);
       false
@@ -242,31 +240,31 @@ let test_single_mode_failure () =
 
 (** [note] only prints on the final replay; here it just must not raise. *)
 let test_note_and_target () =
-  Client.run_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc int_gen in
-    Client.note tc "a note";
-    Client.target tc (Float.of_int v) "v";
+    note tc "a note";
+    target tc (Float.of_int v) "v";
     assert (v >= 0))
 ;;
 
 (** Force [database = Unset] (independent of CI auto-detection) to cover the
     [Unset] arm of settings translation. *)
 let test_run_database_unset () =
-  let settings = Client.settings ~test_cases:3 () |> Client.with_database Client.Unset in
-  Client.run_test ~settings (fun tc -> ignore (Hegel.draw tc int_gen : int))
+  let settings = Hegel.settings ~test_cases:3 () |> with_database Unset in
+  run_hegel_test ~settings (fun tc -> ignore (Hegel.draw tc int_gen : int))
 ;;
 
 (** Exercise build_ffi_settings branches: phases, disabled database,
     suppressed health checks, derandomize, seed. *)
 let test_run_with_full_settings () =
   let settings =
-    Client.settings ~test_cases:10 ~seed:5 ()
-    |> Client.with_derandomize true
-    |> Client.with_database Client.Disabled
-    |> Client.with_phases [ Client.Generate ]
-    |> Client.with_suppress_health_check [ Client.Filter_too_much ]
+    Hegel.settings ~test_cases:10 ~seed:5 ()
+    |> with_derandomize true
+    |> with_database Disabled
+    |> with_phases [ Generate ]
+    |> with_suppress_health_check [ Filter_too_much ]
   in
-  Client.run_test ~settings (fun tc ->
+  run_hegel_test ~settings (fun tc ->
     let v = Hegel.draw tc int_gen in
     assert (v >= 0))
 ;;
@@ -275,38 +273,27 @@ let test_run_with_full_settings () =
     [database_key], and the non-default verbosities. *)
 let test_run_all_settings_branches () =
   Test_helpers.with_tempdir ~prefix:"hegel-db" ~f:(fun dir ->
-    List.iter [ Client.Quiet; Client.Verbose; Client.Debug ] ~f:(fun verbosity ->
+    List.iter [ Quiet; Verbose; Debug ] ~f:(fun verbosity ->
       let settings =
-        Client.settings ~test_cases:1 ~seed:1 ()
-        |> Client.with_verbosity verbosity
-        |> Client.with_database (Client.Path dir)
-        |> Client.with_phases
-             [ Client.Explicit
-             ; Client.Reuse
-             ; Client.Generate
-             ; Client.Target
-             ; Client.Shrink
-             ]
-        |> Client.with_suppress_health_check
-             [ Client.Filter_too_much
-             ; Client.Too_slow
-             ; Client.Test_cases_too_large
-             ; Client.Large_initial_test_case
-             ]
+        Hegel.settings ~test_cases:1 ~seed:1 ()
+        |> with_verbosity verbosity
+        |> with_database (Path dir)
+        |> with_phases [ Explicit; Reuse; Generate; Target; Shrink ]
+        |> with_suppress_health_check
+             [ Filter_too_much; Too_slow; Test_cases_too_large; Large_initial_test_case ]
       in
-      Client.run_test ~settings ~database_key:"key" (fun tc ->
+      run_hegel_test ~settings ~database_key:"key" (fun tc ->
         ignore (Hegel.draw tc int_gen : int))))
 ;;
 
 (** [Flaky_strategy] raised from the body is treated as an invalid case. *)
 let test_run_flaky_strategy () =
   let settings =
-    Client.settings ~test_cases:20 ()
-    |> Client.with_suppress_health_check [ Client.Filter_too_much ]
+    Hegel.settings ~test_cases:20 () |> with_suppress_health_check [ Filter_too_much ]
   in
-  Client.run_test ~settings (fun tc ->
+  run_hegel_test ~settings (fun tc ->
     let v = Hegel.draw tc int_gen in
-    if v >= 50 then raise Client.Flaky_strategy)
+    if v >= 50 then raise Internal.Flaky_strategy)
 ;;
 
 exception A
@@ -316,10 +303,9 @@ exception B
 let test_run_multiple_failures () =
   let msg =
     try
-      Client.run_test
+      run_hegel_test
         ~settings:
-          (Client.settings ~test_cases:300 ~seed:9 ()
-           |> Client.with_report_multiple_failures true)
+          (Hegel.settings ~test_cases:300 ~seed:9 () |> with_report_multiple_failures true)
         (fun tc ->
            let v = Hegel.draw tc int_gen in
            if v >= 60 then raise A;
@@ -342,12 +328,12 @@ let test_run_flaky_on_replay () =
   let calls = ref 0 in
   let msg =
     try
-      Client.run_test
+      run_hegel_test
         ~settings:
-          (Client.settings ()
-           |> Client.with_phases [ Client.Generate ]
-           |> Client.with_database Client.Disabled
-           |> Client.with_verbosity Client.Quiet)
+          (Hegel.settings ()
+           |> with_phases [ Generate ]
+           |> with_database Disabled
+           |> with_verbosity Quiet)
         (fun tc ->
            ignore (Hegel.draw tc int_gen : int);
            let i = !calls in
@@ -372,10 +358,10 @@ let test_run_flaky_on_replay () =
 let test_run_health_check_failure () =
   let raised =
     try
-      Client.run_test ~settings:(Client.settings ~test_cases:50 ()) (fun tc ->
+      run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
         let v = Hegel.draw tc int_gen in
         (* Always-false precondition: every case is invalid → FilterTooMuch. *)
-        Client.assume tc (v > 1_000_000));
+        assume tc (v > 1_000_000));
       false
     with
     | Failure _ -> true
@@ -387,14 +373,14 @@ let test_run_health_check_failure () =
 (** Exercise the optional-argument default paths of the primitives:
     [start_span] without [~label], [pool_generate] without [~consume]. *)
 let test_run_primitive_defaults () =
-  Client.run_test ~settings:(Client.settings ~test_cases:3 ()) (fun tc ->
-    Client.start_span tc;
+  run_hegel_test ~settings:(Hegel.settings ~test_cases:3 ()) (fun tc ->
+    Internal.start_span tc;
     let v = Hegel.draw tc int_gen in
-    Client.stop_span tc;
-    let pool_id = Client.new_pool tc in
-    let _ = Client.pool_add tc ~pool_id in
-    let a = Client.pool_generate tc ~pool_id () in
-    let b = Client.pool_generate tc ~pool_id ~consume:true () in
+    Internal.stop_span tc;
+    let pool_id = Internal.new_pool tc in
+    let _ = Internal.pool_add tc ~pool_id in
+    let a = Internal.pool_generate tc ~pool_id () in
+    let b = Internal.pool_generate tc ~pool_id ~consume:true () in
     assert (v >= 0 && a >= 0 && b >= 0))
 ;;
 

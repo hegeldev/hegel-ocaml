@@ -31,9 +31,16 @@ let booleans () =
 (** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
      ?allow_infinity ()] creates a generator for floating-point values.
 
-    Uses schema type ["float"] as required by the Hegel engine. The fields
-    [allow_nan], [allow_infinity], [exclude_min], [exclude_max], and [width] are
-    always sent (required by the engine). Defaults follow Hypothesis:
+    The fields [allow_nan], [allow_infinity], [exclude_min], [exclude_max], and
+    [width] are always sent.
+
+    Defaults:
+    - [min_value]: 64-bit float min (only when both [allow_nan] and
+      [allow_infinity] are [false])
+    - [max_value]: 64-bit float max (only when both [allow_nan] and
+      [allow_infinity] are [false])
+    - [exclude_min]: [false]
+    - [exclude_max]: [false]
     - [allow_nan]: [true] only when no bounds are set
     - [allow_infinity]: [true] when at most one bound is set *)
 let floats
@@ -303,10 +310,9 @@ let just value =
 ;;
 
 (** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
-    a regular expression [pattern].
-
-    When [fullmatch] is [true] (the default), the entire string must match the
-    pattern. When [false], a substring match suffices. *)
+    a regular expression [pattern], written in the syntax of Python's [re]
+    module. When [fullmatch] is [true] (the default) the whole string must match
+    [pattern]; otherwise a match anywhere suffices. *)
 let from_regex pattern ?(fullmatch = true) () =
   basic
     ~schema:
@@ -320,7 +326,11 @@ let from_regex pattern ?(fullmatch = true) () =
     ()
 ;;
 
-(** [emails ()] creates a generator for valid email address strings. *)
+(** [emails ()] creates a generator for valid email address strings.
+
+    Addresses follow RFC 5321/5322: a local part of 1 to 64 characters from the
+    RFC 5322 [atext] set, an [@], and a domain from {!domains}, with the overall
+    address length capped at 254 octets (RFC 5321 §4.5.3.1.3). *)
 let emails () =
   basic
     ~schema:(`Map [ `Text "type", `Text "email" ])
@@ -329,7 +339,14 @@ let emails () =
     ()
 ;;
 
-(** [urls ()] creates a generator for valid URL strings. *)
+(** [urls ()] creates a generator for valid URL strings.
+
+    URLs follow RFC 3986, of the form
+    [scheme://domain\[:port\]/path\[#fragment\]] with [scheme] one of
+    [http]/[https], the domain drawn from {!domains} (up to 255 characters), an
+    optional port in [1, 65535], zero or more [/]-separated path segments of up
+    to 100 characters each, and an optional fragment of up to 100 characters.
+    Path and fragment characters are percent-encoded. *)
 let urls () =
   basic
     ~schema:(`Map [ `Text "type", `Text "url" ])
@@ -340,8 +357,13 @@ let urls () =
 
 (** [domains ?max_length ()] creates a generator for domain name strings.
 
-    If [max_length] is provided, generated domains will not exceed that length.
-*)
+    Domains are RFC 1035 fully-qualified domain names: a top-level domain
+    sampled from the IANA TLD list followed by up to 126 dot-separated labels,
+    each 1 to 63 characters matching
+    [\[a-zA-Z\](\[a-zA-Z0-9-\]{0,61}\[a-zA-Z0-9\])?] (punycode [xn--] labels
+    reserved by RFC 5890 are excluded). Generated domains never exceed
+    [max_length] (default 255, per RFC 1035 §2.3.4); when provided, [max_length]
+    must be in [4, 255]. *)
 let domains ?max_length () =
   (match max_length with
    | Some ml when ml < 4 || ml > 255 ->
@@ -360,7 +382,8 @@ let domains ?max_length () =
     ()
 ;;
 
-(** [dates ()] creates a generator for ISO 8601 date strings (YYYY-MM-DD). *)
+(** [dates ()] creates a generator for ISO 8601 date strings ([YYYY-MM-DD]),
+    with year in [\[1, 9999\]] and calendar-valid month/day. *)
 let dates () =
   basic
     ~schema:(`Map [ `Text "type", `Text "date" ])
@@ -369,7 +392,9 @@ let dates () =
     ()
 ;;
 
-(** [times ()] creates a generator for time strings. *)
+(** [times ()] creates a generator for ISO 8601 time strings ([HH:MM:SS] or
+    [HH:MM:SS.ffffff], the fractional part present only when microseconds are
+    non-zero). *)
 let times () =
   basic
     ~schema:(`Map [ `Text "type", `Text "time" ])
@@ -378,7 +403,8 @@ let times () =
     ()
 ;;
 
-(** [datetimes ()] creates a generator for ISO 8601 datetime strings. *)
+(** [datetimes ()] creates a generator for ISO 8601 datetime strings
+    ([YYYY-MM-DDTHH:MM:SS\[.ffffff\]]), combining {!dates} and {!times}. *)
 let datetimes () =
   basic
     ~schema:(`Map [ `Text "type", `Text "datetime" ])

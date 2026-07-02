@@ -87,7 +87,23 @@
   (ppx_hegel_compat
    (= :version))
   (hegel
-   (= :version))))
+   (= :version))
+  (ppx_hegel_test
+   (and
+    :with-test
+    (= :version)))
+  (alcotest
+   (and
+    :with-test
+    (>= 1.7)))
+  (core
+   (and
+    :with-test
+    (>= 0.17)))
+  (core_unix
+   (and
+    :with-test
+    (>= 0.17)))))
 
 (package
  (name ppx_hegel_test)
@@ -104,4 +120,20 @@
   (ppx_hegel_compat
    (= :version))
   (hegel
-   (= :version))))
+   (= :version))
+  (alcotest
+   (and
+    :with-test
+    (>= 1.7)))
+  (core
+   (and
+    :with-test
+    (>= 0.17)))
+  (core_unix
+   (and
+    :with-test
+    (>= 0.17)))
+  (yojson
+   (and
+    :with-test
+    (>= 1.7)))))

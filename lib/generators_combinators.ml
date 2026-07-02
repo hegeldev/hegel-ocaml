@@ -34,7 +34,7 @@ let one_of_core : type a. a core list -> a core =
           (fun data ->
             let idx =
               Cbor_helpers.extract_int
-                (Client.generate_from_schema
+                (Internal.generate_from_schema
                    (`Map
                        [ `Text "type", `Text "integer"
                        ; `Text "min_value", `Int 0
@@ -66,8 +66,7 @@ let one_of_core : type a. a core list -> a core =
 ;;
 
 (** [one_of generators] creates a generator that picks from one of the given
-    [generators], all of which must be printable. The drawn value renders with
-    the first branch's printer (branches share a type). Requires at least one
+    [generators], all of which must be printable. Requires at least one
     generator. *)
 let one_of (generators : ('a, printable) generator list) : ('a, printable) generator =
   match generators with
@@ -93,8 +92,8 @@ let optional (element : ('a, printable) generator) : ('a option, printable) gene
 
 (** [ip_addresses ?version ()] creates a generator for IP address strings.
 
-    - [version = Some 4]: generates IPv4 addresses (dotted decimal).
-    - [version = Some 6]: generates IPv6 addresses (colon hex).
+    - [version = Some 4]: generates IPv4 addresses (dotted-decimal, RFC 791).
+    - [version = Some 6]: generates IPv6 addresses (colon-hex, RFC 4291).
     - [version = None] (default): generates either IPv4 or IPv6. *)
 let rec ip_addresses ?version () =
   match version with

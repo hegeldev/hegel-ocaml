@@ -4,9 +4,7 @@ let prop tc =
   if Hegel.draw tc (Hegel.Generators.booleans ()) then failwith "deliberate failure"
 ;;
 
-let settings () =
-  Hegel.settings ~test_cases:50 ~seed:0 () |> Hegel.Client.with_print_blob true
-;;
+let settings () = Hegel.settings ~test_cases:50 ~seed:0 () |> Hegel.with_print_blob true
 
 let contains ~needle s =
   let nl = String.length needle in
@@ -129,8 +127,8 @@ let%hegel_test multi_fail_test tc =
   if v <= 30 then raise B
 [@@settings
   Hegel.settings ~test_cases:300 ~seed:9 ()
-  |> Hegel.Client.with_print_blob true
-  |> Hegel.Client.with_report_multiple_failures true]
+  |> Hegel.with_print_blob true
+  |> Hegel.with_report_multiple_failures true]
 ;;
 
 let%expect_test "recording groups each failure's draws with its diagnostic" =
@@ -158,8 +156,7 @@ let%expect_test "recording groups each failure's draws with its diagnostic" =
    trailing blob line. *)
 let%expect_test "the multi-failure report omits blobs when print_blob is off" =
   let settings =
-    Hegel.settings ~test_cases:300 ~seed:9 ()
-    |> Hegel.Client.with_report_multiple_failures true
+    Hegel.settings ~test_cases:300 ~seed:9 () |> Hegel.with_report_multiple_failures true
   in
   (match Hegel.run_hegel_test ~settings multi_prop with
    | () -> assert false

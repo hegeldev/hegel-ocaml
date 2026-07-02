@@ -1,0 +1,39 @@
+; End-to-end tests for the PPX packages. Each stanza is attributed to the
+; package it exercises so `dune runtest -p <pkg>` (what opam-repo-ci runs for
+; the `,tests` variants) builds and runs it there, with `hegel` and the other
+; ppx packages resolved from the installed world. In a dev checkout everything
+; resolves locally as usual.
+
+(test
+ (name test_ppx_derive)
+ (package ppx_hegel_generator)
+ (modules test_ppx_derive)
+ (libraries hegel hegel.test_runtime alcotest core core_unix threads.posix)
+ (preprocess
+  (pps
+   ppx_js_style
+   ppx_hegel_generator
+   ppx_hegel_test
+   --
+   -allow-unannotated-ignores)))
+
+(test
+ (name test_ppx_hegel_test)
+ (package ppx_hegel_test)
+ (modules test_ppx_hegel_test)
+ (libraries hegel alcotest core core_unix threads.posix yojson)
+ (preprocess
+  (pps ppx_js_style ppx_hegel_test -- -allow-unannotated-ignores)))
+
+; Tests hegel.test_runtime (the PPX's runtime registry/runner) directly, with
+; no let%hegel_test in the process, so run_all's failure count is exact. The
+; exit-code tests re-spawn this same binary with a magic argv (see the top of
+; test_hegel_test_runtime.ml).
+
+(test
+ (name test_hegel_test_runtime)
+ (package ppx_hegel_test)
+ (modules test_hegel_test_runtime)
+ (libraries hegel.test_runtime alcotest unix)
+ (preprocess
+  (pps ppx_js_style -- -allow-unannotated-ignores)))

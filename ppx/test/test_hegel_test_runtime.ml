@@ -1,5 +1,23 @@
 (** Tests for [Hegel_test_runtime]. *)
 
+(* When invoked with the [--__hegel_test_runtime_demo MODE] argv, this binary
+   reuses itself as the subprocess for the exit-code assertions below:
+   [test_main] always exits, so the Alcotest runner at the bottom never runs
+   in that mode. Spawning ourselves (rather than a separate demo executable)
+   avoids any build-ordering dependency between binaries. *)
+let () =
+  match Sys.argv with
+  | [| _; "--__hegel_test_runtime_demo"; mode |] ->
+    let run =
+      match mode with
+      | "fail" -> fun () -> failwith "deliberate"
+      | _ -> fun () -> ()
+    in
+    Hegel_test_runtime.register ~name:"demo" ~file:__FILE__ ~line:__LINE__ run;
+    Hegel_test_runtime.test_main ()
+  | _ -> ()
+;;
+
 (** Marker substring used to identify the tests registered by this test
     file. Other tests in the same process also register entries (e.g. via
     [let%hegel_test]); we only inspect ours. *)
@@ -64,10 +82,10 @@ let test_run_all_counts_failures () =
   Alcotest.(check bool) "exactly one failure counted" true (failures = 1)
 ;;
 
-(** Re-spawn the currently running [test_hegel.exe] with the magic
-    [--__hegel_test_runtime_demo MODE] argv. [test_hegel.ml]'s argv handler
-    registers a single test (passing or failing based on [mode]) and calls
-    [Hegel_test_runtime.test_main]. We return its exit code. *)
+(** Re-spawn the currently running binary with the magic
+    [--__hegel_test_runtime_demo MODE] argv. The handler at the top of this
+    file registers a single test (passing or failing based on [mode]) and
+    calls [Hegel_test_runtime.test_main]. We return its exit code. *)
 let spawn_and_wait mode =
   let exe = Sys.executable_name in
   let pid =
@@ -91,10 +109,17 @@ let test_exit_one_on_fail () =
   Alcotest.(check int) "exit 1 on any-fail" 1 (spawn_and_wait "fail")
 ;;
 
-let tests =
-  [ Alcotest.test_case "register preserves order" `Quick test_register_preserves_order
-  ; Alcotest.test_case "run_all counts failures" `Quick test_run_all_counts_failures
-  ; Alcotest.test_case "exit returns 0 on pass" `Quick test_exit_zero_on_pass
-  ; Alcotest.test_case "exit returns 1 on fail" `Quick test_exit_one_on_fail
-  ]
+let () =
+  Alcotest.run
+    "hegel-test-runtime"
+    [ ( "hegel_test_runtime"
+      , [ Alcotest.test_case
+            "register preserves order"
+            `Quick
+            test_register_preserves_order
+        ; Alcotest.test_case "run_all counts failures" `Quick test_run_all_counts_failures
+        ; Alcotest.test_case "exit returns 0 on pass" `Quick test_exit_zero_on_pass
+        ; Alcotest.test_case "exit returns 1 on fail" `Quick test_exit_one_on_fail
+        ] )
+    ]
 ;;

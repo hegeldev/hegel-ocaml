@@ -151,7 +151,7 @@ let test_max_filter_attempts () =
 (* [with_tc f] runs [f] with a real per-test-case handle from the native
    engine. Used by the collection-record tests, which exercise the OCaml-side
    collection bookkeeping. *)
-let with_tc f = Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:1 ()) f
+let with_tc f = Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) f
 
 let test_collection_new () =
   with_tc (fun data ->
@@ -186,7 +186,7 @@ let test_collection_more_when_finished () =
 (** Test: discardable_group exception path — stop_span skipped when aborted. *)
 let test_discardable_group_exception () =
   with_tc (fun data ->
-    data.Client.test_aborted <- true;
+    Internal.set_test_aborted data true;
     let raised = ref false in
     (try ignore (discardable_group Labels.flat_map data (fun () -> raise Exit) : _) with
      | Exit -> raised := true);
@@ -197,7 +197,7 @@ let test_discardable_group_exception () =
 
 (** Test: map doubles values correctly. *)
 let test_map_doubles_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let gen = integers ~min_value:1 ~max_value:5 () |> map (fun v -> v * 2) in
     Alcotest.(check bool) "still basic" true (is_basic gen);
     let v = Hegel.draw_silent tc gen in
@@ -207,7 +207,7 @@ let test_map_doubles_e2e () =
 
 (** Test: double map composes correctly. *)
 let test_double_map_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let gen =
       integers ~min_value:1 ~max_value:5 ()
       |> map (fun v -> v * 2)
@@ -227,7 +227,7 @@ let test_double_map_e2e () =
 
 (** Test: map on non-basic (Mapped branch of do_draw). *)
 let test_map_on_filtered_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let gen =
       filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ())
       |> map (fun v -> v * 2)
@@ -238,7 +238,7 @@ let test_map_on_filtered_e2e () =
 
 (** Test: flat_map through engine. *)
 let test_flat_map_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let gen =
       flat_map
         (fun n -> integers ~min_value:0 ~max_value:(max 1 n) ())
@@ -251,7 +251,7 @@ let test_flat_map_e2e () =
 
 (** Test: filter through engine. *)
 let test_filter_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let gen = filter (fun v -> v mod 2 = 0) (integers ~min_value:0 ~max_value:100 ()) in
     Alcotest.(check bool) "not basic" false (is_basic gen);
     let v = Hegel.draw tc gen in
@@ -262,8 +262,7 @@ let test_filter_e2e () =
 let test_filter_exhaustion_e2e () =
   Hegel.run_hegel_test
     ~settings:
-      (Client.settings ~test_cases:10 ()
-       |> Hegel.Client.with_suppress_health_check [ Hegel.Client.Filter_too_much ])
+      (Hegel.settings ~test_cases:10 () |> with_suppress_health_check [ Filter_too_much ])
     (fun tc ->
        let gen = filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ()) in
        ignore (Hegel.draw tc gen))
@@ -271,10 +270,10 @@ let test_filter_exhaustion_e2e () =
 
 (** Test: group helper through engine. *)
 let test_group_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
     let v =
       group Labels.list tc (fun () ->
-        Client.generate_from_schema
+        Internal.generate_from_schema
           (`Map
               [ `Text "type", `Text "integer"
               ; `Text "min_value", `Int 0
@@ -288,10 +287,10 @@ let test_group_e2e () =
 
 (** Test: discardable_group through engine — success path. *)
 let test_discardable_group_e2e () =
-  Hegel.run_hegel_test ~settings:(Client.settings ~test_cases:5 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
     let v =
       discardable_group Labels.tuple tc (fun () ->
-        Client.generate_from_schema
+        Internal.generate_from_schema
           (`Map
               [ `Text "type", `Text "integer"
               ; `Text "min_value", `Int 0
@@ -457,7 +456,7 @@ let test_resolve_draw () =
       ignore (resolve_draw tbl ~consume:false 99 : string);
       false
     with
-    | Hegel.Client.Flaky_strategy -> true
+    | Internal.Flaky_strategy -> true
   in
   Alcotest.(check bool) "unknown id raises Flaky_strategy" true raised
 ;;
