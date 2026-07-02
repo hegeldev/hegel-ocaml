@@ -5,7 +5,7 @@
     Every generator carries a phantom ['p] recording whether it holds a printer.
     Primitive generators are {!printable} and may be drawn with
     {!Hegel.draw}, which prints the drawn value on a failing replay.
-    
+
     All examples in this documentation assume [open Hegel] and [open Hegel.Generators]. *)
 
 (**/**)
@@ -40,7 +40,9 @@ type ('a, 'p) generator
 (** Phantom witness that a generator carries a printer; see {!generator}. *)
 type printable
 
-(** Phantom witness that a generator carries no printer; see {!generator}. *)
+(** Phantom witness that a generator carries no printer; see {!generator}.
+    Use {!Hegel.with_printer} to make a [printable] generator that can be drawn
+    with {!Hegel.draw}. *)
 type unprintable
 
 (**/**)
@@ -135,7 +137,7 @@ val draw_silent : Internal.test_case -> ('a, 'p) generator -> 'a
 
 (** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding
     a printable generator that {!draw} accepts. This is how a [map]/[flat_map]/
-    [sampled_from]/[just] result is made drawable with {!draw}
+    [sampled_from]/[just] result is made drawable with {!draw}.
 
     {[
       let%hegel_test with_printer_example tc =
@@ -164,12 +166,8 @@ val pool_values
 (** {2 Generator combinators} *)
 
 (** [composite generate_fn] builds a generator from an imperative [generate_fn]
-    that draws sub-values from the test case and assembles a result — the
-    OCaml/imperative counterpart to the schema-driven combinators, useful when a
-    value is easiest to describe by drawing its parts in sequence (this is also
-    the form [@@deriving hegel_generator] emits). Carries no printer (the output type
-    is the caller's), so it is {!unprintable}: draw it with {!Hegel.draw_silent},
-    or {!Hegel.with_printer} it to draw with {!Hegel.draw}.
+    that draws sub-values from the test case and assembles a result, useful when
+    a value is easiest to describe by drawing its parts in sequence.
 
     {[
       let point =
@@ -181,12 +179,7 @@ val pool_values
     ]} *)
 val composite : (Internal.test_case -> 'a) -> ('a, unprintable) generator
 
-(** [map f gen] transforms values from [gen] using [f]. The result carries no
-    printer (the output type is the user's); use {!Hegel.with_printer} to draw it
-    with {!Hegel.draw}.
-
-    When [gen]'s core is [Basic], the schema is preserved and transforms are
-    composed; otherwise a mapped core is created.
+(** [map f gen] transforms values from [gen] using [f].
 
     {[
       let%hegel_test map_example tc =
@@ -197,8 +190,7 @@ val composite : (Internal.test_case -> 'a) -> ('a, unprintable) generator
 val map : ('a -> 'b) -> ('a, 'p) generator -> ('b, unprintable) generator
 
 (** [flat_map f gen] creates a dependent generator. [f] receives the generated
-    value and returns a generator whose value is the final result. The result
-    carries no printer; use {!Hegel.with_printer} to draw it with {!Hegel.draw}.
+    value and returns a generator whose value is the final result.
 
     {[
       let%hegel_test flat_map_example tc =
@@ -216,7 +208,7 @@ val flat_map
   -> ('b, unprintable) generator
 
 (** [filter predicate gen] filters values from [gen] using [predicate], keeping
-    [gen]'s printability. Tries multiple times; calls [assume false] if all
+    [gen]'s printability. Tries up to three times and rejects the test case if all
     attempts fail.
 
     {[
@@ -260,8 +252,11 @@ val basic_unique_safe : ('a, 'p) generator -> bool
 val booleans : unit -> (bool, printable) generator
 
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
-    the given bounds. When a bound is omitted it defaults to the corresponding
-    OCaml native [int] limit.
+    the given bounds.
+
+    Defaults:
+    - [min_value]: OCaml native int min
+    - [max_value]: OCaml native int max
 
     {[
       let%hegel_test integers_example tc =
@@ -274,9 +269,13 @@ val integers : ?min_value:int -> ?max_value:int -> unit -> (int, printable) gene
 (** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
      ?allow_infinity ()] creates a generator for floating-point values.
 
-    Uses schema type ["float"] as required by the Hegel engine. The fields
-    [allow_nan], [allow_infinity], [exclude_min], [exclude_max], and [width] are
-    always sent (required by the engine). Defaults follow Hypothesis:
+    Defaults:
+    - [min_value]: 64-bit float min (only when both [allow_nan] and
+      [allow_infinity] are [false])
+    - [max_value]: 64-bit float max (only when both [allow_nan] and
+      [allow_infinity] are [false])
+    - [exclude_min]: [false]
+    - [exclude_max]: [false]
     - [allow_nan]: [true] only when no bounds are set
     - [allow_infinity]: [true] when at most one bound is set
 
@@ -404,9 +403,7 @@ val lists
   -> ('a list, printable) generator
 
 (** [hashmaps keys values ?min_size ?max_size ()] creates a generator for
-    dictionaries (hash maps) over printable [keys] and [values]. When both are
-    basic generators, uses the engine-side dict schema; when either is
-    non-basic, falls back to the collection protocol.
+    dictionaries (hash maps) over printable [keys] and [values].
 
     {[
       let%hegel_test hashmaps_example tc =
@@ -451,8 +448,8 @@ val sampled_from : 'a list -> ('a, unprintable) generator
     ]} *)
 val one_of : ('a, printable) generator list -> ('a, printable) generator
 
-(** [optional element] creates a generator that produces either [None] or
-    [Some value] from the printable [element].
+(** [optional gen] creates a generator that produces either [None] or
+    [Some value] from the printable [gen].
 
     {[
       let%hegel_test optional_example tc =
@@ -525,6 +522,10 @@ val tuples4
 
 (** [emails ()] creates a generator for valid email address strings.
 
+    Addresses follow RFC 5321/5322: a local part of 1 to 64 characters from the
+    RFC 5322 [atext] set, an [@], and a domain from {!domains}, with the overall
+    address length capped at 254 octets (RFC 5321 §4.5.3.1.3).
+
     {[
       let%hegel_test emails_example tc =
         let e = draw tc (emails ()) in
@@ -534,6 +535,13 @@ val tuples4
 val emails : unit -> (string, printable) generator
 
 (** [urls ()] creates a generator for valid URL strings.
+
+    URLs follow RFC 3986, of the form
+    [scheme://domain\[:port\]/path\[#fragment\]] with [scheme] one of
+    [http]/[https], the domain drawn from {!domains} (up to 255 characters), an
+    optional port in [1, 65535], zero or more [/]-separated path segments of up
+    to 100 characters each, and an optional fragment of up to 100 characters.
+    Path and fragment characters are percent-encoded.
 
     {[
       let%hegel_test urls_example tc =
@@ -545,6 +553,14 @@ val urls : unit -> (string, printable) generator
 
 (** [domains ?max_length ()] creates a generator for domain name strings.
 
+    Domains are RFC 1035 fully-qualified domain names: a top-level domain
+    sampled from the IANA TLD list followed by up to 126 dot-separated labels,
+    each 1 to 63 characters matching
+    [\[a-zA-Z\](\[a-zA-Z0-9-\]{0,61}\[a-zA-Z0-9\])?] (punycode [xn--] labels
+    reserved by RFC 5890 are excluded). Generated domains never exceed
+    [max_length] (default 255, per RFC 1035 §2.3.4); when provided, [max_length]
+    must be in [4, 255].
+
     {[
       let%hegel_test domains_example tc =
         let d = draw tc (domains ~max_length:64 ()) in
@@ -553,7 +569,8 @@ val urls : unit -> (string, printable) generator
     ]} *)
 val domains : ?max_length:int -> unit -> (string, printable) generator
 
-(** [dates ()] creates a generator for ISO 8601 date strings (YYYY-MM-DD).
+(** [dates ()] creates a generator for ISO 8601 date strings ([YYYY-MM-DD]),
+    with year in [\[1, 9999\]] and calendar-valid month/day.
 
     {[
       let%hegel_test dates_example tc =
@@ -563,7 +580,9 @@ val domains : ?max_length:int -> unit -> (string, printable) generator
     ]} *)
 val dates : unit -> (string, printable) generator
 
-(** [times ()] creates a generator for time strings.
+(** [times ()] creates a generator for ISO 8601 time strings ([HH:MM:SS] or
+    [HH:MM:SS.ffffff], the fractional part present only when microseconds are
+    non-zero).
 
     {[
       let%hegel_test times_example tc =
@@ -573,7 +592,8 @@ val dates : unit -> (string, printable) generator
     ]} *)
 val times : unit -> (string, printable) generator
 
-(** [datetimes ()] creates a generator for ISO 8601 datetime strings.
+(** [datetimes ()] creates a generator for ISO 8601 datetime strings
+    ([YYYY-MM-DDTHH:MM:SS\[.ffffff\]]), combining {!dates} and {!times}.
 
     {[
       let%hegel_test datetimes_example tc =
@@ -584,6 +604,8 @@ val times : unit -> (string, printable) generator
 val datetimes : unit -> (string, printable) generator
 
 (** [ip_addresses ?version ()] creates a generator for IP address strings.
+    [version] selects IPv4 (dotted-decimal, RFC 791) or IPv6 (colon-hex,
+    RFC 4291); when omitted, either version is generated.
 
     {[
       let%hegel_test ip_addresses_example tc =
@@ -594,7 +616,9 @@ val datetimes : unit -> (string, printable) generator
 val ip_addresses : ?version:int -> unit -> (string, printable) generator
 
 (** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
-    a regular expression [pattern].
+    a regular expression [pattern], written in the syntax of Python's [re]
+    module. When [fullmatch] is [true] (the default) the whole string must match
+    [pattern]; otherwise a match anywhere suffices.
 
     {[
       let%hegel_test from_regex_example tc =

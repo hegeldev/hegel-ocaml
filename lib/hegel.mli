@@ -3,10 +3,7 @@
     All code examples in this documentation assume [open Hegel] and
     [open Hegel.Generators] and that [ppx_hegel_test] is used.
 
-    Write a property as a [let%hegel_test], drawing inputs with {!draw} from the
-    combinators in {!Generators}. Hegel runs the body on many generated inputs
-    and, on failure, shrinks to a minimal counterexample and prints each drawn
-    value (named after the [let] binding it was bound to).
+    Write a property
 
     {[
       let%hegel_test addition_commutes tc =
@@ -16,9 +13,15 @@
       ;;
     ]}
 
-    Run the suite with [dune runtest]. {!run_hegel_test} is the entry point the
-    PPX targets (and may be called directly); see {!Generators} for the
-    generator combinators and {!Stateful} for state-machine testing. *)
+    Hegel runs the body on many generated inputs and, on failure, shrinks to a
+    minimal counterexample and prints each drawn value (named after the [let]
+    binding it was bound to).
+
+    [let%hegel_test name tc = body] also defines [name] as a plain
+    [unit -> unit] function, so you can still call it directly from an
+    executable or hand it to another test harness like Alcotest.
+
+    See {!Generators} for the generators and {!Stateful} for state-machine testing. *)
 
 (** The current version of Hegel for OCaml. *)
 val version : string
@@ -48,8 +51,8 @@ type test_case = Internal.test_case
 (** {2 Settings}
 
     Build a {!type:settings} value with {!default_settings} or {!val:settings},
-    refine it with the [with_*] functions, and pass it to {!run_hegel_test} — or
-    attach it to a [let%hegel_test] with the [\[@@settings ...\]] attribute:
+    refine it with the [with_*] functions, and attach it to a [let%hegel_test]
+    with the [\[@@settings ...\]] attribute:
 
     {[
       let%hegel_test many_cases tc =
@@ -103,18 +106,18 @@ type settings = Internal.settings =
   ; seed : int option
   ; derandomize : bool
   ; database : database
-    (** stores previous failures. when set, Hegel replays test cases from previously
-  failed runs and adds new failures when they occur. *)
+    (** Where failing examples are stored. When set, Hegel replays test cases
+        from previous failed runs and records new failures as they occur. *)
   ; suppress_health_check : health_check list
   ; phases : phase list option
     (** [None] uses the engine's default phase list (all phases); [Some xs]
           restricts execution to [xs]. *)
   ; print_blob : bool
-    (** print string representing the engine choices that led to a failure *)
-  ; report_multiple_failures : bool (** false by default *)
+    (** Print the base64 blob encoding the engine choices that led to a failure. *)
+  ; report_multiple_failures : bool (** [false] by default. *)
   }
 
-(** [default_settings ()] creates default test settings, auto-detecting CI: in
+(** [default_settings ()] creates default test settings, auto-detecting CI. In
     CI, [derandomize] is [true] and the [database] is [Disabled]. *)
 val default_settings : unit -> settings
 
@@ -133,14 +136,14 @@ val with_test_cases : int -> settings -> settings
     test (see {!Stateful}). *)
 val with_stateful_step_count : int -> settings -> settings
 
-(** [with_verbosity v s] sets how much output the run produces.
+(** [with_verbosity v s] sets how much printed output the run produces.
 
     {[
       let s = default_settings () |> with_verbosity Verbose
     ]} *)
 val with_verbosity : verbosity -> settings -> settings
 
-(** [with_seed seed s] pins the run's random seed. *)
+(** [with_seed seed s] sets the run's seed. *)
 val with_seed : int option -> settings -> settings
 
 (** [with_derandomize b s] makes the run reproducible by deriving its seed from
@@ -154,7 +157,11 @@ val with_derandomize : bool -> settings -> settings
     ]} *)
 val with_database : database -> settings -> settings
 
-(** [with_suppress_health_check checks s] disables the given health checks. *)
+(** [with_suppress_health_check checks s] disables the given health checks.
+
+    {[
+      let s = default_settings () |> with_suppress_health_check [ Filter_too_much; Too_slow ]
+    ]} *)
 val with_suppress_health_check : health_check list -> settings -> settings
 
 (** [with_phases phases s] restricts the run to the given phases.
@@ -167,8 +174,8 @@ val with_phases : phase list -> settings -> settings
 (** [with_mode mode s] sets the execution mode. *)
 val with_mode : mode -> settings -> settings
 
-(** [with_print_blob b s] makes a failing run print the string(s) representing the 
-engine choices that led to a failure *)
+(** [with_print_blob b s] makes a failing run print the base64 blob(s) encoding
+    the engine choices that led to a failure. *)
 val with_print_blob : bool -> settings -> settings
 
 (** [with_report_multiple_failures b s] makes a failing run report every distinct
@@ -186,7 +193,7 @@ val with_report_multiple_failures : bool -> settings -> settings
     {[
       let my_settings = settings ~test_cases:50 ~seed:5 () in
       let () =
-        run_hegel_test my_settings (fun tc ->
+        run_hegel_test ~settings:my_settings (fun tc ->
           let n = draw tc (integers ~min_value:0 ~max_value:9 ()) in
           assert (n >= 0 && n <= 9))
     ]}
@@ -201,10 +208,10 @@ val with_report_multiple_failures : bool -> settings -> settings
     key; pass an explicit key to override. When both are absent, the engine
     uses its own default key.
     @param failure_blobs
-    a list of base64 encoded strings (blobs), where each string encodes the choices 
-    made in a failing test run. When the list is nonempty, only the first blob 
-    is decoded and run. The blob is only guaranteed to reproduce a failure within 
-    a specific version of Hegel *)
+    a list of base64 encoded strings (blobs), where each string encodes the choices
+    made in a failing test run. When the list is nonempty, only the first blob
+    is decoded and run. A blob is only guaranteed to reproduce a failure within
+    the same version of Hegel. *)
 val run_hegel_test
   :  ?settings:settings
   -> ?test_location:Antithesis.test_location
@@ -223,7 +230,8 @@ exception Assume_rejected
     {[
       let%hegel_test only_even tc =
         let n = draw tc (integers ~min_value:0 ~max_value:99 ()) in
-        assume tc (n mod 2 = 0); (* false assumption *)
+        assume tc (n mod 2 = 0);
+        assert (n mod 2 = 0)
       ;;
     ]} *)
 val assume : test_case -> bool -> unit
@@ -257,9 +265,9 @@ val target : test_case -> float -> string -> unit
     [gen] using test case [tc].
 
     On the final replay of a failing test (or on every case under verbose
-    output), an outermost draw prints its value as [name = value] — where [name]
+    output), an outermost draw prints its value as [name = value], where [name]
     is [label] when given, else ["draw"]. An unlabeled draw is numbered
-    ([draw_1], [draw_2], …) while a [label] is printed bare. To draw a generator 
+    (["draw_1"], ["draw_2"], …) while a [label] is printed bare. To draw a generator
     with no printer, use {!draw_silent} or attach a printer with {!with_printer}.
 
     {[

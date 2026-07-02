@@ -92,8 +92,8 @@ let optional (element : ('a, printable) generator) : ('a option, printable) gene
 
 (** [ip_addresses ?version ()] creates a generator for IP address strings.
 
-    - [version = Some 4]: generates IPv4 addresses (dotted decimal).
-    - [version = Some 6]: generates IPv6 addresses (colon hex).
+    - [version = Some 4]: generates IPv4 addresses (dotted-decimal, RFC 791).
+    - [version = Some 6]: generates IPv6 addresses (colon-hex, RFC 4291).
     - [version = None] (default): generates either IPv4 or IPv6. *)
 let rec ip_addresses ?version () =
   match version with

@@ -85,7 +85,7 @@ module Rule : sig
       ]} *)
   val create : name:string -> step:(Internal.test_case -> 'state -> 'state) -> 'state t
 
-  (** Returns the name of the rule
+  (** Returns the name of the rule.
 
       {[
       let label = Stateful.Rule.name push
@@ -93,8 +93,10 @@ module Rule : sig
   val name : _ t -> string
 end
 
-(** Executes a stateful test by repeatedly applying random rules and checking
-    invariants. *)
+(** Executes a stateful test by repeatedly applying randomly chosen [rules] to a
+    state threaded from [init], checking each of the [invariants] before the
+    first step and after every successful step. Raises [Invalid_argument] if
+    [rules] is empty. *)
 val run
   :  init:'state
   -> rules:'state Rule.t list
