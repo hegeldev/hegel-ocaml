@@ -35,7 +35,7 @@ open Hegel.Generators
 
 let%hegel_test integer_self_equality tc =
   let n = draw tc (integers ()) in
-  assert (n = n)  (* integers are always equal to themselves *)
+  assert (n = n)
 ;;
 ```
 
@@ -79,8 +79,8 @@ Run `dune runtest` again. It should now pass.
 
 Hegel provides a rich library of generators that you can use out of the box.
 There are primitive generators, such as `integers`, `floats`, and `text`, and
-combinators that allow you to make generators out of other generators, such as
-`lists` and `tuples2`.
+generators for collections, such as `lists` and `tuples`, and generator combinators,
+such as `map` and `flat_map`.
 
 For example, you can use `lists` to generate a list of integers:
 
@@ -118,22 +118,6 @@ let%hegel_test person_has_nonnegative_age tc =
   let p = generate_person tc in
   assert (p.age >= 0)
 ;;
-```
-
-Because it's an ordinary function, you can feed the result of one `draw` into a
-later one. For example, say you extend the `person` record with a
-`driving_license` field that only adults can have:
-
-```ocaml
-type person = { age : int; name : string; driving_license : bool }
-
-let generate_person tc =
-  let age = draw tc (integers ~min_value:0 ~max_value:120 ()) in
-  let name = draw tc (text ()) in
-  let driving_license =
-    if age >= 18 then draw tc (booleans ()) else false
-  in
-  { age; name; driving_license }
 ```
 
 If you instead want a first-class `generator` value — one you can draw with
@@ -206,9 +190,6 @@ let%hegel_test addition_commutes tc =
 ;;
 ```
 
-Notes, like drawn values, only appear when Hegel replays the minimal failing
-example.
-
 ## Change the number of test cases
 
 By default Hegel runs 100 test cases. To override this, attach a
@@ -225,4 +206,4 @@ let%hegel_test integer_self_equality tc =
 ## Learning more
 
 - Run `just docs` to build the full odoc API documentation.
-- Browse the [`examples/`](../examples/) directory for runnable programs.
+- Browse the [`examples/`](../examples/) directory for runnable tests.
