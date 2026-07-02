@@ -66,7 +66,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ocaml: ["5.1.1", "5.4.1"]
+        ocaml: ["5.1.1", "5.5.0"]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
