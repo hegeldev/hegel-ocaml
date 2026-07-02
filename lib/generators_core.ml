@@ -141,8 +141,9 @@ let with_printer : type a p. (a -> Sexp.t) -> (a, p) generator -> (a, printable)
 ;;
 
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
-let printer : type a. (a, printable) generator -> a -> Sexp.t =
-  fun (Printable { sexp_of; _ }) -> sexp_of
+let printer : type a. (a, printable) generator -> a -> Sexp.t = function
+  | Printable { sexp_of; _ } -> sexp_of
+  | _ -> .
 ;;
 
 (** [composite generate_fn] builds an unprintable generator from an imperative
@@ -330,14 +331,17 @@ let draw_named
   : type a.
     label:string -> repeatable:bool -> Internal.test_case -> (a, printable) generator -> a
   =
-  fun ~label ~repeatable tc (Printable { core; sexp_of }) ->
-  let value = do_draw core tc in
-  if Internal.draw_depth tc = 0
-  then (
-    let name = Internal.draw_display_name tc ~label ~repeatable in
-    let rendered = Sexp.to_string_hum (sexp_of value) in
-    Internal.note tc (sprintf "%s = %s" name rendered));
-  value
+  fun ~label ~repeatable tc gen ->
+  match gen with
+  | Printable { core; sexp_of } ->
+    let value = do_draw core tc in
+    if Internal.draw_depth tc = 0
+    then (
+      let name = Internal.draw_display_name tc ~label ~repeatable in
+      let rendered = Sexp.to_string_hum (sexp_of value) in
+      Internal.note tc (sprintf "%s = %s" name rendered));
+    value
+  | _ -> .
 ;;
 
 (** [draw ?label tc gen] produces a typed value from the printable generator

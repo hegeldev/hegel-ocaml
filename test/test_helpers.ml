@@ -7,12 +7,16 @@ external unsetenv : string -> unit = "caml_unsetenv"
 open! Core
 module Unix = Core_unix
 
-(** [with_tempdir ~prefix ~f] creates a tempdir via [mkdtemp prefix], passes
-    its path to [f], and removes the directory (and any flat files inside it)
-    on exit — including on exception. Intended for tests whose tempdirs only
-    contain top-level files; subdirectories are not recursively removed. *)
+(** [with_tempdir ~prefix ~f] creates a tempdir via [mkdtemp] under the system
+    temp directory (honoring [TMPDIR]), using [prefix] as the leaf-name prefix.
+    It passes the tempdir's path to [f], and removes the directory (and any
+    flat files inside it) on exit — including on exception. Intended for tests
+    whose tempdirs only contain top-level files; subdirectories are not
+    recursively removed. *)
 let with_tempdir ~prefix ~f =
-  let dir = Core_unix.mkdtemp prefix in
+  let dir =
+    Core_unix.mkdtemp (Filename.concat (Stdlib.Filename.get_temp_dir_name ()) prefix)
+  in
   Exn.protect
     ~finally:(fun () ->
       (try

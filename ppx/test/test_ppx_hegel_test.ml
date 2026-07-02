@@ -19,7 +19,10 @@ let with_env_dir dir ~f =
 ;;
 
 let with_tempdir ~f =
-  let dir = Core_unix.mkdtemp "/tmp/hegel-ppx-test-" in
+  let dir =
+    Core_unix.mkdtemp
+      (Filename.concat (Stdlib.Filename.get_temp_dir_name ()) "hegel-ppx-test-")
+  in
   Exn.protect
     ~finally:(fun () ->
       (try
