@@ -10,7 +10,9 @@
     for the assertion schema. *)
 
 (** A source location identifying a single Hegel test. Used to build the
-    Antithesis assertion JSON. *)
+    Antithesis assertion JSON.
+
+    @canonical Hegel.test_location *)
 type test_location =
   { function_name : string
   ; file : string (** Full source path as captured by [__FILE__]. *)

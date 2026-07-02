@@ -56,10 +56,17 @@ ppx/                         # PPX rewriters and derivers
   ppx_compat_pre-53.ml       # AST compat shim for ppxlib < 0.36 (OCaml < 5.3)
   ppx_compat_post-53.ml      # AST compat shim for ppxlib >= 0.36 (OCaml >= 5.3)
   ppx_compat_oxcaml.ml       # AST compat shim for the OxCaml compiler
+  test/                      # PPX E2E tests, package-attributed so opam-repo-ci runs them
+    test_ppx_derive.ml       # PPX deriver E2E tests (package ppx_hegel_generator)
+    test_ppx_hegel_test.ml   # ppx_hegel_test expander E2E tests (package ppx_hegel_test)
+    test_hegel_test_runtime.ml # Inline-test runner behavior (re-spawns itself;
+                             #   package ppx_hegel_test)
+    expect_tests/            # ppx_expect tests (dev-only, disabled in release profile)
                              # (one of the three is copied to ppx_compat.ml = ppx_hegel_compat lib)
 
-test/                        # Test suite (three executables: test_hegel [Alcotest],
-  dune                       #   test_ppx_derive, test_ppx_hegel_test)
+test/                        # hegel's own test suite (one executable: test_hegel,
+  dune                       #   Alcotest, package hegel — runs under `-p hegel`;
+                             #   no PPX preprocessing beyond the ppx_js_style linter)
   test_hegel.ml              # Top-level Alcotest runner
   test_helpers.ml            # Shared test utilities
   test_cbor_helpers.ml       # CBOR helper tests
@@ -70,9 +77,6 @@ test/                        # Test suite (three executables: test_hegel [Alcote
   test_stateful.ml           # Stateful testing tests
   test_antithesis.ml         # Antithesis integration tests
   test_single_test_case.ml   # Single-case / failure-blob replay tests
-  test_hegel_test_runtime.ml # Inline-test runner behavior (re-spawns test_hegel.exe)
-  test_ppx_derive.ml         # PPX deriver E2E tests (uses ppx_hegel_generator)
-  test_ppx_hegel_test.ml     # ppx_hegel_test expander E2E tests
 
 docs/                        # Tutorial and guide documents
   getting-started.md         # Getting Started tutorial (OCaml translation)
@@ -148,13 +152,13 @@ Libraries that don't opt in still get the registration side effect (the
 PPX always emits it) — entries just sit unused. That's harmless and lets
 tests built around alternative harnesses (Alcotest, raw `let () = name ()`)
 keep working unchanged. The runner's behavior is verified in
-`test/test_hegel_test_runtime.ml`, which re-spawns the running
-`test_hegel.exe` with a magic `--__hegel_test_runtime_demo MODE` argv that
-the top of `test_hegel.ml` intercepts to register a single test and call
+`ppx/test/test_hegel_test_runtime.ml`, which re-spawns itself with a magic
+`--__hegel_test_runtime_demo MODE` argv that the top of the same file
+intercepts to register a single test and call
 `Hegel_test_runtime.test_main`; the subprocess's exit code is then
-asserted. Folding the demo into `test_hegel.exe` itself sidesteps the
-build-ordering trap that would otherwise hit any recipe invoking the test
-binary directly.
+asserted. Spawning itself (rather than a separate demo executable)
+sidesteps the build-ordering trap that would otherwise hit any recipe
+invoking the test binary directly.
 
 ### Type-Directed Derivation (ppx/ + lib/derive.ml)
 
@@ -173,7 +177,9 @@ value named `<t>_generator` from type declarations annotated with
 The PPX emits a `test_case -> t` field-drawing thunk and wraps it with
 `Hegel.Generators.composite`, producing an `(t, unprintable) generator` value —
 no printer is attached, so a bare `[@@deriving hegel_generator]` always compiles. The
-`Hegel.Derive` module provides runtime helpers for option and list types.
+`Hegel.Derive` module provides runtime helpers for option and list types; it is
+re-exported doc-hidden (the standard public-but-invisible PPX-runtime pattern)
+because generated code in user projects calls it.
 
 **Usage example:**
 
@@ -258,7 +264,17 @@ in an `Exn.protect ~finally`.
 - Every lib module has a corresponding `test/test_<module>.ml`
 - Unit tests use socketpair-based fake engines to avoid depending on the real hegel binary
 - End-to-end tests (tagged `_e2e`) require the real binary and live under the same test file
-- PPX-derived tests live in `test/test_ppx_derive.ml` (separate executable with PPX preprocessing)
+- `test/` must build under `-p hegel` (opam-repo-ci runs it): plain Alcotest
+  functions calling `Hegel.run_hegel_test`, no `let%hegel_test`, no PPX beyond
+  the `ppx_js_style` linter. White-box tests use the doc-hidden `(**/**)`
+  re-exports `Hegel.{Internal,Cbor_helpers,Antithesis}`; `Hegel.Derive` is
+  doc-hidden too because PPX-generated code calls it. Only `Generators`,
+  `Stateful`, and the values/types directly under `Hegel` are documented API
+- PPX E2E tests live under `ppx/test/`, attributed via `(package ...)` to
+  `ppx_hegel_generator` (`test_ppx_derive.ml`) and `ppx_hegel_test`
+  (`test_ppx_hegel_test.ml`, `test_hegel_test_runtime.ml`) so
+  `dune runtest -p <pkg>` runs them; `ppx/test/expect_tests/` stays
+  package-less and dev-only (`enabled_if (<> %{profile} release)`)
 - 100% branch and line coverage is mandatory — no exceptions, no `[@coverage off]`
 
 ### Error Handling
@@ -318,18 +334,23 @@ The Hegel engine speaks CBOR. Generator schemas are CBOR maps:
    `(preprocess (pps ppxlib.metaquot))` in the PPX's own dune file.
 
 4. **Runtime helpers in lib/derive.ml**: For option and list types, the PPX delegates
-   to runtime helpers `Hegel.Derive.generate_option` and `Hegel.Derive.generate_list`.
-   These live in the main library (not the PPX) so they're covered by bisect_ppx.
+   to runtime helpers `Hegel.Derive.generate_option` and `Hegel.Derive.generate_list`
+   (`Derive` is re-exported doc-hidden, exclusively for generated code). These live
+   in the main library (not the PPX) so they're covered by bisect_ppx.
 
 5. **Floats default to finite**: The PPX generates `floats ~allow_nan:false ~allow_infinity:false ()`
    to avoid NaN/infinity in derived types, which would cause issues in most user code.
 
 ### Documentation and Polish Stage
 
-7. **`just docs` already enforces zero warnings**: The `dune build @doc` target is strict — any
-   undocumented public value produces a warning that fails the build. All lib modules must have
-   `(** ... *)` doc comments on every public type, function, constant, and exception. This is
-   enforced in CI via `just check: lint docs test`.
+7. **Zero odoc warnings is enforced by `just check-docs`, not by dune**: `dune build @doc`
+   exits 0 even when odoc emits warnings (bad references, undocumented values), and dune's
+   cache hides the warnings entirely on rebuilds — a warm `dune build @doc` prints nothing
+   even if the doc comments are broken. The `check-docs` recipe therefore removes
+   `_build/default/_doc` first and fails on any output. All lib modules must have
+   `(** ... *)` doc comments on every public type, function, constant, and exception.
+   References to non-public modules (e.g. `Internal`) must be code spans (`[Internal.note]`),
+   not `{!...}` links — the target isn't in the doc tree, so the link can't resolve.
 
 8. **odoc module-level comment must come first**: The module-level `(** ... *)` comment must appear
    before any `open` statements or definitions. odoc picks up only the first doc comment as the

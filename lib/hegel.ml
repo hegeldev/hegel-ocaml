@@ -1,28 +1,38 @@
 (** The current version of Hegel for OCaml. *)
 let version = "0.7.5"
 
-(** CBOR encoding/decoding with type-safe extractor helpers. *)
-module Cbor_helpers = Cbor_helpers
-
-(** Test runner and lifecycle management. *)
-module Internal = Internal
-
 (** Generator combinators for composable test data generation. *)
 module Generators = Generators
-
-(** Runtime support for [@@deriving hegel_generator]. *)
-module Derive = Derive
 
 (** Stateful property-based testing on top of {!Generators}. *)
 module Stateful = Stateful
 
-(** Antithesis integration. *)
+(** Runtime support called by [@@deriving hegel_generator]-generated code; not
+    intended for direct use. *)
+module Derive = Derive
+
+(** Test runner and run-loop internals; re-exported (doc-hidden) for white-box
+    tests, not for direct use. *)
+module Internal = Internal
+
+(** CBOR extractor helpers; re-exported (doc-hidden) for white-box tests. *)
+module Cbor_helpers = Cbor_helpers
+
+(** Antithesis integration; re-exported (doc-hidden) for white-box tests. *)
 module Antithesis = Antithesis
 
-(* Settings and test-case types re-exported from Internal so the whole public API
-   lives directly under Hegel. *)
+(* Settings, test-case, and test-location types re-exported so the whole
+   public API lives directly under Hegel. The module re-exports above are all
+   doc-hidden in the mli: Derive is called by generated code, the rest are
+   white-box surfaces for the test suite. *)
 
 type test_case = Internal.test_case
+
+type test_location = Antithesis.test_location =
+  { function_name : string
+  ; file : string
+  ; begin_line : int
+  }
 
 type verbosity = Internal.verbosity =
   | Quiet

@@ -34,12 +34,11 @@ module Stateful = Stateful
 
 (**/**)
 
-(* Internal modules and handles: accessible (used by generated code and tests)
-   but excluded from the generated documentation. *)
+(* Excluded from the documentation, not for direct use *)
 
+module Derive = Derive
 module Internal = Internal
 module Cbor_helpers = Cbor_helpers
-module Derive = Derive
 module Antithesis = Antithesis
 
 (**/**)
@@ -184,6 +183,16 @@ val with_report_multiple_failures : bool -> settings -> settings
 
 (** {2 Running tests} *)
 
+(** A source location identifying a single test, used to create the test's key 
+    in the {!type:database} and by the Antithesis integration to build its assertion. 
+    The [let%hegel_test] PPX builds one automatically. Construct one manually to 
+    pass [~test_location] to a direct {!run_hegel_test} call. *)
+type test_location = Antithesis.test_location =
+  { function_name : string
+  ; file : string (** Full source path as captured by [__FILE__]. *)
+  ; begin_line : int (** 1-based line number of the test's [let] binding. *)
+  }
+
 (** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
     runs a property test against the native engine, defaulting to
     {!default_settings}. This is the entry point the [let%hegel_test] PPX targets;
@@ -214,7 +223,7 @@ val with_report_multiple_failures : bool -> settings -> settings
     the same version of Hegel. *)
 val run_hegel_test
   :  ?settings:settings
-  -> ?test_location:Antithesis.test_location
+  -> ?test_location:test_location
   -> ?database_key:string
   -> ?failure_blobs:string list
   -> (test_case -> unit)

@@ -73,28 +73,29 @@ let var_use_rule =
     state)
 ;;
 
-let%hegel_test stateful_variables_test tc =
-  let module S = Hegel.Stateful in
-  var_next_id := 0;
-  S.run
-    ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc }
-    ~rules:[ var_alloc_rule; var_free_rule ]
-    ~invariants:
-      [ (fun state ->
-          assert (S.Pool.size state.Var_state.variables = Set.length state.Var_state.live))
-      ]
-    tc
-[@@settings Hegel.settings ~test_cases:10 ~seed:0 ()]
+let stateful_variables_test () =
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ~seed:0 ()) (fun tc ->
+    let module S = Hegel.Stateful in
+    var_next_id := 0;
+    S.run
+      ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc }
+      ~rules:[ var_alloc_rule; var_free_rule ]
+      ~invariants:
+        [ (fun state ->
+            assert (
+              S.Pool.size state.Var_state.variables = Set.length state.Var_state.live))
+        ]
+      tc)
 ;;
 
-let%hegel_test stateful_variables_draw_test tc =
-  let module S = Hegel.Stateful in
-  var_next_id := 0;
-  S.run
-    ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc }
-    ~rules:[ var_alloc_rule; var_use_rule ]
-    tc
-[@@settings Hegel.settings ~test_cases:5 ~seed:0 ()]
+let stateful_variables_draw_test () =
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ~seed:0 ()) (fun tc ->
+    let module S = Hegel.Stateful in
+    var_next_id := 0;
+    S.run
+      ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc }
+      ~rules:[ var_alloc_rule; var_use_rule ]
+      tc)
 ;;
 
 let stateful_rule_name_test () =
@@ -121,11 +122,12 @@ let always_reject_rule =
     s)
 ;;
 
-let%hegel_test stateful_retry_budget_floor_test tc =
-  Hegel.Stateful.run ~init:() ~rules:[ always_reject_rule ] tc
-[@@settings
-  Hegel.settings ~test_cases:1 ~seed:0 ()
-  |> Hegel.with_suppress_health_check [ Hegel.Filter_too_much ]]
+let stateful_retry_budget_floor_test () =
+  Hegel.run_hegel_test
+    ~settings:
+      (Hegel.settings ~test_cases:1 ~seed:0 ()
+       |> Hegel.with_suppress_health_check [ Hegel.Filter_too_much ])
+    (fun tc -> Hegel.Stateful.run ~init:() ~rules:[ always_reject_rule ] tc)
 ;;
 
 let test_stateful_bounded_steps () =

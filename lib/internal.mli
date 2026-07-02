@@ -72,7 +72,7 @@ type phase =
 (**/**)
 
 (** [phase_to_string p] returns the lowercase name for [p] (the
-    [hypothesis.Phase] value name). *)
+    [Phase] value name). *)
 val phase_to_string : phase -> string
 
 (**/**)

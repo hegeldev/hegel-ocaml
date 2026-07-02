@@ -1,9 +1,12 @@
-(** Tests for the {!Hegel.Derive} runtime support module.
+(** Tests for the [Hegel.Derive] runtime support module (doc-hidden; called by
+    [@@deriving hegel_generator]-generated code).
 
     These tests verify the runtime helpers used by the [@@deriving hegel_generator]
     PPX:
-    - {!Hegel.Derive.generate_option}: generates [Some v] or [None]
-    - {!Hegel.Derive.generate_list}: generates a list of values *)
+    - [Derive.generate_option]: generates [Some v] or [None]
+    - [Derive.generate_list]: generates a list of values *)
+
+module Derive = Hegel.Derive
 
 (** Test: generate_option E2E — generates both Some and None. *)
 let test_generate_option_e2e () =
@@ -13,7 +16,7 @@ let test_generate_option_e2e () =
     let gen_fn tc =
       Hegel.draw tc (Hegel.Generators.integers ~min_value:0 ~max_value:10 ())
     in
-    match Hegel.Derive.generate_option tc gen_fn with
+    match Derive.generate_option tc gen_fn with
     | Some n ->
       assert (n >= 0 && n <= 10);
       saw_some := true
@@ -23,14 +26,14 @@ let test_generate_option_e2e () =
 ;;
 
 (** Test: generate_list E2E — generates lists with correct elements. *)
-let%hegel_test test_generate_list_e2e tc =
-  let gen_fn tc =
-    Hegel.draw tc (Hegel.Generators.integers ~min_value:0 ~max_value:100 ())
-  in
-  let result = Hegel.Derive.generate_list tc gen_fn in
-  assert (List.length result >= 0 && List.length result <= 20);
-  List.iter (fun n -> assert (n >= 0 && n <= 100)) result
-[@@settings Hegel.settings ~test_cases:20 ()]
+let test_generate_list_e2e () =
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+    let gen_fn tc =
+      Hegel.draw tc (Hegel.Generators.integers ~min_value:0 ~max_value:100 ())
+    in
+    let result = Derive.generate_list tc gen_fn in
+    assert (List.length result >= 0 && List.length result <= 20);
+    List.iter (fun n -> assert (n >= 0 && n <= 100)) result)
 ;;
 
 let tests =

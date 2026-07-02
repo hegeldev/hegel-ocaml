@@ -59,7 +59,7 @@ type mode =
         database. Useful when you want pure data generation without
         property-testing overhead. *)
 
-(** Phases of the test lifecycle. Mirrors [hypothesis.Phase]. *)
+(** Phases of the test lifecycle. *)
 type phase =
   | Explicit
   | Reuse

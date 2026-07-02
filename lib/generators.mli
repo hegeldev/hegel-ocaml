@@ -61,7 +61,7 @@ val discardable_group : int -> Internal.test_case -> (unit -> 'a) -> 'a
 
 (** [resolve_draw values ~consume id] resolves a drawn pool [id] against the
     local [values] table, removing it when [consume]. Raises
-    {!Internal.Flaky_strategy} on an unknown id (an engine-contract violation,
+    [Internal.Flaky_strategy] on an unknown id (an engine-contract violation,
     unreachable through the normal engine-driven path). Exposed only so that
     branch can be unit-tested. *)
 val resolve_draw : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
@@ -88,14 +88,14 @@ val new_collection
 val collection_more : collection -> Internal.test_case -> bool
 
 (** [collection_reject coll data] rejects the last element of the collection.
-    Raises {!Internal.Data_exhausted} on StopTest. *)
+    Raises [Internal.Data_exhausted] on StopTest. *)
 val collection_reject : collection -> Internal.test_case -> unit
 
 (** [draw ?label tc gen] produces a typed value from the printable generator
     [gen] using test case [tc].
 
     On the final replay of a failing test (or on every case under verbose
-    output), an outermost draw prints its value through {!Internal.note} as
+    output), an outermost draw prints its value through [Internal.note] as
     [name = value]. The [name] is [label] when given, else ["draw"]; an unlabeled
     draw is numbered ([draw_1], [draw_2], …) while a [label] is printed bare.
     Draws nested inside a span (e.g. composite elements) are suppressed so only

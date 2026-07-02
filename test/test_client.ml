@@ -1,5 +1,3 @@
-(** Tests for {!Hegel.Internal} against the native libhegel engine. *)
-
 open! Core
 open Hegel
 module Unix = Core_unix

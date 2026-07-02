@@ -456,7 +456,7 @@ let test_resolve_draw () =
       ignore (resolve_draw tbl ~consume:false 99 : string);
       false
     with
-    | Hegel.Internal.Flaky_strategy -> true
+    | Internal.Flaky_strategy -> true
   in
   Alcotest.(check bool) "unknown id raises Flaky_strategy" true raised
 ;;
