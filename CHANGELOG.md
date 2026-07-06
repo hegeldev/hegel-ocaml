@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1 - 2026-07-06
+
+This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.23.1](https://github.com/hegeldev/hegel-rust/releases/tag/v0.23.1) to [0.27.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.27.0).
+
 ## 0.8.0 - 2026-07-02
 
 This release reexports many functions from the `Client` module to the `Hegel` module.
