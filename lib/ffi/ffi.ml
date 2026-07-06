@@ -125,6 +125,12 @@ let c_run_result =
 
 let c_run_free = foreign "hegel_run_free" (ptr void @-> ptr void @-> returning int)
 
+let c_run_result_free =
+  foreign "hegel_run_result_free" (ptr void @-> ptr void @-> returning int)
+;;
+
+let c_failure_free = foreign "hegel_failure_free" (ptr void @-> ptr void @-> returning int)
+
 let c_test_case_free =
   foreign "hegel_test_case_free" (ptr void @-> ptr void @-> returning int)
 ;;
@@ -482,7 +488,9 @@ let run_result ctx run =
 ;;
 
 let run_free ctx run = check_rc ctx (c_run_free ctx run)
-let blob_test_case_free ctx tc = check_rc ctx (c_test_case_free ctx tc)
+let run_result_free ctx r = check_rc ctx (c_run_result_free ctx r)
+let failure_free ctx f = check_rc ctx (c_failure_free ctx f)
+let test_case_free ctx tc = check_rc ctx (c_test_case_free ctx tc)
 
 (* ------------------------------------------------------------------ *)
 (* Per-test-case primitives                                            *)

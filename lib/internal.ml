@@ -492,7 +492,7 @@ let final_replay ~(settings : settings) ~ffi_settings ~test_fn ctx failure =
   let tc = Ffi.test_case_from_blob ctx ffi_settings (Some blob) in
   let outcome =
     Exn.protect
-      ~finally:(fun () -> Ffi.blob_test_case_free ctx tc)
+      ~finally:(fun () -> Ffi.test_case_free ctx tc)
       ~f:(fun () -> run_test_case ~settings ~test_fn ctx tc true)
   in
   match outcome with
@@ -543,19 +543,24 @@ let handle_result
     raise exn
   | Run_failed ->
     emit ~passed:false;
-    (match Ffi.result_failures ctx result with
-     | [ failure ] ->
-       let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
-       if settings.print_blob then eprintf "failure blob: \"%s\"" blob;
-       raise exn
-     | failures ->
-       let count = List.length failures in
-       List.iteri failures ~f:(fun i failure ->
-         eprintf "\nFailure %d:\n%!" (i + 1);
-         let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
-         eprintf "Exception: %s\n%!" (Exn.to_string exn);
-         if settings.print_blob then eprintf "Failure blob: \"%s\"\n%!" blob);
-       raise (Failure (sprintf "\n%d failures found!" count)))
+    (* Failures are caller-owned snapshots, independent of the run result. *)
+    let failures = Ffi.result_failures ctx result in
+    Exn.protect
+      ~finally:(fun () -> List.iter failures ~f:(fun f -> Ffi.failure_free ctx f))
+      ~f:(fun () ->
+        match failures with
+        | [ failure ] ->
+          let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
+          if settings.print_blob then eprintf "failure blob: \"%s\"" blob;
+          raise exn
+        | failures ->
+          let count = List.length failures in
+          List.iteri failures ~f:(fun i failure ->
+            eprintf "\nFailure %d:\n%!" (i + 1);
+            let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
+            eprintf "Exception: %s\n%!" (Exn.to_string exn);
+            if settings.print_blob then eprintf "Failure blob: \"%s\"\n%!" blob);
+          raise (Failure (sprintf "\n%d failures found!" count)))
 ;;
 
 (** [run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location] drives a
@@ -580,23 +585,34 @@ let run_from_engine ctx ~(settings : settings) ~ffi_settings ~test_fn ~test_loca
         match Ffi.next_test_case ctx run with
         | None -> ()
         | Some handle ->
-          if single
-          then single_outcome := run_test_case ~settings ~test_fn ctx handle true
-          else
-            ignore
-              (run_test_case ~settings ~test_fn ctx handle false : (string * exn) option);
+          (* Handles from [next_test_case] are caller-owned; free each once its
+             case has been marked complete by [run_test_case]. *)
+          Exn.protect
+            ~finally:(fun () -> Ffi.test_case_free ctx handle)
+            ~f:(fun () ->
+              if single
+              then single_outcome := run_test_case ~settings ~test_fn ctx handle true
+              else
+                ignore
+                  (run_test_case ~settings ~test_fn ctx handle false
+                   : (string * exn) option));
           loop ()
       in
       loop ();
-      handle_result
-        ~settings
-        ~ffi_settings
-        ~test_fn
-        ~test_location
-        ~single
-        ~single_outcome:!single_outcome
-        ctx
-        (Ffi.run_result ctx run))
+      (* The run result is a caller-owned snapshot, independent of the run. *)
+      let result = Ffi.run_result ctx run in
+      Exn.protect
+        ~finally:(fun () -> Ffi.run_result_free ctx result)
+        ~f:(fun () ->
+          handle_result
+            ~settings
+            ~ffi_settings
+            ~test_fn
+            ~test_location
+            ~single
+            ~single_outcome:!single_outcome
+            ctx
+            result))
 ;;
 
 (** [replay_from_blob ~settings ~ffi_settings ~test_fn blob] replays a single failure
@@ -608,7 +624,7 @@ let replay_from_blob ~(settings : settings) ~ffi_settings ~test_fn blob ctx =
   | exception Ffi.Backend_error msg -> Undecodable msg
   | tc ->
     Exn.protect
-      ~finally:(fun () -> Ffi.blob_test_case_free ctx tc)
+      ~finally:(fun () -> Ffi.test_case_free ctx tc)
       ~f:(fun () ->
         match run_test_case ~settings ~test_fn ctx tc true with
         | None -> Did_not_reproduce

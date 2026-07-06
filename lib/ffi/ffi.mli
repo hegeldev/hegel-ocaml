@@ -15,16 +15,19 @@ type settings
 (** Opaque in-flight run handle ([hegel_run_t]). *)
 type run
 
-(** Opaque per-test-case handle ([hegel_test_case_t]), borrowed from its
-    parent {!run} and valid only until the case is completed. *)
+(** Opaque per-test-case handle ([hegel_test_case_t]): caller-owned whatever its
+    origin ({!next_test_case}, {!test_case_from_blob}, …), freed with
+    {!test_case_free}. A run-owned handle stays valid even after {!run_free}
+    releases the run's own reference. *)
 type test_case
 
-(** Opaque aggregated run result ([hegel_run_result_t]), borrowed from its
-    parent {!run} and valid until {!run_free}. *)
+(** Opaque aggregated run result ([hegel_run_result_t]): a caller-owned snapshot
+    independent of its {!run}, valid until freed with {!run_result_free}. *)
 type run_result
 
-(** Opaque single-failure handle ([hegel_failure_t]), borrowed from its
-    parent {!type:run_result}. *)
+(** Opaque single-failure handle ([hegel_failure_t]): a caller-owned snapshot
+    independent of its {!type:run_result}, valid until freed with
+    {!failure_free}. *)
 type failure
 
 (** Test execution mode ([hegel_mode_t]). *)
@@ -182,18 +185,27 @@ val next_test_case : context -> run -> test_case option
     {!Backend_error} (with the engine's diagnostic) when the blob is missing,
     not UTF-8, or cannot be decoded — the engine never returns a null handle
     without setting an error. The handle must be freed with
-    {!blob_test_case_free}. *)
+    {!test_case_free}. *)
 val test_case_from_blob : context -> settings -> string option -> test_case
 
 (** [run_result ctx run] returns the aggregated result of a finished run. Raises
     {!Backend_error} if the run has not finished. *)
 val run_result : context -> run -> run_result
 
-(** [run_free ctx run] frees a run handle, draining the worker thread. *)
+(** [run_free ctx run] frees a run handle, draining the worker thread. Run-result
+    and failure snapshots are independent and outlive it; free them separately. *)
 val run_free : context -> run -> unit
 
-(** [blob_test_case_free ctx tc] frees a test case created by a failure_blob *)
-val blob_test_case_free : context -> test_case -> unit
+(** [run_result_free ctx r] frees a run-result snapshot from {!val:run_result}. *)
+val run_result_free : context -> run_result -> unit
+
+(** [failure_free ctx f] frees a failure snapshot from {!result_failure} /
+    {!result_failures}. *)
+val failure_free : context -> failure -> unit
+
+(** [test_case_free ctx tc] frees a test-case handle, whatever its origin
+    (run-owned from {!next_test_case}, cloned, or from a failure blob). *)
+val test_case_free : context -> test_case -> unit
 
 (** {2 Per-test-case primitives} *)
 
