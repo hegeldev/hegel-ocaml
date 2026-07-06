@@ -293,9 +293,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-    env:
-      # A directory here; the loader appends libhegel.dll (see Loader.from_env).
-      HEGEL_LIBHEGEL_PATH: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -312,7 +309,7 @@ jobs:
 
       - name: Stage libhegel from the matching GitHub release
         shell: bash
-        run: |
+        run: | # zizmor: ignore[github-env] static RUNNER_TEMP dir, no untrusted input
           VERSION=$(awk -F'"' '/let version =/{print $2}' lib/ffi/loader.ml)
           ASSET="libhegel-windows-amd64.dll"
           URL_BASE="https://github.com/hegeldev/hegel-rust/releases/download/v${VERSION}"
@@ -321,6 +318,8 @@ jobs:
           curl -fsSL -o "${DEST}.sha256" "${URL_BASE}/${ASSET}.sha256"
           WANT=$(awk '{print $1}' "${DEST}.sha256")
           echo "${WANT}  ${DEST}" | sha256sum -c -
+          # A directory; the loader appends libhegel.dll (see Loader.from_env).
+          echo "HEGEL_LIBHEGEL_PATH=${RUNNER_TEMP}" >> "$GITHUB_ENV"
 
       - name: Build the library and examples
         run: opam exec -- dune build lib examples
