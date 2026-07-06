@@ -145,19 +145,34 @@ value you drew as an s-expression, named after the `let` binding it was bound
 to:
 
 ```ocaml
-let%hegel_test addition_commutes tc =
-  let x = draw tc (integers ()) in
-  let y = draw tc (integers ()) in
-  assert (x + y = y + x)
+let%hegel_test reverse_is_identity tc =
+  let xs = draw tc (lists (integers ()) ()) in
+  assert (xs = List.rev xs)
 ;;
 
 (* On failure, prints:
-     x = …
-     y = …  *)
+     xs = (0 1)  *)
 ```
 
-A value that is shadowed or drawn inside a loop is numbered (`x_1`, `x_2`, …),
-and you can override the name with `~label`: `draw ~label:"seed" tc (integers ())`.
+A value that is shadowed or drawn inside a loop is numbered (`x_1`, `x_2`, …):
+
+```ocaml
+let%hegel_test all_draws_below_ten tc =
+  for _ = 1 to 3 do
+    let x = draw tc (integers ()) in
+    assert (x < 10)
+  done
+;;
+
+(* On failure, prints:
+     x_1 = …
+     x_2 = …
+     x_3 = 10  *)
+```
+
+The same `let x` runs on each iteration, so Hegel disambiguates the draws as
+`x_1`, `x_2`, `x_3` in draw order. You can override the name with `~label`:
+`draw ~label:"y" tc (integers ())`.
 
 Some combinators hand the result type to your own code and so carry no printer —
 `map`, `flat_map`, `sampled_from`, `just`, and generators from `[@@deriving
