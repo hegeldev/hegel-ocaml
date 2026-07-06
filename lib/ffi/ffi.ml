@@ -306,19 +306,34 @@ let c_generate_string_result_free =
 let c_generate_date =
   foreign
     "hegel_generate_date"
-    (ptr void @-> ptr void @-> ptr Date_struct.t @-> returning int)
+    (ptr void
+     @-> ptr void
+     @-> Date_struct.t
+     @-> Date_struct.t
+     @-> ptr Date_struct.t
+     @-> returning int)
 ;;
 
 let c_generate_time =
   foreign
     "hegel_generate_time"
-    (ptr void @-> ptr void @-> ptr Time_struct.t @-> returning int)
+    (ptr void
+     @-> ptr void
+     @-> Time_struct.t
+     @-> Time_struct.t
+     @-> ptr Time_struct.t
+     @-> returning int)
 ;;
 
 let c_generate_datetime =
   foreign
     "hegel_generate_datetime"
-    (ptr void @-> ptr void @-> ptr Datetime_struct.t @-> returning int)
+    (ptr void
+     @-> ptr void
+     @-> Datetime_struct.t
+     @-> Datetime_struct.t
+     @-> ptr Datetime_struct.t
+     @-> returning int)
 ;;
 
 let c_generate_ipv4 =
@@ -861,9 +876,43 @@ let generate_string ctx tc sg =
   s
 ;;
 
+(* Build the by-value bound structs. The OCaml [dates]/[times]/[datetimes]
+   generators expose no bounds, so the wrappers always pass the conventional
+   full range: dates {1,1,1}..{9999,12,31}, times {0,0,0,0}..{23,59,59,999999}. *)
+let make_date ~year ~month ~day =
+  let d = make Date_struct.t in
+  setf d Date_struct.year (Int32.of_int year);
+  setf d Date_struct.month (Unsigned.UInt8.of_int month);
+  setf d Date_struct.day (Unsigned.UInt8.of_int day);
+  d
+;;
+
+let make_time ~hour ~minute ~second ~microsecond =
+  let t = make Time_struct.t in
+  setf t Time_struct.hour (Unsigned.UInt8.of_int hour);
+  setf t Time_struct.minute (Unsigned.UInt8.of_int minute);
+  setf t Time_struct.second (Unsigned.UInt8.of_int second);
+  setf t Time_struct.microsecond (Unsigned.UInt32.of_int microsecond);
+  t
+;;
+
+let make_datetime date time =
+  let dt = make Datetime_struct.t in
+  setf dt Datetime_struct.date date;
+  setf dt Datetime_struct.time time;
+  dt
+;;
+
+let date_min = make_date ~year:1 ~month:1 ~day:1
+let date_max = make_date ~year:9999 ~month:12 ~day:31
+let time_min = make_time ~hour:0 ~minute:0 ~second:0 ~microsecond:0
+let time_max = make_time ~hour:23 ~minute:59 ~second:59 ~microsecond:999999
+let datetime_min = make_datetime date_min time_min
+let datetime_max = make_datetime date_max time_max
+
 let generate_date ctx tc =
   let result = make Date_struct.t in
-  check_rc ctx (c_generate_date ctx tc (addr result));
+  check_rc ctx (c_generate_date ctx tc date_min date_max (addr result));
   ( Int32.to_int (getf result Date_struct.year)
   , Unsigned.UInt8.to_int (getf result Date_struct.month)
   , Unsigned.UInt8.to_int (getf result Date_struct.day) )
@@ -871,7 +920,7 @@ let generate_date ctx tc =
 
 let generate_time ctx tc =
   let result = make Time_struct.t in
-  check_rc ctx (c_generate_time ctx tc (addr result));
+  check_rc ctx (c_generate_time ctx tc time_min time_max (addr result));
   ( Unsigned.UInt8.to_int (getf result Time_struct.hour)
   , Unsigned.UInt8.to_int (getf result Time_struct.minute)
   , Unsigned.UInt8.to_int (getf result Time_struct.second)
@@ -880,7 +929,7 @@ let generate_time ctx tc =
 
 let generate_datetime ctx tc =
   let result = make Datetime_struct.t in
-  check_rc ctx (c_generate_datetime ctx tc (addr result));
+  check_rc ctx (c_generate_datetime ctx tc datetime_min datetime_max (addr result));
   let d = getf result Datetime_struct.date in
   let t = getf result Datetime_struct.time in
   ( ( Int32.to_int (getf d Date_struct.year)
