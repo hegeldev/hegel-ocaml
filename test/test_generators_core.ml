@@ -22,128 +22,6 @@ let test_span_label_constants () =
   Alcotest.(check int) "ENUM_VARIANT" 15 enum_variant
 ;;
 
-let test_basic_generator_schema () =
-  let gen = integers ~min_value:0 ~max_value:10 () in
-  Alcotest.(check bool) "is_basic" true (is_basic gen);
-  match schema gen with
-  | Some s ->
-    let pairs = Cbor_helpers.extract_dict s in
-    let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
-    Alcotest.(check string) "type" "integer" typ;
-    let min_v = Cbor_helpers.extract_int (List.assoc (`Text "min_value") pairs) in
-    Alcotest.(check int) "min_value" 0 min_v;
-    let max_v = Cbor_helpers.extract_int (List.assoc (`Text "max_value") pairs) in
-    Alcotest.(check int) "max_value" 10 max_v
-  | None -> Alcotest.fail "expected Some schema"
-;;
-
-let test_basic_generator_no_bounds () =
-  let gen = integers () in
-  Alcotest.(check bool) "is_basic" true (is_basic gen);
-  match schema gen with
-  | Some s ->
-    let pairs = Cbor_helpers.extract_dict s in
-    (* Unbounded integers still carry default min/max bounds (required by the
-       engine), so the schema has type + min_value + max_value. *)
-    Alcotest.(check int) "pairs count" 3 (List.length pairs);
-    let min_v = Cbor_helpers.extract_int (List.assoc (`Text "min_value") pairs) in
-    Alcotest.(check int) "default min_value" Core.Int.min_value min_v;
-    let max_v = Cbor_helpers.extract_int (List.assoc (`Text "max_value") pairs) in
-    Alcotest.(check int) "default max_value" Core.Int.max_value max_v
-  | None -> Alcotest.fail "expected schema"
-;;
-
-let test_map_on_basic_preserves_schema () =
-  let gen = integers ~min_value:0 ~max_value:10 () in
-  let mapped = map (fun v -> v * 2) gen in
-  Alcotest.(check bool) "still basic" true (is_basic mapped);
-  match schema mapped with
-  | Some s ->
-    let pairs = Cbor_helpers.extract_dict s in
-    let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
-    Alcotest.(check string) "type preserved" "integer" typ
-  | None -> Alcotest.fail "expected schema"
-;;
-
-let test_double_map_on_basic () =
-  let gen = integers () in
-  let m1 = map (fun _ -> 2) gen in
-  let m2 = map (fun _ -> 3) m1 in
-  Alcotest.(check bool) "double map still basic" true (is_basic m2);
-  (* Verify schema is preserved through both maps *)
-  match schema gen, schema m2 with
-  | Some s1, Some s2 ->
-    Alcotest.(check bool) "schema unchanged" true (Cbor.encode s1 = Cbor.encode s2)
-  | _ -> Alcotest.fail "expected both schemas"
-;;
-
-let test_map_on_non_basic_creates_mapped () =
-  let gen = integers () in
-  let filtered = filter (fun _ -> true) gen in
-  let mapped = map (fun x -> x) filtered in
-  Alcotest.(check bool) "not basic" false (is_basic mapped)
-;;
-
-let test_flat_map_not_basic () =
-  let gen = integers () in
-  let fm = flat_map (fun _ -> integers ()) gen in
-  Alcotest.(check bool) "not basic" false (is_basic fm)
-;;
-
-let test_filter_not_basic () =
-  let gen = integers () in
-  let f = filter (fun _ -> true) gen in
-  Alcotest.(check bool) "not basic" false (is_basic f)
-;;
-
-let test_schema_on_non_basic () =
-  let gen = filter (fun _ -> true) (integers ()) in
-  Alcotest.(check bool) "no schema" true (schema gen = None)
-;;
-
-let test_as_basic_on_basic () =
-  let gen = integers ~min_value:1 ~max_value:5 () in
-  match as_basic gen with
-  | Some (s, _transform) ->
-    let pairs = Cbor_helpers.extract_dict s in
-    let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
-    Alcotest.(check string) "type" "integer" typ
-  | None -> Alcotest.fail "expected Some"
-;;
-
-let test_as_basic_on_basic_with_transform () =
-  let gen = map (fun x -> x) (integers ()) in
-  match as_basic gen with
-  | Some (_, _transform) -> ()
-  | None -> Alcotest.fail "expected Some"
-;;
-
-let test_as_basic_on_non_basic () =
-  let gen = filter (fun _ -> true) (integers ()) in
-  Alcotest.(check bool) "as_basic is None" true (as_basic gen = None)
-;;
-
-let test_basic_unique_safe_on_leaf () =
-  Alcotest.(check bool)
-    "leaf integers is unique-safe"
-    true
-    (basic_unique_safe (integers ()))
-;;
-
-let test_basic_unique_safe_on_mapped_basic () =
-  (* [map] over [Basic] still returns [Basic], but the user's function may
-     collapse distinct inputs, so the flag is cleared. *)
-  Alcotest.(check bool)
-    "mapped basic is not unique-safe"
-    false
-    (basic_unique_safe (map (fun x -> x) (integers ())))
-;;
-
-let test_basic_unique_safe_on_non_basic () =
-  let gen = filter (fun _ -> true) (integers ()) in
-  Alcotest.(check bool) "non-basic is not unique-safe" false (basic_unique_safe gen)
-;;
-
 let test_max_filter_attempts () =
   Alcotest.(check int) "max attempts" 3 max_filter_attempts
 ;;
@@ -199,13 +77,12 @@ let test_discardable_group_exception () =
 let test_map_doubles_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let gen = integers ~min_value:1 ~max_value:5 () |> map (fun v -> v * 2) in
-    Alcotest.(check bool) "still basic" true (is_basic gen);
     let v = Hegel.draw_silent tc gen in
     assert (v >= 2 && v <= 10);
     assert (v mod 2 = 0))
 ;;
 
-(** Test: double map composes correctly. *)
+(** Test: double map composes correctly (Leaf draw-closure composition). *)
 let test_double_map_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let gen =
@@ -213,14 +90,6 @@ let test_double_map_e2e () =
       |> map (fun v -> v * 2)
       |> map (fun v -> v + 1)
     in
-    Alcotest.(check bool) "still basic" true (is_basic gen);
-    let s = schema gen in
-    (match s with
-     | Some schema_v ->
-       let pairs = Cbor_helpers.extract_dict schema_v in
-       let typ = Cbor_helpers.extract_string (List.assoc (`Text "type") pairs) in
-       Alcotest.(check string) "schema type" "integer" typ
-     | None -> Alcotest.fail "expected schema");
     let v = Hegel.draw_silent tc gen in
     assert (List.mem v [ 3; 5; 7; 9; 11 ]))
 ;;
@@ -244,7 +113,6 @@ let test_flat_map_e2e () =
         (fun n -> integers ~min_value:0 ~max_value:(max 1 n) ())
         (integers ~min_value:1 ~max_value:5 ())
     in
-    Alcotest.(check bool) "not basic" false (is_basic gen);
     let v = Hegel.draw_silent tc gen in
     assert (v >= 0))
 ;;
@@ -253,7 +121,6 @@ let test_flat_map_e2e () =
 let test_filter_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let gen = filter (fun v -> v mod 2 = 0) (integers ~min_value:0 ~max_value:100 ()) in
-    Alcotest.(check bool) "not basic" false (is_basic gen);
     let v = Hegel.draw tc gen in
     assert (v mod 2 = 0))
 ;;
@@ -271,34 +138,20 @@ let test_filter_exhaustion_e2e () =
 (** Test: group helper through engine. *)
 let test_group_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
-    let v =
+    let n =
       group Labels.list tc (fun () ->
-        Internal.generate_from_schema
-          (`Map
-              [ `Text "type", `Text "integer"
-              ; `Text "min_value", `Int 0
-              ; `Text "max_value", `Int 10
-              ])
-          tc)
+        Internal.generate_integer tc ~min_value:0 ~max_value:10)
     in
-    let n = Cbor_helpers.extract_int v in
     assert (n >= 0 && n <= 10))
 ;;
 
 (** Test: discardable_group through engine — success path. *)
 let test_discardable_group_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
-    let v =
+    let n =
       discardable_group Labels.tuple tc (fun () ->
-        Internal.generate_from_schema
-          (`Map
-              [ `Text "type", `Text "integer"
-              ; `Text "min_value", `Int 0
-              ; `Text "max_value", `Int 10
-              ])
-          tc)
+        Internal.generate_integer tc ~min_value:0 ~max_value:10)
     in
-    let n = Cbor_helpers.extract_int v in
     assert (n >= 0 && n <= 10))
 ;;
 
@@ -328,10 +181,12 @@ let test_with_printer () =
 ;;
 
 (* [filter] over an unprintable generator stays unprintable; it can still be
-   drawn via [draw_silent] and reports a non-basic core. *)
+   drawn via [draw_silent]. *)
 let test_filter_on_unprintable () =
-  let gen = filter (fun _ -> true) (sampled_from [ 1; 2; 3 ]) in
-  Alcotest.(check bool) "not basic" false (is_basic gen)
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
+    let gen = filter (fun _ -> true) (sampled_from [ 1; 2; 3 ]) in
+    let v = Hegel.draw_silent tc gen in
+    assert (List.mem v [ 1; 2; 3 ]))
 ;;
 
 (* Lists render via both the engine-side path (basic elements) and the
@@ -464,35 +319,6 @@ let test_resolve_draw () =
 let tests =
   [ Alcotest.test_case "stateful: resolve_draw" `Quick test_resolve_draw
   ; Alcotest.test_case "span label constants" `Quick test_span_label_constants
-  ; Alcotest.test_case "basic generator schema" `Quick test_basic_generator_schema
-  ; Alcotest.test_case "basic generator no bounds" `Quick test_basic_generator_no_bounds
-  ; Alcotest.test_case
-      "map on basic preserves schema"
-      `Quick
-      test_map_on_basic_preserves_schema
-  ; Alcotest.test_case "double map on basic" `Quick test_double_map_on_basic
-  ; Alcotest.test_case
-      "map on non-basic creates mapped"
-      `Quick
-      test_map_on_non_basic_creates_mapped
-  ; Alcotest.test_case "flat_map not basic" `Quick test_flat_map_not_basic
-  ; Alcotest.test_case "filter not basic" `Quick test_filter_not_basic
-  ; Alcotest.test_case "schema on non-basic" `Quick test_schema_on_non_basic
-  ; Alcotest.test_case "as_basic on basic" `Quick test_as_basic_on_basic
-  ; Alcotest.test_case
-      "as_basic on basic with transform"
-      `Quick
-      test_as_basic_on_basic_with_transform
-  ; Alcotest.test_case "as_basic on non-basic" `Quick test_as_basic_on_non_basic
-  ; Alcotest.test_case "basic_unique_safe on leaf" `Quick test_basic_unique_safe_on_leaf
-  ; Alcotest.test_case
-      "basic_unique_safe on mapped basic"
-      `Quick
-      test_basic_unique_safe_on_mapped_basic
-  ; Alcotest.test_case
-      "basic_unique_safe on non-basic"
-      `Quick
-      test_basic_unique_safe_on_non_basic
   ; Alcotest.test_case "max_filter_attempts" `Quick test_max_filter_attempts
   ; Alcotest.test_case "collection new" `Quick test_collection_new
   ; Alcotest.test_case "collection new no max" `Quick test_collection_new_no_max

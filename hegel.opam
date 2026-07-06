@@ -16,6 +16,7 @@ depends: [
   "core_unix" {>= "0.17"}
   "ctypes" {>= "0.20"}
   "ctypes-foreign" {>= "0.20"}
+  "ipaddr" {>= "5.0"}
   "dune-site" {>= "3.16"}
   "alcotest" {with-test & >= "1.7"}
   "ppx_expect" {with-test & >= "v0.17"}

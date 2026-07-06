@@ -293,21 +293,17 @@ val filter : ('a -> bool) -> ('a, 'p) generator -> ('a, 'p) generator
 
 (**/**)
 
-(** [schema gen] returns the schema for a [Basic]-core generator, or [None]. *)
-val schema : ('a, 'p) generator -> Cbor.t option
+(** [format_date (year, month, day)] renders a drawn date as [YYYY-MM-DD].
+    Exposed for white-box testing. *)
+val format_date : int * int * int -> string
 
-(** [is_basic gen] returns [true] if [gen] has a [Basic] core. *)
-val is_basic : ('a, 'p) generator -> bool
+(** [format_time (hour, minute, second, microsecond)] renders a drawn time as
+    [HH:MM:SS\[.ffffff\]]. Exposed for white-box testing. *)
+val format_time : int * int * int * int -> string
 
-(** [as_basic gen] returns [Some (schema, transform)] if [gen] has a [Basic]
-    core, or [None] otherwise. *)
-val as_basic : ('a, 'p) generator -> (Cbor.t * (Cbor.t -> 'a)) option
-
-(** [basic_unique_safe gen] returns [true] iff [gen] has a [Basic] core whose
-    transform is known to preserve distinctness over the schema's value space.
-    Used to decide whether [lists ~unique:true] can take the engine-side fast
-    path or must fall back to client-side dedup. *)
-val basic_unique_safe : ('a, 'p) generator -> bool
+(** [format_datetime (date, time)] renders a drawn datetime as
+    [YYYY-MM-DDTHH:MM:SS\[.ffffff\]]. Exposed for white-box testing. *)
+val format_datetime : (int * int * int) * (int * int * int * int) -> string
 
 (**/**)
 

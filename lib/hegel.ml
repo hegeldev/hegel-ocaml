@@ -15,9 +15,6 @@ module Derive = Derive
     tests, not for direct use. *)
 module Internal = Internal
 
-(** CBOR extractor helpers; re-exported (doc-hidden) for white-box tests. *)
-module Cbor_helpers = Cbor_helpers
-
 (** Antithesis integration; re-exported (doc-hidden) for white-box tests. *)
 module Antithesis = Antithesis
 

@@ -4,7 +4,7 @@
     tests against the native libhegel engine (via {!Hegel_ffi.Ffi}). It manages:
     - Test lifecycle (run_start, test-case loop, mark_complete, run_result)
     - The per-test-case handle threaded through the test function
-    - Helper functions (assume, note, target, generate_from_schema)
+    - Helper functions (assume, note, target, the typed generate_* draws)
     - Origin extraction for error reporting *)
 
 open! Core
@@ -266,18 +266,130 @@ let with_stop_guard tc f =
     raise Assume_rejected
 ;;
 
-(** [generate_from_schema schema tc] generates a value from a schema by drawing
-    from the native engine. Raises {!Data_exhausted} if the engine signals
-    StopTest. *)
-let generate_from_schema schema tc =
-  with_stop_guard tc (fun () ->
-    Cbor_helpers.decode (Ffi.generate tc.context tc.handle (Cbor_helpers.encode schema)))
+(** [generate_boolean tc p forced] draws a boolean with probability [p] of
+    [true]. If [forced] is [Some b] the value is forced to [b]. Raises
+    {!Data_exhausted} on StopTest. *)
+let generate_boolean tc p forced =
+  with_stop_guard tc (fun () -> Ffi.generate_boolean tc.context tc.handle p forced)
 ;;
 
-(** [primitive_boolean tc p forced] generates a boolean with probability [p] of 
-[true]. If [forced] is not [None], then the value is forced to be [b] for [Some b] *)
-let primitive_boolean tc p forced =
-  with_stop_guard tc (fun () -> Ffi.primitive_boolean tc.context tc.handle p forced)
+(** [generate_integer tc ~min_value ~max_value] draws an integer in the inclusive
+    range. Raises {!Data_exhausted} on StopTest. *)
+let generate_integer tc ~min_value ~max_value =
+  with_stop_guard tc (fun () ->
+    Ffi.generate_integer tc.context tc.handle ~min_value ~max_value)
+;;
+
+(** [generate_float tc ...] draws a width-64 float under the given policy. Raises
+    {!Data_exhausted} on StopTest. *)
+let generate_float
+      tc
+      ~min_value
+      ~max_value
+      ~allow_nan
+      ~allow_infinity
+      ~exclude_min
+      ~exclude_max
+      ~smallest_nonzero_magnitude
+  =
+  with_stop_guard tc (fun () ->
+    Ffi.generate_float
+      tc.context
+      tc.handle
+      ~min_value
+      ~max_value
+      ~allow_nan
+      ~allow_infinity
+      ~exclude_min
+      ~exclude_max
+      ~smallest_nonzero_magnitude)
+;;
+
+(** [generate_bytes tc ~min_size ~max_size] draws a byte string. Raises
+    {!Data_exhausted} on StopTest. *)
+let generate_bytes tc ~min_size ~max_size =
+  with_stop_guard tc (fun () ->
+    Ffi.generate_bytes tc.context tc.handle ~min_size ~max_size)
+;;
+
+(** [with_string_generator tc make draw] builds a string-generator handle with
+    [make tc.context], draws from it with [draw], and always frees the handle.
+    Raises {!Data_exhausted} on StopTest and {!Assume_rejected} when the draw
+    rejects itself. *)
+let with_string_generator tc make =
+  with_stop_guard tc (fun () ->
+    let sg = make tc.context in
+    Exn.protect
+      ~finally:(fun () -> Ffi.string_generator_free tc.context sg)
+      ~f:(fun () -> Ffi.generate_string tc.context tc.handle sg))
+;;
+
+(** [generate_text tc ...] draws a text string over the described alphabet. *)
+let generate_text
+      tc
+      ~min_size
+      ~max_size
+      ~codec
+      ~min_codepoint
+      ~max_codepoint
+      ~categories
+      ~exclude_categories
+      ~include_characters
+      ~exclude_characters
+  =
+  with_string_generator tc (fun ctx ->
+    Ffi.string_generator_text
+      ctx
+      ~min_size
+      ~max_size
+      ~codec
+      ~min_codepoint
+      ~max_codepoint
+      ~categories
+      ~exclude_categories
+      ~include_characters
+      ~exclude_characters)
+;;
+
+(** [generate_regex tc ~pattern ~fullmatch] draws a string matching [pattern]. *)
+let generate_regex tc ~pattern ~fullmatch =
+  with_string_generator tc (fun ctx -> Ffi.string_generator_regex ctx ~pattern ~fullmatch)
+;;
+
+(** [generate_email tc] draws an RFC 5321/5322 email address. *)
+let generate_email tc = with_string_generator tc Ffi.string_generator_email
+
+(** [generate_url tc] draws an RFC 3986 http/https URL. *)
+let generate_url tc = with_string_generator tc Ffi.string_generator_url
+
+(** [generate_domain tc ~max_length] draws an RFC 1035 domain name. *)
+let generate_domain tc ~max_length =
+  with_string_generator tc (fun ctx -> Ffi.string_generator_domain ctx ~max_length)
+;;
+
+(** [generate_date tc] draws a Gregorian date as [(year, month, day)]. *)
+let generate_date tc =
+  with_stop_guard tc (fun () -> Ffi.generate_date tc.context tc.handle)
+;;
+
+(** [generate_time tc] draws a time as [(hour, minute, second, microsecond)]. *)
+let generate_time tc =
+  with_stop_guard tc (fun () -> Ffi.generate_time tc.context tc.handle)
+;;
+
+(** [generate_datetime tc] draws a naive datetime as [(date, time)]. *)
+let generate_datetime tc =
+  with_stop_guard tc (fun () -> Ffi.generate_datetime tc.context tc.handle)
+;;
+
+(** [generate_ipv4 tc] draws an IPv4 address as its 4 network-order bytes. *)
+let generate_ipv4 tc =
+  with_stop_guard tc (fun () -> Ffi.generate_ipv4 tc.context tc.handle)
+;;
+
+(** [generate_ipv6 tc] draws an IPv6 address as its 16 network-order bytes. *)
+let generate_ipv6 tc =
+  with_stop_guard tc (fun () -> Ffi.generate_ipv6 tc.context tc.handle)
 ;;
 
 (** [assume tc condition] rejects the current test case if [condition] is
