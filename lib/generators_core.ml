@@ -137,13 +137,21 @@ let printer : type a. (a, printable) generator -> a -> Sexp.t = function
   | _ -> .
 ;;
 
+(** [composite_with_label ~label generate_fn] builds an unprintable generator
+    whose [generate_fn] draws run inside a span tagged [label]. Internal: it lets
+    the library and the derive PPX tag composites with the right structural label
+    (e.g. {!Labels.enum_variant}); user code uses {!composite}, which always tags
+    the struct/record label. *)
+let composite_with_label ~label generate_fn =
+  Unprintable { core = Composite { label; generate_fn } }
+;;
+
 (** [composite generate_fn] builds an unprintable generator from an imperative
     [generate_fn] that draws sub-values from the test case and returns a value.
-    The draws run inside a span, so they are suppressed on the final replay and
-    only an outer [draw] of the whole value prints. *)
-let composite generate_fn =
-  Unprintable { core = Composite { label = Labels.fixed_dict; generate_fn } }
-;;
+    The draws run inside a {!Labels.fixed_dict} span (the struct/record grouping),
+    so they are suppressed on the final replay and only an outer [draw] of the
+    whole value prints. *)
+let composite generate_fn = composite_with_label ~label:Labels.fixed_dict generate_fn
 
 (** [pool_values ~pool_id ~values ~consume] builds an unprintable generator that
     picks a value from the engine pool [pool_id], resolving the drawn id against

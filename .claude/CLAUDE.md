@@ -173,14 +173,21 @@ value named `<t>_generator` from type declarations annotated with
 1. For **records**: generates each field by calling the appropriate primitive
    generator, then constructs the record value.
 2. For **variants**: picks a constructor index uniformly at random via
-   `sampled_from`, then generates arguments for the chosen constructor.
+   `sampled_from`, then generates arguments for the chosen constructor. A
+   data-carrying variant wraps the index-plus-arguments draw in an
+   `enum_variant` span (so the constructor choice and its fields shrink as one
+   unit, matching the engine's own derived-enum generator); an all-nullary enum
+   has no fields to group and is emitted as a bare `sampled_from` over the
+   constructor values (spanless, like the engine).
 3. For **type aliases**: delegates to the generator for the aliased type.
 4. For **nested types**: draws `<type>_generator` via `draw_silent` (user-defined
    generators must exist in scope).
 
-The PPX emits a `test_case -> t` field-drawing thunk and wraps it with
-`Hegel.Generators.composite`, producing an `(t, unprintable) generator` value —
-no printer is attached, so a bare `[@@deriving hegel_generator]` always compiles. The
+Records and aliases emit a `test_case -> t` field-drawing thunk wrapped with
+`Hegel.Generators.composite` (a `fixed_dict` span); variants return a complete
+generator directly (see above). Either way the result is an
+`(t, unprintable) generator` value with no printer attached, so a bare
+`[@@deriving hegel_generator]` always compiles. The
 `Hegel.Derive` module provides runtime helpers for option and list types; it is
 re-exported doc-hidden (the standard public-but-invisible PPX-runtime pattern)
 because generated code in user projects calls it.

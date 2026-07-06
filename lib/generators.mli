@@ -251,6 +251,19 @@ val pool_values
     ]} *)
 val composite : (Internal.test_case -> 'a) -> ('a, unprintable) generator
 
+(**/**)
+
+(** [composite_with_label ~label generate_fn] is {!composite} but tags the span
+    with [label] instead of the fixed struct/record label. Internal: used by the
+    derive PPX to tag composites (e.g. {!Labels.enum_variant}); not for direct
+    use. *)
+val composite_with_label
+  :  label:int
+  -> (Internal.test_case -> 'a)
+  -> ('a, unprintable) generator
+
+(**/**)
+
 (** [map f gen] transforms values from [gen] using [f].
 
     {[

@@ -45,15 +45,21 @@ let one_of (generators : ('a, printable) generator list) : ('a, printable) gener
 (** [optional element] creates a generator that produces either [None] or
     [Some value] from [element].
 
-    Equivalent to [one_of [just None; map (fun x -> Some x) element]]; the
-    [None]/[(Some v)] value renders through [Option.sexp_of_t] applied to
+    The [None]/[(Some v)] value renders through [Option.sexp_of_t] applied to
     [element]'s printer (the round-trippable form: [()] for [None], [(v)] for
     [Some v]). *)
 let optional (element : ('a, printable) generator) : ('a option, printable) generator =
-  Printable
-    { core = one_of_core [ core_of (just None); core_of (map Option.some element) ]
-    ; sexp_of = Option.sexp_of_t (printer element)
-    }
+  let core =
+    Composite
+      { label = Labels.optional
+      ; generate_fn =
+          (fun data ->
+            if Internal.generate_boolean data 0.5 None
+            then Some (do_draw (core_of element) data)
+            else None)
+      }
+  in
+  Printable { core; sexp_of = Option.sexp_of_t (printer element) }
 ;;
 
 (** [ip_addresses ?version ()] creates a generator for IP address strings.
