@@ -4,9 +4,9 @@ open Generators_core
 (** [hashmaps keys values ?min_size ?max_size ()] creates a generator for
     dictionaries (hash maps) over printable [keys] and [values].
 
-    When both [keys] and [values] are basic generators, sends a [dict] schema to
-    the engine (fast path). When either is non-basic, uses the collection
-    protocol to generate key-value pairs one at a time. *)
+    Key-value pairs are generated one at a time via the collection protocol.
+    Dict semantics require unique keys, so duplicate keys are rejected
+    client-side. *)
 let hashmaps
       (keys : ('a, printable) generator)
       (values : ('b, printable) generator)
@@ -30,53 +30,26 @@ let hashmaps
     Sexp.List (List.map kvs ~f:(fun (k, v) -> Sexp.List [ pk k; pv v ]))
   in
   let core =
-    match as_basic_core (core_of keys), as_basic_core (core_of values) with
-    | Some (key_schema, key_transform), Some (val_schema, val_transform) ->
-      let pairs =
-        List.filter_opt
-          [ Some (`Text "type", `Text "dict")
-          ; Some (`Text "keys", key_schema)
-          ; Some (`Text "values", val_schema)
-          ; Some (`Text "min_size", `Int min_size)
-          ; Option.map max_size ~f:(fun ms -> `Text "max_size", `Int ms)
-          ]
-      in
-      let transform raw =
-        match raw with
-        | `Array kv_pairs ->
-          List.map kv_pairs ~f:(function
-            | `Array [ k; v ] -> key_transform k, val_transform v
-            | _ -> failwith "hashmaps: expected [k, v] pair from engine")
-        | _ -> failwith "hashmaps: expected array from engine"
-      in
-      Basic
-        { schema = `Map pairs
-        ; transform
-        ; unique_safe = basic_unique_safe keys && basic_unique_safe values
-        }
-    | _ ->
-      (* dict semantics require unique keys, so we dedup client-side here just
-         like [lists ~unique:true] does *)
-      Composite
-        { label = Labels.map
-        ; generate_fn =
-            (fun data ->
-              let coll = new_collection ~min_size ?max_size data () in
-              let rec collect acc =
-                if collection_more coll data
+    Composite
+      { label = Labels.map
+      ; generate_fn =
+          (fun data ->
+            let coll = new_collection ~min_size ?max_size data () in
+            let rec collect acc =
+              if collection_more coll data
+              then (
+                let k = do_draw (core_of keys) data in
+                if List.exists acc ~f:(fun (k', _) -> Poly.equal k' k)
                 then (
-                  let k = do_draw (core_of keys) data in
-                  if List.exists acc ~f:(fun (k', _) -> Poly.equal k' k)
-                  then (
-                    collection_reject coll data;
-                    collect acc)
-                  else (
-                    let v = do_draw (core_of values) data in
-                    collect ((k, v) :: acc)))
-                else List.rev acc
-              in
-              collect [])
-        }
+                  collection_reject coll data;
+                  collect acc)
+                else (
+                  let v = do_draw (core_of values) data in
+                  collect ((k, v) :: acc)))
+              else List.rev acc
+            in
+            collect [])
+      }
   in
   Printable { core; sexp_of }
 ;;
@@ -84,14 +57,9 @@ let hashmaps
 (** [lists elements ?min_size ?max_size ?unique ()] creates a generator for
     lists of printable [elements].
 
-    When [elements] is a [Basic] generator, sends a [list] schema to the engine
-    and lets it generate the entire list (fast path). When [elements] is
-    non-basic (e.g. filtered or flat-mapped), uses the collection protocol
-    inside a {!Labels.list} span to generate elements one at a time.
-
-    When [unique] is [true], the generated list will contain only distinct
-    elements. For basic elements this is handled engine-side; for non-basic
-    elements, duplicates are rejected via the collection protocol. *)
+    Elements are generated one at a time via the collection protocol inside a
+    {!Labels.list} span. When [unique] is [true], duplicate elements are rejected
+    client-side so the generated list contains only distinct elements. *)
 let lists
       (elements : ('a, printable) generator)
       ?(min_size = 0)
@@ -112,61 +80,31 @@ let lists
   let elt = printer elements in
   let sexp_of xs = Sexp.List (List.map xs ~f:elt) in
   let core =
-    match as_basic_core (core_of elements) with
-    | Some (elem_schema, elem_transform) when (not unique) || basic_unique_safe elements
-      ->
-      (* engine-side uniqueness is only safe when the element transform
-         preserves distinctness (i.e. is injective). Otherwise distinct raw
-         values from the engine can collapse to the same OCaml value, leaving
-         the post-transform list with duplicates. When that happens we fall
-         through to the [unique]-aware dedup path below. *)
-      let pairs =
-        List.filter_opt
-          [ Some (`Text "type", `Text "list")
-          ; Some (`Text "unique", `Bool unique)
-          ; Some (`Text "elements", elem_schema)
-          ; Some (`Text "min_size", `Int min_size)
-          ; Option.map max_size ~f:(fun ms -> `Text "max_size", `Int ms)
-          ]
-      in
-      let list_transform raw_list =
-        match raw_list with
-        | `Array items -> List.map items ~f:elem_transform
-        | _ -> failwith "Internal error: engine returned non-array for list schema"
-      in
-      Basic
-        { schema = `Map pairs
-        ; transform = list_transform
-        ; unique_safe = basic_unique_safe elements
-        }
-    | _ ->
-      if not unique
-      then
-        (* Non-basic element without uniqueness: use CompositeList. *)
-        CompositeList { elements = core_of elements; min_size; max_size }
-      else
-        (* Non-basic with uniqueness: use Composite with collection protocol
-           and duplicate rejection. The engine's own rejection limit (via
-           [many.reject]) will send StopTest when too many duplicates occur,
-           which [collection_reject] converts to [Data_exhausted]. *)
-        Composite
-          { label = Labels.list
-          ; generate_fn =
-              (fun data ->
-                let coll = new_collection ~min_size ?max_size data () in
-                let rec collect acc =
-                  if collection_more coll data
+    if not unique
+    then CompositeList { elements = core_of elements; min_size; max_size }
+    else
+      (* With uniqueness, drive the collection protocol and reject duplicates.
+         The engine's own rejection limit sends StopTest when too many
+         duplicates occur, which [collection_reject] converts to
+         [Data_exhausted]. *)
+      Composite
+        { label = Labels.list
+        ; generate_fn =
+            (fun data ->
+              let coll = new_collection ~min_size ?max_size data () in
+              let rec collect acc =
+                if collection_more coll data
+                then (
+                  let elem = do_draw (core_of elements) data in
+                  if List.mem acc elem ~equal:Poly.equal
                   then (
-                    let elem = do_draw (core_of elements) data in
-                    if List.mem acc elem ~equal:Poly.equal
-                    then (
-                      collection_reject coll data;
-                      collect acc)
-                    else collect (elem :: acc))
-                  else List.rev acc
-                in
-                collect [])
-          }
+                    collection_reject coll data;
+                    collect acc)
+                  else collect (elem :: acc))
+                else List.rev acc
+              in
+              collect [])
+        }
   in
   Printable { core; sexp_of }
 ;;

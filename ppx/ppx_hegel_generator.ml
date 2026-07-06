@@ -17,7 +17,7 @@
     Supported field/argument types:
     - [int] -> generates via [integers ~min_value:(-1073741823)
       ~max_value:1073741823 ()] (30-bit bound; keeps products like [x*x]
-      from overflowing native [int] and avoids CBOR bigint encoding)
+      from overflowing native [int])
     - [bool] -> generates via [booleans()]
     - [float] -> generates via
       [floats ~allow_nan:false ~allow_infinity:false ()]
@@ -156,13 +156,46 @@ let generator_of_record ~loc (labels : label_declaration list) : expression =
   [%expr fun _hegel_tc -> [%e body]]
 ;;
 
-(** Generate code for a variant type. Produces a [fun _hegel_tc -> ...] that
-    picks a constructor index via sampled_from, then generates the appropriate
-    arguments. *)
-let generator_of_variant ~loc (constrs : constructor_declaration list) : expression =
+(** Generate code for a variant type, returning a complete
+    [(t, unprintable) generator] expression.
+
+    A variant with any data-carrying constructor picks a constructor index via
+    [sampled_from] and generates its arguments inside a {!Labels.enum_variant}
+    span (so the index draw and the field draws shrink together as one unit),
+    mirroring the engine's own derived-enum generator. A variant whose
+    constructors are all nullary needs no such grouping — there are no field
+    draws — so it is a bare [sampled_from] over the constructor values, matching
+    the engine's spanless treatment of unit enums. *)
+let rec generator_of_variant ~loc (constrs : constructor_declaration list) : expression =
   let n = List.length constrs in
   if n = 0
   then Location.raise_errorf ~loc "ppx_hegel_generator: empty variant types not supported";
+  let is_nullary (cd : constructor_declaration) =
+    match Ppx_compat.extract_constr_tuple_types cd.pcd_args with
+    | Some [] -> true
+    | _ -> false
+  in
+  if List.for_all is_nullary constrs
+  then (
+    (* All-unit enum: [sampled_from [C0; C1; …]] — a spanless leaf draw. *)
+    let constr_values =
+      List.map
+        (fun (cd : constructor_declaration) ->
+           Ast_builder.Default.pexp_construct
+             ~loc
+             { txt = Lident cd.pcd_name.txt; loc }
+             None)
+        constrs
+    in
+    [%expr
+      Hegel.Generators.sampled_from [%e Ast_builder.Default.elist ~loc constr_values]])
+  else generator_of_data_variant ~loc constrs
+
+(** The data-carrying-variant path of {!generator_of_variant}: a
+    {!Labels.enum_variant}-spanned thunk that draws the constructor index then
+    its arguments. *)
+and generator_of_data_variant ~loc (constrs : constructor_declaration list) : expression =
+  let n = List.length constrs in
   let index_options = List.init n (fun i -> Ast_builder.Default.eint ~loc i) in
   let match_arms =
     List.mapi
@@ -246,18 +279,19 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) : express
   in
   let all_arms = match_arms @ [ catch_all ] in
   let match_expr = Ast_builder.Default.pexp_match ~loc [%expr _variant_idx] all_arms in
+  (* Wrap the index-then-arguments draw in an [enum_variant] span so the engine
+     shrinks the chosen constructor and its fields together as one unit. *)
   [%expr
-    fun _hegel_tc ->
-      let _variant_idx =
-        (* [sampled_from] carries no printer; the whole derived value is printed
-           separately below, and these inner draws are nested in a [group] span
-           anyway, so the index draw is silent. *)
-        Hegel.draw_silent
-          _hegel_tc
-          (Hegel.Generators.sampled_from
-             [%e Ast_builder.Default.elist ~loc index_options])
-      in
-      [%e match_expr]]
+    Hegel.Generators.composite_with_label
+      ~label:Hegel.Generators.Labels.enum_variant
+      (fun _hegel_tc ->
+         let _variant_idx =
+           Hegel.draw_silent
+             _hegel_tc
+             (Hegel.Generators.sampled_from
+                [%e Ast_builder.Default.elist ~loc index_options])
+         in
+         [%e match_expr])]
 ;;
 
 (** Generate code for a type alias. *)
@@ -274,11 +308,18 @@ let generate_impl ~ctxt ((_rec_flag, type_decls) : rec_flag * type_declaration l
     (fun (td : type_declaration) ->
        let name = td.ptype_name.txt in
        let gen_name = name ^ "_generator" in
-       let gen_expr =
+       (* Records and aliases yield a [test_case -> t] field-drawing thunk that
+          [composite] wraps (in a [fixed_dict] span) into an unprintable
+          generator. Variants already return a complete generator — a bare
+          [sampled_from] leaf for all-unit enums, or an [enum_variant]-spanned
+          composite for data-carrying ones — so they are not re-wrapped. *)
+       let generator_expr =
          match td.ptype_kind, td.ptype_manifest with
-         | Ptype_record labels, _ -> generator_of_record ~loc labels
+         | Ptype_record labels, _ ->
+           [%expr Hegel.Generators.composite [%e generator_of_record ~loc labels]]
          | Ptype_variant constrs, _ -> generator_of_variant ~loc constrs
-         | Ptype_abstract, Some ct -> generator_of_alias ~loc ct
+         | Ptype_abstract, Some ct ->
+           [%expr Hegel.Generators.composite [%e generator_of_alias ~loc ct]]
          | Ptype_abstract, None ->
            Location.raise_errorf
              ~loc
@@ -288,9 +329,6 @@ let generate_impl ~ctxt ((_rec_flag, type_decls) : rec_flag * type_declaration l
              ~loc
              "ppx_hegel_generator: unsupported type kind in [@@deriving hegel_generator]"
        in
-       (* [gen_expr] is a [test_case -> t] field-drawing thunk; [composite] wraps it
-          as an unprintable generator (and supplies the surrounding span). *)
-       let generator_expr = [%expr Hegel.Generators.composite [%e gen_expr]] in
        [%stri let [%p Ast_builder.Default.pvar ~loc gen_name] = [%e generator_expr]])
     type_decls
 ;;

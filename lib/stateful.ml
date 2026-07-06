@@ -83,7 +83,7 @@ let run ~init ~rules ?(invariants = []) tc =
       (* Stop: mirror Hypothesis, which breaks out of the loop leaving this span
          open (the engine freezes it on completion), so the terminating stop
          boolean stays recorded inside its own span. *)
-      if Internal.primitive_boolean tc p_stop must_stop
+      if Internal.generate_boolean tc p_stop must_stop
       then (if num_steps_succeeded = 0 then Internal.assume tc false)
       else (
         let next_state, num_steps_succeeded =

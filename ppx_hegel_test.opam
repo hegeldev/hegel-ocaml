@@ -21,20 +21,15 @@ depends: [
   "yojson" {with-test & >= "1.7"}
   "odoc" {with-doc}
 ]
+dev-repo: "git+https://github.com/hegeldev/hegel-ocaml.git"
+available: arch != "riscv64"
 build: [
   ["dune" "subst"] {dev}
   [
-    "dune"
-    "build"
-    "-p"
-    name
-    "-j"
-    jobs
-    "--promote-install-files=false"
+    "dune" "build" "-p" name "-j" jobs "--promote-install-files=false"
     "@install"
-    "@runtest" {with-test}
+    "@runtest" {with-test & !(os = "macos" & arch = "x86_64")}
     "@doc" {with-doc}
   ]
   ["dune" "install" "-p" name "--create-install-files" name]
 ]
-dev-repo: "git+https://github.com/hegeldev/hegel-ocaml.git"

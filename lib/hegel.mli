@@ -53,7 +53,6 @@ module Stateful = Stateful
 
 module Derive = Derive
 module Internal = Internal
-module Cbor_helpers = Cbor_helpers
 module Antithesis = Antithesis
 
 (**/**)

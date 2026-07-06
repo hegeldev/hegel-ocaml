@@ -35,6 +35,8 @@
    (>= 0.20))
   (ctypes-foreign
    (>= 0.20))
+  (ipaddr
+   (>= 5.0))
   (dune-site
    (>= 3.16))
   (alcotest

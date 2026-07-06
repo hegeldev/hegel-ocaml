@@ -15,17 +15,26 @@ type settings
 (** Opaque in-flight run handle ([hegel_run_t]). *)
 type run
 
-(** Opaque per-test-case handle ([hegel_test_case_t]), borrowed from its
-    parent {!run} and valid only until the case is completed. *)
+(** Opaque per-test-case handle ([hegel_test_case_t]): caller-owned whatever its
+    origin ({!next_test_case}, {!test_case_from_blob}, …), freed with
+    {!test_case_free}. A run-owned handle stays valid even after {!run_free}
+    releases the run's own reference. *)
 type test_case
 
-(** Opaque aggregated run result ([hegel_run_result_t]), borrowed from its
-    parent {!run} and valid until {!run_free}. *)
+(** Opaque aggregated run result ([hegel_run_result_t]): a caller-owned snapshot
+    independent of its {!run}, valid until freed with {!run_result_free}. *)
 type run_result
 
-(** Opaque single-failure handle ([hegel_failure_t]), borrowed from its
-    parent {!type:run_result}. *)
+(** Opaque single-failure handle ([hegel_failure_t]): a caller-owned snapshot
+    independent of its {!type:run_result}, valid until freed with
+    {!failure_free}. *)
 type failure
+
+(** Opaque string-generator handle ([hegel_string_generator_t]): built with a
+    context via one of the {!string_generator_text} / {!string_generator_regex}
+    / … constructors, drawn from with {!generate_string}, and freed with
+    {!string_generator_free}. *)
+type string_generator
 
 (** Test execution mode ([hegel_mode_t]). *)
 type mode =
@@ -182,27 +191,128 @@ val next_test_case : context -> run -> test_case option
     {!Backend_error} (with the engine's diagnostic) when the blob is missing,
     not UTF-8, or cannot be decoded — the engine never returns a null handle
     without setting an error. The handle must be freed with
-    {!blob_test_case_free}. *)
+    {!test_case_free}. *)
 val test_case_from_blob : context -> settings -> string option -> test_case
 
 (** [run_result ctx run] returns the aggregated result of a finished run. Raises
     {!Backend_error} if the run has not finished. *)
 val run_result : context -> run -> run_result
 
-(** [run_free ctx run] frees a run handle, draining the worker thread. *)
+(** [run_free ctx run] frees a run handle, draining the worker thread. Run-result
+    and failure snapshots are independent and outlive it; free them separately. *)
 val run_free : context -> run -> unit
 
-(** [blob_test_case_free ctx tc] frees a test case created by a failure_blob *)
-val blob_test_case_free : context -> test_case -> unit
+(** [run_result_free ctx r] frees a run-result snapshot from {!val:run_result}. *)
+val run_result_free : context -> run_result -> unit
+
+(** [failure_free ctx f] frees a failure snapshot from {!result_failure} /
+    {!result_failures}. *)
+val failure_free : context -> failure -> unit
+
+(** [test_case_free ctx tc] frees a test-case handle, whatever its origin
+    (run-owned from {!next_test_case}, cloned, or from a failure blob). *)
+val test_case_free : context -> test_case -> unit
 
 (** {2 Per-test-case primitives} *)
 
-(** [generate ctx tc schema] draws a value described by the CBOR-encoded [schema],
-    returning the CBOR-encoded value bytes. Raises {!Stop_test} when the
-    choice budget is exhausted, {!Backend_error} on a malformed schema. *)
-val generate : context -> test_case -> string -> string
+(** [generate_boolean ctx tc p forced] draws a boolean that is [true] with
+    probability [p]. When [forced] is [Some b] the result is forced to [b]
+    (recorded but consuming no entropy). Raises {!Stop_test} on budget
+    exhaustion. *)
+val generate_boolean : context -> test_case -> float -> bool option -> bool
 
-val primitive_boolean : context -> test_case -> float -> bool option -> bool
+(** [generate_integer ctx tc ~min_value ~max_value] draws an integer in
+    [\[min_value, max_value\]]. Raises {!Stop_test} on budget exhaustion. *)
+val generate_integer : context -> test_case -> min_value:int -> max_value:int -> int
+
+(** [generate_float ctx tc ...] draws a width-64 float in
+    [\[min_value, max_value\]] under the given NaN / infinity / exclusion policy.
+    Pass [neg_infinity] / [infinity] for unbounded ends and
+    [smallest_nonzero_magnitude] (e.g. [5e-324]) for no magnitude restriction.
+    Raises {!Stop_test} on budget exhaustion. *)
+val generate_float
+  :  context
+  -> test_case
+  -> min_value:float
+  -> max_value:float
+  -> allow_nan:bool
+  -> allow_infinity:bool
+  -> exclude_min:bool
+  -> exclude_max:bool
+  -> smallest_nonzero_magnitude:float
+  -> float
+
+(** [generate_bytes ctx tc ~min_size ~max_size] draws a byte string with length
+    in [\[min_size, max_size\]] ([max_size = None] means unbounded). Raises
+    {!Stop_test} on budget exhaustion. *)
+val generate_bytes : context -> test_case -> min_size:int -> max_size:int option -> string
+
+(** [string_generator_text ctx ...] builds a text string generator over the
+    described alphabet. [max_size = None] means unbounded. Raises {!Backend_error}
+    on invalid parameters. The handle must be freed with {!string_generator_free}. *)
+val string_generator_text
+  :  context
+  -> min_size:int
+  -> max_size:int option
+  -> codec:string option
+  -> min_codepoint:int
+  -> max_codepoint:int
+  -> categories:string list option
+  -> exclude_categories:string list option
+  -> include_characters:string option
+  -> exclude_characters:string option
+  -> string_generator
+
+(** [string_generator_regex ctx ~pattern ~fullmatch] builds a regex string
+    generator (Python-[re] syntax). Raises {!Backend_error} on an invalid
+    pattern. The handle must be freed with {!string_generator_free}. *)
+val string_generator_regex
+  :  context
+  -> pattern:string
+  -> fullmatch:bool
+  -> string_generator
+
+(** [string_generator_email ctx] builds an RFC 5321/5322 email generator. *)
+val string_generator_email : context -> string_generator
+
+(** [string_generator_url ctx] builds an RFC 3986 http/https URL generator. *)
+val string_generator_url : context -> string_generator
+
+(** [string_generator_domain ctx ~max_length] builds an RFC 1035 domain-name
+    generator of total length at most [max_length]. Raises {!Backend_error} when
+    [max_length] leaves no eligible TLDs. *)
+val string_generator_domain : context -> max_length:int -> string_generator
+
+(** [string_generator_free ctx sg] frees a string-generator handle. *)
+val string_generator_free : context -> string_generator -> unit
+
+(** [generate_string ctx tc sg] draws a string described by [sg]. Raises
+    {!Stop_test} on budget exhaustion and {!Assume_rejected} when the draw
+    rejects itself (e.g. an over-length email). *)
+val generate_string : context -> test_case -> string_generator -> string
+
+(** [generate_date ctx tc] draws a Gregorian date as [(year, month, day)].
+    Raises {!Stop_test} on budget exhaustion. *)
+val generate_date : context -> test_case -> int * int * int
+
+(** [generate_time ctx tc] draws a time of day as
+    [(hour, minute, second, microsecond)]. Raises {!Stop_test} on budget
+    exhaustion. *)
+val generate_time : context -> test_case -> int * int * int * int
+
+(** [generate_datetime ctx tc] draws a naive datetime as [(date, time)]. Raises
+    {!Stop_test} on budget exhaustion. *)
+val generate_datetime
+  :  context
+  -> test_case
+  -> (int * int * int) * (int * int * int * int)
+
+(** [generate_ipv4 ctx tc] draws an IPv4 address as its 4 network-order bytes. *)
+val generate_ipv4 : context -> test_case -> string
+
+(** [generate_ipv6 ctx tc] draws an IPv6 address as its 16 network-order bytes. *)
+val generate_ipv6 : context -> test_case -> string
+
 val start_span : context -> test_case -> int -> unit
 val stop_span : context -> test_case -> bool -> unit
 

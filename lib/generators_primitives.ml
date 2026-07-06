@@ -10,35 +10,27 @@ let integers ?(min_value = Int.min_value) ?(max_value = Int.max_value) () =
     raise
       (Invalid_argument
          (sprintf "Cannot have max_value=%d < min_value=%d" max_value min_value));
-  let pairs =
-    [ `Text "type", `Text "integer"
-    ; `Text "min_value", `Int min_value
-    ; `Text "max_value", `Int max_value
-    ]
-  in
-  basic ~schema:(`Map pairs) ~transform:Cbor_helpers.extract_int ~sexp_of:sexp_of_int ()
+  leaf
+    ~draw:(fun tc -> Internal.generate_integer tc ~min_value ~max_value)
+    ~sexp_of:sexp_of_int
 ;;
 
 (** [booleans ()] creates a generator for boolean values. *)
 let booleans () =
-  basic
-    ~schema:(`Map [ `Text "type", `Text "boolean" ])
-    ~transform:Cbor_helpers.extract_bool
-    ~sexp_of:sexp_of_bool
-    ()
+  leaf ~draw:(fun tc -> Internal.generate_boolean tc 0.5 None) ~sexp_of:sexp_of_bool
 ;;
+
+(** The smallest positive (subnormal) 64-bit float. Passed as
+    [smallest_nonzero_magnitude] so the engine places no magnitude restriction on
+    drawn floats. *)
+let smallest_nonzero_magnitude = 5e-324
 
 (** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
      ?allow_infinity ()] creates a generator for floating-point values.
 
-    The fields [allow_nan], [allow_infinity], [exclude_min], [exclude_max], and
-    [width] are always sent.
+    Unbounded ends are sent to the engine as [neg_infinity] / [infinity].
 
     Defaults:
-    - [min_value]: 64-bit float min (only when both [allow_nan] and
-      [allow_infinity] are [false])
-    - [max_value]: 64-bit float max (only when both [allow_nan] and
-      [allow_infinity] are [false])
     - [exclude_min]: [false]
     - [exclude_max]: [false]
     - [allow_nan]: [true] only when no bounds are set
@@ -77,47 +69,31 @@ let floats
     raise
       (Invalid_argument
          "Cannot have allow_infinity=true with both min_value and max_value");
-  let pairs =
-    [ `Text "type", `Text "float"
-    ; `Text "allow_nan", `Bool eff_allow_nan
-    ; `Text "allow_infinity", `Bool eff_allow_infinity
-    ; `Text "exclude_min", `Bool exclude_min
-    ; `Text "exclude_max", `Bool exclude_max
-    ; `Text "width", `Int 64
-    ]
-  in
-  let pairs =
-    pairs
-    @ List.filter_opt
-        [ Option.map min_value ~f:(fun v -> `Text "min_value", `Float v)
-        ; Option.map max_value ~f:(fun v -> `Text "max_value", `Float v)
-        ]
-  in
-  basic
-    ~schema:(`Map pairs)
-    ~transform:Cbor_helpers.extract_float
+  let min_value = Option.value min_value ~default:Float.neg_infinity in
+  let max_value = Option.value max_value ~default:Float.infinity in
+  leaf
+    ~draw:(fun tc ->
+      Internal.generate_float
+        tc
+        ~min_value
+        ~max_value
+        ~allow_nan:eff_allow_nan
+        ~allow_infinity:eff_allow_infinity
+        ~exclude_min
+        ~exclude_max
+        ~smallest_nonzero_magnitude)
     ~sexp_of:sexp_of_float
-    ()
 ;;
 
 (** Unicode general categories that include surrogate codepoints. OCaml strings
     are conventionally UTF-8, and surrogates in UTF-8 are ill-formed. *)
 let surrogate_categories = [ "Cs"; "C" ]
 
-(** [char_filter_schema_pairs ?codec ?min_codepoint ?max_codepoint ?categories
-     ?exclude_categories ?include_characters ?exclude_characters ()] builds the
-    CBOR key-value pairs for character filtering options, including surrogate
-    auto-exclusion. Used by both {!text} and {!characters}. *)
-let char_filter_schema_pairs
-      ?codec
-      ?min_codepoint
-      ?max_codepoint
-      ?categories
-      ?exclude_categories
-      ?include_characters
-      ?exclude_characters
-      ()
-  =
+(** [effective_categories ?categories ?exclude_categories ()] applies the
+    character-category validation and surrogate auto-exclusion shared by {!text}
+    and {!characters}, returning the effective [(categories, exclude_categories)]
+    options to pass to the engine. *)
+let effective_categories ?categories ?exclude_categories () =
   (match categories, exclude_categories with
    | Some _, Some _ ->
      raise (Invalid_argument "categories and exclude_categories are mutually exclusive")
@@ -142,28 +118,51 @@ let char_filter_schema_pairs
       let excl = Option.value exclude_categories ~default:[] in
       if List.mem excl "Cs" ~equal:String.equal then Some excl else Some (excl @ [ "Cs" ])
   in
-  List.filter_opt
-    [ Option.map codec ~f:(fun c -> `Text "codec", `Text c)
-    ; Option.map min_codepoint ~f:(fun cp -> `Text "min_codepoint", `Int cp)
-    ; Option.map max_codepoint ~f:(fun cp -> `Text "max_codepoint", `Int cp)
-    ; Option.map categories ~f:(fun cats ->
-        `Text "categories", `Array (List.map cats ~f:(fun c -> `Text c)))
-    ; Option.map effective_exclude_categories ~f:(fun cats ->
-        `Text "exclude_categories", `Array (List.map cats ~f:(fun c -> `Text c)))
-    ; Option.map include_characters ~f:(fun s -> `Text "include_characters", `Text s)
-    ; Option.map exclude_characters ~f:(fun s -> `Text "exclude_characters", `Text s)
-    ]
+  categories, effective_exclude_categories
+;;
+
+(** [text_generator ~min_size ~max_size ...] is the shared {!Leaf} builder behind
+    {!text} and {!characters}: it resolves the effective character categories and
+    draws a text string over the described alphabet. *)
+let text_generator
+      ~min_size
+      ~max_size
+      ?codec
+      ?min_codepoint
+      ?max_codepoint
+      ?categories
+      ?exclude_categories
+      ?include_characters
+      ?exclude_characters
+      ()
+  =
+  let categories, exclude_categories =
+    effective_categories ?categories ?exclude_categories ()
+  in
+  leaf
+    ~draw:(fun tc ->
+      Internal.generate_text
+        tc
+        ~min_size
+        ~max_size
+        ~codec
+        ~min_codepoint:(Option.value min_codepoint ~default:0)
+        ~max_codepoint:(Option.value max_codepoint ~default:0xFFFFFFFF)
+        ~categories
+        ~exclude_categories
+        ~include_characters
+        ~exclude_characters)
+    ~sexp_of:sexp_of_string
 ;;
 
 (** [text ?min_size ?max_size ?codec ?min_codepoint ?max_codepoint ?categories
      ?exclude_categories ?include_characters ?exclude_characters ?alphabet ()]
     creates a generator for Unicode text strings.
 
-    Uses schema type ["string"] as required by the Hegel engine. Character
-    filtering options restrict which characters may appear. The [alphabet]
-    parameter is mutually exclusive with all individual character filtering
-    parameters. Surrogate codepoints (category Cs) are always excluded since
-    OCaml strings are conventionally UTF-8. *)
+    Character filtering options restrict which characters may appear. The
+    [alphabet] parameter is mutually exclusive with all individual character
+    filtering parameters. Surrogate codepoints (category Cs) are always excluded
+    since OCaml strings are conventionally UTF-8. *)
 let text
       ?(min_size = 0)
       ?max_size
@@ -201,44 +200,32 @@ let text
        (Invalid_argument
           "alphabet is mutually exclusive with individual character filtering parameters")
    | _ -> ());
-  let char_pairs =
-    match alphabet with
-    | Some alph ->
-      [ `Text "categories", `Array []; `Text "include_characters", `Text alph ]
-    | None ->
-      char_filter_schema_pairs
-        ?codec
-        ?min_codepoint
-        ?max_codepoint
-        ?categories
-        ?exclude_categories
-        ?include_characters
-        ?exclude_characters
-        ()
-  in
-  let pairs =
-    List.filter_opt
-      [ Some (`Text "type", `Text "string")
-      ; Some (`Text "min_size", `Int min_size)
-      ; Option.map max_size ~f:(fun ms -> `Text "max_size", `Int ms)
-      ]
-    @ char_pairs
-  in
-  basic
-    ~schema:(`Map pairs)
-    ~transform:Cbor_helpers.extract_string
-    ~sexp_of:sexp_of_string
-    ()
+  match alphabet with
+  | Some alph ->
+    (* An explicit alphabet: an empty base category set plus exactly these
+       characters unioned in. *)
+    text_generator ~min_size ~max_size ~categories:[] ~include_characters:alph ()
+  | None ->
+    text_generator
+      ~min_size
+      ~max_size
+      ?codec
+      ?min_codepoint
+      ?max_codepoint
+      ?categories
+      ?exclude_categories
+      ?include_characters
+      ?exclude_characters
+      ()
 ;;
 
 (** [characters ?codec ?min_codepoint ?max_codepoint ?categories
      ?exclude_categories ?include_characters ?exclude_characters ()] creates a
     generator for single Unicode characters (as single-character UTF-8 strings).
 
-    Uses a string schema with [min_size: 1] and [max_size: 1]. Character
-    filtering options restrict which characters may appear. Surrogate codepoints
-    (category Cs) are always excluded since OCaml strings are conventionally
-    UTF-8. *)
+    Character filtering options restrict which characters may appear. Surrogate
+    codepoints (category Cs) are always excluded since OCaml strings are
+    conventionally UTF-8. *)
 let characters
       ?codec
       ?min_codepoint
@@ -249,25 +236,16 @@ let characters
       ?exclude_characters
       ()
   =
-  let char_pairs =
-    char_filter_schema_pairs
-      ?codec
-      ?min_codepoint
-      ?max_codepoint
-      ?categories
-      ?exclude_categories
-      ?include_characters
-      ?exclude_characters
-      ()
-  in
-  let pairs =
-    [ `Text "type", `Text "string"; `Text "min_size", `Int 1; `Text "max_size", `Int 1 ]
-    @ char_pairs
-  in
-  basic
-    ~schema:(`Map pairs)
-    ~transform:Cbor_helpers.extract_string
-    ~sexp_of:sexp_of_string
+  text_generator
+    ~min_size:1
+    ~max_size:(Some 1)
+    ?codec
+    ?min_codepoint
+    ?max_codepoint
+    ?categories
+    ?exclude_categories
+    ?include_characters
+    ?exclude_characters
     ()
 ;;
 
@@ -283,47 +261,24 @@ let binary ?(min_size = 0) ?max_size () =
      raise
        (Invalid_argument (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
    | _ -> ());
-  let pairs =
-    List.filter_opt
-      [ Some (`Text "type", `Text "binary")
-      ; Some (`Text "min_size", `Int min_size)
-      ; Option.map max_size ~f:(fun ms -> `Text "max_size", `Int ms)
-      ]
-  in
-  basic
-    ~schema:(`Map pairs)
-    ~transform:Cbor_helpers.extract_bytes
+  leaf
+    ~draw:(fun tc -> Internal.generate_bytes tc ~min_size ~max_size)
     ~sexp_of:sexp_of_string
-    ()
 ;;
 
 (** [just value] creates a generator that always produces [value].
 
-    The schema uses [{"constant": null}] and the transform ignores the engine
-    result, returning the constant [value]. The output type is chosen by the
-    caller, so no printer is carried. *)
-let just value =
-  basic_silent
-    ~schema:(`Map [ `Text "type", `Text "constant"; `Text "value", `Null ])
-    ~transform:(fun _ -> value)
-    ()
-;;
+    The output type is chosen by the caller, so no printer is carried. *)
+let just value = leaf_silent ~draw:(fun _ -> value)
 
 (** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
     a regular expression [pattern], written in the syntax of Python's [re]
     module. When [fullmatch] is [true] (the default) the whole string must match
     [pattern]; otherwise a match anywhere suffices. *)
 let from_regex pattern ?(fullmatch = true) () =
-  basic
-    ~schema:
-      (`Map
-          [ `Text "type", `Text "regex"
-          ; `Text "pattern", `Text pattern
-          ; `Text "fullmatch", `Bool fullmatch
-          ])
-    ~transform:Cbor_helpers.extract_string
+  leaf
+    ~draw:(fun tc -> Internal.generate_regex tc ~pattern ~fullmatch)
     ~sexp_of:sexp_of_string
-    ()
 ;;
 
 (** [emails ()] creates a generator for valid email address strings.
@@ -331,13 +286,7 @@ let from_regex pattern ?(fullmatch = true) () =
     Addresses follow RFC 5321/5322: a local part of 1 to 64 characters from the
     RFC 5322 [atext] set, an [@], and a domain from {!domains}, with the overall
     address length capped at 254 octets (RFC 5321 §4.5.3.1.3). *)
-let emails () =
-  basic
-    ~schema:(`Map [ `Text "type", `Text "email" ])
-    ~transform:Cbor_helpers.extract_string
-    ~sexp_of:sexp_of_string
-    ()
-;;
+let emails () = leaf ~draw:Internal.generate_email ~sexp_of:sexp_of_string
 
 (** [urls ()] creates a generator for valid URL strings.
 
@@ -347,13 +296,7 @@ let emails () =
     optional port in [1, 65535], zero or more [/]-separated path segments of up
     to 100 characters each, and an optional fragment of up to 100 characters.
     Path and fragment characters are percent-encoded. *)
-let urls () =
-  basic
-    ~schema:(`Map [ `Text "type", `Text "url" ])
-    ~transform:Cbor_helpers.extract_string
-    ~sexp_of:sexp_of_string
-    ()
-;;
+let urls () = leaf ~draw:Internal.generate_url ~sexp_of:sexp_of_string
 
 (** [domains ?max_length ()] creates a generator for domain name strings.
 
@@ -369,46 +312,44 @@ let domains ?max_length () =
    | Some ml when ml < 4 || ml > 255 ->
      raise (Invalid_argument (sprintf "max_length=%d must be between 4 and 255" ml))
    | _ -> ());
-  let pairs =
-    List.filter_opt
-      [ Some (`Text "type", `Text "domain")
-      ; Option.map max_length ~f:(fun ml -> `Text "max_length", `Int ml)
-      ]
-  in
-  basic
-    ~schema:(`Map pairs)
-    ~transform:Cbor_helpers.extract_string
-    ~sexp_of:sexp_of_string
-    ()
+  let max_length = Option.value max_length ~default:255 in
+  leaf ~draw:(fun tc -> Internal.generate_domain tc ~max_length) ~sexp_of:sexp_of_string
 ;;
+
+(** [format_date (year, month, day)] renders a drawn date as an ISO 8601
+    [YYYY-MM-DD] string. *)
+let format_date (year, month, day) = sprintf "%04d-%02d-%02d" year month day
+
+(** [format_time (hour, minute, second, microsecond)] renders a drawn time as an
+    ISO 8601 [HH:MM:SS] string, appending [.ffffff] when [microsecond] is
+    non-zero. *)
+let format_time (hour, minute, second, microsecond) =
+  if microsecond = 0
+  then sprintf "%02d:%02d:%02d" hour minute second
+  else sprintf "%02d:%02d:%02d.%06d" hour minute second microsecond
+;;
+
+(** [format_datetime (date, time)] renders a drawn datetime as an ISO 8601
+    [YYYY-MM-DDTHH:MM:SS\[.ffffff\]] string. *)
+let format_datetime (date, time) = format_date date ^ "T" ^ format_time time
 
 (** [dates ()] creates a generator for ISO 8601 date strings ([YYYY-MM-DD]),
     with year in [\[1, 9999\]] and calendar-valid month/day. *)
 let dates () =
-  basic
-    ~schema:(`Map [ `Text "type", `Text "date" ])
-    ~transform:Cbor_helpers.extract_string
-    ~sexp_of:sexp_of_string
-    ()
+  leaf ~draw:(fun tc -> format_date (Internal.generate_date tc)) ~sexp_of:sexp_of_string
 ;;
 
 (** [times ()] creates a generator for ISO 8601 time strings ([HH:MM:SS] or
     [HH:MM:SS.ffffff], the fractional part present only when microseconds are
     non-zero). *)
 let times () =
-  basic
-    ~schema:(`Map [ `Text "type", `Text "time" ])
-    ~transform:Cbor_helpers.extract_string
-    ~sexp_of:sexp_of_string
-    ()
+  leaf ~draw:(fun tc -> format_time (Internal.generate_time tc)) ~sexp_of:sexp_of_string
 ;;
 
 (** [datetimes ()] creates a generator for ISO 8601 datetime strings
     ([YYYY-MM-DDTHH:MM:SS\[.ffffff\]]), combining {!dates} and {!times}. *)
 let datetimes () =
-  basic
-    ~schema:(`Map [ `Text "type", `Text "datetime" ])
-    ~transform:Cbor_helpers.extract_string
+  leaf
+    ~draw:(fun tc -> format_datetime (Internal.generate_datetime tc))
     ~sexp_of:sexp_of_string
-    ()
 ;;

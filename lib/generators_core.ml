@@ -32,12 +32,11 @@ end
 (** The pure generation structure of a generator, carrying no printer. A
     {!generator} is a {!core} paired (or not) with a printer; see {!generator}.
 
-    - [Basic] cores hold a raw schema and a mandatory client-side transform.
-      Mapping a [Basic] preserves the schema and composes transforms. The
-      [unique_safe] flag tracks whether [transform] is known to preserve
-      distinctness over the schema's value space (i.e. is injective); leaf
-      generators set it to [true], and [map] sets it to [false] since the
-      user's function may collapse distinct inputs.
+    - [Leaf] cores hold a [draw] closure that performs a single engine draw (via
+      one of the typed {!Internal} primitives) and returns the typed value.
+      Mapping a [Leaf] composes the closure in place, staying a leaf (no extra
+      span), because the engine already wraps each primitive draw in its own
+      span.
     - [Mapped] cores wrap a source and a transform function.
     - [FlatMapped] cores wrap a source and a function returning a core.
     - [Filtered] cores wrap a source and a predicate.
@@ -46,12 +45,7 @@ end
     - [Composite] cores wrap a [generate_fn] thunk inside a span with the given
       [label]. Used for tuples and one_of with non-basic elements. *)
 type 'a core =
-  | Basic :
-      { schema : Cbor.t
-      ; transform : Cbor.t -> 'a
-      ; unique_safe : bool
-      }
-      -> 'a core
+  | Leaf : { draw : Internal.test_case -> 'a } -> 'a core
   | Mapped :
       { source : 'b core
       ; f : 'b -> 'a
@@ -120,22 +114,14 @@ let core_of : type a p. (a, p) generator -> a core = function
   | Unprintable { core } -> core
 ;;
 
-(** [basic ~schema ~transform ~sexp_of ?unique_safe ()] builds a printable
-    {!Basic} generator. [sexp_of] is the printer used to render a drawn value on
-    the final replay. [unique_safe] defaults to [true] (leaf generators preserve
-    distinctness); set it to [false] for transforms that may collapse distinct
-    inputs. *)
-let basic ~schema ~transform ~sexp_of ?(unique_safe = true) () =
-  Printable { core = Basic { schema; transform; unique_safe }; sexp_of }
-;;
+(** [leaf ~draw ~sexp_of] builds a printable {!Leaf} generator. [draw] performs
+    a single engine draw and returns the typed value; [sexp_of] renders it on
+    the final replay. *)
+let leaf ~draw ~sexp_of = Printable { core = Leaf { draw }; sexp_of }
 
-(** [basic_silent ~schema ~transform ()] builds an unprintable {!Basic}
-    generator, for leaves whose output type has no known printer (e.g. {!just}).
-    Its transform is treated as not distinctness-preserving ([unique_safe =
-    false]); such leaves are constants today, which collapse all inputs. *)
-let basic_silent ~schema ~transform () =
-  Unprintable { core = Basic { schema; transform; unique_safe = false } }
-;;
+(** [leaf_silent ~draw] builds an unprintable {!Leaf} generator, for leaves
+    whose output type has no known printer (e.g. {!just}). *)
+let leaf_silent ~draw = Unprintable { core = Leaf { draw } }
 
 (** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding a
     printable generator that {!draw} accepts. This is the explicit way to make a
@@ -151,13 +137,21 @@ let printer : type a. (a, printable) generator -> a -> Sexp.t = function
   | _ -> .
 ;;
 
+(** [composite_with_label ~label generate_fn] builds an unprintable generator
+    whose [generate_fn] draws run inside a span tagged [label]. Internal: it lets
+    the library and the derive PPX tag composites with the right structural label
+    (e.g. {!Labels.enum_variant}); user code uses {!composite}, which always tags
+    the struct/record label. *)
+let composite_with_label ~label generate_fn =
+  Unprintable { core = Composite { label; generate_fn } }
+;;
+
 (** [composite generate_fn] builds an unprintable generator from an imperative
     [generate_fn] that draws sub-values from the test case and returns a value.
-    The draws run inside a span, so they are suppressed on the final replay and
-    only an outer [draw] of the whole value prints. *)
-let composite generate_fn =
-  Unprintable { core = Composite { label = Labels.fixed_dict; generate_fn } }
-;;
+    The draws run inside a {!Labels.fixed_dict} span (the struct/record grouping),
+    so they are suppressed on the final replay and only an outer [draw] of the
+    whole value prints. *)
+let composite generate_fn = composite_with_label ~label:Labels.fixed_dict generate_fn
 
 (** [pool_values ~pool_id ~values ~consume] builds an unprintable generator that
     picks a value from the engine pool [pool_id], resolving the drawn id against
@@ -283,8 +277,7 @@ let pick tc values pool_id ~consume =
 let rec do_draw : type a. a core -> Internal.test_case -> a =
   fun core data ->
   match core with
-  | Basic { schema; transform; _ } ->
-    transform (Internal.generate_from_schema schema data)
+  | Leaf { draw } -> draw data
   | Mapped { source; f } ->
     group Labels.mapped data (fun () ->
       let value = do_draw source data in
@@ -379,18 +372,12 @@ let draw_silent : type a p. Internal.test_case -> (a, p) generator -> a =
     printer (the output type is the user's), so it is {!unprintable}; use
     {!with_printer} to make it drawable with {!draw}.
 
-    When [gen]'s core is [Basic], the schema is preserved and transforms are
-    composed; otherwise a [Mapped] core is created. *)
+    When [gen]'s core is a [Leaf], the draw closure is composed in place (no
+    extra span); otherwise a [Mapped] core is created. *)
 let map : type a b p. (a -> b) -> (a, p) generator -> (b, unprintable) generator =
   fun f gen ->
   match core_of gen with
-  | Basic { schema; transform; _ } ->
-    (* The user's [f] may collapse distinct inputs, so the composed transform
-       is no longer known to preserve uniqueness. *)
-    Unprintable
-      { core =
-          Basic { schema; transform = (fun x -> f (transform x)); unique_safe = false }
-      }
+  | Leaf { draw } -> Unprintable { core = Leaf { draw = (fun tc -> f (draw tc)) } }
   | other -> Unprintable { core = Mapped { source = other; f } }
 ;;
 
@@ -414,47 +401,4 @@ let filter : type a p. (a -> bool) -> (a, p) generator -> (a, p) generator =
   | Printable { core; sexp_of } ->
     Printable { core = Filtered { source = core; predicate }; sexp_of }
   | Unprintable { core } -> Unprintable { core = Filtered { source = core; predicate } }
-;;
-
-(** [schema_core core] returns the schema for a [Basic] core, or [None]. *)
-let schema_core : type a. a core -> Cbor.t option = function
-  | Basic { schema; _ } -> Some schema
-  | _ -> None
-;;
-
-(** [schema gen] returns the schema for a [Basic] generator, or [None]. *)
-let schema : type a p. (a, p) generator -> Cbor.t option =
-  fun gen -> schema_core (core_of gen)
-;;
-
-(** [is_basic gen] returns [true] if [gen] has a [Basic] core. *)
-let is_basic : type a p. (a, p) generator -> bool =
-  fun gen ->
-  match core_of gen with
-  | Basic _ -> true
-  | _ -> false
-;;
-
-(** [as_basic_core core] returns [Some (schema, transform)] if [core] is
-    [Basic], or [None] otherwise. *)
-let as_basic_core : type a. a core -> (Cbor.t * (Cbor.t -> a)) option = function
-  | Basic { schema; transform; _ } -> Some (schema, transform)
-  | _ -> None
-;;
-
-(** [as_basic gen] returns [Some (schema, transform)] if [gen] has a [Basic]
-    core, or [None] otherwise. *)
-let as_basic : type a p. (a, p) generator -> (Cbor.t * (Cbor.t -> a)) option =
-  fun gen -> as_basic_core (core_of gen)
-;;
-
-(** [basic_unique_safe gen] returns [true] iff [gen] has a [Basic] core whose
-    transform is known to preserve distinctness (i.e. is injective over the
-    schema's value space). Used by [lists ~unique:true] to decide between the
-    engine-side fast path and the client-side dedup fallback. *)
-let basic_unique_safe : type a p. (a, p) generator -> bool =
-  fun gen ->
-  match core_of gen with
-  | Basic { unique_safe; _ } -> unique_safe
-  | _ -> false
 ;;

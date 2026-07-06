@@ -29,11 +29,11 @@ lib/                         # Library source
   dune                       # Library build config (bisect_ppx instrumented)
   hegel.ml / hegel.mli       # Main module — re-exports the public API
   ffi/                       # ctypes bindings to native libhegel (NOT instrumented)
-    ffi.ml                   # dlopen + 1:1 C-ABI wrappers; settings/run/test_case handles
+    ffi.ml                   # dlopen + 1:1 C-ABI wrappers; settings/run/test_case
+                             #   handles; typed draws + string-generator handles
     loader.ml                # locate/download libhegel at runtime (env > sibling > release)
-  cbor/cbor.ml               # Vendored CBOR encoder/decoder (RFC 7049; mirage/ocaml-cbor)
-  cbor_helpers.ml            # Type-safe CBOR extractors on top of cbor
-  client.ml                  # Test runner + run lifecycle on top of Hegel_ffi.Ffi
+  internal.ml                # Test runner + run lifecycle + typed-draw wrappers on
+                             #   top of Hegel_ffi.Ffi (the module CLAUDE calls "client")
   generators.ml              # Re-export shim: include the four generators_* modules
   generators_core.ml         # generator type; draw/draw_silent, map/flat_map/filter,
                              #   composite, span labels — the discriminated union
@@ -69,10 +69,8 @@ test/                        # hegel's own test suite (one executable: test_hege
                              #   no PPX preprocessing beyond the ppx_js_style linter)
   test_hegel.ml              # Top-level Alcotest runner
   test_helpers.ml            # Shared test utilities
-  test_cbor_helpers.ml       # CBOR helper tests
-  test_cbor_vectors.ml       # CBOR round-trip vector tests
   test_client.ml             # Internal config + run lifecycle tests (real engine)
-  test_generators_*.ml       # Generator core / primitives / collections / combinators / schema
+  test_generators_*.ml       # Generator core / primitives / collections / combinators
   test_derive.ml             # Derive module runtime helper tests
   test_stateful.ml           # Stateful testing tests
   test_antithesis.ml         # Antithesis integration tests
@@ -107,15 +105,20 @@ download from the hegel-rust GitHub release cached under
 `~/.cache/hegel-ocaml/libhegel/<version>/` (opt out with
 `HEGEL_LIBHEGEL_NO_DOWNLOAD=1`). `Hegel_ffi.Ffi` `dlopen`s that path and exposes
 thin 1:1 wrappers: settings handles, the run lifecycle (`run_start`,
-`next_test_case`, `run_result`, `run_free`), and per-test-case primitives
-(`generate`, spans, collections, pools, `target`, `mark_complete`). CBOR is used
-only for schema bytes (in) and generated-value bytes (out). `hegel_next_test_case`
+`next_test_case`, `run_result`, `run_free`), and per-test-case primitives — the
+typed draws (`generate_integer`, `generate_boolean`, `generate_float`,
+`generate_bytes`, `generate_string` + the `string_generator_*` handle
+constructors, `generate_date`/`time`/`datetime`, `generate_ipv4`/`ipv6`), spans,
+collections, pools, `target`, `mark_complete`. There is no CBOR: each value is
+drawn by a dedicated typed call rather than a schema round-trip (this replaced the
+removed `hegel_generate`/CBOR-schema path in libhegel 0.26.0). `hegel_next_test_case`
 blocks on the engine's worker thread, so its binding releases the OCaml runtime
 lock. The `ffi` library is deliberately NOT bisect_ppx-instrumented, keeping its
 mechanical marshalling out of the 100%-coverage gate (no `[@coverage off]`).
 
-`lib/protocol.ml`, `lib/connection.ml`, and the old Python-subprocess install
-flow were removed in the native-backend migration.
+`lib/protocol.ml`, `lib/connection.ml`, `lib/cbor/`, `lib/cbor_helpers.ml`, and
+the old Python-subprocess install flow were removed in the native-backend and
+typed-draw migrations.
 
 ### Generator System (generators_core.ml + generators_{primitives,collections,combinators}.ml)
 
@@ -125,11 +128,12 @@ split across the sibling `generators_*.ml` files. `generators.ml` is a thin shim
 that `include`s all four so they surface as one `Hegel.Generators` module.
 
 Generators are a discriminated union:
-- **Basic** — holds a raw CBOR schema + optional transform. Calling `map` on a Basic preserves the schema (composes transforms). The engine generates the value in one round-trip.
-- **Mapped** — wraps source + transform function (non-schema-preserving map).
+- **Leaf** — holds a `draw : test_case -> 'a` closure that performs a single typed engine draw (via one of the `Internal.generate_*` primitives). Calling `map` on a Leaf composes the closure in place (no extra span), since the engine already wraps every primitive draw in its own span.
+- **Mapped** — wraps source + transform function (adds a `mapped` span).
 - **FlatMapped** — wraps source + a function returning a generator. Evaluated recursively inside a `flat_map` span.
 - **Filtered** — wraps source + predicate. Up to `max_filter_attempts` retries before `assume false`.
-- **CompositeList** — used when list elements are non-Basic. Uses the collection protocol (new_collection / collection_more) to generate elements one at a time.
+- **CompositeList** — lists of any element core. Uses the collection protocol (new_collection / collection_more) to generate elements one at a time.
+- **Composite** — a `generate_fn` thunk run inside a labeled span; used by tuples, one_of, `lists ~unique`, and hashmaps (all of which now always drive the collection protocol / draw sub-values directly — there is no schema fast path).
 
 ### Inline Test Integration (ppx/ppx_hegel_test.ml + lib/test_runtime/)
 
@@ -169,14 +173,21 @@ value named `<t>_generator` from type declarations annotated with
 1. For **records**: generates each field by calling the appropriate primitive
    generator, then constructs the record value.
 2. For **variants**: picks a constructor index uniformly at random via
-   `sampled_from`, then generates arguments for the chosen constructor.
+   `sampled_from`, then generates arguments for the chosen constructor. A
+   data-carrying variant wraps the index-plus-arguments draw in an
+   `enum_variant` span (so the constructor choice and its fields shrink as one
+   unit, matching the engine's own derived-enum generator); an all-nullary enum
+   has no fields to group and is emitted as a bare `sampled_from` over the
+   constructor values (spanless, like the engine).
 3. For **type aliases**: delegates to the generator for the aliased type.
 4. For **nested types**: draws `<type>_generator` via `draw_silent` (user-defined
    generators must exist in scope).
 
-The PPX emits a `test_case -> t` field-drawing thunk and wraps it with
-`Hegel.Generators.composite`, producing an `(t, unprintable) generator` value —
-no printer is attached, so a bare `[@@deriving hegel_generator]` always compiles. The
+Records and aliases emit a `test_case -> t` field-drawing thunk wrapped with
+`Hegel.Generators.composite` (a `fixed_dict` span); variants return a complete
+generator directly (see above). Either way the result is an
+`(t, unprintable) generator` value with no printer attached, so a bare
+`[@@deriving hegel_generator]` always compiles. The
 `Hegel.Derive` module provides runtime helpers for option and list types; it is
 re-exported doc-hidden (the standard public-but-invisible PPX-runtime pattern)
 because generated code in user projects calls it.
@@ -220,7 +231,8 @@ through `with_printer`:
 
 ### Collection Protocol
 
-Non-basic list elements use a engine-side collection handle:
+Lists, sets, and hashmaps generate elements one at a time via an engine-side
+collection handle (there is no whole-collection schema draw):
 1. `new_collection` → engine assigns a collection name
 2. `collection_more` → engine returns true/false (should we generate another element?)
 3. `collection_reject` → undo the last element (used by filter)
@@ -267,7 +279,8 @@ in an `Exn.protect ~finally`.
 - `test/` must build under `-p hegel` (opam-repo-ci runs it): plain Alcotest
   functions calling `Hegel.run_hegel_test`, no `let%hegel_test`, no PPX beyond
   the `ppx_js_style` linter. White-box tests use the doc-hidden `(**/**)`
-  re-exports `Hegel.{Internal,Cbor_helpers,Antithesis}`; `Hegel.Derive` is
+  re-exports `Hegel.{Internal,Antithesis}` and the doc-hidden date/time
+  `format_*` helpers in `Hegel.Generators`; `Hegel.Derive` is
   doc-hidden too because PPX-generated code calls it. Only `Generators`,
   `Stateful`, and the values/types directly under `Hegel` are documented API
 - PPX E2E tests live under `ppx/test/`, attributed via `(package ...)` to
@@ -283,24 +296,24 @@ in an `Exn.protect ~finally`.
 - `Internal.Data_exhausted` — raised when StopTest is received; skips `mark_complete`
 - `Connection.Request_error` — raised on protocol-level errors from the engine
 
-### Schema Format
+### Typed Draws (no schema)
 
-The Hegel engine speaks CBOR. Generator schemas are CBOR maps:
-- `{"type": "boolean"}` — booleans
-- `{"type": "integer", "min_value"?: N, "max_value"?: N}` — integers
-- `{"type": "float", "allow_nan": bool, "allow_infinity": bool, "width": 64, "exclude_min": bool, "exclude_max": bool, "min_value"?: f, "max_value"?: f}` — floats
-- `{"type": "string", "min_size": N, "max_size"?: N}` — text
-- `{"type": "binary", "min_size": N, "max_size"?: N}` — binary
-- sampled_from: uses `{"type": "integer", "min_value": 0, "max_value": N-1}` with a map transform to index into the values array
-- `{"type": "list", "elements": schema, "min_size": N, "max_size"?: N}` — lists
-- `{"type": "dict", "keys": schema, "values": schema, "min_size": N, "max_size"?: N}` — dicts (engine returns `[[k,v],...]`)
-- `{"constant": null}` — just (constant value; transform ignores engine result)
-- `{"type": "regex", "pattern": str, "fullmatch": bool}` — from_regex
-- `{"type": "email"}`, `{"type": "url"}`, `{"type": "domain", "max_length"?: N}` — format generators
-- `{"type": "date"}`, `{"type": "time"}`, `{"type": "datetime"}` — date/time generators
-- `{"type": "ip_addresses", "version": 4|6}` — IP address generators
-- `{"one_of": [tagged_schema, ...]}` — one_of (tagged-tuple schemas for dispatch)
-- `{"type": "tuple", "elements": [schema, ...]}` — tuples
+There is no CBOR schema layer. Each generator draws its value through a dedicated
+typed FFI call (`Hegel_ffi.Ffi` / `Internal.generate_*`):
+- `integers` → `generate_integer ~min_value ~max_value` (i64 bounds; OCaml native int fits)
+- `booleans` → `generate_boolean 0.5 None`
+- `floats` → `generate_float ~min_value ~max_value ~allow_nan ~allow_infinity ~exclude_min ~exclude_max ~smallest_nonzero_magnitude` (width 64; unbounded ends are ±infinity)
+- `binary` → `generate_bytes ~min_size ~max_size`
+- `text` / `characters` → build a text `string_generator` handle (codec / codepoint bounds / categories / include-exclude chars) then `generate_string`; surrogates auto-excluded
+- `from_regex` / `emails` / `urls` / `domains` → the matching `string_generator_*` handle + `generate_string`
+- `dates` / `times` / `datetimes` → `generate_date`/`time`/`datetime` structs, formatted to ISO 8601 strings client-side (`format_date`/`format_time`/`format_datetime`)
+- `ip_addresses` → `generate_ipv4`/`generate_ipv6` raw bytes, rendered to strings by the `ipaddr` library (`Ipaddr.V4/V6.{of_octets_exn, to_string}`; RFC 5952 for v6)
+- `sampled_from` → `generate_integer 0 (n-1)` then index into the values array
+- `just` → a Leaf whose `draw` ignores the engine and returns the constant
+- `one_of` / `optional` / tuples / `lists` / `hashmaps` → `Composite`/`CompositeList` cores that draw an index or drive the collection protocol, calling sub-generators' draws directly
+
+String-generator handles are context-bound: built from `tc.context`, used for the
+draw, and always freed (`Internal.with_string_generator`).
 
 ### Coverage Rules
 

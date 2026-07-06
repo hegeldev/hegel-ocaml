@@ -192,14 +192,75 @@ val set_test_aborted : test_case -> bool -> unit
     the shrinker can group probes for the same bug. *)
 val extract_origin : exn -> string
 
-(** [generate_from_schema schema tc] generates a value from a schema by drawing
-    from the native engine. Raises {!Data_exhausted} if the engine signals
-    StopTest. *)
-val generate_from_schema : Cbor.t -> test_case -> Cbor.t
+(** [generate_boolean tc p forced] draws a boolean with probability [p] of
+    [true]. If [forced] is [Some b] the value is forced to [b]. Raises
+    {!Data_exhausted} on StopTest. *)
+val generate_boolean : test_case -> float -> bool option -> bool
 
-(** [primitive_boolean tc p forced] generates a boolean with probability [p] of 
-    [true]. If [forced] is not [None], then the value is forced to be [b] for [Some b] *)
-val primitive_boolean : test_case -> float -> bool option -> bool
+(** [generate_integer tc ~min_value ~max_value] draws an integer in the inclusive
+    range. Raises {!Data_exhausted} on StopTest. *)
+val generate_integer : test_case -> min_value:int -> max_value:int -> int
+
+(** [generate_float tc ...] draws a width-64 float under the given NaN / infinity
+    / exclusion policy. Raises {!Data_exhausted} on StopTest. *)
+val generate_float
+  :  test_case
+  -> min_value:float
+  -> max_value:float
+  -> allow_nan:bool
+  -> allow_infinity:bool
+  -> exclude_min:bool
+  -> exclude_max:bool
+  -> smallest_nonzero_magnitude:float
+  -> float
+
+(** [generate_bytes tc ~min_size ~max_size] draws a byte string ([max_size = None]
+    means unbounded). Raises {!Data_exhausted} on StopTest. *)
+val generate_bytes : test_case -> min_size:int -> max_size:int option -> string
+
+(** [generate_text tc ...] draws a text string over the described alphabet.
+    Raises {!Data_exhausted} on StopTest. *)
+val generate_text
+  :  test_case
+  -> min_size:int
+  -> max_size:int option
+  -> codec:string option
+  -> min_codepoint:int
+  -> max_codepoint:int
+  -> categories:string list option
+  -> exclude_categories:string list option
+  -> include_characters:string option
+  -> exclude_characters:string option
+  -> string
+
+(** [generate_regex tc ~pattern ~fullmatch] draws a string matching [pattern]
+    (Python-[re] syntax). Raises {!Data_exhausted} on StopTest. *)
+val generate_regex : test_case -> pattern:string -> fullmatch:bool -> string
+
+(** [generate_email tc] draws an RFC 5321/5322 email address. Raises
+    {!Assume_rejected} when the draw rejects itself. *)
+val generate_email : test_case -> string
+
+(** [generate_url tc] draws an RFC 3986 http/https URL. *)
+val generate_url : test_case -> string
+
+(** [generate_domain tc ~max_length] draws an RFC 1035 domain name. *)
+val generate_domain : test_case -> max_length:int -> string
+
+(** [generate_date tc] draws a Gregorian date as [(year, month, day)]. *)
+val generate_date : test_case -> int * int * int
+
+(** [generate_time tc] draws a time as [(hour, minute, second, microsecond)]. *)
+val generate_time : test_case -> int * int * int * int
+
+(** [generate_datetime tc] draws a naive datetime as [(date, time)]. *)
+val generate_datetime : test_case -> (int * int * int) * (int * int * int * int)
+
+(** [generate_ipv4 tc] draws an IPv4 address as its 4 network-order bytes. *)
+val generate_ipv4 : test_case -> string
+
+(** [generate_ipv6 tc] draws an IPv6 address as its 16 network-order bytes. *)
+val generate_ipv6 : test_case -> string
 
 (**/**)
 
