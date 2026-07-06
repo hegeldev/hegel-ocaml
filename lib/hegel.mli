@@ -3,19 +3,34 @@
     All code examples in this documentation assume [open Hegel] and
     [open Hegel.Generators] and that [ppx_hegel_test] is used.
 
-    Write a property
+    Hegel runs the body on many generated inputs. You generate data {e inline},
+    drawing values with {!draw} as the test runs, rather than generating the data
+    then running the property body. Each {!draw} returns an ordinary OCaml value
+    that you bind with [let], compute with, and branch on, so a later draw can 
+    depend on an earlier generated value or a value from the system under test.
+
+    Because Hegel uses
+    {{:https://hypothesis.works/articles/integrated-shrinking/} integrated
+    shrinking}, shrinking comes for free.
+
+    A deliberately false property makes that failure output concrete:
 
     {[
-      let%hegel_test addition_commutes tc =
-        let a = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
-        let b = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
-        assert (a + b = b + a)
+      let%hegel_test every_int_is_small tc =
+        let n = draw tc (integers ()) in
+        assert (n < 50)
       ;;
     ]}
 
-    Hegel runs the body on many generated inputs and, on failure, shrinks to a
-    minimal counterexample and prints each drawn value (named after the [let]
-    binding it was bound to).
+    Hegel finds a failing case and shrinks it to the boundary. The runner prints
+    a [FAIL] line with the re-raised assertion, and the final replay prints each
+    drawn value named after its binding:
+
+    {v
+      FAIL  every_int_is_small (my_tests.ml:3)
+            File "my_tests.ml", line 5: Assertion failed
+      n = 50
+    v}
 
     [let%hegel_test name tc = body] also defines [name] as a plain
     [unit -> unit] function, so you can still call it directly from an
@@ -233,16 +248,22 @@ val run_hegel_test
     case). *)
 exception Assume_rejected
 
-(** [assume tc condition] rejects the current test case if [condition] is
-    [false].
+(** [assume tc condition] states a {e precondition}. If [condition] is [false]
+    the current test case is discarded (not failed) and Hegel generates
+    another. Use it to skip inputs that do not apply to a property.
 
     {[
-      let%hegel_test only_even tc =
-        let n = draw tc (integers ~min_value:0 ~max_value:99 ()) in
-        assume tc (n mod 2 = 0);
-        assert (n mod 2 = 0)
+      let%hegel_test head_cons_tail_reconstructs tc =
+        let xs = draw tc (lists (integers ()) ()) in
+        (* The property is only meaningful for non-empty lists. *)
+        assume tc (xs <> []);
+        assert (List.hd xs :: List.tl xs = xs)
       ;;
-    ]} *)
+    ]}
+
+    Discarding too many cases trips the [Filter_too_much] health check. For a
+    narrow precondition, write a generator that generates valid inputs by 
+    construction (e.g. making the minimum size of the list 1 in the example above). *)
 val assume : test_case -> bool -> unit
 
 (** [note tc message] prints [message] to stderr subject to the run's verbosity:
@@ -278,6 +299,12 @@ val target : test_case -> float -> string -> unit
     is [label] when given, else ["draw"]. An unlabeled draw is numbered
     (["draw_1"], ["draw_2"], …) while a [label] is printed bare. To draw a generator
     with no printer, use {!draw_silent} or attach a printer with {!with_printer}.
+
+    Inside a [let%hegel_test], the PPX supplies the binding name as the label, so
+    [let x = draw tc gen] prints its value as [x = value].
+    When the same name is shadowed or drawn in a loop, its draws are numbered 
+    [x_1], [x_2], … in draw order. Pass [?label] to override the name 
+    (e.g. [draw ~label:"y" tc gen]).
 
     {[
       let%hegel_test draw_example tc =
