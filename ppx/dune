@@ -32,10 +32,22 @@
   (generate_runner
    (echo "let () = Hegel_test_runtime.test_main ();;"))))
 
+; Build-time helper that selects the ppx_compat variant. Kept a plain
+; executable (no shell) so the selection is portable to Windows.
+
+(executable
+ (name select_ppx_compat)
+ (modules select_ppx_compat))
+
 (rule
  (target ppx_compat.ml)
  (action
   (with-stdout-to
    %{target}
-   (bash
-    "case '%{ocaml_version}' in *+ox*) cat %{dep:ppx_compat_oxcaml.ml};; *) ver=$(grep '^version' %{lib:ppxlib:META} | head -1 | cut -d'\"' -f2); if [ \"$(echo $ver | cut -d. -f1)\" -gt 0 ] || [ \"$(echo $ver | cut -d. -f2)\" -ge 36 ]; then cat %{dep:ppx_compat_post-53.ml}; else cat %{dep:ppx_compat_pre-53.ml}; fi;; esac"))))
+   (run
+    %{exe:select_ppx_compat.exe}
+    %{ocaml_version}
+    %{lib:ppxlib:META}
+    %{dep:ppx_compat_oxcaml.ml}
+    %{dep:ppx_compat_post-53.ml}
+    %{dep:ppx_compat_pre-53.ml}))))
