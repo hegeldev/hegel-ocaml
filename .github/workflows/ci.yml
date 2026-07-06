@@ -281,6 +281,62 @@ jobs:
           HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
         run: opam exec -- dune runtest
 
+  # Windows library smoke. Windows cannot run the main suite (the tests depend
+  # on core_unix, which is Unix-only), and the custom setup-opam action targets
+  # Unix — so this leg uses ocaml/setup-ocaml, installs only the non-test deps
+  # (skipping core_unix), builds the library + examples, and runs each example
+  # against the matching libhegel DLL. That exercises the whole runtime path
+  # (loader -> dlopen -> ctypes -> engine) that is unique to Windows.
+  smoke-windows:
+    name: smoke (windows-latest)
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: read
+    env:
+      # A directory here; the loader appends libhegel.dll (see Loader.from_env).
+      HEGEL_LIBHEGEL_PATH: ${{ runner.temp }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: ocaml/setup-ocaml@e32b06a3e831ff2fbc6f08cf35be2085e3918014 # v3.6.1
+        with:
+          ocaml-compiler: "5.2.1"
+
+      # No --with-test: the test-only core_unix dependency is Unix-only, and the
+      # library + examples do not need it.
+      - name: Install non-test dependencies
+        run: opam install . --deps-only --confirm-level=unsafe-yes
+
+      - name: Stage libhegel from the matching GitHub release
+        shell: bash
+        run: |
+          VERSION=$(awk -F'"' '/let version =/{print $2}' lib/ffi/loader.ml)
+          ASSET="libhegel-windows-amd64.dll"
+          URL_BASE="https://github.com/hegeldev/hegel-rust/releases/download/v${VERSION}"
+          DEST="${RUNNER_TEMP}/libhegel.dll"
+          curl -fsSL -o "${DEST}" "${URL_BASE}/${ASSET}"
+          curl -fsSL -o "${DEST}.sha256" "${URL_BASE}/${ASSET}.sha256"
+          WANT=$(awk '{print $1}' "${DEST}.sha256")
+          echo "${WANT}  ${DEST}" | sha256sum -c -
+
+      - name: Build the library and examples
+        run: opam exec -- dune build lib examples
+
+      - name: Run examples/basic_properties
+        run: opam exec -- dune exec examples/basic_properties.exe
+
+      - name: Run examples/collections
+        run: opam exec -- dune exec examples/collections.exe
+
+      - name: Run examples/real_world
+        run: opam exec -- dune exec examples/real_world.exe
+
+      - name: Run examples/derived_types
+        run: opam exec -- dune exec examples/derived_types.exe
+
   release:
     name: release
     if: github.event_name == 'push' && github.repository == 'hegeldev/hegel-ocaml'

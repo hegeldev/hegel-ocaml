@@ -30,7 +30,9 @@
   (core
    (>= 0.17))
   (core_unix
-   (>= 0.17))
+   (and
+    :with-test
+    (>= 0.17)))
   (ctypes
    (>= 0.20))
   (ctypes-foreign
