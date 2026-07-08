@@ -28,7 +28,14 @@
     ]} *)
 
 module Pool : sig
-  (** A typed handle for a per-test case pool of variables. *)
+  (** A pool of previously generated values.
+
+      Create one with {!create} and populate it with {!add}. To draw from the
+      pool, use the following generators:
+      - {!values_reusable}: drawing from it returns a value in the pool without
+        removing it.
+      - {!values_consumed}: drawing from it removes a value from the pool and
+        returns it. *)
   type 'a t
 
   (** Creates an empty {!Pool.t}. Pools are tied to a test case; do not
