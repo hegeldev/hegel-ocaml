@@ -240,7 +240,7 @@ through `with_printer`:
 `Hegel.draw tc (Hegel.with_printer sexp_of_point point_generator)`.
 
 **Supported field types:**
-- `int` — bounded integers (±1073741823 to fit OCaml native int)
+- `int` — integers over the full native `int` range (same default as `integers ()`)
 - `bool` — booleans
 - `float` — finite floats (NaN and infinity disabled)
 - `string` — text strings

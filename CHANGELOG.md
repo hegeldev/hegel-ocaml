@@ -20,6 +20,14 @@ let d = draw tc (dates ()) in
 let s = format_date d in
 ```
 
+`[@@deriving hegel_generator]` no longer clamps derived `int` fields to
+±2³⁰−1. Derived ints now use the same full native-`int` default range as a
+hand-written `integers ()`. The clamp deliberately weakened generation so
+user arithmetic could not overflow — hiding exactly the bugs a property test
+should find. Properties that relied on products of derived ints never
+overflowing must handle overflow themselves (or bound their generators
+explicitly).
+
 **Breaking**: `ip_addresses` now takes `?version:[`V4 | `V6]` instead of
 `?version:int`, and generates typed `Ipaddr.t` values instead of strings
 (`ipaddr` was already a dependency). Previously `~version:5` type-checked and
