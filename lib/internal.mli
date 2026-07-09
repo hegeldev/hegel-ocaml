@@ -64,6 +64,8 @@ type mode =
     @canonical Hegel.phase *)
 type phase =
   | Explicit
+  (** Reserved for future use: hegel-ocaml has no explicit-examples facility
+        yet, so selecting this phase currently has no effect. *)
   | Reuse
   | Generate
   | Target
@@ -273,7 +275,9 @@ val generate_ipv6 : test_case -> string
 (**/**)
 
 (** [assume tc condition] rejects the current test case if [condition] is
-    [false]. *)
+    [false]. The [tc] handle is accepted for API symmetry with the other
+    per-test-case primitives; the rejection is client-side (raising
+    {!Assume_rejected}) and does not consult [tc]. *)
 val assume : test_case -> bool -> unit
 
 (** [note tc message] prints [message] to stderr subject to the run's
@@ -369,7 +373,8 @@ val pool_add : test_case -> pool_id:int -> int
 
 (** [pool_generate tc ~pool_id ?consume ()] draws a variable id from [pool_id].
     When [consume] is [true] (default [false]), the variable is also removed
-    from the pool. Drawing from an empty pool raises {!Data_exhausted}. *)
+    from the pool. Drawing from an empty pool raises {!Assume_rejected} (the
+    engine rejects the test case as invalid). *)
 val pool_generate : test_case -> pool_id:int -> ?consume:bool -> unit -> int
 
 (** [new_state_machine tc ~rule_names ~invariant_names] registers an

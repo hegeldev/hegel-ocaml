@@ -446,7 +446,9 @@ let stderr_color code s =
 ;;
 
 (** [assume tc condition] rejects the current test case if [condition] is
-    [false]. *)
+    [false]. The [tc] handle is accepted for API symmetry with the other
+    per-test-case primitives; the rejection is client-side (raising
+    {!Assume_rejected}) and does not consult [tc]. *)
 let assume _tc condition = if not condition then raise Assume_rejected
 
 (** [should_print tc] says whether {!note} output is visible for this test

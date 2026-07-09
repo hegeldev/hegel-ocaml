@@ -306,10 +306,12 @@ type mode = Internal.mode =
 (** Phases of a test run that can be enabled or disabled with {!with_phases}. *)
 type phase = Internal.phase =
   | Explicit
-  | Reuse
-  | Generate
-  | Target
-  | Shrink
+  (** Reserved for future use: hegel-ocaml has no explicit-examples facility
+        yet, so selecting this phase currently has no effect. *)
+  | Reuse (** replay previously failing examples from the {!type:database} *)
+  | Generate (** generate new test cases *)
+  | Target (** targeted search guided by {!target} observations *)
+  | Shrink (** shrink discovered counterexamples *)
 
 (** Health checks that can be suppressed with {!with_suppress_health_check}. *)
 type health_check = Internal.health_check =
@@ -553,8 +555,11 @@ exception Assume_rejected
     ]}
 
     Discarding too many cases trips the [Filter_too_much] health check. For a
-    narrow precondition, write a generator that generates valid inputs by 
-    construction (e.g. making the minimum size of the list 1 in the example above). *)
+    narrow precondition, write a generator that generates valid inputs by
+    construction (e.g. making the minimum size of the list 1 in the example above).
+
+    The [tc] handle is accepted for API symmetry with the other per-test-case
+    primitives; the rejection itself is client-side and does not consult [tc]. *)
 val assume : test_case -> bool -> unit
 
 (** [target tc value label] sends a target command to guide the search engine

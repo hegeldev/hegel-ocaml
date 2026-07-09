@@ -68,6 +68,15 @@ Previously it appended, so repeated calls accumulated duplicates and a
 suppression could never be undone. To suppress several checks, pass them in
 one list.
 
+Documentation corrections: `sampled_from` no longer claims uniform sampling
+(the engine's bounded-integer draw deliberately over-weights boundary
+indices, favoring earlier elements); the `Explicit` phase is documented as
+reserved for future use (hegel-ocaml has no explicit-examples facility yet,
+so selecting it has no effect); `assume` documents that its test-case handle
+is accepted for API symmetry and the rejection is client-side; and drawing
+from an empty pool is documented (and pinned by a test) as raising
+`Assume_rejected` rather than `Data_exhausted`.
+
 ## 0.10.1 - 2026-07-14
 
 This patch fixes a crash when several test binaries start at the same time
