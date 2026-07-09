@@ -691,17 +691,19 @@ val format_time : Core.Time_ns.Ofday.t -> string
     [YYYY-MM-DDTHH:MM:SS\[.ffffff\]] string. *)
 val format_datetime : Core.Date.t * Core.Time_ns.Ofday.t -> string
 
-(** [ip_addresses ?version ()] creates a generator for IP address strings.
-    [version] selects IPv4 (dotted-decimal, RFC 791) or IPv6 (colon-hex,
-    RFC 4291); when omitted, either version is generated.
+(** [ip_addresses ?version ()] creates a generator for typed [Ipaddr.t] IP
+    addresses. [version] selects IPv4 ([`V4], RFC 791) or IPv6 ([`V6],
+    RFC 4291); when omitted, either version is generated. Render a drawn
+    address with [Ipaddr.to_string] (RFC 5952 canonical form for v6).
 
     {[
       let%hegel_test ip_addresses_example tc =
-        let ip = draw tc (ip_addresses ~version:4 ()) in
-        assert (String.contains ip '.')
+        match draw tc (ip_addresses ~version:`V4 ()) with
+        | Ipaddr.V4 _ as ip -> assert (String.contains (Ipaddr.to_string ip) '.')
+        | Ipaddr.V6 _ -> assert false
       ;;
     ]} *)
-val ip_addresses : ?version:int -> unit -> (string, printable) generator
+val ip_addresses : ?version:[ `V4 | `V6 ] -> unit -> (Ipaddr.t, printable) generator
 
 (** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
     a regular expression [pattern], written in the syntax of Python's [re]

@@ -20,14 +20,6 @@ let test_sampled_from_empty () =
   | _ -> Alcotest.fail "expected Invalid_argument"
 ;;
 
-(** Test: ip_addresses invalid version raises. *)
-let test_ip_invalid_version () =
-  let raised = ref false in
-  (try ignore (ip_addresses ~version:3 ()) with
-   | Failure _ -> raised := true);
-  Alcotest.(check bool) "raised" true !raised
-;;
-
 (* ==== E2E tests ==== *)
 
 (** Test: one_of with basic generators works e2e. *)
@@ -91,20 +83,28 @@ let test_optional_e2e () =
   Alcotest.(check bool) "saw None" true !saw_none
 ;;
 
-(** Test: ip_addresses generates valid IPs e2e. *)
+(** Test: ip_addresses generates typed [Ipaddr.t] values of the requested
+    version e2e. *)
 let test_ip_addresses_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
-    let v4 = Hegel.draw tc (ip_addresses ~version:4 ()) in
-    assert (String.contains v4 '.');
-    let v6 = Hegel.draw tc (ip_addresses ~version:6 ()) in
-    assert (String.contains v6 ':'))
+    (match Hegel.draw tc (ip_addresses ~version:`V4 ()) with
+     | Ipaddr.V4 _ as ip -> assert (String.contains (Ipaddr.to_string ip) '.')
+     | Ipaddr.V6 _ -> Alcotest.fail "expected an IPv4 address");
+    match Hegel.draw tc (ip_addresses ~version:`V6 ()) with
+    | Ipaddr.V6 _ as ip -> assert (String.contains (Ipaddr.to_string ip) ':')
+    | Ipaddr.V4 _ -> Alcotest.fail "expected an IPv6 address")
 ;;
 
-(** Test: ip_addresses default generates either v4 or v6 e2e. *)
+(** Test: ip_addresses default generates both v4 and v6 e2e. *)
 let test_ip_both_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
-    let v = Hegel.draw tc (ip_addresses ()) in
-    assert (String.contains v '.' || String.contains v ':'))
+  let saw_v4 = ref false in
+  let saw_v6 = ref false in
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
+    match Hegel.draw tc (ip_addresses ()) with
+    | Ipaddr.V4 _ -> saw_v4 := true
+    | Ipaddr.V6 _ -> saw_v6 := true);
+  Alcotest.(check bool) "saw v4" true !saw_v4;
+  Alcotest.(check bool) "saw v6" true !saw_v6
 ;;
 
 (** Test: tuples2 basic e2e. *)
@@ -187,7 +187,6 @@ let tests =
   [ Alcotest.test_case "sampled_from empty" `Quick test_sampled_from_empty
   ; Alcotest.test_case "one_of empty" `Quick test_one_of_empty
   ; Alcotest.test_case "one_of single accepted" `Quick test_one_of_single_accepted
-  ; Alcotest.test_case "ip_addresses invalid" `Quick test_ip_invalid_version
   ; Alcotest.test_case "one_of e2e" `Quick test_one_of_e2e
   ; Alcotest.test_case "one_of non-basic e2e" `Quick test_one_of_non_basic_e2e
   ; Alcotest.test_case "one_of branch printer" `Quick test_one_of_branch_printer

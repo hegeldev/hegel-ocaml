@@ -15,7 +15,15 @@
   test_single_test_case
   test_antithesis
   test_loader)
- (libraries hegel hegel_ffi alcotest core core_unix threads.posix yojson)
+ (libraries
+  hegel
+  hegel_ffi
+  alcotest
+  core
+  core_unix
+  ipaddr
+  threads.posix
+  yojson)
  (preprocess
   (pps ppx_js_style -- -allow-unannotated-ignores))
  (foreign_stubs

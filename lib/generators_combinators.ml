@@ -67,28 +67,24 @@ let optional (element : ('a, printable) generator) : ('a option, printable) gene
   Printable { core; sexp_of = Option.sexp_of_t (printer element) }
 ;;
 
-(** [ip_addresses ?version ()] creates a generator for IP address strings.
+(** [ip_addresses ?version ()] creates a generator for typed [Ipaddr.t] IP
+    addresses.
 
-    - [version = Some 4]: generates IPv4 addresses (dotted-decimal, RFC 791).
-    - [version = Some 6]: generates IPv6 addresses (RFC 5952 canonical form).
-    - [version = None] (default): generates either IPv4 or IPv6.
+    - [version = Some `V4]: generates IPv4 addresses (RFC 791).
+    - [version = Some `V6]: generates IPv6 addresses (RFC 4291).
+    - [version = None] (default): generates either version.
 
     The engine returns the address's raw network-order bytes, which [ipaddr]
-    renders into canonical string form. *)
-let rec ip_addresses ?version () =
+    parses into a typed value; render with [Ipaddr.to_string] (RFC 5952
+    canonical form for v6). *)
+let ip_addresses ?version () =
+  let sexp_of ip = Sexp.Atom (Ipaddr.to_string ip) in
+  let v4 tc = Ipaddr.V4 (Ipaddr.V4.of_octets_exn (Internal.generate_ipv4 tc)) in
+  let v6 tc = Ipaddr.V6 (Ipaddr.V6.of_octets_exn (Internal.generate_ipv6 tc)) in
   match version with
-  | Some 4 ->
-    leaf
-      ~draw:(fun tc ->
-        Ipaddr.V4.to_string (Ipaddr.V4.of_octets_exn (Internal.generate_ipv4 tc)))
-      ~sexp_of:sexp_of_string
-  | Some 6 ->
-    leaf
-      ~draw:(fun tc ->
-        Ipaddr.V6.to_string (Ipaddr.V6.of_octets_exn (Internal.generate_ipv6 tc)))
-      ~sexp_of:sexp_of_string
-  | None -> one_of [ ip_addresses ~version:4 (); ip_addresses ~version:6 () ]
-  | Some v -> failwith (sprintf "ip_addresses: invalid version %d" v)
+  | Some `V4 -> leaf ~draw:v4 ~sexp_of
+  | Some `V6 -> leaf ~draw:v6 ~sexp_of
+  | None -> one_of [ leaf ~draw:v4 ~sexp_of; leaf ~draw:v6 ~sexp_of ]
 ;;
 
 (** [tuples2 g1 g2] creates a generator for 2-element tuples of printable

@@ -20,6 +20,21 @@ let d = draw tc (dates ()) in
 let s = format_date d in
 ```
 
+**Breaking**: `ip_addresses` now takes `?version:[`V4 | `V6]` instead of
+`?version:int`, and generates typed `Ipaddr.t` values instead of strings
+(`ipaddr` was already a dependency). Previously `~version:5` type-checked and
+then failed at draw time, and the typed address the implementation built was
+thrown away via `to_string`. Render a drawn address with `Ipaddr.to_string`:
+
+```ocaml
+(* before *)
+let s = draw tc (ip_addresses ~version:4 ()) in
+
+(* after *)
+let ip = draw tc (ip_addresses ~version:`V4 ()) in
+let s = Ipaddr.to_string ip in
+```
+
 `one_of` now prints a drawn value through the printer of the branch it was
 actually drawn from. Previously every branch's values printed through the
 first branch's printer.
