@@ -1,5 +1,5 @@
 (** The current version of Hegel for OCaml. *)
-let version = "0.8.1"
+let version = "0.8.2"
 
 (** Generator combinators for composable test data generation. *)
 module Generators = Generators
