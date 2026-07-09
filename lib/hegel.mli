@@ -100,6 +100,7 @@ type phase = Internal.phase =
   | Generate
   | Target
   | Shrink
+  | Explain
 
 (** Health checks that can be suppressed with {!with_suppress_health_check}. *)
 type health_check = Internal.health_check =

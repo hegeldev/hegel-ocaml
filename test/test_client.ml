@@ -115,7 +115,8 @@ let test_phase_to_string () =
   Alcotest.(check string) "reuse" "reuse" (Internal.phase_to_string Reuse);
   Alcotest.(check string) "generate" "generate" (Internal.phase_to_string Generate);
   Alcotest.(check string) "target" "target" (Internal.phase_to_string Target);
-  Alcotest.(check string) "shrink" "shrink" (Internal.phase_to_string Shrink)
+  Alcotest.(check string) "shrink" "shrink" (Internal.phase_to_string Shrink);
+  Alcotest.(check string) "explain" "explain" (Internal.phase_to_string Explain)
 ;;
 
 let test_extract_origin () =

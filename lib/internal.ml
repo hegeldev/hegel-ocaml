@@ -66,6 +66,7 @@ type phase =
   | Generate
   | Target
   | Shrink
+  | Explain
 
 (** [phase_to_string p] returns the lowercase name for [p]. *)
 let phase_to_string = function
@@ -74,6 +75,7 @@ let phase_to_string = function
   | Generate -> "generate"
   | Target -> "target"
   | Shrink -> "shrink"
+  | Explain -> "explain"
 ;;
 
 (** Configuration for a Hegel test run. *)
@@ -201,11 +203,35 @@ type test_case =
   ; context : Ffi.context
   ; mode : mode
   ; stateful_step_count : int
-  ; is_final : bool
-  ; verbosity : verbosity
+  ; emit : bool
+    (** Whether drawn values and notes are surfaced for this test case: never
+        under [Quiet], only on the final replay under [Normal], on every case
+        under [Verbose]/[Debug]. Precomputed so draw sites skip all printing
+        work on ordinary exploration cases. *)
   ; mutable test_aborted : bool
   ; mutable draw_depth : int
   ; draw_counts : int String.Table.t
+  ; mutable pretty : Pretty.t option
+    (** The test case's document (lazily fetched via the engine's per-family
+        printer), holding drawn values and notes in order. Rendered and
+        emitted to stderr when the case completes. *)
+  ; explain_comments : (int * int, string) Hashtbl.Poly.t
+    (** Explain-phase annotations keyed by the choice slice they describe,
+        installed before the final replay of an explained failure and consumed
+        (each at most once) as the replay's printed regions match them. *)
+  ; mutable explain_together : (Pretty.t * string) option
+    (** The whole-test "varied together" note, waiting in a deferred hole at
+        the top of the document; filled in when the first slice annotation
+        renders, so it never appears without a visible commented part. *)
+  ; mutable printing_draw : bool
+    (** Whether an outermost draw is currently printing (its partial
+        [name = value] line sits in an open speculative region on the
+        document). Notes made meanwhile would splice into the middle of that
+        line — or be retracted with a rejected attempt — so they buffer in
+        [pending_notes] instead. *)
+  ; mutable pending_notes : string list
+    (** Notes recorded while a draw was printing, in reverse order; flushed
+        after the enclosing draw completes (or with the final output). *)
   }
 
 (* Accessors so other library modules can read the internal fields they need
@@ -216,6 +242,110 @@ let draw_depth (tc : test_case) = tc.draw_depth
 let incr_draw_depth (tc : test_case) = tc.draw_depth <- tc.draw_depth + 1
 let decr_draw_depth (tc : test_case) = tc.draw_depth <- tc.draw_depth - 1
 let set_test_aborted (tc : test_case) v = tc.test_aborted <- v
+let should_emit (tc : test_case) = tc.emit
+
+(** [pretty tc] is [tc]'s document, fetched from the engine on first use. *)
+let pretty tc =
+  match tc.pretty with
+  | Some p -> p
+  | None ->
+    let p = Pretty.of_test_case tc.context tc.handle in
+    tc.pretty <- Some p;
+    p
+;;
+
+(** [flush_pending_notes tc] emits the notes buffered while a draw was
+    printing, in the order they were made. *)
+let flush_pending_notes tc =
+  List.iter (List.rev tc.pending_notes) ~f:(fun message ->
+    Ffi.note tc.context tc.handle message);
+  tc.pending_notes <- []
+;;
+
+(** [explain_region tc pretty f] runs the printing draw [f] as one tracked
+    region: the choice slice it consumes is matched against the failure's
+    explain-phase annotations, and on a match the annotation is attached as a
+    comment at the document's current position. Each annotation is consumed at
+    most once. A no-op wrapper on every test case except the final replay of
+    an explained failure. *)
+let explain_region tc (doc : Pretty.t) f =
+  if Hashtbl.is_empty tc.explain_comments
+  then f ()
+  else (
+    let start_count = Ffi.test_case_choice_count tc.context tc.handle in
+    let value = f () in
+    let end_count = Ffi.test_case_choice_count tc.context tc.handle in
+    (match Hashtbl.find_and_remove tc.explain_comments (start_count, end_count) with
+     | None -> ()
+     | Some text ->
+       Pretty.comment doc text;
+       (match tc.explain_together with
+        | None -> ()
+        | Some (slot, note_text) ->
+          tc.explain_together <- None;
+          Pretty.text slot (sprintf "(* %s *)" note_text);
+          Pretty.hard_break slot;
+          Pretty.free slot));
+    value)
+;;
+
+(** [emit_draw tc ~name ~print] prints one outermost draw into [tc]'s document
+    as a [name = value] line, where [print] renders the value (drawing it in
+    the process). The whole line sits in a speculative region so an unwind out
+    of the draw — a failed assumption, an exhausted choice budget — retracts
+    the partial line instead of corrupting the document. *)
+let emit_draw tc ~name ~print =
+  let doc = pretty tc in
+  tc.printing_draw <- true;
+  Pretty.begin_speculative doc;
+  match
+    Pretty.text doc (name ^ " = ");
+    print doc
+  with
+  | value ->
+    Pretty.hard_break doc;
+    Pretty.commit_speculative doc;
+    tc.printing_draw <- false;
+    flush_pending_notes tc;
+    value
+  | exception exn ->
+    Pretty.abort_speculative doc;
+    tc.printing_draw <- false;
+    raise exn
+;;
+
+(** [install_explain_comments tc comments] installs a failure's explain-phase
+    annotations before its final replay. The whole-test note (marker slice
+    [(0, 0)]) reserves a deferred hole at the top of the document; slice notes
+    go into the table {!explain_region} consumes. *)
+let install_explain_comments tc comments =
+  List.iter comments ~f:(fun (start_index, end_index, text) ->
+    if start_index = 0 && end_index = 0
+    then (
+      let doc = pretty tc in
+      let slot = Pretty.deferred doc in
+      tc.explain_together <- Some (slot, text))
+    else Hashtbl.set tc.explain_comments ~key:(start_index, end_index) ~data:text)
+;;
+
+(** [emit_rendered_output tc] renders [tc]'s document and writes each line to
+    stderr, then releases the printer handles. Called once, when the test case
+    completes; a case that printed nothing emits nothing. *)
+let emit_rendered_output tc =
+  (match tc.explain_together with
+   | None -> ()
+   | Some (slot, _) ->
+     tc.explain_together <- None;
+     Pretty.free slot);
+  flush_pending_notes tc;
+  match tc.pretty with
+  | None -> ()
+  | Some doc ->
+    let output = Pretty.value doc in
+    tc.pretty <- None;
+    Pretty.free doc;
+    List.iter (String.split_lines output) ~f:(fun line -> eprintf "%s\n%!" line)
+;;
 
 (** Domain-local flag to detect nested test cases. *)
 let in_test_context : bool Stdlib.Domain.DLS.key =
@@ -400,13 +530,16 @@ let assume _tc condition = if not condition then raise Assume_rejected
     {!type:verbosity}: never under [Quiet], only on the final (failing) replay
     under [Normal], and on every test case under [Verbose] or [Debug]. *)
 let note tc message =
-  let should_print =
-    match tc.verbosity with
-    | Quiet -> false
-    | Normal -> tc.is_final
-    | Verbose | Debug -> true
-  in
-  if should_print then eprintf "%s\n%!" message
+  if tc.emit
+  then
+    if tc.printing_draw
+    then tc.pending_notes <- message :: tc.pending_notes
+    else (
+      (* Fetching the document handle here (not just writing through
+         [Ffi.note]) is what makes a note-only test case render: emission
+         reads the handle this test case holds. *)
+      let (_ : Pretty.t) = pretty tc in
+      Ffi.note tc.context tc.handle message)
 ;;
 
 (** [draw_display_name tc ~label ~repeatable] returns the display name to print
@@ -514,6 +647,7 @@ let phase_bit = function
   | Generate -> Ffi.phase_generate
   | Target -> Ffi.phase_target
   | Shrink -> Ffi.phase_shrink
+  | Explain -> Ffi.phase_explain
 ;;
 
 let health_check_bit = function
@@ -553,19 +687,37 @@ let build_ffi_settings ctx (settings : settings) ~database_key =
     the case complete. Returns [Some (origin, exn)] when the case was {e interesting}
     (the body raised an unexpected exception), otherwise [None]. Shared by the
     engine-run and failure-blob replay paths. *)
-let run_test_case ~(settings : settings) ~test_fn ctx handle is_final =
+let run_test_case
+      ?(explain_comments = [])
+      ~(settings : settings)
+      ~test_fn
+      ctx
+      handle
+      is_final
+  =
+  let emit =
+    match settings.verbosity with
+    | Quiet -> false
+    | Normal -> is_final
+    | Verbose | Debug -> true
+  in
   let (tc : test_case) =
     { handle
     ; context = ctx
     ; mode = settings.mode
-    ; is_final
-    ; verbosity = settings.verbosity
+    ; emit
     ; stateful_step_count = settings.stateful_step_count
     ; test_aborted = false
     ; draw_depth = 0
     ; draw_counts = String.Table.create ()
+    ; pretty = None
+    ; explain_comments = Hashtbl.Poly.create ()
+    ; explain_together = None
+    ; printing_draw = false
+    ; pending_notes = []
     }
   in
+  if emit then install_explain_comments tc explain_comments;
   Stdlib.Domain.DLS.set in_test_context true;
   let status, captured =
     match test_fn tc with
@@ -576,6 +728,7 @@ let run_test_case ~(settings : settings) ~test_fn ctx handle is_final =
     | exception exn -> Ffi.Interesting, Some (extract_origin exn, exn)
   in
   Stdlib.Domain.DLS.set in_test_context false;
+  emit_rendered_output tc;
   Ffi.mark_complete ctx handle status (Option.map captured ~f:fst);
   captured
 ;;
@@ -601,11 +754,12 @@ let flaky_diagnostic =
     and raises {!flaky_diagnostic}. *)
 let final_replay ~(settings : settings) ~ffi_settings ~test_fn ctx failure =
   let blob = Option.value_exn (Ffi.failure_blob ctx failure) in
+  let explain_comments = Ffi.failure_comments ctx failure in
   let tc = Ffi.test_case_from_blob ctx ffi_settings (Some blob) in
   let outcome =
     Exn.protect
       ~finally:(fun () -> Ffi.test_case_free ctx tc)
-      ~f:(fun () -> run_test_case ~settings ~test_fn ctx tc true)
+      ~f:(fun () -> run_test_case ~explain_comments ~settings ~test_fn ctx tc true)
   in
   match outcome with
   | Some (_origin, exn) -> blob, exn

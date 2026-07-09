@@ -472,6 +472,7 @@ type test_case = unit Ctypes.ptr
 type run_result = unit Ctypes.ptr
 type failure = unit Ctypes.ptr
 type string_generator = unit Ctypes.ptr
+type printer = unit Ctypes.ptr
 
 type mode =
   | Test_run
@@ -520,9 +521,10 @@ let phase_reuse = 1 lsl 1
 let phase_generate = 1 lsl 2
 let phase_target = 1 lsl 3
 let phase_shrink = 1 lsl 4
+let phase_explain = 1 lsl 5
 
-(* [HEGEL_PHASE_ALL]: all five phases enabled (the engine default). *)
-let phase_all = 31
+(* [HEGEL_PHASE_ALL]: all six phases enabled (the engine default). *)
+let phase_all = 63
 
 (* Health-check bitmask values [HEGEL_HC_*]. *)
 let hc_filter_too_much = 1
@@ -1078,4 +1080,229 @@ let failure_blob ctx f =
   let out = allocate (ptr char) (from_voidp char null) in
   check_rc ctx (c_failure_blob ctx f out);
   coerce (ptr char) string_opt !@out
+;;
+
+(* ------------------------------------------------------------------ *)
+(* Pretty-printer documents                                            *)
+(* ------------------------------------------------------------------ *)
+
+(* [hegel_printer_value_result_t]: an engine-allocated UTF-8 rendering of the
+   document, freed with [hegel_printer_value_result_free]. *)
+module Printer_value_result = struct
+  type s
+
+  let t : s structure typ = structure "hegel_printer_value_result_t"
+  let data = field t "data" (ptr char)
+  let len = field t "len" size_t
+  let () = seal t
+end
+
+let c_printer_new =
+  foreign "hegel_printer_new" (ptr void @-> uint64_t @-> ptr (ptr void) @-> returning int)
+;;
+
+let c_printer_free = foreign "hegel_printer_free" (ptr void @-> ptr void @-> returning int)
+
+let c_printer_text =
+  foreign
+    "hegel_printer_text"
+    (ptr void @-> ptr void @-> string @-> size_t @-> returning int)
+;;
+
+let c_printer_breakable =
+  foreign
+    "hegel_printer_breakable"
+    (ptr void @-> ptr void @-> string @-> size_t @-> returning int)
+;;
+
+let c_printer_comment =
+  foreign
+    "hegel_printer_comment"
+    (ptr void @-> ptr void @-> string @-> size_t @-> returning int)
+;;
+
+let c_printer_hard_break =
+  foreign "hegel_printer_hard_break" (ptr void @-> ptr void @-> returning int)
+;;
+
+let c_printer_begin_group =
+  foreign
+    "hegel_printer_begin_group"
+    (ptr void @-> ptr void @-> uint64_t @-> string @-> size_t @-> returning int)
+;;
+
+let c_printer_end_group =
+  foreign
+    "hegel_printer_end_group"
+    (ptr void @-> ptr void @-> uint64_t @-> string @-> size_t @-> returning int)
+;;
+
+let c_printer_shift_indent =
+  foreign
+    "hegel_printer_shift_indent"
+    (ptr void @-> ptr void @-> int64_t @-> returning int)
+;;
+
+let c_printer_deferred =
+  foreign
+    "hegel_printer_deferred"
+    (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+;;
+
+let c_printer_begin_speculative =
+  foreign "hegel_printer_begin_speculative" (ptr void @-> ptr void @-> returning int)
+;;
+
+let c_printer_commit_speculative =
+  foreign "hegel_printer_commit_speculative" (ptr void @-> ptr void @-> returning int)
+;;
+
+let c_printer_abort_speculative =
+  foreign "hegel_printer_abort_speculative" (ptr void @-> ptr void @-> returning int)
+;;
+
+let c_printer_resolve =
+  foreign "hegel_printer_resolve" (ptr void @-> ptr void @-> returning int)
+;;
+
+let c_printer_is_live =
+  foreign "hegel_printer_is_live" (ptr void @-> ptr void @-> ptr bool @-> returning int)
+;;
+
+let c_printer_value =
+  foreign
+    "hegel_printer_value"
+    (ptr void @-> ptr void @-> ptr Printer_value_result.t @-> returning int)
+;;
+
+let c_printer_value_result_free =
+  foreign
+    "hegel_printer_value_result_free"
+    (ptr void @-> ptr Printer_value_result.t @-> returning int)
+;;
+
+let c_test_case_printer =
+  foreign
+    "hegel_test_case_printer"
+    (ptr void @-> ptr void @-> uint64_t @-> ptr (ptr void) @-> returning int)
+;;
+
+let c_note =
+  foreign "hegel_note" (ptr void @-> ptr void @-> string @-> size_t @-> returning int)
+;;
+
+let c_test_case_choice_count =
+  foreign
+    "hegel_test_case_choice_count"
+    (ptr void @-> ptr void @-> ptr uint64_t @-> returning int)
+;;
+
+let c_failure_comment_count =
+  foreign
+    "hegel_failure_comment_count"
+    (ptr void @-> ptr void @-> ptr size_t @-> returning int)
+;;
+
+let c_failure_comment =
+  foreign
+    "hegel_failure_comment"
+    (ptr void
+     @-> ptr void
+     @-> size_t
+     @-> ptr uint64_t
+     @-> ptr uint64_t
+     @-> ptr (ptr char)
+     @-> returning int)
+;;
+
+let printer_new ctx ~max_width =
+  let out = allocate (ptr void) null in
+  check_rc ctx (c_printer_new ctx (Unsigned.UInt64.of_int max_width) out);
+  !@out
+;;
+
+let printer_free ctx p = check_rc ctx (c_printer_free ctx p)
+
+(* Byte length of [s] as a [size_t], for the length-delimited text params. *)
+let text_len s = Unsigned.Size_t.of_int (String.length s)
+let printer_text ctx p s = check_rc ctx (c_printer_text ctx p s (text_len s))
+let printer_breakable ctx p s = check_rc ctx (c_printer_breakable ctx p s (text_len s))
+let printer_comment ctx p s = check_rc ctx (c_printer_comment ctx p s (text_len s))
+let printer_hard_break ctx p = check_rc ctx (c_printer_hard_break ctx p)
+
+let printer_begin_group ctx p ~indent s =
+  check_rc
+    ctx
+    (c_printer_begin_group ctx p (Unsigned.UInt64.of_int indent) s (text_len s))
+;;
+
+let printer_end_group ctx p ~dedent s =
+  check_rc ctx (c_printer_end_group ctx p (Unsigned.UInt64.of_int dedent) s (text_len s))
+;;
+
+let printer_shift_indent ctx p delta =
+  check_rc ctx (c_printer_shift_indent ctx p (Int64.of_int delta))
+;;
+
+let printer_deferred ctx p =
+  let out = allocate (ptr void) null in
+  check_rc ctx (c_printer_deferred ctx p out);
+  !@out
+;;
+
+let printer_begin_speculative ctx p = check_rc ctx (c_printer_begin_speculative ctx p)
+let printer_commit_speculative ctx p = check_rc ctx (c_printer_commit_speculative ctx p)
+let printer_abort_speculative ctx p = check_rc ctx (c_printer_abort_speculative ctx p)
+let printer_resolve ctx p = check_rc ctx (c_printer_resolve ctx p)
+
+let printer_is_live ctx p =
+  let out = allocate bool false in
+  check_rc ctx (c_printer_is_live ctx p out);
+  !@out
+;;
+
+let printer_value ctx p =
+  let result = make Printer_value_result.t in
+  check_rc ctx (c_printer_value ctx p (addr result));
+  let data = getf result Printer_value_result.data in
+  let len = Unsigned.Size_t.to_int (getf result Printer_value_result.len) in
+  let value = string_from_ptr data ~length:len in
+  check_rc ctx (c_printer_value_result_free ctx (addr result));
+  value
+;;
+
+let test_case_printer ctx tc ~max_width =
+  let out = allocate (ptr void) null in
+  check_rc ctx (c_test_case_printer ctx tc (Unsigned.UInt64.of_int max_width) out);
+  !@out
+;;
+
+let note ctx tc s = check_rc ctx (c_note ctx tc s (text_len s))
+
+let test_case_choice_count ctx tc =
+  let out = allocate uint64_t Unsigned.UInt64.zero in
+  check_rc ctx (c_test_case_choice_count ctx tc out);
+  Unsigned.UInt64.to_int !@out
+;;
+
+let failure_comment_count ctx f =
+  let out = allocate size_t (Unsigned.Size_t.of_int 0) in
+  check_rc ctx (c_failure_comment_count ctx f out);
+  Unsigned.Size_t.to_int !@out
+;;
+
+let failure_comment ctx f i =
+  let out_start = allocate uint64_t Unsigned.UInt64.zero in
+  let out_end = allocate uint64_t Unsigned.UInt64.zero in
+  let out_text = allocate (ptr char) (from_voidp char null) in
+  check_rc
+    ctx
+    (c_failure_comment ctx f (Unsigned.Size_t.of_int i) out_start out_end out_text);
+  let text = coerce (ptr char) string !@out_text in
+  Unsigned.UInt64.to_int !@out_start, Unsigned.UInt64.to_int !@out_end, text
+;;
+
+let failure_comments ctx f =
+  let n = failure_comment_count ctx f in
+  List.init n (failure_comment ctx f)
 ;;

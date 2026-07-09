@@ -68,6 +68,7 @@ type phase =
   | Generate
   | Target
   | Shrink
+  | Explain
 
 (**/**)
 
@@ -187,6 +188,24 @@ val incr_draw_depth : test_case -> unit
 val decr_draw_depth : test_case -> unit
 val set_test_aborted : test_case -> bool -> unit
 
+(** [should_emit tc] is whether drawn values and notes are surfaced for this
+    test case (the final replay of a failure at normal verbosity, or every
+    case under verbose output). Draw sites skip all printing work when it is
+    [false]. *)
+val should_emit : test_case -> bool
+
+(** [emit_draw tc ~name ~print] prints one outermost draw into the test
+    case's document as a [name = value] line, where [print] renders the value
+    into the document while drawing it. The line is retracted if [print]
+    unwinds. Returns the drawn value. *)
+val emit_draw : test_case -> name:string -> print:(Pretty.t -> 'a) -> 'a
+
+(** [explain_region tc doc f] runs the printing draw [f] as one tracked
+    region: if the choice slice it consumes carries an explain-phase
+    annotation, the annotation is attached as a comment at the document's
+    current position. *)
+val explain_region : test_case -> Pretty.t -> (unit -> 'a) -> 'a
+
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available; derived from the assertion's location so
     the shrinker can group probes for the same bug. *)
@@ -268,9 +287,11 @@ val generate_ipv6 : test_case -> string
     [false]. *)
 val assume : test_case -> bool -> unit
 
-(** [note tc message] prints [message] to stderr subject to the run's
-    {!type:verbosity}: never under [Quiet], only on the final (failing) replay
-    under [Normal], and on every test case under [Verbose] or [Debug]. *)
+(** [note tc message] appends [message] to the test case's document, subject
+    to the run's {!type:verbosity}: never under [Quiet], only on the final
+    (failing) replay under [Normal], and on every test case under [Verbose] or
+    [Debug]. The document — drawn values and notes, in order — is rendered and
+    written to stderr when the case completes. *)
 val note : test_case -> string -> unit
 
 (**/**)

@@ -35,20 +35,14 @@ let%expect_test "labeled draw prints name = value on final replay" =
   run_failing (fun tc ->
     let _ = Hegel.draw ~label:"x" tc (integers ~min_value:7 ~max_value:7 ()) in
     assert false);
-  [%expect
-    {|
-    x = 7
-    |}]
+  [%expect {| x = 7  (* or any other generated value *) |}]
 ;;
 
 let%expect_test "unlabeled draw is auto-named draw_N on final replay" =
   run_failing (fun tc ->
     let _ = Hegel.draw tc (integers ~min_value:123456 ~max_value:123456 ()) in
     assert false);
-  [%expect
-    {|
-    draw_1 = 123456
-    |}]
+  [%expect {| draw_1 = 123456  (* or any other generated value *) |}]
 ;;
 
 let%expect_test "successive unlabeled draws number draw_1, draw_2" =
@@ -58,8 +52,9 @@ let%expect_test "successive unlabeled draws number draw_1, draw_2" =
     assert false);
   [%expect
     {|
-    draw_1 = 1
-    draw_2 = 2
+    (* The test always failed when commented parts were varied together. *)
+    draw_1 = 1  (* or any other generated value *)
+    draw_2 = 2  (* or any other generated value *)
     |}]
 ;;
 
@@ -74,20 +69,14 @@ let%expect_test "with_printer supplies the printer draw renders with" =
            (integers ~min_value:255 ~max_value:255 ()))
     in
     assert false);
-  [%expect
-    {|
-    h = 0xff
-    |}]
+  [%expect {| h = 0xff  (* or any other generated value *) |}]
 ;;
 
 let%expect_test "with_printer makes an unprintable sampled_from drawable" =
   run_failing (fun tc ->
     let _ = Hegel.draw ~label:"c" tc (with_printer Int.sexp_of_t (sampled_from [ 9 ])) in
     assert false);
-  [%expect
-    {|
-    c = 9
-    |}]
+  [%expect {| c = 9  (* or any other generated value *) |}]
 ;;
 
 let%expect_test "draw nested in a span (depth > 0) is suppressed" =
@@ -116,10 +105,7 @@ let%expect_test "a tuple draw prints as one sexp" =
            (integers ~min_value:8 ~max_value:8 ()))
     in
     assert false);
-  [%expect
-    {|
-    pair = (7 8)
-    |}]
+  [%expect {| pair = (7 8)  (* or any other generated value *) |}]
 ;;
 
 let%expect_test "a list draw prints as one sexp" =
@@ -131,10 +117,7 @@ let%expect_test "a list draw prints as one sexp" =
         (lists (integers ~min_value:7 ~max_value:7 ()) ~min_size:2 ~max_size:2 ())
     in
     assert false);
-  [%expect
-    {|
-    xs = (7 7)
-    |}]
+  [%expect {| xs = (7 7)  (* or any other generated value *) |}]
 ;;
 
 let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
@@ -200,20 +183,14 @@ let%expect_test "a derived value prints as one sexp via with_printer" =
   run_failing (fun tc ->
     let _ = Hegel.draw tc (with_printer sexp_of_only only_generator) in
     assert false);
-  [%expect
-    {|
-    draw_1 = Only
-    |}]
+  [%expect {| draw_1 = Only  (* or any other generated value *) |}]
 ;;
 
 let%expect_test "a nested derived record prints as one sexp via with_printer" =
   run_failing (fun tc ->
     let _ = Hegel.draw tc (with_printer sexp_of_wrap wrap_generator) in
     assert false);
-  [%expect
-    {|
-    draw_1 = ((tag Only))
-    |}]
+  [%expect {| draw_1 = ((tag Only))  (* or any other generated value *) |}]
 ;;
 
 let%expect_test
@@ -244,10 +221,7 @@ let%hegel_test label_injection_from_binding (tc : test_case) =
 let%expect_test "ppx injects ~label from the binding name" =
   (try label_injection_from_binding () with
    | _ -> ());
-  [%expect
-    {| 
-    x = 7
-    |}]
+  [%expect {| x = 7  (* or any other generated value *) |}]
 ;;
 
 (* The receiver decides what is rewritten, not the module path: a draw on [tc]
@@ -264,10 +238,7 @@ let%hegel_test qualified_generators_draw (tc : test_case) =
 let%expect_test "a Generators-qualified draw is labeled (prefix preserved)" =
   (try qualified_generators_draw () with
    | _ -> ());
-  [%expect
-    {|   
-    g = 9
-    |}]
+  [%expect {| g = 9  (* or any other generated value *) |}]
 ;;
 
 (* A local function also named [draw] that is not Hegel's is left untouched,
@@ -291,10 +262,7 @@ let%expect_test "a local non-Hegel draw (not on tc) is not rewritten" =
    | _ -> ());
   (* No [y = …] line: [draw 5] was left alone; only [z], a real Hegel draw on
      [tc], is labeled. *)
-  [%expect
-    {|
-    z = 1
-    |}]
+  [%expect {| z = 1  (* or any other generated value *) |}]
 ;;
 
 (* When a binding name is drawn more than once, the PPX flags it repeatable, so
@@ -317,9 +285,10 @@ let%expect_test "a reused binding name numbers x_1, x_2, x_3" =
    | _ -> ());
   [%expect
     {|
-    x_1 = 1
-    x_2 = 2
-    x_3 = 3
+    (* The test always failed when commented parts were varied together. *)
+    x_1 = 1  (* or any other generated value *)
+    x_2 = 2  (* or any other generated value *)
+    x_3 = 3  (* or any other generated value *)
     |}]
 ;;
 
@@ -340,8 +309,9 @@ let%expect_test "a draw inside a loop numbers x_1, x_2" =
    | _ -> ());
   [%expect
     {|
-    x_1 = 1
-    x_2 = 2
+    (* The test always failed when commented parts were varied together. *)
+    x_1 = 1  (* or any other generated value *)
+    x_2 = 2  (* or any other generated value *)
     |}]
 ;;
 

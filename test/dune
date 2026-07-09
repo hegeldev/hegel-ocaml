@@ -9,6 +9,7 @@
   test_generators_primitives
   test_generators_collections
   test_generators_combinators
+  test_printing
   test_derive
   test_stateful
   test_single_test_case

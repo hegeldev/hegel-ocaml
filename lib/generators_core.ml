@@ -103,6 +103,18 @@ type ('a, 'p) generator =
   | Printable :
       { core : 'a core
       ; sexp_of : 'a -> Sexp.t
+      ; print_draw : (Internal.test_case -> Pretty.t -> 'a) option
+        (** How to print the value {e while drawing it} on the final replay.
+            [None] prints by value: draw through [core], then render
+            [sexp_of value] into the document. Structural generators (lists,
+            tuples, [one_of], [optional], dictionaries) supply [Some] and
+            print compositionally — emitting their delimiters around their
+            component generators' own printing draws — which is what lets an
+            explain-phase annotation attach to exactly the printed part it
+            describes (a single list element, one tuple component). A
+            printing draw must consume exactly the choices (and spans) the
+            silent [core] path consumes; any divergence makes the failing
+            replay flaky. *)
       }
       -> ('a, printable) generator
   | Unprintable : { core : 'a core } -> ('a, unprintable) generator
@@ -117,7 +129,7 @@ let core_of : type a p. (a, p) generator -> a core = function
 (** [leaf ~draw ~sexp_of] builds a printable {!Leaf} generator. [draw] performs
     a single engine draw and returns the typed value; [sexp_of] renders it on
     the final replay. *)
-let leaf ~draw ~sexp_of = Printable { core = Leaf { draw }; sexp_of }
+let leaf ~draw ~sexp_of = Printable { core = Leaf { draw }; sexp_of; print_draw = None }
 
 (** [leaf_silent ~draw] builds an unprintable {!Leaf} generator, for leaves
     whose output type has no known printer (e.g. {!just}). *)
@@ -128,7 +140,7 @@ let leaf_silent ~draw = Unprintable { core = Leaf { draw } }
     [map]/[flat_map]/[sampled_from]/[just] result printable. *)
 let with_printer : type a p. (a -> Sexp.t) -> (a, p) generator -> (a, printable) generator
   =
-  fun sexp_of gen -> Printable { core = core_of gen; sexp_of }
+  fun sexp_of gen -> Printable { core = core_of gen; sexp_of; print_draw = None }
 ;;
 
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
@@ -316,6 +328,26 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
   | Values { pool_id; values; consume } -> pick data values pool_id ~consume
 ;;
 
+(** [print_draw gen tc doc] draws a value from the printable [gen], rendering
+    its representation into [doc] as it goes — the printing twin of
+    {!do_draw}, used on the final replay of a failing test. The whole draw is
+    one explain-annotation region ({!Internal.explain_region}), and
+    compositional generators route their component draws back through here,
+    so every nested printed region can carry its own annotation. *)
+let print_draw : type a. (a, printable) generator -> Internal.test_case -> Pretty.t -> a =
+  fun gen tc doc ->
+  match gen with
+  | Printable { core; sexp_of; print_draw } ->
+    Internal.explain_region tc doc (fun () ->
+      match print_draw with
+      | Some print -> print tc doc
+      | None ->
+        let value = do_draw core tc in
+        Pretty.sexp doc (sexp_of value);
+        value)
+  | _ -> .
+;;
+
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
     [let%hegel_test] PPX rewrites bindings to; it is not intended for direct use
     (prefer {!draw}). On the final replay of a failing test (or on every case
@@ -331,14 +363,12 @@ let draw_named
   =
   fun ~label ~repeatable tc gen ->
   match gen with
-  | Printable { core; sexp_of } ->
-    let value = do_draw core tc in
-    if Internal.draw_depth tc = 0
-    then (
-      let name = Internal.draw_display_name tc ~label ~repeatable in
-      let rendered = Sexp.to_string_hum (sexp_of value) in
-      Internal.note tc (sprintf "%s = %s" name rendered));
-    value
+  | Printable { core; _ } when Internal.draw_depth tc > 0 -> do_draw core tc
+  | Printable { core; _ } ->
+    let name = Internal.draw_display_name tc ~label ~repeatable in
+    if Internal.should_emit tc
+    then Internal.emit_draw tc ~name ~print:(fun doc -> print_draw gen tc doc)
+    else do_draw core tc
   | _ -> .
 ;;
 
@@ -398,7 +428,38 @@ let flat_map
 let filter : type a p. (a -> bool) -> (a, p) generator -> (a, p) generator =
   fun predicate gen ->
   match gen with
-  | Printable { core; sexp_of } ->
-    Printable { core = Filtered { source = core; predicate }; sexp_of }
+  | Printable { core; sexp_of; _ } ->
+    (* The printing twin of the [Filtered] interpreter arm: each attempt
+       prints inside a speculative region, so only the accepted attempt's
+       text survives. Spans, discards, and the attempt budget replicate
+       {!do_draw} exactly; an unwinding attempt leaves its span open just as
+       the silent path does. *)
+    let print tc doc =
+      let rec attempt i =
+        if i > max_filter_attempts
+        then raise Internal.Assume_rejected
+        else (
+          Internal.start_span ~label:Labels.filter tc;
+          Pretty.begin_speculative doc;
+          match
+            let value = print_draw gen tc doc in
+            if predicate value then Some value else None
+          with
+          | Some value ->
+            Pretty.commit_speculative doc;
+            Internal.stop_span tc;
+            value
+          | None ->
+            Pretty.abort_speculative doc;
+            Internal.stop_span ~discard:true tc;
+            attempt (i + 1)
+          | exception exn ->
+            Pretty.abort_speculative doc;
+            raise exn)
+      in
+      attempt 1
+    in
+    Printable
+      { core = Filtered { source = core; predicate }; sexp_of; print_draw = Some print }
   | Unprintable { core } -> Unprintable { core = Filtered { source = core; predicate } }
 ;;

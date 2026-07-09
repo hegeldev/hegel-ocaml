@@ -107,8 +107,9 @@ val phase_reuse : int
 val phase_generate : int
 val phase_target : int
 val phase_shrink : int
+val phase_explain : int
 
-(** [phase_all] ([HEGEL_PHASE_ALL]) is all five phases enabled, the engine
+(** [phase_all] ([HEGEL_PHASE_ALL]) is all six phases enabled, the engine
     default. *)
 val phase_all : int
 
@@ -381,3 +382,110 @@ val result_failures : context -> run_result -> failure list
 
 val failure_blob : context -> failure -> string option
 val failure_origin : context -> failure -> string option
+
+(** {2 Pretty-printer documents}
+
+    Bindings to the engine's layout machinery ([hegel_printer_*]): a document
+    built from text, break points, and groups, with deferred holes, retractable
+    speculative regions, and end-of-line comments. The engine owns layout only;
+    what is printed — and in which language's syntax — is the client's choice.
+    The hegel library wraps these in its OCaml-facing [Pretty] module. *)
+
+(** Opaque printer handle ([hegel_printer_t]): the main document (from
+    {!printer_new} or {!test_case_printer}) or a deferred slot (from
+    {!printer_deferred}). Every handle is freed with {!printer_free}. *)
+type printer
+
+(** [printer_new ctx ~max_width] creates a standalone document that keeps lines
+    within [max_width] characters where the group structure allows it. *)
+val printer_new : context -> max_width:int -> printer
+
+(** [printer_free ctx p] releases a printer handle. Content already printed
+    stays in the shared document. *)
+val printer_free : context -> printer -> unit
+
+(** [printer_text ctx p s] emits literal text. Must not contain newlines. *)
+val printer_text : context -> printer -> string -> unit
+
+(** [printer_breakable ctx p sep] emits a break point rendering as [sep] when
+    the enclosing group fits on one line, and as a newline plus indentation
+    when it breaks. *)
+val printer_breakable : context -> printer -> string -> unit
+
+(** [printer_comment ctx p text] attaches a comment — passed in full rendered
+    form, e.g. ["  (* like this *)"] — to the line being written: it is
+    emitted at the end of that line, forces every open group to break, and is
+    excluded from width accounting. *)
+val printer_comment : context -> printer -> string -> unit
+
+(** [printer_hard_break ctx p] emits an unconditional newline plus the current
+    indentation. *)
+val printer_hard_break : context -> printer -> unit
+
+(** [printer_begin_group ctx p ~indent open_] opens a group: emits [open_],
+    then indents subsequent break points by [indent]. *)
+val printer_begin_group : context -> printer -> indent:int -> string -> unit
+
+(** [printer_end_group ctx p ~dedent close] closes the innermost group:
+    dedents by [dedent], then emits [close]. *)
+val printer_end_group : context -> printer -> dedent:int -> string -> unit
+
+(** [printer_shift_indent ctx p delta] adjusts the indentation applied by
+    subsequent break points. *)
+val printer_shift_indent : context -> printer -> int -> unit
+
+(** [printer_deferred ctx p] opens a deferred hole at [p]'s current position
+    and returns a handle onto its slot; content written to the slot later is
+    spliced in at the hole's position when the document renders. *)
+val printer_deferred : context -> printer -> printer
+
+(** [printer_begin_speculative ctx p] opens a speculative region: subsequent
+    output buffers until committed or aborted. *)
+val printer_begin_speculative : context -> printer -> unit
+
+(** [printer_commit_speculative ctx p] keeps the innermost speculative
+    region's content. *)
+val printer_commit_speculative : context -> printer -> unit
+
+(** [printer_abort_speculative ctx p] discards the innermost speculative
+    region's content. *)
+val printer_abort_speculative : context -> printer -> unit
+
+(** [printer_resolve ctx p] closes the outstanding deferred session: every
+    slot's content is spliced in and the slots die. *)
+val printer_resolve : context -> printer -> unit
+
+(** [printer_is_live ctx p] is whether a deferred slot can still be written. *)
+val printer_is_live : context -> printer -> bool
+
+(** [printer_value ctx p] lays the document out and returns everything printed
+    so far. *)
+val printer_value : context -> printer -> string
+
+(** [test_case_printer ctx tc ~max_width] fetches (creating on first use) the
+    document shared by [tc]'s test-case family. The document survives the test
+    case's completion, so the client can read it after [mark_complete]. *)
+val test_case_printer : context -> test_case -> max_width:int -> printer
+
+(** [note ctx tc s] appends a note to the test case's document; each
+    newline-separated line of [s] becomes its own output line. *)
+val note : context -> test_case -> string -> unit
+
+(** [test_case_choice_count ctx tc] is the number of choices [tc] has recorded
+    so far. Snapshotting it around a draw yields the choice slice the draw
+    consumed, for matching explain annotations. *)
+val test_case_choice_count : context -> test_case -> int
+
+(** [failure_comment_count ctx f] is the number of explain-phase annotations
+    on [f]. *)
+val failure_comment_count : context -> failure -> int
+
+(** [failure_comment ctx f i] is the [i]-th explain annotation: the half-open
+    choice slice [(start, end)] of the shrunk counterexample it applies to and
+    its text (without comment syntax). The whole-test "varied together" note
+    uses the marker slice [(0, 0)]. *)
+val failure_comment : context -> failure -> int -> int * int * string
+
+(** [failure_comments ctx f] is every explain annotation on [f], in slice
+    order. *)
+val failure_comments : context -> failure -> (int * int * string) list

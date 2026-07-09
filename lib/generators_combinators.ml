@@ -38,8 +38,18 @@ let one_of (generators : ('a, printable) generator list) : ('a, printable) gener
   match generators with
   | [] -> failwith "one_of requires at least one generator"
   | first :: _ ->
+    let branches = Array.of_list generators in
+    let n = Array.length branches in
+    let print tc doc =
+      group Labels.one_of tc (fun () ->
+        let idx = Internal.generate_integer tc ~min_value:0 ~max_value:(n - 1) in
+        print_draw branches.(idx) tc doc)
+    in
     Printable
-      { core = one_of_core (List.map generators ~f:core_of); sexp_of = printer first }
+      { core = one_of_core (List.map generators ~f:core_of)
+      ; sexp_of = printer first
+      ; print_draw = Some print
+      }
 ;;
 
 (** [optional element] creates a generator that produces either [None] or
@@ -59,7 +69,20 @@ let optional (element : ('a, printable) generator) : ('a option, printable) gene
             else None)
       }
   in
-  Printable { core; sexp_of = Option.sexp_of_t (printer element) }
+  let print tc doc =
+    group Labels.optional tc (fun () ->
+      if Internal.generate_boolean tc 0.5 None
+      then (
+        Pretty.begin_group doc ~indent:1 "(";
+        let value = print_draw element tc doc in
+        Pretty.end_group doc ~dedent:1 ")";
+        Some value)
+      else (
+        Pretty.text doc "()";
+        None))
+  in
+  Printable
+    { core; sexp_of = Option.sexp_of_t (printer element); print_draw = Some print }
 ;;
 
 (** [ip_addresses ?version ()] creates a generator for IP address strings.
@@ -104,7 +127,16 @@ let tuples2 (type a b) (g1 : (a, printable) generator) (g2 : (b, printable) gene
             a, b)
       }
   in
-  Printable { core; sexp_of }
+  let print tc doc =
+    group Labels.tuple tc (fun () ->
+      Pretty.begin_group doc ~indent:1 "(";
+      let a = print_draw g1 tc doc in
+      Pretty.breakable doc " ";
+      let b = print_draw g2 tc doc in
+      Pretty.end_group doc ~dedent:1 ")";
+      a, b)
+  in
+  Printable { core; sexp_of; print_draw = Some print }
 ;;
 
 (** [tuples3 g1 g2 g3] creates a generator for 3-element tuples of printable
@@ -131,7 +163,18 @@ let tuples3
             a, b, c)
       }
   in
-  Printable { core; sexp_of }
+  let print tc doc =
+    group Labels.tuple tc (fun () ->
+      Pretty.begin_group doc ~indent:1 "(";
+      let a = print_draw g1 tc doc in
+      Pretty.breakable doc " ";
+      let b = print_draw g2 tc doc in
+      Pretty.breakable doc " ";
+      let c = print_draw g3 tc doc in
+      Pretty.end_group doc ~dedent:1 ")";
+      a, b, c)
+  in
+  Printable { core; sexp_of; print_draw = Some print }
 ;;
 
 (** [tuples4 g1 g2 g3 g4] creates a generator for 4-element tuples of printable
@@ -161,5 +204,18 @@ let tuples4
             a, b, c, d)
       }
   in
-  Printable { core; sexp_of }
+  let print tc doc =
+    group Labels.tuple tc (fun () ->
+      Pretty.begin_group doc ~indent:1 "(";
+      let a = print_draw g1 tc doc in
+      Pretty.breakable doc " ";
+      let b = print_draw g2 tc doc in
+      Pretty.breakable doc " ";
+      let c = print_draw g3 tc doc in
+      Pretty.breakable doc " ";
+      let d = print_draw g4 tc doc in
+      Pretty.end_group doc ~dedent:1 ")";
+      a, b, c, d)
+  in
+  Printable { core; sexp_of; print_draw = Some print }
 ;;

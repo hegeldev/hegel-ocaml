@@ -29,6 +29,51 @@ let hashmaps
   let sexp_of kvs =
     Sexp.List (List.map kvs ~f:(fun (k, v) -> Sexp.List [ pk k; pv v ]))
   in
+  (* The printing twin of [generate_fn] below: each key-value entry prints
+     inside a speculative region (its separator included), so an entry
+     retracted for a duplicate key leaves no text behind. *)
+  let print tc doc =
+    group Labels.map tc (fun () ->
+      let coll = new_collection ~min_size ?max_size tc () in
+      Pretty.begin_group doc ~indent:1 "(";
+      let rec collect acc =
+        if collection_more coll tc
+        then (
+          Pretty.begin_speculative doc;
+          match
+            if not (List.is_empty acc) then Pretty.breakable doc " ";
+            Pretty.begin_group doc ~indent:1 "(";
+            do_draw (core_of keys) tc
+          with
+          | exception exn ->
+            Pretty.abort_speculative doc;
+            raise exn
+          | k ->
+            if List.exists acc ~f:(fun (k', _) -> Poly.equal k' k)
+            then (
+              Pretty.abort_speculative doc;
+              collection_reject coll tc;
+              collect acc)
+            else (
+              match
+                Pretty.sexp doc (pk k);
+                Pretty.breakable doc " ";
+                let v = print_draw values tc doc in
+                Pretty.end_group doc ~dedent:1 ")";
+                v
+              with
+              | v ->
+                Pretty.commit_speculative doc;
+                collect ((k, v) :: acc)
+              | exception exn ->
+                Pretty.abort_speculative doc;
+                raise exn))
+        else List.rev acc
+      in
+      let entries = collect [] in
+      Pretty.end_group doc ~dedent:1 ")";
+      entries)
+  in
   let core =
     Composite
       { label = Labels.map
@@ -51,7 +96,7 @@ let hashmaps
             collect [])
       }
   in
-  Printable { core; sexp_of }
+  Printable { core; sexp_of; print_draw = Some print }
 ;;
 
 (** [lists elements ?min_size ?max_size ?unique ()] creates a generator for
@@ -79,6 +124,40 @@ let lists
    | _ -> ());
   let elt = printer elements in
   let sexp_of xs = Sexp.List (List.map xs ~f:elt) in
+  (* The printing twin of the list interpreters: elements print one at a time
+     between the collection protocol's calls, each inside a speculative region
+     (its separator included) so a rejected duplicate leaves no text behind.
+     Non-unique lists never reject, but share the shape. *)
+  let print tc doc =
+    group Labels.list tc (fun () ->
+      let coll = new_collection ~min_size ?max_size tc () in
+      Pretty.begin_group doc ~indent:1 "(";
+      let rec collect acc =
+        if collection_more coll tc
+        then (
+          Pretty.begin_speculative doc;
+          match
+            if not (List.is_empty acc) then Pretty.breakable doc " ";
+            print_draw elements tc doc
+          with
+          | exception exn ->
+            Pretty.abort_speculative doc;
+            raise exn
+          | elem ->
+            if unique && List.mem acc elem ~equal:Poly.equal
+            then (
+              Pretty.abort_speculative doc;
+              collection_reject coll tc;
+              collect acc)
+            else (
+              Pretty.commit_speculative doc;
+              collect (elem :: acc)))
+        else List.rev acc
+      in
+      let elems = collect [] in
+      Pretty.end_group doc ~dedent:1 ")";
+      elems)
+  in
   let core =
     if not unique
     then CompositeList { elements = core_of elements; min_size; max_size }
@@ -106,5 +185,5 @@ let lists
               collect [])
         }
   in
-  Printable { core; sexp_of }
+  Printable { core; sexp_of; print_draw = Some print }
 ;;

@@ -52,6 +52,7 @@ type phase = Internal.phase =
   | Generate
   | Target
   | Shrink
+  | Explain
 
 type health_check = Internal.health_check =
   | Filter_too_much

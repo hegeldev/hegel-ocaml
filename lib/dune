@@ -6,7 +6,8 @@
   generators_core
   generators_primitives
   generators_collections
-  generators_combinators)
+  generators_combinators
+  pretty)
  (preprocess
   (pps ppx_js_style))
  (instrumentation
