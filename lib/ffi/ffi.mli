@@ -407,6 +407,11 @@ val printer_free : context -> printer -> unit
 (** [printer_text ctx p s] emits literal text. Must not contain newlines. *)
 val printer_text : context -> printer -> string -> unit
 
+(** [printer_if_break ctx p s] emits [s] only if the innermost open group
+    renders broken; a group that fits on one line renders nothing here, and
+    [s] never counts toward width. *)
+val printer_if_break : context -> printer -> string -> unit
+
 (** [printer_breakable ctx p sep] emits a break point rendering as [sep] when
     the enclosing group fits on one line, and as a newline plus indentation
     when it breaks. *)

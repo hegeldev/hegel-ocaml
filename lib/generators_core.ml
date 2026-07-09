@@ -131,6 +131,24 @@ let core_of : type a p. (a, p) generator -> a core = function
     the final replay. *)
 let leaf ~draw ~sexp_of = Printable { core = Leaf { draw }; sexp_of; print_draw = None }
 
+(** [string_literal s] renders [s] as an OCaml string literal, quoted and
+    escaped, for string-typed leaves' report rendering. *)
+let string_literal s = sprintf "%S" s
+
+(** [leaf_literal ~draw ~sexp_of ~literal] is {!leaf} for a value type whose
+    sexp form is not valid OCaml source: [literal] renders the drawn value as
+    OCaml syntax — a string leaf's quoted-and-escaped literal, for example —
+    and is what appears in a failing test's report. [sexp_of] still serves
+    the {!printer} accessor (composite parents rendering by value). *)
+let leaf_literal ~draw ~sexp_of ~literal =
+  let print tc doc =
+    let value = draw tc in
+    Pretty.text doc (literal value);
+    value
+  in
+  Printable { core = Leaf { draw }; sexp_of; print_draw = Some print }
+;;
+
 (** [leaf_silent ~draw] builds an unprintable {!Leaf} generator, for leaves
     whose output type has no known printer (e.g. {!just}). *)
 let leaf_silent ~draw = Unprintable { core = Leaf { draw } }

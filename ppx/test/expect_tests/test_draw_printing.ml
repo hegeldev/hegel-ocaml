@@ -94,7 +94,7 @@ let%expect_test "draw nested in a span (depth > 0) is suppressed" =
     |}]
 ;;
 
-let%expect_test "a tuple draw prints as one sexp" =
+let%expect_test "a tuple draw prints as an OCaml tuple" =
   run_failing (fun tc ->
     let _ =
       Hegel.draw
@@ -105,10 +105,10 @@ let%expect_test "a tuple draw prints as one sexp" =
            (integers ~min_value:8 ~max_value:8 ()))
     in
     assert false);
-  [%expect {| pair = (7 8)  (* or any other generated value *) |}]
+  [%expect {| pair = (7, 8)  (* or any other generated value *) |}]
 ;;
 
-let%expect_test "a list draw prints as one sexp" =
+let%expect_test "a list draw prints as an OCaml list" =
   run_failing (fun tc ->
     let _ =
       Hegel.draw
@@ -117,7 +117,7 @@ let%expect_test "a list draw prints as one sexp" =
         (lists (integers ~min_value:7 ~max_value:7 ()) ~min_size:2 ~max_size:2 ())
     in
     assert false);
-  [%expect {| xs = (7 7)  (* or any other generated value *) |}]
+  [%expect {| xs = [ 7; 7 ]  (* or any other generated value *) |}]
 ;;
 
 let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =

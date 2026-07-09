@@ -69,16 +69,19 @@ let optional (element : ('a, printable) generator) : ('a option, printable) gene
             else None)
       }
   in
+  (* [Some]'s payload is always parenthesized: the twin cannot see the
+     payload's rendering, and the parentheses keep every case — a negative
+     number most notably — valid OCaml. *)
   let print tc doc =
     group Labels.optional tc (fun () ->
       if Internal.generate_boolean tc 0.5 None
       then (
-        Pretty.begin_group doc ~indent:1 "(";
+        Pretty.text doc "Some (";
         let value = print_draw element tc doc in
-        Pretty.end_group doc ~dedent:1 ")";
+        Pretty.text doc ")";
         Some value)
       else (
-        Pretty.text doc "()";
+        Pretty.text doc "None";
         None))
   in
   Printable
@@ -96,15 +99,17 @@ let optional (element : ('a, printable) generator) : ('a option, printable) gene
 let rec ip_addresses ?version () =
   match version with
   | Some 4 ->
-    leaf
+    leaf_literal
       ~draw:(fun tc ->
         Ipaddr.V4.to_string (Ipaddr.V4.of_octets_exn (Internal.generate_ipv4 tc)))
       ~sexp_of:sexp_of_string
+      ~literal:string_literal
   | Some 6 ->
-    leaf
+    leaf_literal
       ~draw:(fun tc ->
         Ipaddr.V6.to_string (Ipaddr.V6.of_octets_exn (Internal.generate_ipv6 tc)))
       ~sexp_of:sexp_of_string
+      ~literal:string_literal
   | None -> one_of [ ip_addresses ~version:4 (); ip_addresses ~version:6 () ]
   | Some v -> failwith (sprintf "ip_addresses: invalid version %d" v)
 ;;
@@ -129,11 +134,12 @@ let tuples2 (type a b) (g1 : (a, printable) generator) (g2 : (b, printable) gene
   in
   let print tc doc =
     group Labels.tuple tc (fun () ->
-      Pretty.begin_group doc ~indent:1 "(";
+      Pretty.begin_group doc ~indent:0 "(";
       let a = print_draw g1 tc doc in
-      Pretty.breakable doc " ";
+      Pretty.breakable doc ", ";
+      Pretty.if_break doc ", ";
       let b = print_draw g2 tc doc in
-      Pretty.end_group doc ~dedent:1 ")";
+      Pretty.end_group doc ~dedent:0 ")";
       a, b)
   in
   Printable { core; sexp_of; print_draw = Some print }
@@ -165,13 +171,15 @@ let tuples3
   in
   let print tc doc =
     group Labels.tuple tc (fun () ->
-      Pretty.begin_group doc ~indent:1 "(";
+      Pretty.begin_group doc ~indent:0 "(";
       let a = print_draw g1 tc doc in
-      Pretty.breakable doc " ";
+      Pretty.breakable doc ", ";
+      Pretty.if_break doc ", ";
       let b = print_draw g2 tc doc in
-      Pretty.breakable doc " ";
+      Pretty.breakable doc ", ";
+      Pretty.if_break doc ", ";
       let c = print_draw g3 tc doc in
-      Pretty.end_group doc ~dedent:1 ")";
+      Pretty.end_group doc ~dedent:0 ")";
       a, b, c)
   in
   Printable { core; sexp_of; print_draw = Some print }
@@ -206,15 +214,18 @@ let tuples4
   in
   let print tc doc =
     group Labels.tuple tc (fun () ->
-      Pretty.begin_group doc ~indent:1 "(";
+      Pretty.begin_group doc ~indent:0 "(";
       let a = print_draw g1 tc doc in
-      Pretty.breakable doc " ";
+      Pretty.breakable doc ", ";
+      Pretty.if_break doc ", ";
       let b = print_draw g2 tc doc in
-      Pretty.breakable doc " ";
+      Pretty.breakable doc ", ";
+      Pretty.if_break doc ", ";
       let c = print_draw g3 tc doc in
-      Pretty.breakable doc " ";
+      Pretty.breakable doc ", ";
+      Pretty.if_break doc ", ";
       let d = print_draw g4 tc doc in
-      Pretty.end_group doc ~dedent:1 ")";
+      Pretty.end_group doc ~dedent:0 ")";
       a, b, c, d)
   in
   Printable { core; sexp_of; print_draw = Some print }

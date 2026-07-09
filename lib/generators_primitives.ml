@@ -1,9 +1,23 @@
 open! Core
 open Generators_core
 
+(* [float_literal f] renders [f] as OCaml source: the special values print as
+   their stdlib names ([nan], [infinity], [neg_infinity]), which the sexp
+   form ([NAN], [INF]) is not. *)
+
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
     the given bounds. When a bound is omitted it defaults to the corresponding
     OCaml native [int] limit. *)
+let float_literal f =
+  if Float.is_nan f
+  then "nan"
+  else if Float.equal f Float.infinity
+  then "infinity"
+  else if Float.equal f Float.neg_infinity
+  then "neg_infinity"
+  else Float.to_string f
+;;
+
 let integers ?(min_value = Int.min_value) ?(max_value = Int.max_value) () =
   if min_value > max_value
   then
@@ -71,7 +85,7 @@ let floats
          "Cannot have allow_infinity=true with both min_value and max_value");
   let min_value = Option.value min_value ~default:Float.neg_infinity in
   let max_value = Option.value max_value ~default:Float.infinity in
-  leaf
+  leaf_literal
     ~draw:(fun tc ->
       Internal.generate_float
         tc
@@ -83,6 +97,7 @@ let floats
         ~exclude_max
         ~smallest_nonzero_magnitude)
     ~sexp_of:sexp_of_float
+    ~literal:float_literal
 ;;
 
 (** Unicode general categories that include surrogate codepoints. OCaml strings
@@ -139,7 +154,7 @@ let text_generator
   let categories, exclude_categories =
     effective_categories ?categories ?exclude_categories ()
   in
-  leaf
+  leaf_literal
     ~draw:(fun tc ->
       Internal.generate_text
         tc
@@ -153,6 +168,7 @@ let text_generator
         ~include_characters
         ~exclude_characters)
     ~sexp_of:sexp_of_string
+    ~literal:string_literal
 ;;
 
 (** [text ?min_size ?max_size ?codec ?min_codepoint ?max_codepoint ?categories
@@ -261,9 +277,10 @@ let binary ?(min_size = 0) ?max_size () =
      raise
        (Invalid_argument (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
    | _ -> ());
-  leaf
+  leaf_literal
     ~draw:(fun tc -> Internal.generate_bytes tc ~min_size ~max_size)
     ~sexp_of:sexp_of_string
+    ~literal:string_literal
 ;;
 
 (** [just value] creates a generator that always produces [value].
@@ -276,9 +293,10 @@ let just value = leaf_silent ~draw:(fun _ -> value)
     module. When [fullmatch] is [true] (the default) the whole string must match
     [pattern]; otherwise a match anywhere suffices. *)
 let from_regex pattern ?(fullmatch = true) () =
-  leaf
+  leaf_literal
     ~draw:(fun tc -> Internal.generate_regex tc ~pattern ~fullmatch)
     ~sexp_of:sexp_of_string
+    ~literal:string_literal
 ;;
 
 (** [emails ()] creates a generator for valid email address strings.
@@ -286,7 +304,12 @@ let from_regex pattern ?(fullmatch = true) () =
     Addresses follow RFC 5321/5322: a local part of 1 to 64 characters from the
     RFC 5322 [atext] set, an [@], and a domain from {!domains}, with the overall
     address length capped at 254 octets (RFC 5321 §4.5.3.1.3). *)
-let emails () = leaf ~draw:Internal.generate_email ~sexp_of:sexp_of_string
+let emails () =
+  leaf_literal
+    ~draw:Internal.generate_email
+    ~sexp_of:sexp_of_string
+    ~literal:string_literal
+;;
 
 (** [urls ()] creates a generator for valid URL strings.
 
@@ -296,7 +319,9 @@ let emails () = leaf ~draw:Internal.generate_email ~sexp_of:sexp_of_string
     optional port in [1, 65535], zero or more [/]-separated path segments of up
     to 100 characters each, and an optional fragment of up to 100 characters.
     Path and fragment characters are percent-encoded. *)
-let urls () = leaf ~draw:Internal.generate_url ~sexp_of:sexp_of_string
+let urls () =
+  leaf_literal ~draw:Internal.generate_url ~sexp_of:sexp_of_string ~literal:string_literal
+;;
 
 (** [domains ?max_length ()] creates a generator for domain name strings.
 
@@ -313,7 +338,10 @@ let domains ?max_length () =
      raise (Invalid_argument (sprintf "max_length=%d must be between 4 and 255" ml))
    | _ -> ());
   let max_length = Option.value max_length ~default:255 in
-  leaf ~draw:(fun tc -> Internal.generate_domain tc ~max_length) ~sexp_of:sexp_of_string
+  leaf_literal
+    ~draw:(fun tc -> Internal.generate_domain tc ~max_length)
+    ~sexp_of:sexp_of_string
+    ~literal:string_literal
 ;;
 
 (** [format_date (year, month, day)] renders a drawn date as an ISO 8601
@@ -336,20 +364,27 @@ let format_datetime (date, time) = format_date date ^ "T" ^ format_time time
 (** [dates ()] creates a generator for ISO 8601 date strings ([YYYY-MM-DD]),
     with year in [\[1, 9999\]] and calendar-valid month/day. *)
 let dates () =
-  leaf ~draw:(fun tc -> format_date (Internal.generate_date tc)) ~sexp_of:sexp_of_string
+  leaf_literal
+    ~draw:(fun tc -> format_date (Internal.generate_date tc))
+    ~sexp_of:sexp_of_string
+    ~literal:string_literal
 ;;
 
 (** [times ()] creates a generator for ISO 8601 time strings ([HH:MM:SS] or
     [HH:MM:SS.ffffff], the fractional part present only when microseconds are
     non-zero). *)
 let times () =
-  leaf ~draw:(fun tc -> format_time (Internal.generate_time tc)) ~sexp_of:sexp_of_string
+  leaf_literal
+    ~draw:(fun tc -> format_time (Internal.generate_time tc))
+    ~sexp_of:sexp_of_string
+    ~literal:string_literal
 ;;
 
 (** [datetimes ()] creates a generator for ISO 8601 datetime strings
     ([YYYY-MM-DDTHH:MM:SS\[.ffffff\]]), combining {!dates} and {!times}. *)
 let datetimes () =
-  leaf
+  leaf_literal
     ~draw:(fun tc -> format_datetime (Internal.generate_datetime tc))
     ~sexp_of:sexp_of_string
+    ~literal:string_literal
 ;;

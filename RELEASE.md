@@ -5,11 +5,15 @@ phase.
 
 A failing test's report is now a document the engine lays out: drawn values
 and notes render together when the test case completes, wrapping long values
-across lines. Structural generators (`lists`, `tuples*`, `one_of`,
-`optional`, `hashmaps`, `filter`) print compositionally — emitting their
-delimiters around their component generators' own printing draws — while
-leaf values still render through their sexp printers, so the inline output
-format is unchanged.
+across lines. Values print as OCaml source rather than sexps: lists as
+`[ 0; 1 ]` (broken across lines behind leading semicolons when too wide),
+tuples as `(0, false)`, hashmaps as association lists of pairs, options as
+`None` / `Some (…)`, strings quoted and escaped, and float specials as
+`nan` / `infinity` / `neg_infinity`. Structural generators (`lists`,
+`tuples*`, `one_of`, `optional`, `hashmaps`, `filter`) print
+compositionally — emitting their delimiters around their component
+generators' own printing draws — so explain-phase annotations attach to
+individual elements.
 
 The engine's new explain phase runs after shrinking (enabled by default;
 disable by passing `with_phases` a list without `Explain`): parts of the

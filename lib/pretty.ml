@@ -42,6 +42,14 @@ let free t = Ffi.printer_free t.context t.handle
 let text t s = Ffi.printer_text t.context t.handle s
 
 let breakable t sep = Ffi.printer_breakable t.context t.handle sep
+
+(** [if_break t s] emits [s] only if the innermost open group renders broken;
+    a group that fits on one line renders nothing here, and [s] never counts
+    toward width. Paired with a {!breakable}, this expresses a separator that
+    leads its line in the broken form — [breakable t "; "] then
+    [if_break t "; "] renders ["; "] inline and ["\n; "] broken. *)
+let if_break t s = Ffi.printer_if_break t.context t.handle s
+
 let hard_break t = Ffi.printer_hard_break t.context t.handle
 let begin_group t ~indent s = Ffi.printer_begin_group t.context t.handle ~indent s
 let end_group t ~dedent s = Ffi.printer_end_group t.context t.handle ~dedent s

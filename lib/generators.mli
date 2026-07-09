@@ -111,6 +111,14 @@ type unprintable
 (** Maximum number of filter attempts before calling [assume false]. *)
 val max_filter_attempts : int
 
+(** [string_literal s] renders [s] as an OCaml string literal, quoted and
+    escaped: the report rendering of string-typed leaves. *)
+val string_literal : string -> string
+
+(** [float_literal f] renders [f] as OCaml source: special values print as
+    their stdlib names ([nan], [infinity], [neg_infinity]). *)
+val float_literal : float -> string
+
 (** [group label data f] runs [f ()] inside a span with the given [label]. The
     span is stopped with [discard:false] regardless of whether [f] raises. *)
 val group : int -> Internal.test_case -> (unit -> 'a) -> 'a

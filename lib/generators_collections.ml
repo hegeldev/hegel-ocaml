@@ -31,19 +31,27 @@ let hashmaps
   in
   (* The printing twin of [generate_fn] below: each key-value entry prints
      inside a speculative region (its separator included), so an entry
-     retracted for a duplicate key leaves no text behind. *)
+     retracted for a duplicate key leaves no text behind — the key prints
+     through its own generator as it draws, and a duplicate retracts that
+     text along with the rest of the entry. The layout is OCaml's: flat as
+     [[ (k, v); … ]], broken with each entry on its own line behind a
+     leading semicolon. *)
   let print tc doc =
     group Labels.map tc (fun () ->
       let coll = new_collection ~min_size ?max_size tc () in
-      Pretty.begin_group doc ~indent:1 "(";
+      Pretty.begin_group doc ~indent:0 "[";
       let rec collect acc =
         if collection_more coll tc
         then (
           Pretty.begin_speculative doc;
           match
-            if not (List.is_empty acc) then Pretty.breakable doc " ";
-            Pretty.begin_group doc ~indent:1 "(";
-            do_draw (core_of keys) tc
+            if List.is_empty acc
+            then Pretty.text doc " "
+            else (
+              Pretty.breakable doc "; ";
+              Pretty.if_break doc "; ");
+            Pretty.begin_group doc ~indent:0 "(";
+            print_draw keys tc doc
           with
           | exception exn ->
             Pretty.abort_speculative doc;
@@ -56,10 +64,10 @@ let hashmaps
               collect acc)
             else (
               match
-                Pretty.sexp doc (pk k);
-                Pretty.breakable doc " ";
+                Pretty.breakable doc ", ";
+                Pretty.if_break doc ", ";
                 let v = print_draw values tc doc in
-                Pretty.end_group doc ~dedent:1 ")";
+                Pretty.end_group doc ~dedent:0 ")";
                 v
               with
               | v ->
@@ -71,7 +79,8 @@ let hashmaps
         else List.rev acc
       in
       let entries = collect [] in
-      Pretty.end_group doc ~dedent:1 ")";
+      if not (List.is_empty entries) then Pretty.breakable doc " ";
+      Pretty.end_group doc ~dedent:0 "]";
       entries)
   in
   let core =
@@ -127,17 +136,24 @@ let lists
   (* The printing twin of the list interpreters: elements print one at a time
      between the collection protocol's calls, each inside a speculative region
      (its separator included) so a rejected duplicate leaves no text behind.
-     Non-unique lists never reject, but share the shape. *)
+     Non-unique lists never reject, but share the shape. The layout is
+     OCaml's: [[]] empty, [[ 0; 1 ]] flat, and broken with each element on
+     its own line behind a leading semicolon and the close bracket on its own
+     line. *)
   let print tc doc =
     group Labels.list tc (fun () ->
       let coll = new_collection ~min_size ?max_size tc () in
-      Pretty.begin_group doc ~indent:1 "(";
+      Pretty.begin_group doc ~indent:0 "[";
       let rec collect acc =
         if collection_more coll tc
         then (
           Pretty.begin_speculative doc;
           match
-            if not (List.is_empty acc) then Pretty.breakable doc " ";
+            if List.is_empty acc
+            then Pretty.text doc " "
+            else (
+              Pretty.breakable doc "; ";
+              Pretty.if_break doc "; ");
             print_draw elements tc doc
           with
           | exception exn ->
@@ -155,7 +171,8 @@ let lists
         else List.rev acc
       in
       let elems = collect [] in
-      Pretty.end_group doc ~dedent:1 ")";
+      if not (List.is_empty elems) then Pretty.breakable doc " ";
+      Pretty.end_group doc ~dedent:0 "]";
       elems)
   in
   let core =

@@ -111,9 +111,9 @@ let test_list_element_annotation () =
       in
       assert (not (List.nth_exn xs 0 >= 0 && List.nth_exn xs 2 >= 1)))
   in
-  check_contains output "xs = (0\n";
-  check_contains output (sprintf " 0  %s\n" explain_note);
-  check_contains output " 1\n)"
+  check_contains output "xs = [ 0\n";
+  check_contains output (sprintf "; 0  %s\n" explain_note);
+  check_contains output "; 1\n]"
 ;;
 
 (* Tuple components are annotated individually. *)
@@ -130,7 +130,7 @@ let test_tuple_component_annotation () =
       in
       assert (snd pair < 0))
   in
-  check_contains output (sprintf "pair = (0  %s\n 0\n)" explain_note)
+  check_contains output (sprintf "pair = (0  %s\n, 0\n)" explain_note)
 ;;
 
 (* Every printable shape draws-and-prints through the document: three- and
@@ -143,14 +143,14 @@ let test_compositional_shapes_print () =
       ignore (t3 : int * int * int);
       assert false)
   in
-  check_contains output "t3 = (7 7 7)";
+  check_contains output "t3 = (7, 7, 7)";
   let output =
     failing_output (fun tc ->
       let t4 = draw ~label:"t4" tc (tuples4 int_gen int_gen int_gen int_gen) in
       ignore (t4 : int * int * int * int);
       assert false)
   in
-  check_contains output "t4 = (7 7 7 7)";
+  check_contains output "t4 = (7, 7, 7, 7)";
   let output =
     failing_output (fun tc ->
       let choice = draw ~label:"choice" tc (one_of [ int_gen ]) in
@@ -163,13 +163,13 @@ let test_compositional_shapes_print () =
       let opt = draw ~label:"opt" tc (optional int_gen) in
       assert (Option.is_some opt))
   in
-  check_contains output "opt = ()";
+  check_contains output "opt = None";
   let output =
     failing_output (fun tc ->
       let opt = draw ~label:"opt" tc (optional int_gen) in
       assert (Option.is_none opt))
   in
-  check_contains output (sprintf "opt = (7  %s" explain_note);
+  check_contains output (sprintf "opt = Some (7)  %s" explain_note);
   let output =
     failing_output (fun tc ->
       let m =
@@ -178,7 +178,45 @@ let test_compositional_shapes_print () =
       ignore (m : (int * bool) list);
       assert false)
   in
-  check_contains output "m = ((7 false))"
+  check_contains output "m = [ (7, false) ]"
+;;
+
+(* Values render as OCaml source: strings quote and escape, floats print
+   through {!Generators.float_literal}, and an empty list is [[]]. *)
+let test_values_render_as_ocaml_source () =
+  let output =
+    failing_output (fun tc ->
+      let s = draw ~label:"s" tc (text ~min_size:1 ~max_size:1 ~alphabet:"a" ()) in
+      ignore (s : string);
+      assert false)
+  in
+  check_contains output {|s = "a"|};
+  let output =
+    failing_output (fun tc ->
+      let f = draw ~label:"f" tc (floats ~min_value:1.5 ~max_value:1.5 ()) in
+      ignore (f : float);
+      assert false)
+  in
+  check_contains output "f = 1.5";
+  let output =
+    failing_output (fun tc ->
+      let xs =
+        draw ~label:"xs" tc (lists (integers ~min_value:0 ~max_value:0 ()) ~max_size:0 ())
+      in
+      ignore (xs : int list);
+      assert false)
+  in
+  check_contains output "xs = []"
+;;
+
+(* The OCaml-source rendering of every float class, including the special
+   values no draw can be pinned to deterministically. *)
+let test_float_literal_covers_special_values () =
+  Alcotest.(check string) "plain" "1.5" (float_literal 1.5);
+  Alcotest.(check string) "nan" "nan" (float_literal Float.nan);
+  Alcotest.(check string) "infinity" "infinity" (float_literal Float.infinity);
+  Alcotest.(check string) "neg_infinity" "neg_infinity" (float_literal Float.neg_infinity);
+  Alcotest.(check string) "escaped string" {|"a\"b"|} (string_literal {|a"b|})
 ;;
 
 (* A duplicate element rejected while printing leaves no text behind: keys
@@ -196,7 +234,7 @@ let test_rejected_duplicates_leave_no_text () =
       ignore (xs : int list);
       assert false)
   in
-  check_contains output "xs = (0 1)"
+  check_contains output "xs = [ 0; 1 ]"
 ;;
 
 (* Duplicate dictionary keys likewise retract cleanly while printing. *)
@@ -212,7 +250,7 @@ let test_rejected_duplicate_keys_leave_no_text () =
       ignore (m : (int * bool) list);
       assert false)
   in
-  check_contains output "m = ((0 false) (1 false))"
+  check_contains output "m = [ (0, false); (1, false) ]"
 ;;
 
 (* A filter's rejected attempts print nothing; only the accepted value shows.
@@ -394,6 +432,14 @@ let tests =
   ; Alcotest.test_case "list element annotation" `Quick test_list_element_annotation
   ; Alcotest.test_case "tuple component annotation" `Quick test_tuple_component_annotation
   ; Alcotest.test_case "compositional shapes" `Quick test_compositional_shapes_print
+  ; Alcotest.test_case
+      "values render as OCaml source"
+      `Quick
+      test_values_render_as_ocaml_source
+  ; Alcotest.test_case
+      "float literal special values"
+      `Quick
+      test_float_literal_covers_special_values
   ; Alcotest.test_case
       "rejected duplicates leave no text"
       `Quick

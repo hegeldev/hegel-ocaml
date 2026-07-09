@@ -1115,6 +1115,12 @@ let c_printer_breakable =
     (ptr void @-> ptr void @-> string @-> size_t @-> returning int)
 ;;
 
+let c_printer_if_break =
+  foreign
+    "hegel_printer_if_break"
+    (ptr void @-> ptr void @-> string @-> size_t @-> returning int)
+;;
+
 let c_printer_comment =
   foreign
     "hegel_printer_comment"
@@ -1227,6 +1233,7 @@ let printer_free ctx p = check_rc ctx (c_printer_free ctx p)
 let text_len s = Unsigned.Size_t.of_int (String.length s)
 let printer_text ctx p s = check_rc ctx (c_printer_text ctx p s (text_len s))
 let printer_breakable ctx p s = check_rc ctx (c_printer_breakable ctx p s (text_len s))
+let printer_if_break ctx p s = check_rc ctx (c_printer_if_break ctx p s (text_len s))
 let printer_comment ctx p s = check_rc ctx (c_printer_comment ctx p s (text_len s))
 let printer_hard_break ctx p = check_rc ctx (c_printer_hard_break ctx p)
 
