@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+`with_suppress_health_check` now sets the suppressed-health-check list like
+every other `with_*` builder, replacing any previously suppressed list.
+Previously it appended, so repeated calls accumulated duplicates and a
+suppression could never be undone. To suppress several checks, pass them in
+one list.
+
 ## 0.10.1 - 2026-07-14
 
 This patch fixes a crash when several test binaries start at the same time

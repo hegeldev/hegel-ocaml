@@ -94,6 +94,26 @@ let test_with_builders () =
   Alcotest.(check bool) "mode" true (Poly.equal s.mode Single_test_case)
 ;;
 
+(* Regression test: [with_suppress_health_check] sets the suppressed list like
+   every other [with_*] builder, rather than appending — a second call replaces
+   the first (so a suppression can also be undone with [[]]). *)
+let test_with_suppress_health_check_replaces () =
+  let s =
+    default_settings ()
+    |> with_suppress_health_check [ Filter_too_much; Too_slow ]
+    |> with_suppress_health_check [ Too_slow ]
+  in
+  Alcotest.(check bool)
+    "second call replaces the first"
+    true
+    (Poly.equal s.suppress_health_check [ Too_slow ]);
+  let cleared = s |> with_suppress_health_check [] in
+  Alcotest.(check bool)
+    "empty list un-suppresses"
+    true
+    (List.is_empty cleared.suppress_health_check)
+;;
+
 let test_health_check_to_string () =
   Alcotest.(check string)
     "filter"
@@ -463,6 +483,10 @@ let tests =
   ; Alcotest.test_case "default settings ci" `Quick test_default_settings_ci
   ; Alcotest.test_case "settings seed" `Quick test_settings_seed
   ; Alcotest.test_case "with_* builders" `Quick test_with_builders
+  ; Alcotest.test_case
+      "with_suppress_health_check replaces"
+      `Quick
+      test_with_suppress_health_check_replaces
   ; Alcotest.test_case "health_check_to_string" `Quick test_health_check_to_string
   ; Alcotest.test_case "phase_to_string" `Quick test_phase_to_string
   ; Alcotest.test_case "extract_origin" `Quick test_extract_origin

@@ -380,7 +380,9 @@ val with_derandomize : bool -> settings -> settings
     ]} *)
 val with_database : database -> settings -> settings
 
-(** [with_suppress_health_check checks s] disables the given health checks.
+(** [with_suppress_health_check checks s] disables exactly the given health
+    checks, replacing any previously suppressed list (like the other [with_*]
+    builders).
 
     {[
       let s = default_settings () |> with_suppress_health_check [ Filter_too_much; Too_slow ]

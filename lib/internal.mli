@@ -150,8 +150,9 @@ val with_derandomize : bool -> settings -> settings
 (** [with_database db s] returns settings [s] with [database] set to [db]. *)
 val with_database : database -> settings -> settings
 
-(** [with_suppress_health_check checks s] returns settings [s] with additional
-    health checks suppressed. *)
+(** [with_suppress_health_check checks s] returns settings [s] with
+    [suppress_health_check] set to [checks], replacing any previously suppressed
+    list (like the other [with_*] builders). *)
 val with_suppress_health_check : health_check list -> settings -> settings
 
 (** [with_phases phases s] returns settings [s] with [phases] set to restrict

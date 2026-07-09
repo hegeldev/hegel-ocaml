@@ -170,11 +170,10 @@ let with_derandomize b s = { s with derandomize = b }
 (** [with_database db s] returns settings [s] with [database] set to [db]. *)
 let with_database db s = { s with database = db }
 
-(** [with_suppress_health_check checks s] returns settings [s] with additional
-    health checks suppressed. *)
-let with_suppress_health_check checks s =
-  { s with suppress_health_check = s.suppress_health_check @ checks }
-;;
+(** [with_suppress_health_check checks s] returns settings [s] with
+    [suppress_health_check] set to [checks], replacing any previously suppressed
+    list. *)
+let with_suppress_health_check checks s = { s with suppress_health_check = checks }
 
 (** [with_phases phases s] returns settings [s] with [phases] set. *)
 let with_phases phases s = { s with phases = Some phases }
