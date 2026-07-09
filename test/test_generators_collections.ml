@@ -24,23 +24,23 @@ let test_lists_min_greater_than_max () =
   | _ -> Alcotest.fail "expected Invalid_argument"
 ;;
 
-(** Test: association_lists raises when min_size is negative. *)
-let test_association_lists_negative_min_size () =
-  match association_lists (integers ()) (booleans ()) ~min_size:(-1) () with
+(** Test: assoc_lists raises when min_size is negative. *)
+let test_assoc_lists_negative_min_size () =
+  match assoc_lists (integers ()) (booleans ()) ~min_size:(-1) () with
   | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 ;;
 
-(** Test: association_lists raises when max_size is negative. *)
-let test_association_lists_negative_max_size () =
-  match association_lists (integers ()) (booleans ()) ~max_size:(-1) () with
+(** Test: assoc_lists raises when max_size is negative. *)
+let test_assoc_lists_negative_max_size () =
+  match assoc_lists (integers ()) (booleans ()) ~max_size:(-1) () with
   | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 ;;
 
-(** Test: association_lists raises when min_size > max_size. *)
-let test_association_lists_min_greater_than_max () =
-  match association_lists (integers ()) (booleans ()) ~min_size:5 ~max_size:3 () with
+(** Test: assoc_lists raises when min_size > max_size. *)
+let test_assoc_lists_min_greater_than_max () =
+  match assoc_lists (integers ()) (booleans ()) ~min_size:5 ~max_size:3 () with
   | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 ;;
@@ -142,22 +142,22 @@ let test_lists_non_basic_unique_exhaustion_e2e () =
        ignore (Hegel.draw tc gen))
 ;;
 
-(** Test: association_lists(non-basic keys) E2E — generates pairs. *)
-let test_association_lists_non_basic_keys_e2e () =
+(** Test: assoc_lists(non-basic keys) E2E — generates pairs. *)
+let test_assoc_lists_non_basic_keys_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let key_gen = filter (fun _ -> true) (integers ~min_value:0 ~max_value:100 ()) in
     let val_gen = integers ~min_value:0 ~max_value:100 () in
-    let gen = association_lists key_gen val_gen ~min_size:0 ~max_size:5 () in
+    let gen = assoc_lists key_gen val_gen ~min_size:0 ~max_size:5 () in
     let pairs = Hegel.draw tc gen in
     assert (List.length pairs <= 5))
 ;;
 
-(** Test: association_lists(non-basic values) E2E — generates pairs. *)
-let test_association_lists_non_basic_values_e2e () =
+(** Test: assoc_lists(non-basic values) E2E — generates pairs. *)
+let test_assoc_lists_non_basic_values_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let key_gen = integers ~min_value:0 ~max_value:100 () in
     let val_gen = filter (fun _ -> true) (integers ~min_value:0 ~max_value:100 ()) in
-    let gen = association_lists key_gen val_gen ~min_size:0 ~max_size:5 () in
+    let gen = assoc_lists key_gen val_gen ~min_size:0 ~max_size:5 () in
     let pairs = Hegel.draw tc gen in
     assert (List.length pairs <= 5))
 ;;
@@ -207,24 +207,24 @@ let test_hash_tables_e2e () =
     Core.Hashtbl.iteri table ~f:(fun ~key ~data:_ -> assert (key >= 0 && key <= 100)))
 ;;
 
-(** Test: hash_tables rejects crossed size bounds like association_lists. *)
+(** Test: hash_tables rejects crossed size bounds like assoc_lists. *)
 let test_hash_tables_min_greater_than_max () =
   match hash_tables (integers ()) (booleans ()) ~min_size:5 ~max_size:3 () with
   | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 ;;
 
-(** Regression: [association_lists] with a non-basic key generator must still enforce
+(** Regression: [assoc_lists] with a non-basic key generator must still enforce
     key uniqueness. With keys constrained to a single value, the dedup loop
     rejects every duplicate; the engine's reject limit eventually fires
     StopTest, which is caught by the test runner and skips the case.*)
-let test_association_lists_unique_keys_under_filter_e2e () =
+let test_assoc_lists_unique_keys_under_filter_e2e () =
   Hegel.run_hegel_test
     ~settings:
       (Hegel.settings ~test_cases:5 () |> with_suppress_health_check [ Filter_too_much ])
     (fun tc ->
        let gen =
-         association_lists
+         assoc_lists
            (filter (fun _ -> true) (integers ~min_value:0 ~max_value:0 ()))
            (booleans ())
            ~min_size:2
@@ -242,17 +242,17 @@ let tests =
   ; Alcotest.test_case "lists negative max_size" `Quick test_lists_negative_max_size
   ; Alcotest.test_case "lists min > max" `Quick test_lists_min_greater_than_max
   ; Alcotest.test_case
-      "association_lists negative min_size"
+      "assoc_lists negative min_size"
       `Quick
-      test_association_lists_negative_min_size
+      test_assoc_lists_negative_min_size
   ; Alcotest.test_case
-      "association_lists negative max_size"
+      "assoc_lists negative max_size"
       `Quick
-      test_association_lists_negative_max_size
+      test_assoc_lists_negative_max_size
   ; Alcotest.test_case
-      "association_lists min > max"
+      "assoc_lists min > max"
       `Quick
-      test_association_lists_min_greater_than_max
+      test_assoc_lists_min_greater_than_max
   ; Alcotest.test_case "lists of integers e2e" `Quick test_lists_of_integers_e2e
   ; Alcotest.test_case "lists booleans bounds e2e" `Quick test_lists_booleans_bounds_e2e
   ; Alcotest.test_case "lists non-basic e2e" `Quick test_lists_non_basic_e2e
@@ -270,20 +270,20 @@ let tests =
       `Quick
       test_hash_tables_min_greater_than_max
   ; Alcotest.test_case
-      "association_lists non-basic keys e2e"
+      "assoc_lists non-basic keys e2e"
       `Quick
-      test_association_lists_non_basic_keys_e2e
+      test_assoc_lists_non_basic_keys_e2e
   ; Alcotest.test_case
-      "association_lists non-basic values e2e"
+      "assoc_lists non-basic values e2e"
       `Quick
-      test_association_lists_non_basic_values_e2e
+      test_assoc_lists_non_basic_values_e2e
   ; Alcotest.test_case
       "lists unique under non-injective map e2e (regression)"
       `Quick
       test_lists_unique_under_map_e2e
   ; Alcotest.test_case
-      "association_lists unique keys under filter e2e (regression)"
+      "assoc_lists unique keys under filter e2e (regression)"
       `Quick
-      test_association_lists_unique_keys_under_filter_e2e
+      test_assoc_lists_unique_keys_under_filter_e2e
   ]
 ;;

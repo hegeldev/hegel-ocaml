@@ -1,6 +1,6 @@
 (** Collection and combinator examples.
 
-    Demonstrates: lists, association_lists, hash_tables, sampled_from, map,
+    Demonstrates: lists, assoc_lists, hash_tables, sampled_from, map,
     flat_map, filter. *)
 
 open Hegel.Generators
@@ -72,11 +72,11 @@ let%hegel_test test_sampled_from tc =
 
 (** Property: association lists generated with a min_size have at least that
     many entries. *)
-let%hegel_test test_association_list_size tc =
+let%hegel_test test_assoc_list_size tc =
   let pairs =
     Hegel.draw
       tc
-      (association_lists
+      (assoc_lists
          (text ~min_size:1 ~max_size:8 ())
          (integers ~min_value:0 ~max_value:100 ())
          ~min_size:2
@@ -117,8 +117,8 @@ let () =
   Printf.printf "  flat_map_combinator: OK\n%!";
   test_sampled_from ();
   Printf.printf "  sampled_from: OK\n%!";
-  test_association_list_size ();
-  Printf.printf "  association_list_size: OK\n%!";
+  test_assoc_list_size ();
+  Printf.printf "  assoc_list_size: OK\n%!";
   test_hash_table_size ();
   Printf.printf "  hash_table_size: OK\n%!";
   Printf.printf "All tests passed.\n%!"

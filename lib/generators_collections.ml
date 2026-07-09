@@ -16,7 +16,7 @@ let validate_size_bounds ~min_size ~max_size =
 
 (* [draw_association_pairs keys values ~min_size ~max_size data] drives the
    collection protocol to produce unique-keyed [(key, value)] pairs in draw
-   order: the shared generation of {!association_lists} and {!hash_tables}.
+   order: the shared generation of {!assoc_lists} and {!hash_tables}.
    Duplicate keys are rejected client-side. *)
 let draw_association_pairs keys values ~min_size ~max_size data =
   let coll = new_collection ~min_size ?max_size data () in
@@ -36,13 +36,13 @@ let draw_association_pairs keys values ~min_size ~max_size data =
   collect []
 ;;
 
-(** [association_lists keys values ?min_size ?max_size ()] creates a generator
+(** [assoc_lists keys values ?min_size ?max_size ()] creates a generator
     for association lists over printable [keys] and [values]: [(key, value)]
     pairs, in generation order, whose keys are unique.
 
     Key-value pairs are generated one at a time via the collection protocol,
     with duplicate keys rejected client-side. *)
-let association_lists
+let assoc_lists
       (keys : ('a, printable) generator)
       (values : ('b, printable) generator)
       ?(min_size = 0)
@@ -68,7 +68,7 @@ let association_lists
 (** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
     polymorphic hash tables over printable [keys] and [values].
 
-    The entries are generated exactly as {!association_lists} generates its
+    The entries are generated exactly as {!assoc_lists} generates its
     pairs — one at a time via the collection protocol, duplicate keys
     rejected client-side — and loaded into a [Hashtbl.Poly.t]. *)
 let hash_tables

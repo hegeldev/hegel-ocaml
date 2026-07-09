@@ -260,18 +260,18 @@ let test_printer_one_of_composite () =
 
 (* Association lists render via both the dict-schema (basic) and collection
    paths. *)
-let test_printer_association_list_basic () =
+let test_printer_assoc_list_basic () =
   check_printer
     "association list"
-    (association_lists (integers ()) (integers ()) ())
+    (assoc_lists (integers ()) (integers ()) ())
     [ 1, 2; 3, 4 ]
     "((1 2)(3 4))"
 ;;
 
-let test_printer_association_list_composite () =
+let test_printer_assoc_list_composite () =
   check_printer
     "association list composite"
-    (association_lists (filter (fun _ -> true) (integers ())) (integers ()) ())
+    (assoc_lists (filter (fun _ -> true) (integers ())) (integers ()) ())
     [ 1, 2 ]
     "((1 2))"
 ;;
@@ -374,11 +374,11 @@ let tests =
   ; Alcotest.test_case
       "printer association list basic"
       `Quick
-      test_printer_association_list_basic
+      test_printer_assoc_list_basic
   ; Alcotest.test_case
       "printer association list composite"
       `Quick
-      test_printer_association_list_composite
+      test_printer_assoc_list_composite
   ; Alcotest.test_case "printer hash table" `Quick test_printer_hash_table
   ; Alcotest.test_case "printer optional some" `Quick test_printer_optional_some
   ; Alcotest.test_case "printer optional none" `Quick test_printer_optional_none

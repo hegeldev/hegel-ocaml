@@ -483,15 +483,15 @@ val lists
   -> unit
   -> ('a list, printable) generator
 
-(** [association_lists keys values ?min_size ?max_size ()] creates a
+(** [assoc_lists keys values ?min_size ?max_size ()] creates a
     generator for association lists over printable [keys] and [values]:
     [(key, value)] pairs, in generation order, whose keys are unique.
 
     {[
-      let%hegel_test association_lists_example tc =
+      let%hegel_test assoc_lists_example tc =
         let m =
           draw tc
-            (association_lists
+            (assoc_lists
                (text ~max_size:4 ())
                (integers ~min_value:0 ~max_value:9 ())
                ~max_size:5
@@ -500,7 +500,7 @@ val lists
         assert (List.length m <= 5)
       ;;
     ]} *)
-val association_lists
+val assoc_lists
   :  ('a, printable) generator
   -> ('b, printable) generator
   -> ?min_size:int
@@ -510,7 +510,7 @@ val association_lists
 
 (** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
     polymorphic hash tables over printable [keys] and [values], with entries
-    generated exactly as {!association_lists} generates its pairs.
+    generated exactly as {!assoc_lists} generates its pairs.
 
     {[
       let%hegel_test hash_tables_example tc =
