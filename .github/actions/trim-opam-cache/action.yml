@@ -1,0 +1,16 @@
+name: Trim opam cache
+description:
+  Drop opam state the next run can refetch cheaply — the download cache,
+  logs, and switch sources — so the ~/.opam cache saved at job end stays
+  small. The repository's Actions cache is capped at 10GB; oversized opam
+  caches evict each other, and an evicted OxCaml switch costs a ~30-minute
+  compiler rebuild.
+runs:
+  using: composite
+  steps:
+    - name: Trim opam cache
+      shell: bash
+      run: |
+        opam clean --logs --download-cache --yes
+        rm -rf "$HOME"/.opam/*/.opam-switch/sources
+        du -sh "$HOME/.opam"

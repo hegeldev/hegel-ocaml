@@ -57,6 +57,9 @@ jobs:
           pipx install zizmor==1.23.1
           zizmor --format plain .github/
 
+      - name: Trim opam cache before it is saved
+        uses: ./.github/actions/trim-opam-cache
+
   compat:
     name: compat (ocaml ${{ matrix.ocaml }})
     runs-on: ubuntu-latest
@@ -123,6 +126,9 @@ jobs:
             exit 1
           fi
 
+      - name: Trim opam cache before it is saved
+        uses: ./.github/actions/trim-opam-cache
+
   test:
     name: test
     runs-on: ubuntu-latest
@@ -181,6 +187,9 @@ jobs:
             exit 1
           fi
 
+      - name: Trim opam cache before it is saved
+        uses: ./.github/actions/trim-opam-cache
+
   docs:
     name: docs
     runs-on: ubuntu-latest
@@ -205,6 +214,9 @@ jobs:
 
       - name: Check docs
         run: just check-docs
+
+      - name: Trim opam cache before it is saved
+        uses: ./.github/actions/trim-opam-cache
 
   nix:
     name: nix
@@ -280,6 +292,9 @@ jobs:
         env:
           HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
         run: opam exec -- dune runtest
+
+      - name: Trim opam cache before it is saved
+        uses: ./.github/actions/trim-opam-cache
 
   release:
     name: release
