@@ -22,8 +22,9 @@
     - [float] -> generates via
       [floats ~allow_nan:false ~allow_infinity:false ()]
     - [string] -> generates via [text()]
-    - [t list] -> generates a list length, then generates each element
-    - [t option] -> generates [Some v] or [None]
+    - [t list] -> engine-driven list via the collection protocol (as
+      [Generators.lists]: no fixed length cap, element-deletion shrinking)
+    - [t option] -> generates [Some v] or [None] (as [Generators.optional])
     - Named type [t] -> draws [t_generator] (assumes it exists in scope) *)
 
 open Ppxlib

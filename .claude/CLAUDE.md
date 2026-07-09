@@ -244,7 +244,7 @@ through `with_printer`:
 - `bool` — booleans
 - `float` — finite floats (NaN and infinity disabled)
 - `string` — text strings
-- `t list` — lists of derived elements (max size 20)
+- `t list` — lists of derived elements (engine-driven length via the collection protocol, like `lists`)
 - `t option` — `Some v` or `None`
 - Named types `t` — draws `t_generator` via `draw_silent` (must be in scope)
 - Tuples `(t1 * t2 * ...)` — generates each component

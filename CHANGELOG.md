@@ -20,6 +20,13 @@ let d = draw tc (dates ()) in
 let s = format_date d in
 ```
 
+`[@@deriving hegel_generator]`'s `t list` fields now generate through the
+same engine-driven collection protocol as `Generators.lists`. Previously the
+deriver drew a length in a hidden, unconfigurable `[0, 20]` range and looped,
+so derived lists could never exceed 20 elements and the engine could not
+shrink them by deleting individual elements. Derived `t option` fields
+likewise now go through the same machinery as `Generators.optional`.
+
 `[@@deriving hegel_generator]` no longer clamps derived `int` fields to
 ±2³⁰−1. Derived ints now use the same full native-`int` default range as a
 hand-written `integers ()`. The clamp deliberately weakened generation so

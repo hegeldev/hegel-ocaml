@@ -47,6 +47,21 @@ let one_of (generators : ('a, printable) generator list) : ('a, printable) gener
     Printable { core; sexp_of = (fun v -> !drawn_printer v) }
 ;;
 
+(** [optional_core element] is the generation structure behind {!optional}: a
+    {!Labels.optional}-spanned draw that yields [None] or [Some] of [element]
+    with equal probability. Shared with [Derive.generate_option] so derived
+    option fields go through the same machinery. *)
+let optional_core (element : 'a core) : 'a option core =
+  Composite
+    { label = Labels.optional
+    ; generate_fn =
+        (fun data ->
+          if Internal.generate_boolean data 0.5 None
+          then Some (do_draw element data)
+          else None)
+    }
+;;
+
 (** [optional element] creates a generator that produces either [None] or
     [Some value] from [element].
 
@@ -54,17 +69,10 @@ let one_of (generators : ('a, printable) generator list) : ('a, printable) gener
     [element]'s printer (the round-trippable form: [()] for [None], [(v)] for
     [Some v]). *)
 let optional (element : ('a, printable) generator) : ('a option, printable) generator =
-  let core =
-    Composite
-      { label = Labels.optional
-      ; generate_fn =
-          (fun data ->
-            if Internal.generate_boolean data 0.5 None
-            then Some (do_draw (core_of element) data)
-            else None)
-      }
-  in
-  Printable { core; sexp_of = Option.sexp_of_t (printer element) }
+  Printable
+    { core = optional_core (core_of element)
+    ; sexp_of = Option.sexp_of_t (printer element)
+    }
 ;;
 
 (** [ip_addresses ?version ()] creates a generator for typed [Ipaddr.t] IP

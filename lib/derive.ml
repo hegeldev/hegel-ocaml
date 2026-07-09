@@ -5,24 +5,27 @@
 
     The PPX generates [Internal.test_case -> 'a] functions that call
     {!Hegel.Generators.draw} internally and return typed OCaml values. These
-    helpers provide the plumbing for option and list types. *)
+    helpers provide the plumbing for option and list types, delegating to the
+    same generation machinery as the [Generators.optional] and
+    [Generators.lists] combinators. *)
 
 open! Core
+open Generators_core
 
-(** [generate_option tc gen_fn] generates an [option] value.
-
-    Uses {!Generators.booleans} to decide between [Some] and [None]. When [Some]
-    is chosen, calls [gen_fn tc] to produce the inner value. *)
+(** [generate_option tc gen_fn] generates an [option] value through the same
+    [optional]-spanned machinery as [Generators.optional]: the engine picks
+    [None] or [Some] with equal probability, and [gen_fn tc] produces the inner
+    value when [Some] is chosen. *)
 let generate_option tc gen_fn =
-  let b = Generators.draw tc (Generators.booleans ()) in
-  if b then Some (gen_fn tc) else None
+  do_draw (Generators_combinators.optional_core (Leaf { draw = gen_fn })) tc
 ;;
 
-(** [generate_list tc gen_fn] generates a list of values.
-
-    Uses {!Generators.integers} to determine the list length (0-20), then calls
-    [gen_fn tc] for each element. *)
+(** [generate_list tc gen_fn] generates a list of values through the same
+    engine-driven collection protocol as [Generators.lists]: the engine decides
+    the length (there is no client-side cap) and can delete individual elements
+    while shrinking. [gen_fn tc] draws each element. *)
 let generate_list tc gen_fn =
-  let len = Generators.draw tc (Generators.integers ~min_value:0 ~max_value:20 ()) in
-  List.init len ~f:(fun _ -> gen_fn tc)
+  do_draw
+    (CompositeList { elements = Leaf { draw = gen_fn }; min_size = 0; max_size = None })
+    tc
 ;;
