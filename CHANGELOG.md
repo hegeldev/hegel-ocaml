@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0 - 2026-07-09
+
+The `hashmaps` generator is replaced by two generators that say what they
+mean: `assoc_lists`, which produces what `hashmaps` actually
+produced — a `(key * value) list` in generation order with unique keys —
+and `hash_tables`, which produces a real polymorphic `Hashtbl.t` with the
+same entry generation. Existing uses of `hashmaps` translate directly to
+`assoc_lists`.
+
 ## 0.8.2 - 2026-07-09
 
 This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.27.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.27.0) to [0.28.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.28.0).
