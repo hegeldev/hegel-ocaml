@@ -98,6 +98,63 @@
         assert (n < 50)
     ]}
 
+    {3 Use generators}
+
+    Hegel provides a rich library of generators that you can use out of the box.
+    There are primitive generators, such as {!Generators.integers},
+    {!Generators.floats}, and {!Generators.text}, and combinators that build
+    generators out of other generators, such as {!Generators.lists} and
+    {!Generators.tuples2}.
+
+    For instance, you can use {!Generators.lists} to construct a list of
+    integers:
+
+    {[
+      let%hegel_test append_increases_length tc =
+        let xs = draw tc (lists (integers ()) ()) in
+        let initial_length = List.length xs in
+        let xs = draw tc (integers ()) :: xs in
+        assert (List.length xs > initial_length)
+    ]}
+
+    Custom generators are also supported. Suppose you have a [person] record that
+    requires generation. Build a generator for it with {!Generators.composite},
+    drawing each field in sequence:
+
+    {[
+      type person =
+        { age : int
+        ; name : string
+        }
+
+      let person =
+        composite (fun tc ->
+          let age = draw_silent tc (integers ()) in
+          let name = draw_silent tc (text ()) in
+          { age; name })
+    ]}
+
+    You can chain drawing operations together, so a later draw depends on an
+    earlier one. For instance, extending [person] with a [driving_license] field
+    that can only be [true] once [age] is at least 18:
+
+    {[
+      type person =
+        { age : int
+        ; name : string
+        ; driving_license : bool
+        }
+
+      let person =
+        composite (fun tc ->
+          let age = draw_silent tc (integers ()) in
+          let name = draw_silent tc (text ()) in
+          let driving_license =
+            if age >= 18 then draw_silent tc (booleans ()) else false
+          in
+          { age; name; driving_license })
+    ]}
+
     {3 Changing test settings}
 
     To override the default settings, attach a [\[@@settings ...\]] attribute:

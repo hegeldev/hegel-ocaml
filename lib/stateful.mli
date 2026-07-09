@@ -1,7 +1,8 @@
-(** A stateful test exercises a system through a sequence of randomly chosen
+(** {2 Introduction}
+    A stateful test exercises a system through a sequence of randomly chosen
     actions ("rules") applied to a state. Rules are constructed with
     {!Rule.create} from a [name] and a [step] function that performs one
-    application of the rule — drawing any arguments it needs from the test case
+    application of the rule, drawing any arguments it needs from the test case
     and returning the new state. Invariants are ['state -> unit] functions
     evaluated before any step is run and after every successful step.
 
@@ -27,15 +28,47 @@
       Stateful.run ~init:[] ~rules:[ push; pop ] tc
     ]} *)
 
+(** {2 Submodules} *)
+
 module Pool : sig
-  (** A pool of previously generated values.
+  (** A pool of previously generated values. They are populated with the results
+      of rules and may be used as arguments to later rules. A pool lets data flow
+      from one rule to another, so a rule can act on a handle or identifier that
+      an earlier rule produced rather than on a freshly drawn value.
 
       Create one with {!create} and populate it with {!add}. To draw from the
       pool, use the following generators:
       - {!values_reusable}: drawing from it returns a value in the pool without
         removing it.
       - {!values_consumed}: drawing from it removes a value from the pool and
-        returns it. *)
+        returns it.
+
+      Example: a resource allocator. The [alloc] rule creates a fresh handle and
+      deposits it in the pool. The [free] rule draws one of those handles back
+      out and releases it. Without a pool, [free] would have no way to name a
+      handle that a previous [alloc] actually created. It could only draw an
+      arbitrary integer, most of which name no live resource.
+
+      {[
+      type state =
+        { live : Int.Set.t
+        ; handles : int Stateful.Pool.t
+        }
+
+      let alloc =
+        Stateful.Rule.create ~name:"alloc" ~step:(fun _tc state ->
+            let h = fresh_handle () in
+            Stateful.Pool.add state.handles h;
+            { state with live = Set.add state.live h })
+
+      let free =
+        Stateful.Rule.create ~name:"free" ~step:(fun tc state ->
+            (* draws a handle a prior [alloc] put in the pool *)
+            let h = draw_silent tc (Stateful.Pool.values_consumed state.handles) in
+            release h;
+            { state with live = Set.remove state.live h })
+      ]}
+  *)
   type 'a t
 
   (** Creates an empty {!Pool.t}. Pools are tied to a test case; do not
@@ -99,6 +132,8 @@ module Rule : sig
       ]} *)
   val name : _ t -> string
 end
+
+(** {2 Running stateful tests} *)
 
 (** Executes a stateful test by repeatedly applying randomly chosen [rules] to a
     state threaded from [init], checking each of the [invariants] before the
