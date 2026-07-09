@@ -1,4 +1,4 @@
-RELEASE_TYPE: major
+RELEASE_TYPE: minor
 
 The `hashmaps` generator is replaced by two generators that say what they
 mean: `association_lists`, which produces what `hashmaps` actually
