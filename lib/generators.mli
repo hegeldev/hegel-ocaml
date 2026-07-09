@@ -483,25 +483,55 @@ val lists
   -> unit
   -> ('a list, printable) generator
 
-(** [hashmaps keys values ?min_size ?max_size ()] creates a generator for
-    dictionaries (hash maps) over printable [keys] and [values].
+(** [association_lists keys values ?min_size ?max_size ()] creates a
+    generator for association lists over printable [keys] and [values]:
+    [(key, value)] pairs, in generation order, whose keys are unique.
 
     {[
-      let%hegel_test hashmaps_example tc =
+      let%hegel_test association_lists_example tc =
         let m =
           draw tc
-            (hashmaps (text ~max_size:4 ()) (integers ~min_value:0 ~max_value:9 ()) ~max_size:5 ())
+            (association_lists
+               (text ~max_size:4 ())
+               (integers ~min_value:0 ~max_value:9 ())
+               ~max_size:5
+               ())
         in
         assert (List.length m <= 5)
       ;;
     ]} *)
-val hashmaps
+val association_lists
   :  ('a, printable) generator
   -> ('b, printable) generator
   -> ?min_size:int
   -> ?max_size:int
   -> unit
   -> (('a * 'b) list, printable) generator
+
+(** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
+    polymorphic hash tables over printable [keys] and [values], with entries
+    generated exactly as {!association_lists} generates its pairs.
+
+    {[
+      let%hegel_test hash_tables_example tc =
+        let m =
+          draw tc
+            (hash_tables
+               (text ~max_size:4 ())
+               (integers ~min_value:0 ~max_value:9 ())
+               ~max_size:5
+               ())
+        in
+        assert (Core.Hashtbl.length m <= 5)
+      ;;
+    ]} *)
+val hash_tables
+  :  ('a, printable) generator
+  -> ('b, printable) generator
+  -> ?min_size:int
+  -> ?max_size:int
+  -> unit
+  -> (('a, 'b) Core.Hashtbl.t, printable) generator
 
 (** [sampled_from options] creates a generator that samples uniformly from a
     non-empty list of values. The output type is the caller's, so the result

@@ -1,13 +1,48 @@
 open! Core
 open Generators_core
 
-(** [hashmaps keys values ?min_size ?max_size ()] creates a generator for
-    dictionaries (hash maps) over printable [keys] and [values].
+(* [validate_size_bounds ~min_size ~max_size] rejects negative or crossed
+   collection size bounds. *)
+let validate_size_bounds ~min_size ~max_size =
+  if min_size < 0
+  then raise (Invalid_argument (sprintf "min_size=%d must be non-negative" min_size));
+  match max_size with
+  | Some ms when ms < 0 ->
+    raise (Invalid_argument (sprintf "max_size=%d must be non-negative" ms))
+  | Some ms when min_size > ms ->
+    raise (Invalid_argument (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
+  | _ -> ()
+;;
 
-    Key-value pairs are generated one at a time via the collection protocol.
-    Dict semantics require unique keys, so duplicate keys are rejected
-    client-side. *)
-let hashmaps
+(* [draw_association_pairs keys values ~min_size ~max_size data] drives the
+   collection protocol to produce unique-keyed [(key, value)] pairs in draw
+   order: the shared generation of {!association_lists} and {!hash_tables}.
+   Duplicate keys are rejected client-side. *)
+let draw_association_pairs keys values ~min_size ~max_size data =
+  let coll = new_collection ~min_size ?max_size data () in
+  let rec collect acc =
+    if collection_more coll data
+    then (
+      let k = do_draw (core_of keys) data in
+      if List.exists acc ~f:(fun (k', _) -> Poly.equal k' k)
+      then (
+        collection_reject coll data;
+        collect acc)
+      else (
+        let v = do_draw (core_of values) data in
+        collect ((k, v) :: acc)))
+    else List.rev acc
+  in
+  collect []
+;;
+
+(** [association_lists keys values ?min_size ?max_size ()] creates a generator
+    for association lists over printable [keys] and [values]: [(key, value)]
+    pairs, in generation order, whose keys are unique.
+
+    Key-value pairs are generated one at a time via the collection protocol,
+    with duplicate keys rejected client-side. *)
+let association_lists
       (keys : ('a, printable) generator)
       (values : ('b, printable) generator)
       ?(min_size = 0)
@@ -15,15 +50,7 @@ let hashmaps
       ()
   : (('a * 'b) list, printable) generator
   =
-  if min_size < 0
-  then raise (Invalid_argument (sprintf "min_size=%d must be non-negative" min_size));
-  (match max_size with
-   | Some ms when ms < 0 ->
-     raise (Invalid_argument (sprintf "max_size=%d must be non-negative" ms))
-   | Some ms when min_size > ms ->
-     raise
-       (Invalid_argument (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
-   | _ -> ());
+  validate_size_bounds ~min_size ~max_size;
   let pk = printer keys
   and pv = printer values in
   let sexp_of kvs =
@@ -32,23 +59,37 @@ let hashmaps
   let core =
     Composite
       { label = Labels.map
+      ; generate_fn = draw_association_pairs keys values ~min_size ~max_size
+      }
+  in
+  Printable { core; sexp_of }
+;;
+
+(** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
+    polymorphic hash tables over printable [keys] and [values].
+
+    The entries are generated exactly as {!association_lists} generates its
+    pairs — one at a time via the collection protocol, duplicate keys
+    rejected client-side — and loaded into a [Hashtbl.Poly.t]. *)
+let hash_tables
+      (keys : ('a, printable) generator)
+      (values : ('b, printable) generator)
+      ?(min_size = 0)
+      ?max_size
+      ()
+  : (('a, 'b) Hashtbl.t, printable) generator
+  =
+  validate_size_bounds ~min_size ~max_size;
+  let pk = printer keys
+  and pv = printer values in
+  let sexp_of table = Hashtbl.Poly.sexp_of_t pk pv table in
+  let core =
+    Composite
+      { label = Labels.map
       ; generate_fn =
           (fun data ->
-            let coll = new_collection ~min_size ?max_size data () in
-            let rec collect acc =
-              if collection_more coll data
-              then (
-                let k = do_draw (core_of keys) data in
-                if List.exists acc ~f:(fun (k', _) -> Poly.equal k' k)
-                then (
-                  collection_reject coll data;
-                  collect acc)
-                else (
-                  let v = do_draw (core_of values) data in
-                  collect ((k, v) :: acc)))
-              else List.rev acc
-            in
-            collect [])
+            Hashtbl.Poly.of_alist_exn
+              (draw_association_pairs keys values ~min_size ~max_size data))
       }
   in
   Printable { core; sexp_of }

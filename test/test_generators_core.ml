@@ -258,20 +258,31 @@ let test_printer_one_of_composite () =
     "3"
 ;;
 
-(* Hashmaps render via both the dict-schema (basic) and collection paths. *)
-let test_printer_hashmap_basic () =
+(* Association lists render via both the dict-schema (basic) and collection
+   paths. *)
+let test_printer_association_list_basic () =
   check_printer
-    "hashmap"
-    (hashmaps (integers ()) (integers ()) ())
+    "association list"
+    (association_lists (integers ()) (integers ()) ())
     [ 1, 2; 3, 4 ]
     "((1 2)(3 4))"
 ;;
 
-let test_printer_hashmap_composite () =
+let test_printer_association_list_composite () =
   check_printer
-    "hashmap composite"
-    (hashmaps (filter (fun _ -> true) (integers ())) (integers ()) ())
+    "association list composite"
+    (association_lists (filter (fun _ -> true) (integers ())) (integers ()) ())
     [ 1, 2 ]
+    "((1 2))"
+;;
+
+(* Hash tables render through [Hashtbl.Poly.sexp_of_t]; a single entry keeps
+   the iteration order deterministic. *)
+let test_printer_hash_table () =
+  check_printer
+    "hash table"
+    (hash_tables (integers ()) (integers ()) ())
+    (Core.Hashtbl.Poly.of_alist_exn [ 1, 2 ])
     "((1 2))"
 ;;
 
@@ -360,8 +371,15 @@ let tests =
   ; Alcotest.test_case "printer tuple4" `Quick test_printer_tuple4
   ; Alcotest.test_case "printer one_of basic" `Quick test_printer_one_of_basic
   ; Alcotest.test_case "printer one_of composite" `Quick test_printer_one_of_composite
-  ; Alcotest.test_case "printer hashmap basic" `Quick test_printer_hashmap_basic
-  ; Alcotest.test_case "printer hashmap composite" `Quick test_printer_hashmap_composite
+  ; Alcotest.test_case
+      "printer association list basic"
+      `Quick
+      test_printer_association_list_basic
+  ; Alcotest.test_case
+      "printer association list composite"
+      `Quick
+      test_printer_association_list_composite
+  ; Alcotest.test_case "printer hash table" `Quick test_printer_hash_table
   ; Alcotest.test_case "printer optional some" `Quick test_printer_optional_some
   ; Alcotest.test_case "printer optional none" `Quick test_printer_optional_none
   ; Alcotest.test_case "printer optional composite" `Quick test_printer_optional_composite
