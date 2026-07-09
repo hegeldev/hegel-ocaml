@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+`one_of` now prints a drawn value through the printer of the branch it was
+actually drawn from. Previously every branch's values printed through the
+first branch's printer.
+
 `with_suppress_health_check` now sets the suppressed-health-check list like
 every other `with_*` builder, replacing any previously suppressed list.
 Previously it appended, so repeated calls accumulated duplicates and a

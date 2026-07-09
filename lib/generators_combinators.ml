@@ -15,31 +15,33 @@ let sampled_from options =
   map (fun i -> arr.(i)) (integers ~min_value:0 ~max_value:(n - 1) ())
 ;;
 
-(** [one_of_core cores] builds the generation structure that picks among
-    [cores]: an index is drawn inside a {!Labels.one_of} span and that branch is
-    generated compositionally. *)
-let one_of_core : type a. a core list -> a core =
-  fun cores ->
-  let gens = Array.of_list cores in
-  let n = Array.length gens in
-  Composite
-    { label = Labels.one_of
-    ; generate_fn =
-        (fun data ->
-          let idx = Internal.generate_integer data ~min_value:0 ~max_value:(n - 1) in
-          do_draw gens.(idx) data)
-    }
-;;
-
 (** [one_of generators] creates a generator that picks from one of the given
     [generators], all of which must be printable. Requires at least one
-    generator. *)
+    generator.
+
+    An index is drawn inside a {!Labels.one_of} span and that branch is
+    generated compositionally. Each draw records the chosen branch's printer, so
+    the drawn value renders through the printer of the branch it actually came
+    from; before any draw, the printer defaults to the first branch's. *)
 let one_of (generators : ('a, printable) generator list) : ('a, printable) generator =
   match generators with
   | [] -> failwith "one_of requires at least one generator"
   | first :: _ ->
-    Printable
-      { core = one_of_core (List.map generators ~f:core_of); sexp_of = printer first }
+    let cores = Array.of_list (List.map generators ~f:core_of) in
+    let printers = Array.of_list (List.map generators ~f:printer) in
+    let n = Array.length cores in
+    let drawn_printer = ref (printer first) in
+    let core =
+      Composite
+        { label = Labels.one_of
+        ; generate_fn =
+            (fun data ->
+              let idx = Internal.generate_integer data ~min_value:0 ~max_value:(n - 1) in
+              drawn_printer := printers.(idx);
+              do_draw cores.(idx) data)
+        }
+    in
+    Printable { core; sexp_of = (fun v -> !drawn_printer v) }
 ;;
 
 (** [optional element] creates a generator that produces either [None] or

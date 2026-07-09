@@ -452,7 +452,9 @@ val hash_tables
 val sampled_from : 'a list -> ('a, unprintable) generator
 
 (** [one_of generators] creates a generator that picks from one of the given
-    printable [generators]. Requires at least one generator.
+    printable [generators]. Requires at least one generator. On a failing
+    replay, the drawn value prints through the printer of the branch it was
+    drawn from.
 
     {[
       let%hegel_test one_of_example tc =
