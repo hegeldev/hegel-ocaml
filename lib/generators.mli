@@ -439,9 +439,12 @@ val hash_tables
   -> unit
   -> (('a, 'b) Core.Hashtbl.t, printable) generator
 
-(** [sampled_from options] creates a generator that samples uniformly from a
-    non-empty list of values. The output type is the caller's, so the result
-    carries no printer.
+(** [sampled_from options] creates a generator that samples from a non-empty
+    list of values. Sampling is {e not} uniform: the engine's bounded-integer
+    draw deliberately over-weights boundary and "interesting" indices, so the
+    first element (and, to a lesser extent, the last) is drawn noticeably more
+    often than the middle ones, matching the sibling Hegel client libraries.
+    The output type is the caller's, so the result carries no printer.
 
     {[
       let%hegel_test sampled_from_example tc =

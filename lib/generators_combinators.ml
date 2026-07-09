@@ -2,12 +2,15 @@ open! Core
 open Generators_core
 open Generators_primitives
 
-(** [sampled_from options] creates a generator that samples uniformly from a
-    non-empty list of values.
+(** [sampled_from options] creates a generator that samples from a non-empty
+    list of values.
 
     Implemented as an integer index generator: picks an index in [0, n-1] and
-    returns [options.(index)]. The output type is the caller's, so the result
-    carries no printer; use {!with_printer} to draw it with {!draw}. *)
+    returns [options.(index)]. The engine's bounded-integer draw is deliberately
+    non-uniform (boundary and "interesting" indices are over-weighted), so
+    earlier elements — the first in particular — are drawn more often than the
+    middle ones. The output type is the caller's, so the result carries no
+    printer; use {!with_printer} to draw it with {!draw}. *)
 let sampled_from options =
   let arr = Array.of_list options in
   let n = Array.length arr in

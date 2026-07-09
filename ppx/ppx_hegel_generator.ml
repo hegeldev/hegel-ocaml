@@ -11,7 +11,8 @@
 
     Supported types:
     - Records: generates all fields, then constructs the record
-    - Variants: picks a constructor uniformly at random, then generates args
+    - Variants: picks a constructor via [sampled_from] (engine-biased toward
+      earlier constructors), then generates args
     - Type aliases: delegates to the generator for the aliased type
 
     Supported field/argument types:

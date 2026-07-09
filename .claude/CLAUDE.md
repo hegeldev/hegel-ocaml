@@ -191,8 +191,9 @@ value named `<t>_generator` from type declarations annotated with
 
 1. For **records**: generates each field by calling the appropriate primitive
    generator, then constructs the record value.
-2. For **variants**: picks a constructor index uniformly at random via
-   `sampled_from`, then generates arguments for the chosen constructor. A
+2. For **variants**: picks a constructor index via `sampled_from` (the
+   engine's bounded-integer draw is non-uniform, over-weighting boundary
+   indices), then generates arguments for the chosen constructor. A
    data-carrying variant wraps the index-plus-arguments draw in an
    `enum_variant` span (so the constructor choice and its fields shrink as one
    unit, matching the engine's own derived-enum generator); an all-nullary enum
