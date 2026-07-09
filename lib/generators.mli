@@ -33,30 +33,6 @@
     Primitive generators are {!printable} and may be drawn with {!Hegel.draw},
     which prints the drawn value on a failing replay. *)
 
-(**/**)
-
-(** Constants for span labels used in generation tracking. *)
-module Labels : sig
-  val list : int
-  val list_element : int
-  val set : int
-  val set_element : int
-  val map : int
-  val map_entry : int
-  val tuple : int
-  val one_of : int
-  val optional : int
-  val fixed_dict : int
-  val flat_map : int
-  val filter : int
-  val mapped : int
-  val sampled_from : int
-  val enum_variant : int
-  val stateful_rule : int
-end
-
-(**/**)
-
 (** A generator producing values of type ['a]. The phantom ['p] is {!printable}
     when the generator carries a printer (and so may be drawn with {!Hegel.draw})
     and {!unprintable} otherwise. *)
@@ -81,50 +57,6 @@ type printable
 type unprintable
 
 (**/**)
-
-(** Maximum number of filter attempts before calling [assume false]. *)
-val max_filter_attempts : int
-
-(** [group label data f] runs [f ()] inside a span with the given [label]. The
-    span is stopped with [discard:false] regardless of whether [f] raises. *)
-val group : int -> Internal.test_case -> (unit -> 'a) -> 'a
-
-(** [discardable_group label data f] runs [f ()] inside a span with [label]. If
-    [f] raises, the span is stopped with [discard:true]; otherwise
-    [discard:false]. *)
-val discardable_group : int -> Internal.test_case -> (unit -> 'a) -> 'a
-
-(** [resolve_draw values ~consume id] resolves a drawn pool [id] against the
-    local [values] table, removing it when [consume]. Raises
-    [Internal.Flaky_strategy] on an unknown id (an engine-contract violation,
-    unreachable through the normal engine-driven path). Exposed only so that
-    branch can be unit-tested. *)
-val resolve_draw : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
-
-(** A collection handle for generating variable-length sequences. *)
-type collection =
-  { mutable finished : bool
-  ; mutable collection_id : int option
-  ; min_size : int
-  ; max_size : int option
-  }
-
-(** [new_collection ~min_size ?max_size data ()] creates a new collection
-    handle. *)
-val new_collection
-  :  min_size:int
-  -> ?max_size:int
-  -> Internal.test_case
-  -> unit
-  -> collection
-
-(** [collection_more coll data] returns [true] if more elements should be
-    generated, [false] when the collection is complete. *)
-val collection_more : collection -> Internal.test_case -> bool
-
-(** [collection_reject coll data] rejects the last element of the collection.
-    Raises [Internal.Data_exhausted] on StopTest. *)
-val collection_reject : collection -> Internal.test_case -> unit
 
 (** [draw ?label tc gen] produces a typed value from the printable generator
     [gen] using test case [tc].
@@ -201,16 +133,6 @@ val with_printer : ('a -> Core.Sexp.t) -> ('a, 'p) generator -> ('a, printable) 
 
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
 val printer : ('a, printable) generator -> 'a -> Core.Sexp.t
-
-(** [pool_values ~pool_id ~values ~consume] builds a generator that picks a value
-    from the engine pool [pool_id], resolving the drawn id against the local
-    [values] table. When [consume], the picked value is removed from the pool.
-    Carries no printer, so it is {!unprintable}. *)
-val pool_values
-  :  pool_id:int
-  -> values:(int, 'a) Core.Hashtbl.t
-  -> consume:bool
-  -> ('a, unprintable) generator
 
 (**/**)
 
@@ -734,19 +656,6 @@ val from_regex : string -> ?fullmatch:bool -> unit -> (string, printable) genera
     ]} *)
 val composite : (Internal.test_case -> 'a) -> ('a, unprintable) generator
 
-(**/**)
-
-(** [composite_with_label ~label generate_fn] is {!composite} but tags the span
-    with [label] instead of the fixed struct/record label. Internal: used by the
-    derive PPX to tag composites (e.g. {!Labels.enum_variant}); not for direct
-    use. *)
-val composite_with_label
-  :  label:int
-  -> (Internal.test_case -> 'a)
-  -> ('a, unprintable) generator
-
-(**/**)
-
 (** [map f gen] transforms values from [gen] using [f].
 
     {[
@@ -786,3 +695,94 @@ val flat_map
       ;;
     ]} *)
 val filter : ('a -> bool) -> ('a, 'p) generator -> ('a, 'p) generator
+
+(**/**)
+
+(** Internal plumbing consumed by the [ppx_hegel_generator] deriver, the
+    library's own modules, and white-box tests. Not for direct use — no
+    stability guarantees. *)
+module Ppx_internal : sig
+  (** Constants for span labels used in generation tracking. *)
+  module Labels : sig
+    val list : int
+    val list_element : int
+    val set : int
+    val set_element : int
+    val map : int
+    val map_entry : int
+    val tuple : int
+    val one_of : int
+    val optional : int
+    val fixed_dict : int
+    val flat_map : int
+    val filter : int
+    val mapped : int
+    val sampled_from : int
+    val enum_variant : int
+    val stateful_rule : int
+  end
+
+  (** Maximum number of filter attempts before calling [assume false]. *)
+  val max_filter_attempts : int
+
+  (** [group label data f] runs [f ()] inside a span with the given [label]. The
+      span is stopped with [discard:false] regardless of whether [f] raises. *)
+  val group : int -> Internal.test_case -> (unit -> 'a) -> 'a
+
+  (** [discardable_group label data f] runs [f ()] inside a span with [label].
+      If [f] raises, the span is stopped with [discard:true]; otherwise
+      [discard:false]. *)
+  val discardable_group : int -> Internal.test_case -> (unit -> 'a) -> 'a
+
+  (** [resolve_draw values ~consume id] resolves a drawn pool [id] against the
+      local [values] table, removing it when [consume]. Raises
+      [Internal.Flaky_strategy] on an unknown id (an engine-contract violation,
+      unreachable through the normal engine-driven path). Exposed only so that
+      branch can be unit-tested. *)
+  val resolve_draw : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
+
+  (** A collection handle for generating variable-length sequences. *)
+  type collection =
+    { mutable finished : bool
+    ; mutable collection_id : int option
+    ; min_size : int
+    ; max_size : int option
+    }
+
+  (** [new_collection ~min_size ?max_size data ()] creates a new collection
+      handle. *)
+  val new_collection
+    :  min_size:int
+    -> ?max_size:int
+    -> Internal.test_case
+    -> unit
+    -> collection
+
+  (** [collection_more coll data] returns [true] if more elements should be
+      generated, [false] when the collection is complete. *)
+  val collection_more : collection -> Internal.test_case -> bool
+
+  (** [collection_reject coll data] rejects the last element of the collection.
+      Raises [Internal.Data_exhausted] on StopTest. *)
+  val collection_reject : collection -> Internal.test_case -> unit
+
+  (** [pool_values ~pool_id ~values ~consume] builds a generator that picks a
+      value from the engine pool [pool_id], resolving the drawn id against the
+      local [values] table. When [consume], the picked value is removed from the
+      pool. Carries no printer, so it is {!unprintable}. *)
+  val pool_values
+    :  pool_id:int
+    -> values:(int, 'a) Core.Hashtbl.t
+    -> consume:bool
+    -> ('a, unprintable) generator
+
+  (** [composite_with_label ~label generate_fn] is {!composite} but tags the
+      span with [label] instead of the fixed struct/record label. Used by the
+      derive PPX to tag composites (e.g. {!Labels.enum_variant}). *)
+  val composite_with_label
+    :  label:int
+    -> (Internal.test_case -> 'a)
+    -> ('a, unprintable) generator
+end
+
+(**/**)

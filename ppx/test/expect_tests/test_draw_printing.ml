@@ -123,7 +123,7 @@ let%expect_test "with_printer makes an unprintable sampled_from drawable" =
 let%expect_test "draw nested in a span (depth > 0) is suppressed" =
   run_failing (fun tc ->
     let _ =
-      group Labels.list tc (fun () ->
+      Ppx_internal.group Ppx_internal.Labels.list tc (fun () ->
         Hegel.draw ~label:"n" tc (integers ~min_value:7 ~max_value:7 ()))
     in
     Hegel.note tc "ran";

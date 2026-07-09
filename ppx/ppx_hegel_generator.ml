@@ -279,8 +279,8 @@ and generator_of_data_variant ~loc (constrs : constructor_declaration list) : ex
   (* Wrap the index-then-arguments draw in an [enum_variant] span so the engine
      shrinks the chosen constructor and its fields together as one unit. *)
   [%expr
-    Hegel.Generators.composite_with_label
-      ~label:Hegel.Generators.Labels.enum_variant
+    Hegel.Generators.Ppx_internal.composite_with_label
+      ~label:Hegel.Generators.Ppx_internal.Labels.enum_variant
       (fun _hegel_tc ->
          let _variant_idx =
            Hegel.draw_silent

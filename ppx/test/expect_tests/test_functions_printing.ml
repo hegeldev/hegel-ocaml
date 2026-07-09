@@ -260,7 +260,7 @@ let%expect_test "a printable function generator prints with its sexp_of" =
    applied at the top level, so its pair still shows. *)
 let%hegel_test printable_function_drawn_nested tc =
   let f =
-    group Labels.list tc (fun () ->
+    Ppx_internal.group Ppx_internal.Labels.list tc (fun () ->
       draw
         tc
         (with_printer
@@ -302,7 +302,7 @@ let%hegel_test application_inside_span_is_suppressed tc =
          ~returns:(integers ~min_value:0 ~max_value:1000 ())
          ())
   in
-  let r = group Labels.list tc (fun () -> f 42) in
+  let r = Ppx_internal.group Ppx_internal.Labels.list tc (fun () -> f 42) in
   ignore (r : int);
   assert false
 [@@settings settings ~test_cases:100 ~seed:0 ()]

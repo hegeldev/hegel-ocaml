@@ -54,6 +54,14 @@ let s = Ipaddr.to_string ip in
 actually drawn from. Previously every branch's values printed through the
 first branch's printer.
 
+The internal PPX/engine plumbing that `Hegel.Generators` previously exposed
+at its top level (`Labels`, `group`, `discardable_group`, `new_collection`,
+`collection_more`, `collection_reject`, `pool_values`, `resolve_draw`,
+`max_filter_attempts`, `composite_with_label`, and the `collection` type) has
+moved into `Hegel.Generators.Ppx_internal`, an explicitly internal submodule
+with no stability guarantees. These values were never documented API;
+`open Hegel.Generators` no longer brings them into scope.
+
 `with_suppress_health_check` now sets the suppressed-health-check list like
 every other `with_*` builder, replacing any previously suppressed list.
 Previously it appended, so repeated calls accumulated duplicates and a

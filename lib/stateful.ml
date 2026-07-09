@@ -22,11 +22,11 @@ module Pool = struct
   let size t = Hashtbl.length t.values
 
   let values_consumed t =
-    Generators.pool_values ~pool_id:t.pool_id ~values:t.values ~consume:true
+    Generators.Ppx_internal.pool_values ~pool_id:t.pool_id ~values:t.values ~consume:true
   ;;
 
   let values_reusable t =
-    Generators.pool_values ~pool_id:t.pool_id ~values:t.values ~consume:false
+    Generators.Ppx_internal.pool_values ~pool_id:t.pool_id ~values:t.values ~consume:false
   ;;
 end
 
@@ -81,7 +81,7 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
        step count once a failing case is found: stop with probability 2^-16
        during normal operation, and force a stop once enough steps have run. *)
     let rec loop ~state ~num_steps_succeeded ~steps_run =
-      Internal.start_span ~label:Generators.Labels.stateful_rule tc;
+      Internal.start_span ~label:Generators.Ppx_internal.Labels.stateful_rule tc;
       let p_stop = 2.0 ** -16.0 in
       let must_stop =
         if is_single
