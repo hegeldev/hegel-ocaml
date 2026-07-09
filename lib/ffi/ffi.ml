@@ -56,7 +56,9 @@ module String_result = struct
   let () = seal t
 end
 
-(* [hegel_date_t]: year in [1, 9999], month in [1, 12], day in [1, 31]. *)
+(* [hegel_date_t]: proleptic Gregorian date. [year] in [-999999, 999999]
+   (bounded by the range passed to [hegel_generate_date]; this binding requests
+   [1, 9999]), [month] in [1, 12], [day] in [1, 31]. *)
 module Date_struct = struct
   type s
 

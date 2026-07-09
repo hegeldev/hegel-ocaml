@@ -471,7 +471,7 @@ let pool_add tc ~pool_id =
 
 (** [pool_generate tc ~pool_id ?consume ()] draws a variable id from [pool_id].
     When [consume] is [true], the variable is also removed from the pool.
-    Drawing from an empty pool raises {!Data_exhausted}. *)
+    Drawing from an empty pool raises {!Assume_rejected}. *)
 let pool_generate tc ~pool_id ?(consume = false) () =
   with_stop_guard tc (fun () -> Ffi.pool_generate tc.context tc.handle ~pool_id ~consume)
 ;;
