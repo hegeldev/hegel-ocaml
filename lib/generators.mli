@@ -212,18 +212,6 @@ val pool_values
   -> consume:bool
   -> ('a, unprintable) generator
 
-(** [format_date (year, month, day)] renders a drawn date as [YYYY-MM-DD].
-    Exposed for white-box testing. *)
-val format_date : int * int * int -> string
-
-(** [format_time (hour, minute, second, microsecond)] renders a drawn time as
-    [HH:MM:SS\[.ffffff\]]. Exposed for white-box testing. *)
-val format_time : int * int * int * int -> string
-
-(** [format_datetime (date, time)] renders a drawn datetime as
-    [YYYY-MM-DDTHH:MM:SS\[.ffffff\]]. Exposed for white-box testing. *)
-val format_datetime : (int * int * int) * (int * int * int * int) -> string
-
 (**/**)
 
 (** {2 Primitive generators} *)
@@ -654,39 +642,54 @@ val urls : unit -> (string, printable) generator
     ]} *)
 val domains : ?max_length:int -> unit -> (string, printable) generator
 
-(** [dates ()] creates a generator for ISO 8601 date strings ([YYYY-MM-DD]),
-    with year in [\[1, 9999\]] and calendar-valid month/day.
+(** [dates ()] creates a generator for calendar dates as [Core.Date.t] values,
+    with year in [\[1, 9999\]] and calendar-valid month/day. Use {!format_date}
+    to render a drawn date as an ISO 8601 string.
 
     {[
       let%hegel_test dates_example tc =
         let d = draw tc (dates ()) in
-        assert (String.length d = 10)
+        assert (Core.Date.year d >= 1 && Core.Date.year d <= 9999)
       ;;
     ]} *)
-val dates : unit -> (string, printable) generator
+val dates : unit -> (Core.Date.t, printable) generator
 
-(** [times ()] creates a generator for ISO 8601 time strings ([HH:MM:SS] or
-    [HH:MM:SS.ffffff], the fractional part present only when microseconds are
-    non-zero).
+(** [times ()] creates a generator for times of day as [Core.Time_ns.Ofday.t]
+    values with microsecond precision. Use {!format_time} to render a drawn
+    time as an ISO 8601 string.
 
     {[
       let%hegel_test times_example tc =
         let t = draw tc (times ()) in
-        assert (String.length t > 0)
+        assert (String.length (format_time t) > 0)
       ;;
     ]} *)
-val times : unit -> (string, printable) generator
+val times : unit -> (Core.Time_ns.Ofday.t, printable) generator
 
-(** [datetimes ()] creates a generator for ISO 8601 datetime strings
-    ([YYYY-MM-DDTHH:MM:SS\[.ffffff\]]), combining {!dates} and {!times}.
+(** [datetimes ()] creates a generator for naive datetimes as
+    [(Core.Date.t, Core.Time_ns.Ofday.t)] pairs, combining {!dates} and
+    {!times}. Use {!format_datetime} to render a drawn pair as an ISO 8601
+    string.
 
     {[
       let%hegel_test datetimes_example tc =
-        let dt = draw tc (datetimes ()) in
-        assert (String.length dt > 0)
+        let d, t = draw tc (datetimes ()) in
+        assert (String.length (format_datetime (d, t)) > 0)
       ;;
     ]} *)
-val datetimes : unit -> (string, printable) generator
+val datetimes : unit -> (Core.Date.t * Core.Time_ns.Ofday.t, printable) generator
+
+(** [format_date date] renders a date as an ISO 8601 [YYYY-MM-DD] string. *)
+val format_date : Core.Date.t -> string
+
+(** [format_time time] renders a time of day as an ISO 8601 [HH:MM:SS] string,
+    appending [.ffffff] when the microsecond component is non-zero (sub-µs
+    precision is truncated). *)
+val format_time : Core.Time_ns.Ofday.t -> string
+
+(** [format_datetime (date, time)] renders a datetime pair as an ISO 8601
+    [YYYY-MM-DDTHH:MM:SS\[.ffffff\]] string. *)
+val format_datetime : Core.Date.t * Core.Time_ns.Ofday.t -> string
 
 (** [ip_addresses ?version ()] creates a generator for IP address strings.
     [version] selects IPv4 (dotted-decimal, RFC 791) or IPv6 (colon-hex,

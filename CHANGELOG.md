@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+**Breaking**: `dates`, `times`, and `datetimes` now generate typed values
+instead of ISO 8601 strings: `dates` produces `Core.Date.t`, `times` produces
+`Core.Time_ns.Ofday.t` (microsecond precision), and `datetimes` produces
+`Core.Date.t * Core.Time_ns.Ofday.t` pairs. Previously the engine's structured
+date/time values were formatted away into strings at the draw. The
+`format_date` / `format_time` / `format_datetime` helpers are now documented
+public API and render the new typed values in the old ISO 8601 forms, so
+string-oriented tests migrate with a single function call:
+
+```ocaml
+(* before *)
+let s = draw tc (dates ()) in
+
+(* after *)
+let d = draw tc (dates ()) in
+let s = format_date d in
+```
+
 `one_of` now prints a drawn value through the printer of the branch it was
 actually drawn from. Previously every branch's values printed through the
 first branch's printer.

@@ -316,40 +316,63 @@ let domains ?max_length () =
   leaf ~draw:(fun tc -> Internal.generate_domain tc ~max_length) ~sexp_of:sexp_of_string
 ;;
 
-(** [format_date (year, month, day)] renders a drawn date as an ISO 8601
-    [YYYY-MM-DD] string. *)
-let format_date (year, month, day) = sprintf "%04d-%02d-%02d" year month day
-
-(** [format_time (hour, minute, second, microsecond)] renders a drawn time as an
-    ISO 8601 [HH:MM:SS] string, appending [.ffffff] when [microsecond] is
-    non-zero. *)
-let format_time (hour, minute, second, microsecond) =
-  if microsecond = 0
-  then sprintf "%02d:%02d:%02d" hour minute second
-  else sprintf "%02d:%02d:%02d.%06d" hour minute second microsecond
+(* [date_of_parts (year, month, day)] converts an engine-drawn Gregorian date
+   into a [Core.Date.t]. The engine only emits calendar-valid dates, so the
+   conversion cannot raise. *)
+let date_of_parts (year, month, day) =
+  Date.create_exn ~y:year ~m:(Month.of_int_exn month) ~d:day
 ;;
 
-(** [format_datetime (date, time)] renders a drawn datetime as an ISO 8601
+(* [time_of_parts (hour, minute, second, microsecond)] converts an engine-drawn
+   time of day into a [Core.Time_ns.Ofday.t]. The engine only emits valid times,
+   so the conversion cannot raise. *)
+let time_of_parts (hour, minute, second, microsecond) =
+  Time_ns.Ofday.create ~hr:hour ~min:minute ~sec:second ~us:microsecond ()
+;;
+
+(** [format_date date] renders a date as an ISO 8601 [YYYY-MM-DD] string. *)
+let format_date date = Date.to_string date
+
+(** [format_time time] renders a time of day as an ISO 8601 [HH:MM:SS] string,
+    appending [.ffffff] when the microsecond component is non-zero (sub-µs
+    precision is truncated). *)
+let format_time time =
+  let parts = Time_ns.Ofday.to_parts time in
+  let microsecond = (parts.ms * 1000) + parts.us in
+  if microsecond = 0
+  then sprintf "%02d:%02d:%02d" parts.hr parts.min parts.sec
+  else sprintf "%02d:%02d:%02d.%06d" parts.hr parts.min parts.sec microsecond
+;;
+
+(** [format_datetime (date, time)] renders a datetime as an ISO 8601
     [YYYY-MM-DDTHH:MM:SS\[.ffffff\]] string. *)
 let format_datetime (date, time) = format_date date ^ "T" ^ format_time time
 
-(** [dates ()] creates a generator for ISO 8601 date strings ([YYYY-MM-DD]),
-    with year in [\[1, 9999\]] and calendar-valid month/day. *)
+(** [dates ()] creates a generator for [Core.Date.t] values, with year in
+    [\[1, 9999\]] and calendar-valid month/day. Use {!format_date} to render a
+    drawn date as an ISO 8601 string. *)
 let dates () =
-  leaf ~draw:(fun tc -> format_date (Internal.generate_date tc)) ~sexp_of:sexp_of_string
+  leaf ~draw:(fun tc -> date_of_parts (Internal.generate_date tc)) ~sexp_of:Date.sexp_of_t
 ;;
 
-(** [times ()] creates a generator for ISO 8601 time strings ([HH:MM:SS] or
-    [HH:MM:SS.ffffff], the fractional part present only when microseconds are
-    non-zero). *)
+(** [times ()] creates a generator for [Core.Time_ns.Ofday.t] times of day with
+    microsecond precision. Use {!format_time} to render a drawn time as an
+    ISO 8601 string. *)
 let times () =
-  leaf ~draw:(fun tc -> format_time (Internal.generate_time tc)) ~sexp_of:sexp_of_string
+  leaf
+    ~draw:(fun tc -> time_of_parts (Internal.generate_time tc))
+    ~sexp_of:Time_ns.Ofday.sexp_of_t
 ;;
 
-(** [datetimes ()] creates a generator for ISO 8601 datetime strings
-    ([YYYY-MM-DDTHH:MM:SS\[.ffffff\]]), combining {!dates} and {!times}. *)
+(** [datetimes ()] creates a generator for naive datetimes as
+    [(Core.Date.t, Core.Time_ns.Ofday.t)] pairs, combining {!dates} and
+    {!times}. Use {!format_datetime} to render a drawn pair as an ISO 8601
+    string. *)
 let datetimes () =
   leaf
-    ~draw:(fun tc -> format_datetime (Internal.generate_datetime tc))
-    ~sexp_of:sexp_of_string
+    ~draw:(fun tc ->
+      let date, time = Internal.generate_datetime tc in
+      date_of_parts date, time_of_parts time)
+    ~sexp_of:(fun (date, time) ->
+      Sexp.List [ Date.sexp_of_t date; Time_ns.Ofday.sexp_of_t time ])
 ;;
