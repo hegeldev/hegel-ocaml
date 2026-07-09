@@ -1,7 +1,7 @@
 (** The current version of Hegel for OCaml. *)
 let version = "0.8.2"
 
-(** Generator combinators for composable test data generation. *)
+(** Generators for composable test data generation. *)
 module Generators = Generators
 
 (** Stateful property-based testing on top of {!Generators}. *)

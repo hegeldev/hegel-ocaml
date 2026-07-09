@@ -1,4 +1,4 @@
-(** Internal — runtime registry and runner for the [let%hegel_test] PPX. Not
+(** Internal. Runtime registry and runner for the [let%hegel_test] PPX. Not
     part of the public API.
 
     The [ppx_hegel_test] PPX emits a registration call for every
