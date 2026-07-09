@@ -28,9 +28,9 @@
   (ocaml
    (>= 5.1))
   (core
-   (>= 0.17))
+   (>= v0.17))
   (core_unix
-   (>= 0.17))
+   (>= v0.17))
   (ctypes
    (>= 0.20))
   (ctypes-foreign
@@ -101,11 +101,11 @@
   (core
    (and
     :with-test
-    (>= 0.17)))
+    (>= v0.17)))
   (core_unix
    (and
     :with-test
-    (>= 0.17)))))
+    (>= v0.17)))))
 
 (package
  (name ppx_hegel_test)
@@ -130,11 +130,11 @@
   (core
    (and
     :with-test
-    (>= 0.17)))
+    (>= v0.17)))
   (core_unix
    (and
     :with-test
-    (>= 0.17)))
+    (>= v0.17)))
   (yojson
    (and
     :with-test
