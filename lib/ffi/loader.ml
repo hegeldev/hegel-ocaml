@@ -175,6 +175,37 @@ let from_sibling ext =
   List.find_opt is_file [ candidate "release"; candidate "debug" ]
 ;;
 
+(* Download [url] into [cache_path], failing unless the payload's SHA-256 is
+   [expected]. The payload is fetched to a temporary file in the cache
+   directory, verified, and then renamed into place. Exposed (rather than
+   inlined in [from_cache_or_download]) so the test suite can exercise the
+   download protocol against a stubbed [curl] and its own checksum. *)
+let download_verified ~url ~expected ~cache_path =
+  mkdir_p (Filename.dirname cache_path);
+  let tmp = cache_path ^ ".tmp" in
+  let rc =
+    Sys.command
+      (Printf.sprintf "curl -fsSL %s -o %s" (Filename.quote url) (Filename.quote tmp))
+  in
+  if rc <> 0
+  then (
+    (try Sys.remove tmp with
+     | _ -> ());
+    failwith (Printf.sprintf "hegel: failed to download %s (curl exit %d)" url rc));
+  let actual = sha256_of_file tmp in
+  if not (String.equal actual expected)
+  then (
+    (try Sys.remove tmp with
+     | _ -> ());
+    failwith
+      (Printf.sprintf
+         "hegel: SHA-256 mismatch for downloaded libhegel (expected %s, got %s)"
+         expected
+         actual));
+  Sys.rename tmp cache_path;
+  cache_path
+;;
+
 (* 4. Cached download (fetching + verifying on first use). *)
 let from_cache_or_download os_id ext =
   let key = os_id ^ "-" ^ arch_id () in
@@ -206,29 +237,7 @@ let from_cache_or_download os_id ext =
             cache_path)
      | None -> ());
     let url = Printf.sprintf "%s/%s" release_base (release_artifact key ext) in
-    mkdir_p (cache_dir ());
-    let tmp = cache_path ^ ".tmp" in
-    let rc =
-      Sys.command
-        (Printf.sprintf "curl -fsSL %s -o %s" (Filename.quote url) (Filename.quote tmp))
-    in
-    if rc <> 0
-    then (
-      (try Sys.remove tmp with
-       | _ -> ());
-      failwith (Printf.sprintf "hegel: failed to download %s (curl exit %d)" url rc));
-    let actual = sha256_of_file tmp in
-    if not (String.equal actual expected)
-    then (
-      (try Sys.remove tmp with
-       | _ -> ());
-      failwith
-        (Printf.sprintf
-           "hegel: SHA-256 mismatch for downloaded libhegel (expected %s, got %s)"
-           expected
-           actual));
-    Sys.rename tmp cache_path;
-    cache_path)
+    download_verified ~url ~expected ~cache_path)
 ;;
 
 (** [locate ()] returns the path to a usable libhegel shared library, downloading
