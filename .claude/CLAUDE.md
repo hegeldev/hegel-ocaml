@@ -88,6 +88,7 @@ examples/                    # Example programs demonstrating the library
   collections.ml             # Collections and combinators: lists, filter, map
   real_world.ml              # Real-world scenario: sorted-merge property test
   derived_types.ml           # Derived generators via [@@deriving hegel_generator]
+  higher_order.ml            # Function generators: functions/functions2/functions3
 
 scripts/
   check-coverage.py          # Parses bisect-ppx-report, enforces 100%
@@ -137,7 +138,7 @@ Generators are a discriminated union:
 - **Filtered** — wraps source + predicate. Up to `max_filter_attempts` retries before `assume false`.
 - **CompositeList** — lists of any element core. Uses the collection protocol (new_collection / collection_more) to generate elements one at a time.
 - **Composite** — a `generate_fn` thunk run inside a labeled span; used by tuples, one_of, `lists ~unique`, and hashmaps (all of which now always drive the collection protocol / draw sub-values directly — there is no schema fast path).
-- **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (keyed by `sexp_of_arg`) and shows applied pairs as `name arg = result` via `note` on the final replay. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); nested result draws are wrapped in a `Labels.function_result` span.
+- **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (memoized on the argument via structural hash/equality — a `Hashtbl.Poly` — so `sexp_of_arg` is display-only and an omitted one shows `<opaque>` without collapsing the key) and shows applied pairs as `name arg = result` via `note` on the final replay. Only *top-level* applications print — a pair applied at draw depth > 0 (inside a span) is suppressed, like a nested draw. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); the name threads even when the function is drawn nested. Result draws are wrapped in a `Labels.function_result` span.
 
 ### Inline Test Integration (ppx/ppx_hegel_test.ml + lib/test_runtime/)
 
@@ -153,11 +154,13 @@ becomes `draw_silent_named ~name:"x" tc g`. Both target hidden entry points, kee
 `~repeatable`/`~name` off the public `draw`/`draw_silent` (the `draw`→`draw_named`
 precedent). The `~name` is only meaningful for a function generator (`Function` core),
 where it labels the shown `x arg = result` pairs; it is ignored for every other
-generator, attaches at the draw site (so it works through an intermediate
-`let g = functions ..; let f = draw_silent tc g` binding), and overrides the
-generator's own `?name`. A function made printable (via `with_printer`) is drawn with
-`draw`; `draw_named` threads the label the same way and also prints the usual
-`x = value` line (the function renders as `<fun>` through its printer).
+generator, and attaches at the draw site (so it works through an intermediate
+`let g = functions ..; let f = draw_silent tc g` binding). Precedence: an explicit
+`?name` on `functions` always wins, else the draw-site binding name, else `"function"`.
+A function made printable (via `with_printer`) is drawn with
+`draw`; `draw_named` threads the label the same way (even when nested) and prints
+the usual `x = value` line — the function renders as `<fun>` through its printer —
+only at the top level, suppressing it when nested like any other draw.
 
 `ppx_hegel_test`'s dune stanza declares `(inline_tests.backend ...)` with a
 generated runner that calls `Hegel_test_runtime.test_main ()`, and
@@ -394,10 +397,11 @@ draw, and always freed (`Internal.with_string_generator`).
     Reference it from README.md. Translate all Python library examples to idiomatic OCaml, adding
     short notes where the OCaml API differs (no decorator, no `.generate()` method, etc.).
 
-11. **Four example programs covers the full surface area**: `basic_properties.ml` (primitives,
+11. **Five example programs cover the full surface area**: `basic_properties.ml` (primitives,
     assume, note), `collections.ml` (lists, map, flat_map, filter, sampled_from, hashmaps),
-    `real_world.ml` (sorted-merge property test), `derived_types.ml` (PPX deriver). Each has a
-    standalone `main`; derived_types needs a separate dune stanza with PPX preprocessing.
+    `real_world.ml` (sorted-merge property test), `derived_types.ml` (PPX deriver),
+    `higher_order.ml` (function generators). Each has a standalone `main`; derived_types needs
+    a separate dune stanza with PPX preprocessing.
 
 12. **opam not on PATH in shell spawned by `just`**: The `just` tool starts a fresh shell that
     does not source `.bashrc` or `.profile`. Fix: add

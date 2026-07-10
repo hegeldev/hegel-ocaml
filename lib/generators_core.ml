@@ -329,9 +329,9 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
     Draws nested inside a span (e.g. composite elements) are suppressed so only
     the outermost value shows.
 
-    A function generator ({!Generators.functions}) still prints the usual 
-    [name = value] line. The function renders through its printer, typically 
-    [<fun>], and threads [label] into the function's own per-application print *)
+    A function generator ({!Generators.functions}) made printable always threads
+    [label] into the function's own per-application showing, so its
+    [name arg = result] pairs are labeled. *)
 let draw_named
   : type a.
     label:string -> repeatable:bool -> Internal.test_case -> (a, printable) generator -> a
@@ -339,13 +339,11 @@ let draw_named
   fun ~label ~repeatable tc gen ->
   match gen with
   | Printable { core = Function { build }; sexp_of } ->
+    let name = Internal.draw_display_name tc ~label ~repeatable in
+    let value = build ~name:(Some name) tc in
     if Internal.draw_depth tc = 0
-    then (
-      let name = Internal.draw_display_name tc ~label ~repeatable in
-      let value = build ~name:(Some name) tc in
-      Internal.note tc (sprintf "%s = %s" name (Sexp.to_string_hum (sexp_of value)));
-      value)
-    else build ~name:None tc
+    then Internal.note tc (sprintf "%s = %s" name (Sexp.to_string_hum (sexp_of value)));
+    value
   | Printable { core; sexp_of } ->
     let value = do_draw core tc in
     if Internal.draw_depth tc = 0

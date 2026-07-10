@@ -543,11 +543,15 @@ val tuples4
     with {!Hegel.draw_silent}. Applying the drawn function to an argument draws a
     result from [returns] the first time that argument is seen and memoizes it.
 
-    On the failing final replay each function application prints as [name arg = result].
-    [name] defaults to ["function"] and is overridden by the draw-site name (the
-    binding name inside a [let%hegel_test]). Pass [?name] to set a fallback when
-    drawing without the PPX. [sexp_of_arg] both keys the memo table and renders
-    arguments; [returns] must be printable so results can be shown.
+    On the failing final replay each top-level application prints as
+    [name arg = result] (applications nested inside a span are suppressed).
+    [name] is [?name] when you pass it — an explicit label always wins — else the
+    draw-site binding name inside a [let%hegel_test], else ["function"].
+
+    The memo table keys on the argument itself (structural hash/equality), so
+    distinct arguments always get independent results. [sexp_of_arg] only renders
+    the argument in the shown pair. An omitted [sexp_of_arg] or a non-printable
+    [returns] shows [<opaque>].
 
     {[
       let%hegel_test map_length_preserved tc =
@@ -559,8 +563,8 @@ val tuples4
     ]} *)
 val functions
   :  ?name:string
-  -> sexp_of_arg:('a -> Core.Sexp.t)
-  -> returns:('b, printable) generator
+  -> ?sexp_of_arg:('a -> Core.Sexp.t)
+  -> returns:('b, _) generator
   -> unit
   -> ('a -> 'b, unprintable) generator
 
@@ -572,9 +576,9 @@ val functions
     with {!draw_silent}. *)
 val functions2
   :  ?name:string
-  -> sexp_of_arg1:('a -> Core.Sexp.t)
-  -> sexp_of_arg2:('b -> Core.Sexp.t)
-  -> returns:('c, printable) generator
+  -> ?sexp_of_arg1:('a -> Core.Sexp.t)
+  -> ?sexp_of_arg2:('b -> Core.Sexp.t)
+  -> returns:('c, _) generator
   -> unit
   -> ('a -> 'b -> 'c, unprintable) generator
 
@@ -586,10 +590,10 @@ val functions2
     [name (arg1 arg2 arg3) = result]. Draw it with {!draw_silent}. *)
 val functions3
   :  ?name:string
-  -> sexp_of_arg1:('a -> Core.Sexp.t)
-  -> sexp_of_arg2:('b -> Core.Sexp.t)
-  -> sexp_of_arg3:('c -> Core.Sexp.t)
-  -> returns:('d, printable) generator
+  -> ?sexp_of_arg1:('a -> Core.Sexp.t)
+  -> ?sexp_of_arg2:('b -> Core.Sexp.t)
+  -> ?sexp_of_arg3:('c -> Core.Sexp.t)
+  -> returns:('d, _) generator
   -> unit
   -> ('a -> 'b -> 'c -> 'd, unprintable) generator
 

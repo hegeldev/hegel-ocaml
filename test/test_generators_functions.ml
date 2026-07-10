@@ -39,6 +39,22 @@ let test_functions_independent_e2e () =
   Alcotest.(check bool) "distinct args can differ" true !saw_differ
 ;;
 
+let test_functions_no_sexp_of_arg_e2e () =
+  let saw_differ = ref false in
+  run_hegel_test ~settings:(settings ~test_cases:100 ~seed:0 ()) (fun tc ->
+    let f =
+      draw_silent tc (functions ~returns:(integers ~min_value:0 ~max_value:5 ()) ())
+    in
+    let a0 = f 0 in
+    let a1 = f 1 in
+    if a0 <> a1 then saw_differ := true;
+    (* memo hit: same argument, same result even without a printer *)
+    assert (f 0 = a0);
+    assert (a0 >= 0 && a0 <= 5);
+    assert (a1 >= 0 && a1 <= 5));
+  Alcotest.(check bool) "distinct args differ without sexp_of_arg" true !saw_differ
+;;
+
 (** Test: [functions2] produces a curried two-argument function. Same arguments
     give the same result (memo hit); over many cases, varying the second
     argument must draw a different result at least once (the second argument is
@@ -98,6 +114,10 @@ let tests =
       `Quick
       test_functions_deterministic_e2e
   ; Alcotest.test_case "functions independent e2e" `Quick test_functions_independent_e2e
+  ; Alcotest.test_case
+      "functions no sexp_of_arg e2e"
+      `Quick
+      test_functions_no_sexp_of_arg_e2e
   ; Alcotest.test_case "functions2 curry e2e" `Quick test_functions2_e2e
   ; Alcotest.test_case "functions3 curry e2e" `Quick test_functions3_e2e
   ]
