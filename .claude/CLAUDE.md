@@ -40,6 +40,9 @@ lib/                         # Library source
   generators_primitives.ml   # integers, booleans, floats, text, binary, just, formats
   generators_collections.ml  # lists, hashmaps, sets, and the collection protocol
   generators_combinators.ml  # sampled_from, one_of, tuples2/3/4
+  generators_functions.ml    # functions/functions2/functions3: memoized
+                             #   function generators (Claessen's show/shrink,
+                             #   but no trie — the engine shrinks results)
   derive.ml                  # Runtime support for [@@deriving hegel_generator]
   stateful.ml                # Stateful testing: Rule.create + run over action sequences
   antithesis.ml              # Antithesis integration (emits an always-typed assertion)
@@ -134,6 +137,7 @@ Generators are a discriminated union:
 - **Filtered** — wraps source + predicate. Up to `max_filter_attempts` retries before `assume false`.
 - **CompositeList** — lists of any element core. Uses the collection protocol (new_collection / collection_more) to generate elements one at a time.
 - **Composite** — a `generate_fn` thunk run inside a labeled span; used by tuples, one_of, `lists ~unique`, and hashmaps (all of which now always drive the collection protocol / draw sub-values directly — there is no schema fast path).
+- **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (keyed by `sexp_of_arg`) and shows applied pairs as `name arg = result` via `note` on the final replay. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); nested result draws are wrapped in a `Labels.function_result` span.
 
 ### Inline Test Integration (ppx/ppx_hegel_test.ml + lib/test_runtime/)
 
@@ -142,6 +146,18 @@ top-level items: (1) `let name = fun () -> Hegel.run_hegel_test ...
 (fun tc -> body)`, and (2) `let () = Hegel_test_runtime.register ~name ~file
 ~line name`. The function remains directly callable; the registration is a
 side effect run at module init.
+
+Within the body the PPX also injects binding names into draws: `let x = draw tc g`
+becomes `draw_named ~label:"x" ~repeatable:.. tc g`, and `let x = draw_silent tc g`
+becomes `draw_silent_named ~name:"x" tc g`. Both target hidden entry points, keeping
+`~repeatable`/`~name` off the public `draw`/`draw_silent` (the `draw`→`draw_named`
+precedent). The `~name` is only meaningful for a function generator (`Function` core),
+where it labels the shown `x arg = result` pairs; it is ignored for every other
+generator, attaches at the draw site (so it works through an intermediate
+`let g = functions ..; let f = draw_silent tc g` binding), and overrides the
+generator's own `?name`. A function made printable (via `with_printer`) is drawn with
+`draw`; `draw_named` threads the label the same way and also prints the usual
+`x = value` line (the function renders as `<fun>` through its printer).
 
 `ppx_hegel_test`'s dune stanza declares `(inline_tests.backend ...)` with a
 generated runner that calls `Hegel_test_runtime.test_main ()`, and

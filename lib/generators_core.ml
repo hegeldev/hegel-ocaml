@@ -27,6 +27,7 @@ module Labels = struct
      label past the engine's range. *)
   let _feature_flag = 16
   let stateful_rule = 17
+  let function_result = 18
 end
 
 (** The pure generation structure of a generator, carrying no printer. A
@@ -78,6 +79,7 @@ type 'a core =
       ; consume : bool
       }
       -> 'a core
+  | Function : { build : name:string option -> Internal.test_case -> 'a } -> 'a core
 
 (** Phantom witness that a generator carries a printer and so may be drawn with
     {!draw}. Defined as a private polymorphic variant (not left abstract) so
@@ -314,6 +316,7 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
       collect [])
   | Composite { label; generate_fn } -> group label data (fun () -> generate_fn data)
   | Values { pool_id; values; consume } -> pick data values pool_id ~consume
+  | Function { build } -> build ~name:None data
 ;;
 
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
@@ -324,13 +327,25 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
     its sole use and numbered ([label_1], [label_2], …) when [repeatable] is set
     — which the PPX does for a binding name that is reused or drawn in a loop.
     Draws nested inside a span (e.g. composite elements) are suppressed so only
-    the outermost value shows. *)
+    the outermost value shows.
+
+    A function generator ({!Generators.functions}) still prints the usual 
+    [name = value] line. The function renders through its printer, typically 
+    [<fun>], and threads [label] into the function's own per-application print *)
 let draw_named
   : type a.
     label:string -> repeatable:bool -> Internal.test_case -> (a, printable) generator -> a
   =
   fun ~label ~repeatable tc gen ->
   match gen with
+  | Printable { core = Function { build }; sexp_of } ->
+    if Internal.draw_depth tc = 0
+    then (
+      let name = Internal.draw_display_name tc ~label ~repeatable in
+      let value = build ~name:(Some name) tc in
+      Internal.note tc (sprintf "%s = %s" name (Sexp.to_string_hum (sexp_of value)));
+      value)
+    else build ~name:None tc
   | Printable { core; sexp_of } ->
     let value = do_draw core tc in
     if Internal.draw_depth tc = 0
@@ -366,6 +381,18 @@ let draw ?label tc gen =
     carry no printer. *)
 let draw_silent : type a p. Internal.test_case -> (a, p) generator -> a =
   fun tc gen -> do_draw (core_of gen) tc
+;;
+
+(** [draw_silent_named ~name tc gen] is {!draw_silent} threading the draw-site
+    [name] into a function generator ({!Generators.functions}). Not intended for 
+    direct use (prefer {!draw_silent}). *)
+let draw_silent_named
+  : type a p. name:string -> Internal.test_case -> (a, p) generator -> a
+  =
+  fun ~name tc gen ->
+  match core_of gen with
+  | Function { build } -> build ~name:(Some name) tc
+  | core -> do_draw core tc
 ;;
 
 (** [map f gen] transforms values from [gen] using [f]. The result carries no

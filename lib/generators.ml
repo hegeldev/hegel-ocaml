@@ -2,3 +2,4 @@ include Generators_core
 include Generators_primitives
 include Generators_collections
 include Generators_combinators
+include Generators_functions
