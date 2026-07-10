@@ -3,8 +3,8 @@
 
     A drawn function is backed by a per-test-case memo table. The first time it
     is applied to a given argument it draws a fresh result from [returns] and
-    stores, so repeated applications to the same argument return the same
-    value. 
+    stores it, so repeated applications to the same argument return the same
+    value.
 
     On the failing final replay each top-level application of the generated
     function is printed through {!Hegel.note} as [name arg = result] (see
@@ -74,7 +74,7 @@ let sexp_or sexp_of_arg =
   Option.value sexp_of_arg ~default:(fun _ -> Sexp.Atom "<opaque>")
 ;;
 
-(** [functions ?name ~sexp_of_arg ~returns ()] creates a generator for functions
+(** [functions ?name ?sexp_of_arg ~returns ()] creates a generator for functions
     ['a -> 'b] whose results are drawn from [returns].
 
     The result carries no printer (its output type is a function), so draw it
@@ -86,13 +86,14 @@ let sexp_or sexp_of_arg =
     [name] is [?name] when you pass it — an explicit label always wins — else the
     draw-site binding name inside a [let%hegel_test], else ["function"].
 
-    [sexp_of_arg] only renders the argument in the shown pair. An omitted 
-    [sexp_of_arg] or an unprintable [returns], shows [<opaque>]. *)
+    The memo table keys on the argument itself, so distinct arguments always get
+    independent results. [sexp_of_arg] only renders the argument in the shown
+    pair; an omitted [sexp_of_arg] or an unprintable [returns] shows [<opaque>]. *)
 let functions ?name ?sexp_of_arg ~returns () =
   make name (sexp_or sexp_of_arg) returns (fun f -> f)
 ;;
 
-(** [functions2 ?name ~sexp_of_arg1 ~sexp_of_arg2 ~returns ()] creates a
+(** [functions2 ?name ?sexp_of_arg1 ?sexp_of_arg2 ~returns ()] creates a
     generator for curried two-argument functions ['a -> 'b -> 'c].
 
     Sugar over {!functions} keyed on the argument pair: the two arguments form

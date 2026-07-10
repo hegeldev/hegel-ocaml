@@ -327,11 +327,7 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
     its sole use and numbered ([label_1], [label_2], …) when [repeatable] is set
     — which the PPX does for a binding name that is reused or drawn in a loop.
     Draws nested inside a span (e.g. composite elements) are suppressed so only
-    the outermost value shows.
-
-    A function generator ({!Generators.functions}) made printable always threads
-    [label] into the function's own per-application showing, so its
-    [name arg = result] pairs are labeled. *)
+    the outermost value shows. *)
 let draw_named
   : type a.
     label:string -> repeatable:bool -> Internal.test_case -> (a, printable) generator -> a

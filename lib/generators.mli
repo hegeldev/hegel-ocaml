@@ -536,7 +536,7 @@ val tuples4
 
 (** {2 Function generators} *)
 
-(** [functions ?name ~sexp_of_arg ~returns ()] creates a generator for functions
+(** [functions ?name ?sexp_of_arg ~returns ()] creates a generator for functions
     ['a -> 'b] whose results are drawn from [returns].
 
     The result carries no printer (its output type is a function), so draw it
@@ -555,7 +555,7 @@ val tuples4
 
     {[
       let%hegel_test map_length_preserved tc =
-        let f_gen = functions ~sexp_of_arg:Int.sexp_of_t ~returns:(integers ()) () in
+        let f_gen = functions ~sexp_of_arg:Core.Int.sexp_of_t ~returns:(integers ()) () in
         let f = draw_silent tc f_gen in
         let xs = draw tc (lists (integers ()) ()) in
         assert (List.length (List.map ~f xs) = List.length xs)
@@ -568,7 +568,7 @@ val functions
   -> unit
   -> ('a -> 'b, unprintable) generator
 
-(** [functions2 ?name ~sexp_of_arg1 ~sexp_of_arg2 ~returns ()] creates a
+(** [functions2 ?name ?sexp_of_arg1 ?sexp_of_arg2 ~returns ()] creates a
     generator for curried two-argument functions ['a -> 'b -> 'c].
 
     Sugar over {!functions} keyed on the argument pair: the two arguments form
@@ -582,7 +582,7 @@ val functions2
   -> unit
   -> ('a -> 'b -> 'c, unprintable) generator
 
-(** [functions3 ?name ~sexp_of_arg1 ~sexp_of_arg2 ~sexp_of_arg3 ~returns ()]
+(** [functions3 ?name ?sexp_of_arg1 ?sexp_of_arg2 ?sexp_of_arg3 ~returns ()]
     creates a generator for curried three-argument functions
     ['a -> 'b -> 'c -> 'd].
 
