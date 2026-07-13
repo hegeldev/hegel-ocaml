@@ -233,13 +233,17 @@ let in_test_context : bool Stdlib.Domain.DLS.key =
     groups probes for the same bug while keeping failures at distinct source
     lines apart (see {!Ffi.mark_complete}).
 
-    [failwith] and [invalid_arg] raise from within the runtime ([stdlib.ml]), so
-    the innermost backtrace slot is the runtime, not the assertion's true source.
-    Such frames are skipped so the origin points at the caller's line; without
-    this, every same-typed exception in a run would collapse to one origin. *)
+    [failwith] and [invalid_arg] raise from within the runtime ([stdlib.ml]),
+    and [require]/[require_equal] raise from within this file, so the innermost
+    backtrace slot is not the assertion's true source. Such frames are skipped
+    so the origin points at the caller's line; without this, every same-typed
+    exception in a run would collapse to one origin. *)
 let extract_origin exn =
   let bt = Stdlib.Printexc.get_raw_backtrace () in
-  let is_runtime_file file = String.is_suffix file ~suffix:"stdlib.ml" in
+  let is_runtime_file file =
+    String.is_suffix file ~suffix:"stdlib.ml"
+    || String.is_suffix file ~suffix:"lib/internal.ml"
+  in
   let user_location =
     match Stdlib.Printexc.backtrace_slots bt with
     | None -> None
@@ -401,23 +405,57 @@ let generate_ipv6 tc =
     [false]. *)
 let assume _tc condition = if not condition then raise Assume_rejected
 
-(** [note tc message] prints [message] to stderr subject to the run's
-    {!type:verbosity}: never under [Quiet], only on the final (failing) replay
-    under [Normal], and on every test case under [Verbose] or [Debug]. Inside
-    the framed failure report (the final replay), lines print indented. *)
+(** [should_print tc] says whether {!note} output is visible for this test
+    case under the run's {!type:verbosity}: never under [Quiet], only on the
+    final (failing) replay under [Normal], and on every test case under
+    [Verbose] or [Debug]. *)
+let should_print tc =
+  match tc.verbosity with
+  | Quiet -> false
+  | Normal -> tc.is_final
+  | Verbose | Debug -> true
+;;
+
+(** [note tc message] prints [message] to stderr subject to {!should_print}.
+    Inside the framed failure report (the final replay), every line of a
+    (possibly multi-line) message prints indented. *)
 let note tc message =
-  let should_print =
-    match tc.verbosity with
-    | Quiet -> false
-    | Normal -> tc.is_final
-    | Verbose | Debug -> true
-  in
-  if should_print
+  if should_print tc
   then (
     if tc.indent && not tc.printed_output then eprintf "\n%!";
     tc.printed_output <- true;
     let indent = if tc.indent then "  " else "" in
-    eprintf "%s%s\n%!" indent message)
+    let body = String.concat ~sep:("\n" ^ indent) (String.split_lines message) in
+    eprintf "%s%s\n%!" indent body)
+;;
+
+(** [require tc ?msg condition] fails the current test case when [condition] is
+    [false] by raising [Failure msg]. *)
+let require _tc ?(msg = "require: condition was false") condition =
+  if not condition then raise (Failure msg)
+;;
+
+(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
+    the two values render to different sexps under [sexp_of]. The failure
+    report's body shows a structural sexp diff of the two values ([-] lines
+    only in [lhs], [+] lines only in [rhs]) before [Failure msg] is raised.
+    The diff is only rendered when notes are visible (see {!should_print}),
+    so shrink probes don't pay for it. *)
+let require_equal tc ?(msg = "require_equal: values differ") sexp_of lhs rhs =
+  let original = sexp_of lhs in
+  let updated = sexp_of rhs in
+  if not (Sexp.equal original updated)
+  then (
+    if should_print tc
+    then (
+      let diff = Sexp_diff.Algo.diff ~original ~updated () in
+      let rendered =
+        Sexp_diff.Display.display_as_plain_string
+          (Sexp_diff.Display.Display_options.create Two_column)
+          diff
+      in
+      note tc (sprintf "%s (- lhs / + rhs):\n%s" msg rendered));
+    raise (Failure msg))
 ;;
 
 (** [draw_display_name tc ~label ~repeatable] returns the display name to print

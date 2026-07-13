@@ -275,6 +275,18 @@ val assume : test_case -> bool -> unit
     under [Normal], and on every test case under [Verbose] or [Debug]. *)
 val note : test_case -> string -> unit
 
+(** [require tc ?msg condition] fails the current test case when [condition] is
+    [false] by raising [Failure msg]. Unlike [assert] the failure message is
+    yours to choose, and unlike {!assume} the case counts as a genuine failure
+    rather than being discarded. *)
+val require : test_case -> ?msg:string -> bool -> unit
+
+(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
+    the two values render to different sexps under [sexp_of], printing a
+    structural sexp diff of the two values in the failure report's body before
+    raising [Failure msg]. *)
+val require_equal : test_case -> ?msg:string -> ('a -> Core.Sexp.t) -> 'a -> 'a -> unit
+
 (**/**)
 
 (** [draw_display_name tc ~label ~repeatable] returns the display name to print

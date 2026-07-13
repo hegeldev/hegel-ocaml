@@ -92,6 +92,15 @@ let assume = Internal.assume
     on every test case under [Verbose] or [Debug]. *)
 let note = Internal.note
 
+(** [require tc ?msg condition] fails the current test case when [condition]
+    is [false]. See {!Internal.require}. *)
+let require = Internal.require
+
+(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
+    the two values render to different sexps, printing a sexp diff in the
+    failure report. See {!Internal.require_equal}. *)
+let require_equal = Internal.require_equal
+
 (** [target tc value label] sends a target command to guide the search engine
     toward higher values. *)
 let target = Internal.target

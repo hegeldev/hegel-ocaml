@@ -42,14 +42,42 @@ let%hegel_test scenario_exn tc =
   if String.length s > 3 then failwith "string too long for my liking"
 ;;
 
-(* 6: equality-style failure: compare two values *)
+(* 6: equality failure via require_equal: prints a sexp diff *)
 let%hegel_test scenario_eq tc =
   let l = Hegel.draw tc (lists (integers ~min_value:(-50) ~max_value:50 ()) ()) in
   let f x = x * 2 in
-  (* wrong claim: map then rev = rev then... same thing, so make it actually wrong *)
   let lhs = List.rev_map f l in
   let rhs = List.map f l in
-  assert (lhs = rhs)
+  Hegel.require_equal tc (Core.List.sexp_of_t Core.Int.sexp_of_t) lhs rhs
+;;
+
+(* 6b: require with a custom message *)
+let%hegel_test scenario_req tc =
+  let a = Hegel.draw tc (integers ~min_value:0 ~max_value:100 ()) in
+  let b = Hegel.draw tc (integers ~min_value:0 ~max_value:100 ()) in
+  Hegel.require tc ~msg:"a and b must not sum past 150" (a + b <= 150)
+;;
+
+(* 6c: require_equal on nested values, to see the tree diff *)
+let%hegel_test scenario_eq_nested tc =
+  let l =
+    Hegel.draw
+      tc
+      (lists
+         ~min_size:2
+         (tuples2 (integers ~min_value:0 ~max_value:9 ()) (text ~max_size:4 ()))
+         ())
+  in
+  let swapped =
+    match l with
+    | a :: b :: rest -> b :: a :: rest
+    | _ -> l
+  in
+  Hegel.require_equal
+    tc
+    (Core.List.sexp_of_t (Core.Tuple2.sexp_of_t Core.Int.sexp_of_t Core.String.sexp_of_t))
+    l
+    swapped
 ;;
 
 (* 7: print_blob on *)
@@ -69,6 +97,20 @@ let scenario_multi () =
        let a = Hegel.draw tc (integers ~min_value:0 ~max_value:1000 ()) in
        if a > 900 then failwith "bug one";
        if a > 0 && a mod 7 = 0 then assert false)
+;;
+
+(* 6d: two require failures at distinct lines -> two origins *)
+let scenario_req_multi () =
+  Hegel.run_hegel_test
+    ~settings:
+      (Hegel.settings ~test_cases:300 ~seed:9 ()
+       |> Hegel.with_database Hegel.Disabled
+       |> Hegel.with_report_multiple_failures true
+       |> Hegel.with_print_blob false)
+    (fun tc ->
+       let v = Hegel.draw tc (integers ~min_value:0 ~max_value:100 ()) in
+       Hegel.require tc ~msg:"too big" (v < 60);
+       Hegel.require tc ~msg:"too small" (v > 30))
 ;;
 
 (* 9: verbose verbosity *)
@@ -132,6 +174,9 @@ let scenario_stateful () =
 
 let scenarios =
   [ "ints", scenario_ints
+  ; "req", scenario_req
+  ; "eq_nested", scenario_eq_nested
+  ; "req_multi", scenario_req_multi
   ; "list", scenario_list
   ; "note", scenario_note
   ; "derived", scenario_derived

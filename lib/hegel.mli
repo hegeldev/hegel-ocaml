@@ -538,6 +538,33 @@ val target : test_case -> float -> string -> unit
     ]} *)
 val note : test_case -> string -> unit
 
+(** [require tc ?msg condition] fails the current test case when [condition] is
+    [false] by raising [Failure msg] ([msg] defaults to a generic message).
+
+    {[
+      let%hegel_test balanced tc =
+        let l = draw tc (lists (integers ()) ()) in
+        require tc ~msg:"sum must stay non-negative" (running_sum l >= 0)
+    ]} *)
+val require : test_case -> ?msg:string -> bool -> unit
+
+(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
+    the two values render to different sexps under [sexp_of]. The failure
+    report's body shows a structural sexp diff of the two values. Lines
+    marked [-] appear only in [lhs], lines marked [+] only in [rhs].
+    Prefer it over [assert (lhs = rhs)], which shows nothing about either value.
+
+    {[
+      let%hegel_test sort_is_stable tc =
+        let l = draw tc (lists (integers ()) ()) in
+        require_equal
+          tc
+          (Core.List.sexp_of_t Core.Int.sexp_of_t)
+          (List.sort compare l)
+          (stable_sort l)
+    ]} *)
+val require_equal : test_case -> ?msg:string -> ('a -> Core.Sexp.t) -> 'a -> 'a -> unit
+
 (** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding a
     printable generator that {!draw} accepts. This is how a
     [map]/[flat_map]/[sampled_from]/[just] result is made drawable with {!draw}.

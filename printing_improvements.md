@@ -33,27 +33,33 @@ never replace it.
 - [x] Multi-failure report: one shared header + `Falsified` line for the run,
       then `Failure i of n:` sections (e.g.
       `Failure 1 of 2:`). Order is the engine's discovery order (stable for a
-      seeded run).
+      seeded run). The section header deliberately omits the engine origin —
+      it duplicates the `Exception:` line printed two lines below.
+- [x] `require` / `require_equal`. `Hegel.require tc ?msg cond` fails with a
+      chosen message (`Failure msg`); `Hegel.require_equal tc ?msg sexp_of lhs
+      rhs` compares the two values' sexps and prints a structural sexp diff
+      (Jane Street's `sexp_diff`, new dependency) in the report body — `- `
+      lines only in lhs, `+ ` lines only in rhs. The diff is rendered only
+      when notes are visible, so shrink probes don't pay for it.
+      `extract_origin` now also skips frames in `lib/internal.ml` so a
+      require failure's origin is the caller's line, not require's raise
+      site — without this every require failure in a run would collapse into
+      one engine origin. Printers are passed explicitly (e.g.
+      `Core.List.sexp_of_t Core.Int.sexp_of_t`); OCaml erases types at
+      runtime, so there is no principled auto-printing.
 
 ## Todo
 
 Ranked by leverage.
 
-1. **Equality assertion with a sexp diff.** `assert (lhs = rhs)` shows nothing
-   about either side — the biggest remaining DX gap. Add
-   `Hegel.require_equal tc sexp_of_t lhs rhs` failing with a rendered diff
-   (Hedgehog's `━━━ Failed (- lhs) (+ rhs) ━━━` is the model; Jane Street's
-   `sexp_diff` library fits the sexp constraint exactly), plus a cheap
-   `Hegel.require tc bool ~msg` sibling (QuickCheck's `counterexample`).
-
-2. **Never print an empty counterexample.** A failing test whose draws are all
+1. **Never print an empty counterexample.** A failing test whose draws are all
    `draw_silent` (e.g. derived generators) prints no body at all. On the final
    replay, a depth-0 silent draw should emit a `<no printer>` placeholder line
    (QCheck2 precedent) plus a one-line hint about `with_printer` /
    `[@@deriving sexp_of]`. Cautionary tale: Hedgehog issue #343 (inputs lost
    on exception paths).
 
-3. **Stateful trace: results, state, and the failing step.** Current output is
+2. **Stateful trace: results, state, and the failing step.** Current output is
    only `Step N: rule` lines. qcheck-stm prints `cmd : result` with a
    "Results incompatible with model" diagnosis; quickcheck-state-machine also
    shows model state per step. Client-side wins in `stateful.ml`:
@@ -63,7 +69,7 @@ Ranked by leverage.
    - `Rule.create ?sexp_of_result` so a rule's return value can print
      (`cmd : result`, mirroring qcheck-stm).
 
-4. **Statistics / label collection.** No `label`/`collect`/`event` mechanism
+3. **Statistics / label collection.** No `label`/`collect`/`event` mechanism
    exists, and passing runs print nothing — the ICSE'24 paper's OCaml-specific
    critique (discard rates hidden on success). Client-side bookkeeping:
    `Hegel.event tc "label"` aggregated across cases with a QuickCheck-style
@@ -72,19 +78,21 @@ Ranked by leverage.
    (already implemented for base-quickcheck; ~5 fields suffice per the Tyche
    paper).
 
-5. **Multiline sexp alignment.** Continuation lines of `Sexp.to_string_hum`
-   land at column 0 under `name = (...)`; indent them under the value, or
-   print `name =` on its own line when the sexp is multiline.
+4. **Multiline sexp alignment.** Partially done: `note` is now
+   multiline-aware, so continuation lines of `Sexp.to_string_hum` get the
+   report body's indent instead of landing at column 0. Remaining: they still
+   don't align under `name = (...)` — either pad by the name's width or print
+   `name =` on its own line when the sexp is multiline.
 
-6. **Colors.** None anywhere. QCheck2-style red/green on the failure header
+5. **Colors.** None anywhere. QCheck2-style red/green on the failure header
    and runner PASS/FAIL lines — tty-detected, `NO_COLOR`-respecting.
 
-7. **Verbose mode legibility.** Engine phase lines and client draw lines
+6. **Verbose mode legibility.** Engine phase lines and client draw lines
    interleave with no per-case separator; add a client-printed case separator
    so `Verbose` is usable for watching shrink candidates (falsify's
    `--falsify-verbose` shrink history is the model).
 
-8. **UTF-8 text readability (low priority).** Sexp escaping renders non-ASCII
+7. **UTF-8 text readability (low priority).** Sexp escaping renders non-ASCII
    counterexamples as byte escapes (`"\194\128"`). The encoding can't change
    (sexp constraint); consider an auxiliary human-readable echo line for
    string draws containing escapes.
