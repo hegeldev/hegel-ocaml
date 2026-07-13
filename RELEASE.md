@@ -5,7 +5,7 @@ This release overhauls what Hegel prints when a property fails.
 Failing runs now produce a framed report: a header naming the test and its
 source location, a `Falsified after N test cases (M discarded):` line, an
 indented body of the drawn values and `note`s, the exception, and 
-`rerun with: [@@failure_blobs "..."]`. Failure blobs are now printed by default. 
+`rerun with: [@@failure_blobs [ "..." ]]`. Failure blobs are now printed by default. 
 A run that finds multiple failures reports each in its own numbered section, and
 on a terminal the report is colorized (`HEGEL_COLOR=1|0` forces it on or off).
 

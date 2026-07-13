@@ -59,7 +59,7 @@ let%hegel_test integer_under_fifty tc =
 
 This test asserts that any integer is less than 50, which is obviously incorrect.
 Hegel will find a test case that makes this assertion fail, and then shrink it
-to find the smallest counterexample — in this case, `n = 50`. `dune runtest`
+to find the smallest counterexample (`n = 50`). `dune runtest`
 will print a `FAIL` line, report the drawn value as `n = 50` (named after the
 `let` binding), and exit non-zero.
 
@@ -110,7 +110,7 @@ let generate_person tc =
 ```
 
 `generate_person` has type `test_case -> person`. It is *not* a `generator`
-value, so you do not pass it to `draw` — you call it directly with the same `tc`,
+value, so you do not pass it to `draw`. You call it directly with the same `tc`,
 and it draws its fields for you:
 
 ```ocaml
@@ -120,8 +120,7 @@ let%hegel_test person_has_nonnegative_age tc =
 ;;
 ```
 
-If you instead want a first-class `generator` value — one you can draw with
-`draw` rather than call by hand — wrap the function with `composite`:
+If you instead want a first-class `generator` value wrap the function with `composite`:
 
 ```ocaml
 let person_generator = composite generate_person
@@ -134,8 +133,8 @@ let%hegel_test people_are_generatable tc =
 ```
 
 `composite` carries no printer (the value type is yours), so draw it with
-`draw_silent`. To print it on a failing replay — or to feed it into combinators
-like `lists` that expect a *printable* element generator — attach a printer with
+`draw_silent`. To print it on a failing replay or to feed it into combinators
+like `lists` that expect a *printable* element generator, attach a printer with
 `with_printer` (see [Debugging failures](#debug-your-failing-test-cases)).
 
 ## Debug your failing test cases
@@ -192,7 +191,7 @@ The same `let x` runs on each iteration, so Hegel disambiguates the draws as
 `x_1`, `x_2`, `x_3` in draw order. You can override the name with `~label`:
 `draw ~label:"y" tc (integers ())`.
 
-Some combinators hand the result type to your own code and so carry no printer —
+Some combinators hand the result type to your own code and so carry no printer:
 `map`, `flat_map`, `sampled_from`, `just`, and generators from `[@@deriving
 hegel_generator]`. Either draw it with `draw_silent` (which prints nothing):
 
@@ -215,20 +214,22 @@ let parity = draw tc (with_printer [%sexp_of: int] (map (fun n -> n mod 2) (inte
 You can also attach your own debug information with `note`:
 
 ```ocaml
-let%hegel_test addition_commutes tc =
-  let x = draw tc (integers ()) in
-  let y = draw tc (integers ()) in
-  note tc (Printf.sprintf "x + y = %d, y + x = %d" (x + y) (y + x));
-  assert (x + y = y + x)
+let%hegel_test remainder_below_divisor tc =
+  let n = draw tc (integers ~min_value:0 ~max_value:1000 ()) in
+  let r = n mod 7 in
+  note tc (Printf.sprintf "n mod 7 = %d" r);
+  assert (r < 7)
 ;;
 ```
 
 ## Assert with `require` and `require_equal`
 
-`assert` works, `require_equal` provides more information. It compares two values 
-and prints a structural s-expression diff of them in the report. `-` lines appear only in the first value and `+` lines only in the second. It takes a printer (`'a -> Core.Sexp.t`)
-for the values; build one from `Core`'s `sexp_of_t` functions, or with a
-`[%sexp_of: ...]` from `ppx_sexp_conv`:
+When `assert (a = b)` fails, the report tells you the assertion failed and shows
+the inputs you drew, but not the two sides being compared or how they differ.
+`require_equal` renders both and prints a structural s-expression diff in the
+report. `-` lines appear only in the first value, `+` lines only in the second.
+It takes a printer (`'a -> Core.Sexp.t`) for the values; build one from `Core`'s
+`sexp_of_t` functions, or with a `[%sexp_of: ...]` from `ppx_sexp_conv`:
 
 ```ocaml
 let%hegel_test reverse_is_identity tc =

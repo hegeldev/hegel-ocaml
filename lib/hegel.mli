@@ -594,7 +594,8 @@ val require : test_case -> ?msg:string -> bool -> unit
     the two values render to different sexps under [sexp_of]. The failure
     report's body shows a structural sexp diff of the two values. Lines
     marked [-] appear only in [lhs], lines marked [+] only in [rhs].
-    Prefer it over [assert (lhs = rhs)], which shows nothing about either value.
+    Prefer it over [assert (lhs = rhs)], which reports only that the assertion
+    failed, not the two values or how they differ.
 
     {[
       let%hegel_test sort_is_stable tc =

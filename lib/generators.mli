@@ -19,8 +19,8 @@
       ;;
     ]}
 
-    Use a generator combinator when you need a first-class generator {e value} to
-    pass around or nest inside another generator:
+    Generator combinators are higher-order functions that take generators and/or
+    functions as input and assemble them into a single generator:
 
     - {!map} transforms every generated value with a function.
     - {!flat_map} builds a {e dependent} generator, where a later generator is
