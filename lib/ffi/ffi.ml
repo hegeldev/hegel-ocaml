@@ -171,8 +171,13 @@ let c_settings_suppress_health_check =
     (ptr void @-> ptr void @-> uint32_t @-> returning int)
 ;;
 
+(* [hegel_run_start]'s [callback]/[user_data] (the third and fourth arguments)
+   redirect the engine's own output off stderr. We always pass NULL for both,
+   keeping it on stderr. We do not yet install a callback. *)
 let c_run_start =
-  foreign "hegel_run_start" (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+  foreign
+    "hegel_run_start"
+    (ptr void @-> ptr void @-> ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
 ;;
 
 let c_next_test_case =
@@ -349,7 +354,13 @@ let c_generate_ipv6 =
 let c_test_case_from_blob =
   foreign
     "hegel_test_case_from_blob"
-    (ptr void @-> ptr void @-> string_opt @-> ptr (ptr void) @-> returning int)
+    (ptr void
+     @-> ptr void
+     @-> string_opt
+     @-> ptr void
+     @-> ptr void
+     @-> ptr (ptr void)
+     @-> returning int)
 ;;
 
 let c_start_span =
@@ -659,7 +670,7 @@ let settings_suppress_health_check ctx s mask =
 
 let run_start ctx s =
   let out = allocate (ptr void) null in
-  check_rc ctx (c_run_start ctx s out);
+  check_rc ctx (c_run_start ctx s null null out);
   !@out
 ;;
 
@@ -671,7 +682,7 @@ let next_test_case ctx run =
 
 let test_case_from_blob ctx s b =
   let out = allocate (ptr void) null in
-  check_rc ctx (c_test_case_from_blob ctx s b out);
+  check_rc ctx (c_test_case_from_blob ctx s b null null out);
   !@out
 ;;
 
