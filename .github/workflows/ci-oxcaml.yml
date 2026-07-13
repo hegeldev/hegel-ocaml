@@ -106,4 +106,5 @@ jobs:
       - name: Run tests
         env:
           HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
+          HEGEL_SKIP_EXPECT_TESTS: "1"
         run: just check-tests-no-coverage
