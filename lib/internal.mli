@@ -105,7 +105,9 @@ type settings =
   ; phases : phase list option
     (** [None] uses the engine's default phase list (all phases); [Some xs]
           restricts execution to [xs]. *)
-  ; print_blob : bool (** print blob for a failure *)
+  ; print_blob : bool
+    (** print a [rerun with: [@@failure_blobs "..."]] line for a failure;
+        [true] by default *)
   ; report_multiple_failures : bool (** false by default *)
   }
 
@@ -164,8 +166,8 @@ val with_phases : phase list -> settings -> settings
 val with_mode : mode -> settings -> settings
 
 (** [with_print_blob b s] returns settings [s] with [print_blob] set to [b]. When
-    [true], a failing run prints replay instructions (the failure blob), and
-    replay runs report which blobs reproduced the failure. *)
+    [true] (the default), a failing run's report ends with a copy-pasteable
+    [rerun with: [@@failure_blobs "..."]] line encoding the failure. *)
 val with_print_blob : bool -> settings -> settings
 
 (** [with_report_multiple_failures b s] returns settings [s] with [report_multiple_failures] 

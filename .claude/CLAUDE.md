@@ -246,7 +246,8 @@ defaulting to `default_settings ()`. It is what the `let%hegel_test` PPX
 targets. The `[@@failure_blobs ...]` record/replay workflow is supported: the
 PPX forwards the listed blobs as `~failure_blobs` to `run_hegel_test`, which
 replays the first blob as a standalone deterministic case (pair it with
-`with_print_blob true` to print the reproducing blob on failure). For persisting
+`with_print_blob false` to suppress the `rerun with: [@@failure_blobs "..."]`
+line that failing runs print by default). For persisting
 and replaying failing examples across runs, use `database` / `database_key`.
 
 ### Test Runner (client.ml)

@@ -136,7 +136,7 @@ let default_settings () =
   ; database = (if in_ci then Disabled else Unset)
   ; suppress_health_check = []
   ; phases = None
-  ; print_blob = false
+  ; print_blob = true
   ; report_multiple_failures = false
   }
 ;;
@@ -183,8 +183,8 @@ let with_phases phases s = { s with phases = Some phases }
 let with_mode mode s = { s with mode }
 
 (** [with_print_blob b s] returns settings [s] with [print_blob] set to [b]. When
-    [true], a failing run prints replay instructions (the failure blob), and
-    replay runs report which blobs reproduced the failure. *)
+    [true] (the default), a failing run's report ends with a copy-pasteable
+    [rerun with: [@@failure_blobs "..."]] line encoding the failure. *)
 let with_print_blob b s = { s with print_blob = b }
 
 (** [with_report_multiple_failures b s] returns settings [s] with [report_multiple_failures] 
@@ -195,15 +195,20 @@ let with_report_multiple_failures b s = { s with report_multiple_failures = b }
     native test-case handle, the final-replay flag, whether verbose output is
     on, abort state, the current generation-span depth (used to print only the
     outermost drawn value), and the per-name occurrence counter that numbers
-    repeatable draws. *)
+    repeatable draws. [indent] is set on the final replay so note/draw lines
+    print indented inside the framed failure report, and [printed_output]
+    records whether any such line printed (the report needs to know whether to
+    separate the body from the exception). *)
 type test_case =
   { handle : Ffi.test_case
   ; context : Ffi.context
   ; mode : mode
   ; stateful_step_count : int
   ; is_final : bool
+  ; indent : bool
   ; verbosity : verbosity
   ; mutable test_aborted : bool
+  ; mutable printed_output : bool
   ; mutable draw_depth : int
   ; draw_counts : int String.Table.t
   }
@@ -398,7 +403,8 @@ let assume _tc condition = if not condition then raise Assume_rejected
 
 (** [note tc message] prints [message] to stderr subject to the run's
     {!type:verbosity}: never under [Quiet], only on the final (failing) replay
-    under [Normal], and on every test case under [Verbose] or [Debug]. *)
+    under [Normal], and on every test case under [Verbose] or [Debug]. Inside
+    the framed failure report (the final replay), lines print indented. *)
 let note tc message =
   let should_print =
     match tc.verbosity with
@@ -406,7 +412,12 @@ let note tc message =
     | Normal -> tc.is_final
     | Verbose | Debug -> true
   in
-  if should_print then eprintf "%s\n%!" message
+  if should_print
+  then (
+    if tc.indent && not tc.printed_output then eprintf "\n%!";
+    tc.printed_output <- true;
+    let indent = if tc.indent then "  " else "" in
+    eprintf "%s%s\n%!" indent message)
 ;;
 
 (** [draw_display_name tc ~label ~repeatable] returns the display name to print
@@ -548,20 +559,28 @@ let build_ffi_settings ctx (settings : settings) ~database_key =
   s
 ;;
 
-(** [run_test_case ~mode ~verbose ~test_fn handle is_final] runs [test_fn] over a single 
-    native test-case [handle], maps the outcome to a {!Ffi.status}, and marks 
-    the case complete. Returns [Some (origin, exn)] when the case was {e interesting}
-    (the body raised an unexpected exception), otherwise [None]. Shared by the
-    engine-run and failure-blob replay paths. *)
-let run_test_case ~(settings : settings) ~test_fn ctx handle is_final =
+type case_outcome =
+  { status : Ffi.status
+  ; interesting : (string * exn) option
+  ; printed_output : bool
+  }
+
+(** [run_test_case ~settings ~test_fn ?indent ctx handle is_final] runs
+    [test_fn] over a single native test-case [handle], maps the outcome to a
+    {!Ffi.status}, and marks the case complete. [indent] indents note/draw
+    lines, for the body of the framed failure report. Shared by the engine-run
+    and failure-blob replay paths. *)
+let run_test_case ~(settings : settings) ~test_fn ?(indent = false) ctx handle is_final =
   let (tc : test_case) =
     { handle
     ; context = ctx
     ; mode = settings.mode
     ; is_final
+    ; indent
     ; verbosity = settings.verbosity
     ; stateful_step_count = settings.stateful_step_count
     ; test_aborted = false
+    ; printed_output = false
     ; draw_depth = 0
     ; draw_counts = String.Table.create ()
     }
@@ -577,7 +596,7 @@ let run_test_case ~(settings : settings) ~test_fn ctx handle is_final =
   in
   Stdlib.Domain.DLS.set in_test_context false;
   Ffi.mark_complete ctx handle status (Option.map captured ~f:fst);
-  captured
+  { status; interesting = captured; printed_output = tc.printed_output }
 ;;
 
 (** Diagnostic raised when the engine's shrunk counterexample no longer fails on
@@ -595,36 +614,72 @@ let flaky_diagnostic =
     run only explores (generation, shrinking) and never replays a counterexample
     itself, so the client reads the counterexample's reproduction blob and
     replays it as a standalone final test case — re-running the body so its
-    notes and drawn values print for the minimal example. Returns the blob and
-    the test's own exception. The engine just produced the blob, so it always
-    decodes; a replay that no longer fails means the test is non-deterministic
-    and raises {!flaky_diagnostic}. *)
+    notes and drawn values print for the minimal example. Returns the blob, the
+    test's own exception, and whether the replay printed any note/draw line.
+    The engine just produced the blob, so it always decodes; a replay that no
+    longer fails means the test is non-deterministic and raises
+    {!flaky_diagnostic}. *)
 let final_replay ~(settings : settings) ~ffi_settings ~test_fn ctx failure =
   let blob = Option.value_exn (Ffi.failure_blob ctx failure) in
   let tc = Ffi.test_case_from_blob ctx ffi_settings (Some blob) in
   let outcome =
     Exn.protect
       ~finally:(fun () -> Ffi.test_case_free ctx tc)
-      ~f:(fun () -> run_test_case ~settings ~test_fn ctx tc true)
+      ~f:(fun () -> run_test_case ~settings ~test_fn ~indent:true ctx tc true)
   in
-  match outcome with
-  | Some (_origin, exn) -> blob, exn
+  match outcome.interesting with
+  | Some (_origin, exn) -> blob, exn, outcome.printed_output
   | None -> raise (Failure flaky_diagnostic)
 ;;
 
+(** Width the framed failure report's header rule is padded to. *)
+let frame_width = 72
+
+let print_failure_header ?index ~cases_run ~cases_discarded test_location =
+  let name =
+    match index with
+    | None -> "Failure"
+    | Some i -> sprintf "Failure %d" i
+  in
+  let title =
+    match test_location with
+    | None -> name
+    | Some (loc : Antithesis.test_location) ->
+      sprintf "%s: %s (%s:%d)" name loc.function_name loc.file loc.begin_line
+  in
+  let prefix = sprintf "--- %s " title in
+  let rule = prefix ^ String.make (max 3 (frame_width - String.length prefix)) '-' in
+  eprintf
+    "%s\nFalsified after %d test case%s (%d discarded):\n%!"
+    rule
+    cases_run
+    (if cases_run = 1 then "" else "s")
+    cases_discarded
+;;
+
+let print_failure_body ~(settings : settings) ~blob ~exn ~printed_output =
+  if printed_output then eprintf "\n%!";
+  eprintf "Exception: %s\n%!" (Stdlib.Printexc.to_string exn);
+  if settings.print_blob then eprintf "rerun with: [@@failure_blobs \"%s\"]\n%!" blob
+;;
+
 (** [handle_result ~settings ~ffi_settings ~test_fn ~test_location ~single
-    ~single_outcome ctx result] inspects a finished run's [result]. A clean run
-    returns [unit]. On a run-level error (a failed health check, a
-    nondeterministic test, an engine panic) it raises [Failure] with the
-    engine's message — there is no counterexample to report.
+    ~single_outcome ~cases_run ~cases_discarded ctx result] inspects a finished
+    run's [result]. A clean run returns [unit]. On a run-level error (a failed
+    health check, a nondeterministic test, an engine panic) it raises [Failure]
+    with the engine's message — there is no counterexample to report.
 
     On a failed property the engine only explored, so the client owns the final
     replay. In {!Single_test_case} mode the one emitted case already ran as its
     own final case and its [single_outcome] exception is re-raised directly.
     Otherwise each discovered counterexample's blob is replayed via
-    {!final_replay} (printing the blob when [settings.print_blob]); a single
-    failure re-raises the test's own exception, several distinct failures raise
-    an aggregated [Failure]. *)
+    {!final_replay} inside a framed report — a header rule naming the test, a
+    [Falsified after N test cases (M discarded)] line built from the run's
+    case counts, the replay's note/draw lines, the exception, and a
+    copy-pasteable [rerun with: [@@failure_blobs "..."]] line (omitted when
+    [settings.print_blob] is off). A single failure re-raises the test's own
+    exception; several distinct failures each get a numbered frame and raise an
+    aggregated [Failure]. *)
 let handle_result
       ~(settings : settings)
       ~ffi_settings
@@ -632,6 +687,8 @@ let handle_result
       ~test_location
       ~single
       ~single_outcome
+      ~cases_run
+      ~cases_discarded
       ctx
       result
   =
@@ -662,16 +719,21 @@ let handle_result
       ~f:(fun () ->
         match failures with
         | [ failure ] ->
-          let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
-          if settings.print_blob then eprintf "Failure blob: \"%s\"\n%!" blob;
+          print_failure_header ~cases_run ~cases_discarded test_location;
+          let blob, exn, printed_output =
+            final_replay ~settings ~ffi_settings ~test_fn ctx failure
+          in
+          print_failure_body ~settings ~blob ~exn ~printed_output;
           raise exn
         | failures ->
           let count = List.length failures in
           List.iteri failures ~f:(fun i failure ->
-            eprintf "\nFailure %d:\n%!" (i + 1);
-            let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
-            eprintf "Exception: %s\n%!" (Stdlib.Printexc.to_string exn);
-            if settings.print_blob then eprintf "Failure blob: \"%s\"\n%!" blob);
+            if i > 0 then eprintf "\n%!";
+            print_failure_header ~index:(i + 1) ~cases_run ~cases_discarded test_location;
+            let blob, exn, printed_output =
+              final_replay ~settings ~ffi_settings ~test_fn ctx failure
+            in
+            print_failure_body ~settings ~blob ~exn ~printed_output);
           raise (Failure (sprintf "%d failures found!" count)))
 ;;
 
@@ -689,6 +751,9 @@ let run_from_engine ctx ~(settings : settings) ~ffi_settings ~test_fn ~test_loca
     | Test_run -> false
   in
   let single_outcome = ref None in
+  let seen_interesting = ref false in
+  let cases_run = ref 0 in
+  let cases_discarded = ref 0 in
   let run = Ffi.run_start ctx ffi_settings in
   Exn.protect
     ~finally:(fun () -> Ffi.run_free ctx run)
@@ -698,16 +763,21 @@ let run_from_engine ctx ~(settings : settings) ~ffi_settings ~test_fn ~test_loca
         | None -> ()
         | Some handle ->
           (* Handles from [next_test_case] are caller-owned; free each once its
-             case has been marked complete by [run_test_case]. *)
+             case has been marked complete by [run_test_case]. In single mode
+             the one emitted case is the whole run, so it runs as final. *)
           Exn.protect
             ~finally:(fun () -> Ffi.test_case_free ctx handle)
             ~f:(fun () ->
-              if single
-              then single_outcome := run_test_case ~settings ~test_fn ctx handle true
-              else
-                ignore
-                  (run_test_case ~settings ~test_fn ctx handle false
-                   : (string * exn) option));
+              let outcome = run_test_case ~settings ~test_fn ctx handle single in
+              if not !seen_interesting
+              then (
+                match outcome.status with
+                | Ffi.Interesting ->
+                  Int.incr cases_run;
+                  seen_interesting := true
+                | Ffi.Valid -> Int.incr cases_run
+                | Ffi.Invalid | Ffi.Overrun -> Int.incr cases_discarded);
+              if single then single_outcome := outcome.interesting);
           loop ()
       in
       loop ();
@@ -723,6 +793,8 @@ let run_from_engine ctx ~(settings : settings) ~ffi_settings ~test_fn ~test_loca
             ~test_location
             ~single
             ~single_outcome:!single_outcome
+            ~cases_run:!cases_run
+            ~cases_discarded:!cases_discarded
             ctx
             result))
 ;;
@@ -738,7 +810,8 @@ let replay_from_blob ~(settings : settings) ~ffi_settings ~test_fn blob ctx =
     Exn.protect
       ~finally:(fun () -> Ffi.test_case_free ctx tc)
       ~f:(fun () ->
-        match run_test_case ~settings ~test_fn ctx tc true with
+        let outcome = run_test_case ~settings ~test_fn ctx tc true in
+        match outcome.interesting with
         | None -> Did_not_reproduce
         | Some (_, exn) -> Reproduced exn)
 ;;

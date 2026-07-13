@@ -37,7 +37,13 @@ let%expect_test "labeled draw prints name = value on final replay" =
     assert false);
   [%expect
     {|
-    x = 7
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      x = 7
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 37, characters 4-10: Assertion failed
+    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAH"]
     |}]
 ;;
 
@@ -47,7 +53,13 @@ let%expect_test "unlabeled draw is auto-named draw_N on final replay" =
     assert false);
   [%expect
     {|
-    draw_1 = 123456
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      draw_1 = 123456
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 53, characters 4-10: Assertion failed
+    rerun with: [@@failure_blobs "AAEAAAAACgMAAABA4gE="]
     |}]
 ;;
 
@@ -58,8 +70,14 @@ let%expect_test "successive unlabeled draws number draw_1, draw_2" =
     assert false);
   [%expect
     {|
-    draw_1 = 1
-    draw_2 = 2
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      draw_1 = 1
+      draw_2 = 2
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 70, characters 4-10: Assertion failed
+    rerun with: [@@failure_blobs "AAIAAAAACgEAAAABAAoBAAAAAg=="]
     |}]
 ;;
 
@@ -76,7 +94,13 @@ let%expect_test "with_printer supplies the printer draw renders with" =
     assert false);
   [%expect
     {|
-    h = 0xff
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      h = 0xff
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 94, characters 4-10: Assertion failed
+    rerun with: [@@failure_blobs "AAEAAAAACgIAAAD/AA=="]
     |}]
 ;;
 
@@ -86,7 +110,13 @@ let%expect_test "with_printer makes an unprintable sampled_from drawable" =
     assert false);
   [%expect
     {|
-    c = 9
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      c = 9
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 110, characters 4-10: Assertion failed
+    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAA"]
     |}]
 ;;
 
@@ -101,7 +131,13 @@ let%expect_test "draw nested in a span (depth > 0) is suppressed" =
   (* Only the outermost draw should print; the nested one is suppressed. *)
   [%expect
     {|
-    ran
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      ran
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 130, characters 4-10: Assertion failed
+    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAH"]
     |}]
 ;;
 
@@ -118,7 +154,13 @@ let%expect_test "a tuple draw prints as one sexp" =
     assert false);
   [%expect
     {|
-    pair = (7 8)
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      pair = (7 8)
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 154, characters 4-10: Assertion failed
+    rerun with: [@@failure_blobs "AAIAAAAACgEAAAAHAAoBAAAACA=="]
     |}]
 ;;
 
@@ -133,7 +175,13 @@ let%expect_test "a list draw prints as one sexp" =
     assert false);
   [%expect
     {|
-    xs = (7 7)
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      xs = (7 7)
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 175, characters 4-10: Assertion failed
+    rerun with: [@@failure_blobs "AXicY2IAAi5GIMEOpQABRAAn"]
     |}]
 ;;
 
@@ -146,8 +194,14 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
   run_failing (fun tc -> Stateful.run ~init:() ~rules:[ rule ] tc);
   [%expect
     {|
-    Step 1: push
-    n = 7 
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      Step 1: push
+      n = 7
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 192, characters 6-12: Assertion failed
+    rerun with: [@@failure_blobs "AXicY2VgYGBkYOACYgYYBeOzAwACrQAw"]
     |}]
 ;;
 
@@ -202,7 +256,13 @@ let%expect_test "a derived value prints as one sexp via with_printer" =
     assert false);
   [%expect
     {|
-    draw_1 = Only
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      draw_1 = Only
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 256, characters 4-10: Assertion failed
+    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAA"]
     |}]
 ;;
 
@@ -212,7 +272,13 @@ let%expect_test "a nested derived record prints as one sexp via with_printer" =
     assert false);
   [%expect
     {|
-    draw_1 = ((tag Only))
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      draw_1 = ((tag Only))
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 272, characters 4-10: Assertion failed
+    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAA"]
     |}]
 ;;
 
@@ -223,7 +289,13 @@ let%expect_test
     let _ = Hegel.draw_silent tc bare_generator in
     assert false);
   (* Header only — no [@@deriving sexp_of], so nothing to print. *)
-  [%expect {|  |}]
+  [%expect
+    {|
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 290, characters 4-10: Assertion failed
+    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAA"]
+    |}]
 ;;
 
 (* ---- ppx_hegel_test label injection (end-to-end) ----
@@ -245,8 +317,14 @@ let%expect_test "ppx injects ~label from the binding name" =
   (try label_injection_from_binding () with
    | _ -> ());
   [%expect
-    {| 
-    x = 7
+    {|
+    --- Failure: label_injection_from_binding (ppx/test/expect_tests/test_draw_printing.ml:309) ---
+    Falsified after 1 test case (0 discarded):
+
+      x = 7
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 312, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAH"]
     |}]
 ;;
 
@@ -265,8 +343,14 @@ let%expect_test "a Generators-qualified draw is labeled (prefix preserved)" =
   (try qualified_generators_draw () with
    | _ -> ());
   [%expect
-    {|   
-    g = 9
+    {|
+    --- Failure: qualified_generators_draw (ppx/test/expect_tests/test_draw_printing.ml:335) ---
+    Falsified after 1 test case (0 discarded):
+
+      g = 9
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 338, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAJ"]
     |}]
 ;;
 
@@ -293,7 +377,13 @@ let%expect_test "a local non-Hegel draw (not on tc) is not rewritten" =
      [tc], is labeled. *)
   [%expect
     {|
-    z = 1
+    --- Failure: local_draw_not_on_tc_untouched (ppx/test/expect_tests/test_draw_printing.ml:363) ---
+    Falsified after 1 test case (0 discarded):
+
+      z = 1
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 369, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAB"]
     |}]
 ;;
 
@@ -317,9 +407,15 @@ let%expect_test "a reused binding name numbers x_1, x_2, x_3" =
    | _ -> ());
   [%expect
     {|
-    x_1 = 1
-    x_2 = 2
-    x_3 = 3
+    --- Failure: repeated_binding_numbers (ppx/test/expect_tests/test_draw_printing.ml:394) ---
+    Falsified after 1 test case (0 discarded):
+
+      x_1 = 1
+      x_2 = 2
+      x_3 = 3
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 401, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs "AXicY2YAAi5GIMEIoZggFDMAAjAAKw=="]
     |}]
 ;;
 
@@ -340,8 +436,14 @@ let%expect_test "a draw inside a loop numbers x_1, x_2" =
    | _ -> ());
   [%expect
     {|
-    x_1 = 1
-    x_2 = 2
+    --- Failure: looped_binding_numbers (ppx/test/expect_tests/test_draw_printing.ml:425) ---
+    Falsified after 1 test case (0 discarded):
+
+      x_1 = 1
+      x_2 = 2
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 430, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs "AAIAAAAACgEAAAABAAoBAAAAAg=="]
     |}]
 ;;
 

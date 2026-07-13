@@ -189,23 +189,27 @@
         assert (n < 50)
     ]}
     
-    If you toggle the [print_blob] setting, a base64 encoded string corresponding
-    to the choice sequence that caused the failure will be printed:
+    A failing run prints a framed report: the shrunk counterexample's draws
+    and notes, the exception, and a copy-pasteable [rerun with:] line whose
+    base64 blob encodes the choice sequence that caused the failure (disable
+    it with [with_print_blob false]):
 
     {[
       let%hegel_test every_int_is_small tc =
         let n = draw tc (integers ()) in
         assert (n < 50)
-      [@@settings default_settings () |> with_print_blob true]
     ]}
-    
+
     {v
-      FAIL  every_int_is_small (my_tests.ml:3)
-            File "my_tests.ml", line 5: Assertion failed
-      n = 50
-      failure blob: "AAEAAAAACgEAAAAy"
+      --- Failure: every_int_is_small (my_tests.ml:3) ------------------
+      Falsified after 2 test cases (0 discarded):
+
+        n = 50
+
+      Exception: File "my_tests.ml", line 5, characters 2-8: Assertion failed
+      rerun with: [@@failure_blobs "AAEAAAAACgEAAAAy"]
     v}
-    
+
     The blob can then be used to replay the failing test case:
 
     {[
@@ -313,7 +317,8 @@ type settings = Internal.settings =
     (** [None] uses the engine's default phase list (all phases); [Some xs]
           restricts execution to [xs]. *)
   ; print_blob : bool
-    (** Print the base64 blob encoding the engine choices that led to a failure. *)
+    (** Print a [rerun with: [@@failure_blobs "..."]] line whose base64 blob
+        encodes the engine choices that led to a failure. [true] by default. *)
   ; report_multiple_failures : bool (** [false] by default. *)
   }
 
@@ -374,8 +379,9 @@ val with_phases : phase list -> settings -> settings
 (** [with_mode mode s] sets the execution mode. *)
 val with_mode : mode -> settings -> settings
 
-(** [with_print_blob b s] makes a failing run print the base64 blob(s) encoding
-    the engine choices that led to a failure. *)
+(** [with_print_blob b s] controls whether a failing run's report ends with a
+    copy-pasteable [rerun with: [@@failure_blobs "..."]] line encoding the
+    engine choices that led to the failure. On by default. *)
 val with_print_blob : bool -> settings -> settings
 
 (** [with_report_multiple_failures b s] makes a failing run report every distinct

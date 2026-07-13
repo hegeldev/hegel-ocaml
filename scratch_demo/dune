@@ -1,0 +1,6 @@
+(executable
+ (name demo)
+ (modules demo)
+ (libraries hegel core)
+ (preprocess
+  (pps ppx_hegel_generator ppx_hegel_test)))
