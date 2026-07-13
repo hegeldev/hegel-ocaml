@@ -635,17 +635,12 @@ let final_replay ~(settings : settings) ~ffi_settings ~test_fn ctx failure =
 (** Width the framed failure report's header rule is padded to. *)
 let frame_width = 72
 
-let print_failure_header ?index ~cases_run ~cases_discarded test_location =
-  let name =
-    match index with
-    | None -> "Failure"
-    | Some i -> sprintf "Failure %d" i
-  in
+let print_failure_header ~cases_run ~cases_discarded test_location =
   let title =
     match test_location with
-    | None -> name
+    | None -> "Failure"
     | Some (loc : Antithesis.test_location) ->
-      sprintf "%s: %s (%s:%d)" name loc.function_name loc.file loc.begin_line
+      sprintf "Failure: %s (%s:%d)" loc.function_name loc.file loc.begin_line
   in
   let prefix = sprintf "--- %s " title in
   let rule = prefix ^ String.make (max 3 (frame_width - String.length prefix)) '-' in
@@ -663,23 +658,6 @@ let print_failure_body ~(settings : settings) ~blob ~exn ~printed_output =
   if settings.print_blob then eprintf "rerun with: [@@failure_blobs \"%s\"]\n%!" blob
 ;;
 
-(** [handle_result ~settings ~ffi_settings ~test_fn ~test_location ~single
-    ~single_outcome ~cases_run ~cases_discarded ctx result] inspects a finished
-    run's [result]. A clean run returns [unit]. On a run-level error (a failed
-    health check, a nondeterministic test, an engine panic) it raises [Failure]
-    with the engine's message — there is no counterexample to report.
-
-    On a failed property the engine only explored, so the client owns the final
-    replay. In {!Single_test_case} mode the one emitted case already ran as its
-    own final case and its [single_outcome] exception is re-raised directly.
-    Otherwise each discovered counterexample's blob is replayed via
-    {!final_replay} inside a framed report — a header rule naming the test, a
-    [Falsified after N test cases (M discarded)] line built from the run's
-    case counts, the replay's note/draw lines, the exception, and a
-    copy-pasteable [rerun with: [@@failure_blobs "..."]] line (omitted when
-    [settings.print_blob] is off). A single failure re-raises the test's own
-    exception; several distinct failures each get a numbered frame and raise an
-    aggregated [Failure]. *)
 let handle_result
       ~(settings : settings)
       ~ffi_settings
@@ -727,9 +705,9 @@ let handle_result
           raise exn
         | failures ->
           let count = List.length failures in
+          print_failure_header ~cases_run ~cases_discarded test_location;
           List.iteri failures ~f:(fun i failure ->
-            if i > 0 then eprintf "\n%!";
-            print_failure_header ~index:(i + 1) ~cases_run ~cases_discarded test_location;
+            eprintf "\nFailure %d of %d:%!" (i + 1) count;
             let blob, exn, printed_output =
               final_replay ~settings ~ffi_settings ~test_fn ctx failure
             in
