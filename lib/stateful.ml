@@ -40,7 +40,7 @@ module Rule = struct
   let name t = t.name
 end
 
-let run ~init ~rules ?(invariants = []) tc =
+let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
   match rules with
   | [] -> invalid_arg "Cannot run a state machine with no rules."
   | _ ->
@@ -59,8 +59,20 @@ let run ~init ~rules ?(invariants = []) tc =
         ~rule_names:(List.map rules ~f:Rule.name)
         ~invariant_names
     in
-    let run_invariants state = List.iter invariants ~f:(fun inv -> inv state) in
-    run_invariants init;
+    let print_state state =
+      Option.iter sexp_of_state ~f:(fun sexp_of ->
+        Internal.note tc (Stdlib.Format.asprintf "state = %a" Sexp.pp_hum (sexp_of state)))
+    in
+    let check_invariants ~where state =
+      List.iteri invariants ~f:(fun i inv ->
+        match inv state with
+        | () -> ()
+        | exception e ->
+          Internal.note tc (Printf.sprintf "Invariant %d violated %s." i where);
+          raise e)
+    in
+    print_state init;
+    check_invariants ~where:"in the initial state" init;
     let max_steps =
       if is_single then Int.max_value else Internal.stateful_step_count tc
     in
@@ -91,9 +103,13 @@ let run ~init ~rules ?(invariants = []) tc =
             let rule =
               rule_array.(Internal.state_machine_next_rule tc ~state_machine_id)
             in
-            Internal.note tc (Printf.sprintf "Step %d: %s" (steps_run + 1) rule.Rule.name);
-            let new_state = rule.Rule.step tc state in
-            run_invariants new_state;
+            let step_num = steps_run + 1 in
+            Internal.note tc (Printf.sprintf "Step %d: %s" step_num rule.Rule.name);
+            let new_state =
+              Internal.with_note_indent tc (fun () -> rule.Rule.step tc state)
+            in
+            print_state new_state;
+            check_invariants ~where:(Printf.sprintf "after step %d" step_num) new_state;
             Internal.stop_span tc;
             new_state, num_steps_succeeded + 1
           with

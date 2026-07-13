@@ -9,7 +9,7 @@
     into:
     {[
       let my_test () =
-        Hegel.run_hegel_test
+        Hegel.run_hegel_test_ppx
           ~settings:expr
           ~test_location:{ function_name; file; begin_line }
           ~failure_blobs:[ "<base64>"; ... ]
@@ -138,8 +138,9 @@ let build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn
   let base_call =
     match settings_expr with
     | Some s ->
-      [%expr Hegel.run_hegel_test ~settings:[%e s] ~test_location:[%e location_record]]
-    | None -> [%expr Hegel.run_hegel_test ~test_location:[%e location_record]]
+      [%expr
+        Hegel.run_hegel_test_ppx ~settings:[%e s] ~test_location:[%e location_record]]
+    | None -> [%expr Hegel.run_hegel_test_ppx ~test_location:[%e location_record]]
   in
   let call =
     match failure_blobs with

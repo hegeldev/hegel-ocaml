@@ -324,6 +324,76 @@ let test_run_multiple_failures () =
   | None -> Alcotest.fail "expected multiple failures"
 ;;
 
+(** [color_enabled] decision table: a HEGEL_COLOR override of 1/0 wins,
+    anything else falls back to the tty state. *)
+let test_color_enabled () =
+  let check name expected ~override ~isatty =
+    Alcotest.(check bool) name expected (Internal.color_enabled ~override ~isatty)
+  in
+  check "1 forces on" true ~override:(Some "1") ~isatty:false;
+  check "0 forces off" false ~override:(Some "0") ~isatty:true;
+  check "unset: tty" true ~override:None ~isatty:true;
+  check "unset: not a tty" false ~override:None ~isatty:false;
+  check "junk: falls back to tty" true ~override:(Some "junk") ~isatty:true
+;;
+
+(** Run [f] with HEGEL_COLOR set to [value], restoring the variable after. *)
+let with_hegel_color value f =
+  let saved = Sys.getenv "HEGEL_COLOR" in
+  Unix.putenv ~key:"HEGEL_COLOR" ~data:value;
+  Exn.protect
+    ~finally:(fun () ->
+      match saved with
+      | Some v -> Unix.putenv ~key:"HEGEL_COLOR" ~data:v
+      | None -> Test_helpers.unsetenv "HEGEL_COLOR")
+    ~f
+;;
+
+(** [stderr_color_enabled] reads HEGEL_COLOR from the environment. *)
+let test_stderr_color_enabled () =
+  with_hegel_color "1" (fun () ->
+    Alcotest.(check bool)
+      "HEGEL_COLOR=1 forces on"
+      true
+      (Internal.stderr_color_enabled ()));
+  with_hegel_color "0" (fun () ->
+    Alcotest.(check bool)
+      "HEGEL_COLOR=0 forces off"
+      false
+      (Internal.stderr_color_enabled ()))
+;;
+
+(** [stderr_color] wraps in SGR codes only when colors are enabled. *)
+let test_stderr_color () =
+  with_hegel_color "1" (fun () ->
+    Alcotest.(check string)
+      "enabled wraps"
+      "\027[31mx\027[0m"
+      (Internal.stderr_color "31" "x"));
+  with_hegel_color "0" (fun () ->
+    Alcotest.(check string) "disabled is identity" "x" (Internal.stderr_color "31" "x"))
+;;
+
+(** [render_diff] marks changes with ANSI colors or with -/+ prefixes. *)
+let test_render_diff () =
+  let original = Sexp.of_string "(1 2 3)" in
+  let updated = Sexp.of_string "(1 9 3)" in
+  let colored = Internal.render_diff ~colored:true ~original ~updated in
+  Alcotest.(check bool)
+    "colored diff contains an SGR code"
+    true
+    (Test_helpers.contains_substring colored "\027[");
+  let plain = Internal.render_diff ~colored:false ~original ~updated in
+  Alcotest.(check bool)
+    "plain diff has no SGR code"
+    false
+    (Test_helpers.contains_substring plain "\027[");
+  Alcotest.(check bool)
+    "plain diff marks the deletion"
+    true
+    (Test_helpers.contains_substring plain "- ")
+;;
+
 let test_run_flaky_on_replay () =
   let calls = ref 0 in
   let msg =
@@ -404,6 +474,10 @@ let tests =
       "extract_origin distinct lines"
       `Quick
       test_extract_origin_distinct_lines
+  ; Alcotest.test_case "color_enabled" `Quick test_color_enabled
+  ; Alcotest.test_case "stderr_color_enabled" `Quick test_stderr_color_enabled
+  ; Alcotest.test_case "stderr_color" `Quick test_stderr_color
+  ; Alcotest.test_case "render_diff" `Quick test_render_diff
   ; Alcotest.test_case "run flaky on replay" `Quick test_run_flaky_on_replay
   ; Alcotest.test_case "run passing" `Quick test_run_passing
   ; Alcotest.test_case "run failing re-raises" `Quick test_run_failing_reraises

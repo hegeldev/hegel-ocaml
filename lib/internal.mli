@@ -105,7 +105,9 @@ type settings =
   ; phases : phase list option
     (** [None] uses the engine's default phase list (all phases); [Some xs]
           restricts execution to [xs]. *)
-  ; print_blob : bool (** print blob for a failure *)
+  ; print_blob : bool
+    (** print a [rerun with:] line for a failure;
+        [true] by default *)
   ; report_multiple_failures : bool (** false by default *)
   }
 
@@ -164,8 +166,8 @@ val with_phases : phase list -> settings -> settings
 val with_mode : mode -> settings -> settings
 
 (** [with_print_blob b s] returns settings [s] with [print_blob] set to [b]. When
-    [true], a failing run prints replay instructions (the failure blob), and
-    replay runs report which blobs reproduced the failure. *)
+    [true] (the default), a failing run's report ends with a copy-pasteable
+    [rerun with:] line encoding the failure. *)
 val with_print_blob : bool -> settings -> settings
 
 (** [with_report_multiple_failures b s] returns settings [s] with [report_multiple_failures] 
@@ -186,6 +188,11 @@ val draw_depth : test_case -> int
 val incr_draw_depth : test_case -> unit
 val decr_draw_depth : test_case -> unit
 val set_test_aborted : test_case -> bool -> unit
+
+(** [with_note_indent tc f] runs [f], nesting every {!note}/draw line it prints
+    one level deeper (restoring the depth even if [f] raises). Used to indent the
+    draws a stateful step makes under its [Step N] header. *)
+val with_note_indent : test_case -> (unit -> 'a) -> 'a
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available; derived from the assertion's location so
@@ -272,6 +279,39 @@ val assume : test_case -> bool -> unit
     {!type:verbosity}: never under [Quiet], only on the final (failing) replay
     under [Normal], and on every test case under [Verbose] or [Debug]. *)
 val note : test_case -> string -> unit
+
+(**/**)
+
+(** [color_enabled ~override ~isatty] decides whether ANSI colors are on: an
+    [override] of ["1"]/["0"] (the [HEGEL_COLOR] variable) forces it on/off;
+    otherwise follow [isatty]. *)
+val color_enabled : override:string option -> isatty:bool -> bool
+
+(** [stderr_color_enabled ()] is {!color_enabled} for the failure report's
+    stream, reading the environment and stderr's tty state afresh. *)
+val stderr_color_enabled : unit -> bool
+
+(** [stderr_color code s] wraps [s] in the ANSI SGR [code] when colors are
+    enabled for stderr, else returns [s] unchanged. *)
+val stderr_color : string -> string -> string
+
+(** [render_diff ~colored ~original ~updated] renders a structural sexp diff of
+    the two values: red/green markings when [colored], [-]/[+] otherwise. *)
+val render_diff : colored:bool -> original:Core.Sexp.t -> updated:Core.Sexp.t -> string
+
+(**/**)
+
+(** [require tc ?msg condition] fails the current test case when [condition] is
+    [false] by raising [Failure msg]. Unlike [assert] the failure message is
+    yours to choose, and unlike {!assume} the case counts as a genuine failure
+    rather than being discarded. *)
+val require : test_case -> ?msg:string -> bool -> unit
+
+(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
+    the two values render to different sexps under [sexp_of], printing a
+    structural sexp diff of the two values in the failure report's body before
+    raising [Failure msg]. *)
+val require_equal : test_case -> ?msg:string -> ('a -> Core.Sexp.t) -> 'a -> 'a -> unit
 
 (**/**)
 
@@ -362,14 +402,19 @@ val state_machine_next_rule : test_case -> state_machine_id:int -> int
     [file:function_name]) so each [let%hegel_test] gets a stable, distinct
     key; pass an explicit key to override. When both are absent, the engine
     uses its own default key.
+    @param from_ppx
+    [true] when the run is driven by the [let%hegel_test] PPX; only set by the
+    PPX. Selects the [[@@failure_blobs [...]]] attribute form of the [rerun with:]
+    hint vs. the [~failure_blobs] argument form a plain caller would use.
     @param failure_blobs
-    a list of base64 encoded strings (blobs), where each string encodes the choices 
-    made in a failing test run. When the list is nonempty, only the first blob 
-    is decoded and run. The blob is only guaranteed to reproduce a failure within 
+    a list of base64 encoded strings (blobs), where each string encodes the choices
+    made in a failing test run. When the list is nonempty, only the first blob
+    is decoded and run. The blob is only guaranteed to reproduce a failure within
     a specific version of Hegel *)
 val run_test
   :  settings:settings
   -> ?test_location:Antithesis.test_location
+  -> ?from_ppx:bool
   -> ?database_key:string
   -> ?failure_blobs:string list
   -> (test_case -> unit)
@@ -389,6 +434,7 @@ val run_test
 val run_hegel_test
   :  ?settings:settings
   -> ?test_location:Antithesis.test_location
+  -> ?from_ppx:bool
   -> ?database_key:string
   -> ?failure_blobs:string list
   -> (test_case -> unit)

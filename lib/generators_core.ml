@@ -345,8 +345,11 @@ let draw_named
     if Internal.draw_depth tc = 0
     then (
       let name = Internal.draw_display_name tc ~label ~repeatable in
-      let rendered = Sexp.to_string_hum (sexp_of value) in
-      Internal.note tc (sprintf "%s = %s" name rendered));
+      (* Render through Format so the pretty-printer breaks the sexp knowing
+         it starts after "name = ": continuation lines align under the value
+         instead of landing at column 0. *)
+      let rendered = Stdlib.Format.asprintf "%s = %a" name Sexp.pp_hum (sexp_of value) in
+      Internal.note tc rendered);
     value
   | _ -> .
 ;;

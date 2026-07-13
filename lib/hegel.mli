@@ -56,8 +56,15 @@
       let%hegel_test commutative_addition tc =
         let a = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
         let b = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
-        assert (a + b = b + a)
+        require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
     ]}
+
+    We check the property with {!require_equal} rather than
+    [assert (a + b = b + a)]. It takes a printer for the values and, when they
+    differ, shows a structural diff of the two sides in the failure report
+    instead of a bare "assertion failed". Use {!require} for a boolean check with
+    a custom message. A plain [assert] can be used as well, but it does not provide
+    as much information as {!require_equal} and {!require}.
 
     Run [dune runtest]. You should see that the test passes. Hegel generates up to 100 random input pairs and reports the
     minimal counterexample if it finds one. When a test fails, Hegel prints each
@@ -79,15 +86,19 @@
         assert (n < 50)
     ]}
 
-    This test asserts that any integer is less than 50, which is obviously incorrect. 
-    Hegel will find a test case that makes this assertion fail, and then shrink it to
-    find the smallest counterexample (n = 50). The runner prints a [FAIL] line with the 
-    re-raised assertion, and the final replay prints each drawn value named after its binding:
+    This test asserts that any integer is less than 50, which is obviously
+    incorrect. Hegel finds a test case that makes the assertion fail, then shrinks
+    it to the smallest counterexample ([n = 50]). The final replay prints the 
+    drawn values, the exception, and a [rerun with:] line that replays the exact case:
 
     {v
-      FAIL  every_int_is_small (my_tests.ml:3)
-            File "my_tests.ml", line 5: Assertion failed
-      n = 50
+      --- Failure: every_int_is_small (my_tests.ml:3) ------------------
+      Falsified after 1 test case (0 discarded):
+
+        n = 50
+
+      Exception: File "my_tests.ml", line 5, characters 2-8: Assertion failed
+      rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAy" ]]
     v}
 
     To fix this test, you can constrain the integers you generate with [min_value] and [max_value]:
@@ -114,7 +125,8 @@
         let xs = draw tc (lists (integers ()) ()) in
         let initial_length = List.length xs in
         let xs = draw tc (integers ()) :: xs in
-        assert (List.length xs > initial_length)
+        require tc ~msg:"prepending an element must grow the list"
+          (List.length xs > initial_length)
     ]}
 
     Custom generators are also supported. Suppose you have a [person] record that
@@ -163,7 +175,7 @@
       let%hegel_test commutative_addition tc =
         let a = draw tc (integers ()) in
         let b = draw tc (integers ()) in
-        assert (a + b = b + a)
+        require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
       [@@settings Hegel.settings ~test_cases:500 ()]
     ]}
 
@@ -174,7 +186,7 @@
       let%hegel_test commutative_addition tc =
         let a = draw tc (integers ()) in
         let b = draw tc (integers ()) in
-        assert (a + b = b + a)
+        require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
       [@@settings Hegel.settings ~test_cases:500 () |> with_seed 5 |> with_verbosity Verbose]
     ]}
     
@@ -189,23 +201,33 @@
         assert (n < 50)
     ]}
     
-    If you toggle the [print_blob] setting, a base64 encoded string corresponding
-    to the choice sequence that caused the failure will be printed:
+    A failing run prints a framed report: the shrunk counterexample's draws
+    and notes, the exception, and a copy-pasteable [rerun with:] line whose
+    base64 blob encodes the choice sequence that caused the failure (disable
+    it with [with_print_blob false]). On a terminal the report headers (and
+    {!require_equal} diffs) print in color; set [HEGEL_COLOR] to [1] or [0]
+    to force colors on or off.
+
+    For an equality property, prefer {!require_equal} over [assert (x = y)]: it
+    adds a structural diff of the two values to this report, so you see exactly
+    how they differ. {!require} is the message-carrying boolean variant.
 
     {[
       let%hegel_test every_int_is_small tc =
         let n = draw tc (integers ()) in
         assert (n < 50)
-      [@@settings default_settings () |> with_print_blob true]
     ]}
-    
+
     {v
-      FAIL  every_int_is_small (my_tests.ml:3)
-            File "my_tests.ml", line 5: Assertion failed
-      n = 50
-      failure blob: "AAEAAAAACgEAAAAy"
+      --- Failure: every_int_is_small (my_tests.ml:3) ------------------
+      Falsified after 2 test cases (0 discarded):
+
+        n = 50
+
+      Exception: File "my_tests.ml", line 5, characters 2-8: Assertion failed
+      rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAy" ]]
     v}
-    
+
     The blob can then be used to replay the failing test case:
 
     {[
@@ -313,7 +335,8 @@ type settings = Internal.settings =
     (** [None] uses the engine's default phase list (all phases); [Some xs]
           restricts execution to [xs]. *)
   ; print_blob : bool
-    (** Print the base64 blob encoding the engine choices that led to a failure. *)
+    (** Print a [rerun with:] line whose base64 blob
+        encodes the engine choices that led to a failure. [true] by default. *)
   ; report_multiple_failures : bool (** [false] by default. *)
   }
 
@@ -374,8 +397,9 @@ val with_phases : phase list -> settings -> settings
 (** [with_mode mode s] sets the execution mode. *)
 val with_mode : mode -> settings -> settings
 
-(** [with_print_blob b s] makes a failing run print the base64 blob(s) encoding
-    the engine choices that led to a failure. *)
+(** [with_print_blob b s] controls whether a failing run's report ends with a
+    copy-pasteable [rerun with:] line encoding the
+    engine choices that led to the failure. On by default. *)
 val with_print_blob : bool -> settings -> settings
 
 (** [with_report_multiple_failures b s] makes a failing run report every distinct
@@ -396,8 +420,7 @@ type test_location = Antithesis.test_location =
 
 (** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
     runs a property test against the native engine, defaulting to
-    {!default_settings}. This is the entry point the [let%hegel_test] PPX targets;
-    it can also be called directly, e.g. to drive a property from a plain
+    {!default_settings}. Call it directly to drive a property from a plain
     executable or another test harness:
 
     {[
@@ -429,6 +452,22 @@ val run_hegel_test
   -> ?failure_blobs:string list
   -> (test_case -> unit)
   -> unit
+
+(**/**)
+
+(** [run_hegel_test_ppx] is {!run_hegel_test} with the PPX replay hint enabled,
+    so a failing run suggests the [[@@failure_blobs [...]]] attribute rather than
+    the [~failure_blobs] argument. The [let%hegel_test] PPX targets it; not for
+    direct use. *)
+val run_hegel_test_ppx
+  :  ?settings:settings
+  -> ?test_location:test_location
+  -> ?database_key:string
+  -> ?failure_blobs:string list
+  -> (test_case -> unit)
+  -> unit
+
+(**/**)
 
 (** {3 Drawing values} *)
 
@@ -540,6 +579,34 @@ val target : test_case -> float -> string -> unit
         assert (n < 100)
     ]} *)
 val note : test_case -> string -> unit
+
+(** [require tc ?msg condition] fails the current test case when [condition] is
+    [false] by raising [Failure msg] ([msg] defaults to a generic message).
+
+    {[
+      let%hegel_test balanced tc =
+        let l = draw tc (lists (integers ()) ()) in
+        require tc ~msg:"sum must stay non-negative" (running_sum l >= 0)
+    ]} *)
+val require : test_case -> ?msg:string -> bool -> unit
+
+(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
+    the two values render to different sexps under [sexp_of]. The failure
+    report's body shows a structural sexp diff of the two values. Lines
+    marked [-] appear only in [lhs], lines marked [+] only in [rhs].
+    Prefer it over [assert (lhs = rhs)], which reports only that the assertion
+    failed, not the two values or how they differ.
+
+    {[
+      let%hegel_test sort_is_stable tc =
+        let l = draw tc (lists (integers ()) ()) in
+        require_equal
+          tc
+          (Core.List.sexp_of_t Core.Int.sexp_of_t)
+          (List.sort compare l)
+          (stable_sort l)
+    ]} *)
+val require_equal : test_case -> ?msg:string -> ('a -> Core.Sexp.t) -> 'a -> 'a -> unit
 
 (** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding a
     printable generator that {!draw} accepts. This is how a

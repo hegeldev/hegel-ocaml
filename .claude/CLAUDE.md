@@ -261,12 +261,17 @@ collection handle (there is no whole-collection schema draw):
 The engine runs in-process, so there is no subprocess or session to manage.
 The public entry point is `Hegel.run_hegel_test ?settings ?test_location
 test_fn` — `Internal.run_hegel_test`, which is `Internal.run_test` with [settings]
-defaulting to `default_settings ()`. It is what the `let%hegel_test` PPX
-targets. The `[@@failure_blobs ...]` record/replay workflow is supported: the
-PPX forwards the listed blobs as `~failure_blobs` to `run_hegel_test`, which
-replays the first blob as a standalone deterministic case (pair it with
-`with_print_blob true` to print the reproducing blob on failure). For persisting
-and replaying failing examples across runs, use `database` / `database_key`.
+defaulting to `default_settings ()`. The `let%hegel_test` PPX targets the
+doc-hidden `Hegel.run_hegel_test_ppx` — a thin wrapper that sets `~from_ppx:true`
+on `Internal.run_hegel_test` — so the PPX-vs-plain signal never appears on the
+public `run_hegel_test`. The `[@@failure_blobs ...]` record/replay workflow is
+supported: the PPX forwards the listed blobs as `~failure_blobs`, which replays
+the first blob as a standalone deterministic case (pair it with
+`with_print_blob false` to suppress the `rerun with:` line that failing runs
+print by default). `from_ppx` selects that line's syntax: a
+`[@@failure_blobs [...]]` attribute under the PPX, a `~failure_blobs:[...]`
+argument for a plain `run_hegel_test` caller. For persisting and replaying
+failing examples across runs, use `database` / `database_key`.
 
 ### Test Runner (client.ml)
 

@@ -37,6 +37,8 @@
    (>= 0.20))
   (ipaddr
    (>= 5.0))
+  (sexp_diff
+   (>= v0.17))
   (dune-site
    (>= 3.16))
   (alcotest
