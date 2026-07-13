@@ -47,6 +47,11 @@ never replace it.
       one engine origin. Printers are passed explicitly (e.g.
       `Core.List.sexp_of_t Core.Int.sexp_of_t`); OCaml erases types at
       runtime, so there is no principled auto-printing.
+- [x] Multiline sexp alignment. `note` is multiline-aware (each line of a
+      message gets the report body's indent), and `draw_named` renders values
+      via `Format.asprintf "%s = %a" name Sexp.pp_hum` so the pretty-printer
+      breaks the sexp knowing it starts after `name = ` — continuation lines
+      align under the value's opening paren instead of landing at column 0.
 
 ## Todo
 
@@ -78,21 +83,15 @@ Ranked by leverage.
    (already implemented for base-quickcheck; ~5 fields suffice per the Tyche
    paper).
 
-4. **Multiline sexp alignment.** Partially done: `note` is now
-   multiline-aware, so continuation lines of `Sexp.to_string_hum` get the
-   report body's indent instead of landing at column 0. Remaining: they still
-   don't align under `name = (...)` — either pad by the name's width or print
-   `name =` on its own line when the sexp is multiline.
-
-5. **Colors.** None anywhere. QCheck2-style red/green on the failure header
+4. **Colors.** None anywhere. QCheck2-style red/green on the failure header
    and runner PASS/FAIL lines — tty-detected, `NO_COLOR`-respecting.
 
-6. **Verbose mode legibility.** Engine phase lines and client draw lines
+5. **Verbose mode legibility.** Engine phase lines and client draw lines
    interleave with no per-case separator; add a client-printed case separator
    so `Verbose` is usable for watching shrink candidates (falsify's
    `--falsify-verbose` shrink history is the model).
 
-7. **UTF-8 text readability (low priority).** Sexp escaping renders non-ASCII
+6. **UTF-8 text readability (low priority).** Sexp escaping renders non-ASCII
    counterexamples as byte escapes (`"\194\128"`). The encoding can't change
    (sexp constraint); consider an auxiliary human-readable echo line for
    string draws containing escapes.
