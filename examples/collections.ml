@@ -1,6 +1,7 @@
 (** Collection and combinator examples.
 
-    Demonstrates: lists, hashmaps, sampled_from, map, flat_map, filter. *)
+    Demonstrates: lists, assoc_lists, hash_tables, sampled_from, map,
+    flat_map, filter. *)
 
 open Hegel.Generators
 
@@ -69,13 +70,13 @@ let%hegel_test test_sampled_from tc =
 [@@settings Hegel.settings ~test_cases:100 ()]
 ;;
 
-(** Property: hashmaps generated with a min_size have at least that many
-    entries. *)
-let%hegel_test test_hashmap_size tc =
+(** Property: association lists generated with a min_size have at least that
+    many entries. *)
+let%hegel_test test_assoc_list_size tc =
   let pairs =
     Hegel.draw
       tc
-      (hashmaps
+      (assoc_lists
          (text ~min_size:1 ~max_size:8 ())
          (integers ~min_value:0 ~max_value:100 ())
          ~min_size:2
@@ -83,6 +84,24 @@ let%hegel_test test_hashmap_size tc =
          ())
   in
   assert (List.length pairs >= 2)
+[@@settings Hegel.settings ~test_cases:50 ()]
+;;
+
+(** Property: hash tables respect their size bounds and hold unique keys by
+    construction. *)
+let%hegel_test test_hash_table_size tc =
+  let table =
+    Hegel.draw
+      tc
+      (hash_tables
+         (text ~min_size:1 ~max_size:8 ())
+         (integers ~min_value:0 ~max_value:100 ())
+         ~min_size:2
+         ~max_size:6
+         ())
+  in
+  let n = Core.Hashtbl.length table in
+  assert (n >= 2 && n <= 6)
 [@@settings Hegel.settings ~test_cases:50 ()]
 ;;
 
@@ -98,7 +117,9 @@ let () =
   Printf.printf "  flat_map_combinator: OK\n%!";
   test_sampled_from ();
   Printf.printf "  sampled_from: OK\n%!";
-  test_hashmap_size ();
-  Printf.printf "  hashmap_size: OK\n%!";
+  test_assoc_list_size ();
+  Printf.printf "  assoc_list_size: OK\n%!";
+  test_hash_table_size ();
+  Printf.printf "  hash_table_size: OK\n%!";
   Printf.printf "All tests passed.\n%!"
 ;;

@@ -56,7 +56,9 @@ module String_result = struct
   let () = seal t
 end
 
-(* [hegel_date_t]: year in [1, 9999], month in [1, 12], day in [1, 31]. *)
+(* [hegel_date_t]: proleptic Gregorian date. [year] in [-999999, 999999]
+   (bounded by the range passed to [hegel_generate_date]; this binding requests
+   [1, 9999]), [month] in [1, 12], [day] in [1, 31]. *)
 module Date_struct = struct
   type s
 
@@ -169,8 +171,13 @@ let c_settings_suppress_health_check =
     (ptr void @-> ptr void @-> uint32_t @-> returning int)
 ;;
 
+(* [hegel_run_start]'s [callback]/[user_data] (the third and fourth arguments)
+   redirect the engine's own output off stderr. We always pass NULL for both,
+   keeping it on stderr. We do not yet install a callback. *)
 let c_run_start =
-  foreign "hegel_run_start" (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+  foreign
+    "hegel_run_start"
+    (ptr void @-> ptr void @-> ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
 ;;
 
 let c_next_test_case =
@@ -347,7 +354,13 @@ let c_generate_ipv6 =
 let c_test_case_from_blob =
   foreign
     "hegel_test_case_from_blob"
-    (ptr void @-> ptr void @-> string_opt @-> ptr (ptr void) @-> returning int)
+    (ptr void
+     @-> ptr void
+     @-> string_opt
+     @-> ptr void
+     @-> ptr void
+     @-> ptr (ptr void)
+     @-> returning int)
 ;;
 
 let c_start_span =
@@ -657,7 +670,7 @@ let settings_suppress_health_check ctx s mask =
 
 let run_start ctx s =
   let out = allocate (ptr void) null in
-  check_rc ctx (c_run_start ctx s out);
+  check_rc ctx (c_run_start ctx s null null out);
   !@out
 ;;
 
@@ -669,7 +682,7 @@ let next_test_case ctx run =
 
 let test_case_from_blob ctx s b =
   let out = allocate (ptr void) null in
-  check_rc ctx (c_test_case_from_blob ctx s b out);
+  check_rc ctx (c_test_case_from_blob ctx s b null null out);
   !@out
 ;;
 

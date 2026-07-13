@@ -7,6 +7,11 @@ Hegel is a property-based testing library for OCaml based on
 ## Install Hegel
 
 ```bash
+opam install hegel
+```
+
+The Hegel version in OPAM sometimes lags behind the version in Github. To pin the version in Github:
+```bash
 opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
 ```
 
@@ -56,9 +61,11 @@ let%hegel_test commutative_addition tc =
 ```
 
 Run `dune runtest`. Hegel generates up to 100 random input pairs and reports the
-minimal counterexample if it finds one. When a test fails, Hegel prints each
-value you drew from the failing case, named after the `let` binding it was
-bound to (`a = …`, `b = …`). See [Debugging failures](docs/getting-started.md#debug-your-failing-test-cases)
+minimal counterexample if it finds one. When a test fails, Hegel prints a
+report naming each value you drew from the failing case (`a = …`, `b = …`, named
+after the `let` binding) and a copy-pasteable line to replay it. For equality
+checks, `require_equal` can be used to print a structural diff of the two values 
+instead of a bare `assert`. See [Debugging failures](docs/getting-started.md#debug-your-failing-test-cases)
 for details.
 
 To override the default settings, attach a `[@@settings ...]` attribute:

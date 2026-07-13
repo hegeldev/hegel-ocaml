@@ -82,6 +82,15 @@ let test_run_all_counts_failures () =
   Alcotest.(check bool) "exactly one failure counted" true (failures = 1)
 ;;
 
+let test_run_all_color_env () =
+  List.iter
+    (fun hegel_color ->
+       Unix.putenv "HEGEL_COLOR" hegel_color;
+       ignore (with_silenced_stdout Hegel_test_runtime.run_all : int))
+    [ "1"; "0"; "" ];
+  Unix.putenv "HEGEL_COLOR" ""
+;;
+
 (** Re-spawn the currently running binary with the magic
     [--__hegel_test_runtime_demo MODE] argv. The handler at the top of this
     file registers a single test (passing or failing based on [mode]) and
@@ -118,6 +127,7 @@ let () =
             `Quick
             test_register_preserves_order
         ; Alcotest.test_case "run_all counts failures" `Quick test_run_all_counts_failures
+        ; Alcotest.test_case "run_all color env combos" `Quick test_run_all_color_env
         ; Alcotest.test_case "exit returns 0 on pass" `Quick test_exit_zero_on_pass
         ; Alcotest.test_case "exit returns 1 on fail" `Quick test_exit_one_on_fail
         ] )

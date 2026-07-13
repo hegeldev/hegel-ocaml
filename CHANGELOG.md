@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.10.0 - 2026-07-13
+
+This release overhauls what Hegel prints when a property fails.
+
+Failing runs now produce a framed report: a header naming the test and its
+source location, a `Falsified after N test cases (M discarded):` line, an
+indented body of the drawn values and `note`s, the exception, and 
+`rerun with: [@@failure_blobs [ "..." ]]`. Failure blobs are now printed by default. 
+A run that finds multiple failures reports each in its own numbered section, and
+on a terminal the report is colorized (`HEGEL_COLOR=1|0` forces it on or off).
+
+In stateful testing, the draws a rule makes are nested under its step header, 
+and an invariant violation is attributed to the index of the invariant in the 
+invariant list (`Invariant N violated after step M`).
+
+It also adds two ways to make a failure more informative:
+
+- `require` and `require_equal` for assertions inside a test. `require_equal`
+  renders a structural s-expression diff of the two values in the report
+
+- `?sexp_of_state` on `Stateful.run`, which prints the model state after the
+  initial state and after each step.
+
+## 0.9.2 - 2026-07-13
+
+This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.28.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.28.0) to [0.29.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.29.0).
+
+## 0.9.1 - 2026-07-13
+
+This patch adds `functions`, `functions2`, and `functions3` in `Hegel.Generators` for 
+generating functions. `functions2` and `functions3` generate curried two and three 
+argument functions. Function generators are unprintable.
+
+When a property over a generated function fails, Hegel prints the function application(s)
+and its result(s). For example, a property that wrongly assumes applying a function twice 
+returns the original value:
+
+```ocaml
+let%hegel_test involution tc =
+  let f = draw_silent tc (functions ~sexp_of_arg:Int.sexp_of_t ~returns:(integers ()) ()) in
+  let x = draw tc (integers ()) in
+  assert (f (f x) = x)
+```
+
+fails with a concrete counterexample:
+
+```
+x = 0
+f 0 = 1
+f 1 = 1
+```
+
+## 0.9.0 - 2026-07-09
+
+The `hashmaps` generator is replaced by two generators that say what they
+mean: `assoc_lists`, which produces what `hashmaps` actually
+produced — a `(key * value) list` in generation order with unique keys —
+and `hash_tables`, which produces a real polymorphic `Hashtbl.t` with the
+same entry generation. Existing uses of `hashmaps` translate directly to
+`assoc_lists`.
+
+## 0.8.2 - 2026-07-09
+
+This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.27.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.27.0) to [0.28.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.28.0).
+
 ## 0.8.1 - 2026-07-06
 
 This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.23.1](https://github.com/hegeldev/hegel-rust/releases/tag/v0.23.1) to [0.27.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.27.0).

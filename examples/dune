@@ -1,6 +1,6 @@
 (executables
- (names basic_properties collections real_world)
- (modules basic_properties collections real_world)
+ (names basic_properties collections real_world higher_order)
+ (modules basic_properties collections real_world higher_order)
  (libraries hegel core)
  (preprocess
   (pps ppx_js_style ppx_hegel_test -- -allow-unannotated-ignores)))

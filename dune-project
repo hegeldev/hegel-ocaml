@@ -2,7 +2,7 @@
 
 (name hegel)
 
-(version 0.8.1)
+(version 0.10.0)
 
 (generate_opam_files true)
 
@@ -28,15 +28,17 @@
   (ocaml
    (>= 5.1))
   (core
-   (>= 0.17))
+   (>= v0.17))
   (core_unix
-   (>= 0.17))
+   (>= v0.17))
   (ctypes
    (>= 0.20))
   (ctypes-foreign
    (>= 0.20))
   (ipaddr
    (>= 5.0))
+  (sexp_diff
+   (>= v0.17))
   (dune-site
    (>= 3.16))
   (alcotest
@@ -101,11 +103,11 @@
   (core
    (and
     :with-test
-    (>= 0.17)))
+    (>= v0.17)))
   (core_unix
    (and
     :with-test
-    (>= 0.17)))))
+    (>= v0.17)))))
 
 (package
  (name ppx_hegel_test)
@@ -130,11 +132,11 @@
   (core
    (and
     :with-test
-    (>= 0.17)))
+    (>= v0.17)))
   (core_unix
    (and
     :with-test
-    (>= 0.17)))
+    (>= v0.17)))
   (yojson
    (and
     :with-test

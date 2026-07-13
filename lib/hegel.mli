@@ -1,9 +1,7 @@
-(** Property-based testing for OCaml, powered by the native Hegel engine.
+(** {2 Introduction}
+    Property-based testing for OCaml, powered by the native {{:https://hegel.dev} Hegel} engine based on {{:https://hypothesis.works} Hypothesis}.
 
-    All code examples in this documentation assume [open Hegel] and
-    [open Hegel.Generators] and that [ppx_hegel_test] is used.
-
-    Hegel runs the body on many generated inputs. You generate data {e inline},
+    Hegel runs the test function on many generated inputs. You generate data {e inline},
     drawing values with {!draw} as the test runs, rather than generating the data
     then running the property body. Each {!draw} returns an ordinary OCaml value
     that you bind with [let], compute with, and branch on, so a later draw can 
@@ -13,38 +11,255 @@
     {{:https://hypothesis.works/articles/integrated-shrinking/} integrated
     shrinking}, shrinking comes for free.
 
-    A deliberately false property makes that failure output concrete:
+    {2 Getting started}
+    
+    {3 Install Hegel}
+
+    To install Hegel for OCaml:
+
+    {@shell[
+      opam install hegel
+    ]}
+
+    The version of Hegel in OPAM sometimes lags behind the version in Github. To pin the
+    version in Github:
+    {@shell[
+      opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
+    ]}
+
+    Hegel for OCaml supports {b Linux} (amd64/arm64) and {b macOS} (Apple Silicon).
+    macOS amd64 (Intel) has no published [libhegel] artifact, so on that platform point
+    [HEGEL_LIBHEGEL_PATH] at a locally built [libhegel.dylib].
+
+    Add [hegel] to your dune library dependencies:
+
+    {[
+      (library
+       (name my_tests)
+       (libraries hegel)
+       (inline_tests (backend ppx_hegel_test))
+       (preprocess (pps ppx_hegel_test)))
+    ]}
+
+    [ppx_hegel_test] is not required to use Hegel, but strongly recommended as it
+    adds many convenience features and integration with [dune runtest]. The examples
+    below assume [ppx_hegel_test] is used.
+
+    {3 Write your first test}
+
+    Write a property test using [let%hegel_test]:
+
+    {[
+      open Hegel
+      open Hegel.Generators
+
+      let%hegel_test commutative_addition tc =
+        let a = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
+        let b = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
+        require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
+    ]}
+
+    We check the property with {!require_equal} rather than
+    [assert (a + b = b + a)]. It takes a printer for the values and, when they
+    differ, shows a structural diff of the two sides in the failure report
+    instead of a bare "assertion failed". Use {!require} for a boolean check with
+    a custom message. A plain [assert] can be used as well, but it does not provide
+    as much information as {!require_equal} and {!require}.
+
+    Run [dune runtest]. You should see that the test passes. Hegel generates up to 100 random input pairs and reports the
+    minimal counterexample if it finds one. When a test fails, Hegel prints each
+    value you drew from the failing case, named after the [let] binding it was
+    bound to ([a = …], [b = …]).
+
+    [let%hegel_test name tc = body] also defines [name] as a plain
+    [unit -> unit] function, so you can still call it directly from an
+    executable or hand it to another test harness like Alcotest. 
+
+    The rest of the examples in the documentation assume you have [open Hegel] and
+    [open Hegel.Generators] at the top of the test file like in the example above.
+    
+    Next, let's try a test that fails.
 
     {[
       let%hegel_test every_int_is_small tc =
         let n = draw tc (integers ()) in
         assert (n < 50)
-      ;;
     ]}
 
-    Hegel finds a failing case and shrinks it to the boundary. The runner prints
-    a [FAIL] line with the re-raised assertion, and the final replay prints each
-    drawn value named after its binding:
+    This test asserts that any integer is less than 50, which is obviously
+    incorrect. Hegel finds a test case that makes the assertion fail, then shrinks
+    it to the smallest counterexample ([n = 50]). The final replay prints the 
+    drawn values, the exception, and a [rerun with:] line that replays the exact case:
 
     {v
-      FAIL  every_int_is_small (my_tests.ml:3)
-            File "my_tests.ml", line 5: Assertion failed
-      n = 50
+      --- Failure: every_int_is_small (my_tests.ml:3) ------------------
+      Falsified after 1 test case (0 discarded):
+
+        n = 50
+
+      Exception: File "my_tests.ml", line 5, characters 2-8: Assertion failed
+      rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAy" ]]
     v}
 
-    [let%hegel_test name tc = body] also defines [name] as a plain
-    [unit -> unit] function, so you can still call it directly from an
-    executable or hand it to another test harness like Alcotest.
+    To fix this test, you can constrain the integers you generate with [min_value] and [max_value]:
 
-    See {!Generators} for the generators and {!Stateful} for state-machine testing. *)
+    {[
+      let%hegel_test every_int_is_small tc =
+        let n = draw tc (integers ~min_value:0 ~max_value:49 ()) in
+        assert (n < 50)
+    ]}
+
+    {3 Use generators}
+
+    Hegel provides a rich library of generators that you can use out of the box.
+    There are primitive generators, such as {!Generators.integers},
+    {!Generators.floats}, and {!Generators.text}, and combinators that build
+    generators out of other generators, such as {!Generators.lists} and
+    {!Generators.tuples2}.
+
+    For instance, you can use {!Generators.lists} to construct a list of
+    integers:
+
+    {[
+      let%hegel_test append_increases_length tc =
+        let xs = draw tc (lists (integers ()) ()) in
+        let initial_length = List.length xs in
+        let xs = draw tc (integers ()) :: xs in
+        require tc ~msg:"prepending an element must grow the list"
+          (List.length xs > initial_length)
+    ]}
+
+    Custom generators are also supported. Suppose you have a [person] record that
+    requires generation. Build a generator for it with {!Generators.composite},
+    drawing each field in sequence:
+
+    {[
+      type person =
+        { age : int
+        ; name : string
+        }
+
+      let person =
+        composite (fun tc ->
+          let age = draw_silent tc (integers ()) in
+          let name = draw_silent tc (text ()) in
+          { age; name })
+    ]}
+
+    You can chain drawing operations together, so a later draw depends on an
+    earlier one. For instance, extending [person] with a [driving_license] field
+    that can only be [true] once [age] is at least 18:
+
+    {[
+      type person =
+        { age : int
+        ; name : string
+        ; driving_license : bool
+        }
+
+      let person =
+        composite (fun tc ->
+          let age = draw_silent tc (integers ()) in
+          let name = draw_silent tc (text ()) in
+          let driving_license =
+            if age >= 18 then draw_silent tc (booleans ()) else false
+          in
+          { age; name; driving_license })
+    ]}
+
+    {3 Changing test settings}
+
+    To override the default settings, attach a [\[@@settings ...\]] attribute:
+
+    {[
+      let%hegel_test commutative_addition tc =
+        let a = draw tc (integers ()) in
+        let b = draw tc (integers ()) in
+        require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
+      [@@settings Hegel.settings ~test_cases:500 ()]
+    ]}
+
+    This increases the number of test cases run from 100 to 500.
+
+    You can also update settings using the [with_*] functions:
+    {[
+      let%hegel_test commutative_addition tc =
+        let a = draw tc (integers ()) in
+        let b = draw tc (integers ()) in
+        require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
+      [@@settings Hegel.settings ~test_cases:500 () |> with_seed 5 |> with_verbosity Verbose]
+    ]}
+    
+    {3 Debugging failing test cases}
+
+    Use {!note} to attach debug information:
+    
+    {[
+      let%hegel_test every_int_is_small tc =
+        let n = draw tc (integers ()) in
+        note tc (Printf.sprintf "n is %d" n); 
+        assert (n < 50)
+    ]}
+    
+    A failing run prints a framed report: the shrunk counterexample's draws
+    and notes, the exception, and a copy-pasteable [rerun with:] line whose
+    base64 blob encodes the choice sequence that caused the failure (disable
+    it with [with_print_blob false]). On a terminal the report headers (and
+    {!require_equal} diffs) print in color; set [HEGEL_COLOR] to [1] or [0]
+    to force colors on or off.
+
+    For an equality property, prefer {!require_equal} over [assert (x = y)]: it
+    adds a structural diff of the two values to this report, so you see exactly
+    how they differ. {!require} is the message-carrying boolean variant.
+
+    {[
+      let%hegel_test every_int_is_small tc =
+        let n = draw tc (integers ()) in
+        assert (n < 50)
+    ]}
+
+    {v
+      --- Failure: every_int_is_small (my_tests.ml:3) ------------------
+      Falsified after 2 test cases (0 discarded):
+
+        n = 50
+
+      Exception: File "my_tests.ml", line 5, characters 2-8: Assertion failed
+      rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAy" ]]
+    v}
+
+    The blob can then be used to replay the failing test case:
+
+    {[
+      let%hegel_test every_int_is_small tc =
+        let n = draw tc (integers ()) in
+        assert (n < 50)
+      [@@failure_blobs [ "AAEAAAAACgEAAAAy" ]]
+    ]}
+
+    The blob is only meant to reproduce the failure within a specific version of
+    Hegel, since the choice sequence leading to a failure can change from version 
+    to version.
+    
+    {3 Learning more}
+    See {!Generators} for the generators and {!Stateful} for state-machine testing.
+    *)
+
+(** {2 Hegel module documentation}*)
 
 (** The current version of Hegel for OCaml. *)
 val version : string
 
-(** Generator combinators for composable test data generation. *)
+(** An opaque handle for the current test case, passed to your test function and
+    threaded to {!draw} and the other drawing primitives. *)
+type test_case = Internal.test_case
+
+(** {3 Submodules} *)
+
+(** Generators for composable test data generation. *)
 module Generators = Generators
 
-(** Stateful property-based testing on top of {!Generators}. *)
+(** Stateful property-based testing. *)
 module Stateful = Stateful
 
 (**/**)
@@ -57,11 +272,7 @@ module Antithesis = Antithesis
 
 (**/**)
 
-(** An opaque handle for the current test case, passed to your test function and
-    threaded to {!draw} and the other drawing primitives. *)
-type test_case = Internal.test_case
-
-(** {2 Settings}
+(** {3 Settings}
 
     Build a {!type:settings} value with {!default_settings} or {!val:settings},
     refine it with the [with_*] functions, and attach it to a [let%hegel_test]
@@ -72,7 +283,6 @@ type test_case = Internal.test_case
         let n = draw tc (integers ~min_value:0 ~max_value:99 ()) in
         assert (n < 100)
       [@@settings settings ~test_cases:500 () |> with_verbosity Verbose]
-      ;;
     ]} *)
 
 (** How much output Hegel produces during a run. *)
@@ -110,7 +320,6 @@ type health_check = Internal.health_check =
 
 (** Configuration for a test run. Build one with {!default_settings} or
     {!val:settings} and refine it with the [with_*] functions below. *)
-
 type settings = Internal.settings =
   { mode : mode
   ; test_cases : int
@@ -126,7 +335,8 @@ type settings = Internal.settings =
     (** [None] uses the engine's default phase list (all phases); [Some xs]
           restricts execution to [xs]. *)
   ; print_blob : bool
-    (** Print the base64 blob encoding the engine choices that led to a failure. *)
+    (** Print a [rerun with:] line whose base64 blob
+        encodes the engine choices that led to a failure. [true] by default. *)
   ; report_multiple_failures : bool (** [false] by default. *)
   }
 
@@ -187,15 +397,16 @@ val with_phases : phase list -> settings -> settings
 (** [with_mode mode s] sets the execution mode. *)
 val with_mode : mode -> settings -> settings
 
-(** [with_print_blob b s] makes a failing run print the base64 blob(s) encoding
-    the engine choices that led to a failure. *)
+(** [with_print_blob b s] controls whether a failing run's report ends with a
+    copy-pasteable [rerun with:] line encoding the
+    engine choices that led to the failure. On by default. *)
 val with_print_blob : bool -> settings -> settings
 
 (** [with_report_multiple_failures b s] makes a failing run report every distinct
     failure it found rather than just the first. *)
 val with_report_multiple_failures : bool -> settings -> settings
 
-(** {2 Running tests} *)
+(** {3 Running tests} *)
 
 (** A source location identifying a single test, used to create the test's key 
     in the {!type:database} and by the Antithesis integration to build its assertion. 
@@ -209,8 +420,7 @@ type test_location = Antithesis.test_location =
 
 (** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
     runs a property test against the native engine, defaulting to
-    {!default_settings}. This is the entry point the [let%hegel_test] PPX targets;
-    it can also be called directly, e.g. to drive a property from a plain
+    {!default_settings}. Call it directly to drive a property from a plain
     executable or another test harness:
 
     {[
@@ -243,52 +453,23 @@ val run_hegel_test
   -> (test_case -> unit)
   -> unit
 
-(** Raised by {!assume} when its condition is [false] (rejecting the current test
-    case). *)
-exception Assume_rejected
+(**/**)
 
-(** [assume tc condition] states a {e precondition}. If [condition] is [false]
-    the current test case is discarded (not failed) and Hegel generates
-    another. Use it to skip inputs that do not apply to a property.
+(** [run_hegel_test_ppx] is {!run_hegel_test} with the PPX replay hint enabled,
+    so a failing run suggests the [[@@failure_blobs [...]]] attribute rather than
+    the [~failure_blobs] argument. The [let%hegel_test] PPX targets it; not for
+    direct use. *)
+val run_hegel_test_ppx
+  :  ?settings:settings
+  -> ?test_location:test_location
+  -> ?database_key:string
+  -> ?failure_blobs:string list
+  -> (test_case -> unit)
+  -> unit
 
-    {[
-      let%hegel_test head_cons_tail_reconstructs tc =
-        let xs = draw tc (lists (integers ()) ()) in
-        (* The property is only meaningful for non-empty lists. *)
-        assume tc (xs <> []);
-        assert (List.hd xs :: List.tl xs = xs)
-      ;;
-    ]}
+(**/**)
 
-    Discarding too many cases trips the [Filter_too_much] health check. For a
-    narrow precondition, write a generator that generates valid inputs by 
-    construction (e.g. making the minimum size of the list 1 in the example above). *)
-val assume : test_case -> bool -> unit
-
-(** [note tc message] prints [message] to stderr subject to the run's verbosity:
-    never under [Quiet], only on the final (failing) replay under [Normal], and
-    on every test case under [Verbose] or [Debug].
-
-    {[
-      let%hegel_test note_value tc =
-        let n = draw tc (integers ~min_value:0 ~max_value:99 ()) in
-        note tc (Printf.sprintf "n is %d" n);
-        assert (n < 100)
-      ;;
-    ]} *)
-val note : test_case -> string -> unit
-
-(** [target tc value label] sends a target command to guide the search engine
-    toward higher values.
-
-    {[
-      let%hegel_test grow_size tc =
-        let v = draw tc (integers ~min_value:0 ~max_value:1000 ()) in
-        target tc (float_of_int v) "size";
-        assert (v <= 1000)
-      ;;
-    ]} *)
-val target : test_case -> float -> string -> unit
+(** {3 Drawing values} *)
 
 (** [draw ?label tc gen] produces a typed value from the printable generator
     [gen] using test case [tc].
@@ -309,7 +490,6 @@ val target : test_case -> float -> string -> unit
       let%hegel_test draw_example tc =
         let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
         assert (n >= 0)
-      ;;
     ]} *)
 val draw
   :  ?label:string
@@ -340,9 +520,93 @@ val draw_named
       let%hegel_test draw_silent_example tc =
         let n = draw_silent tc (map (fun x -> x * 2) (integers ~min_value:0 ~max_value:9 ())) in
         assert (n >= 0)
-      ;;
     ]} *)
 val draw_silent : test_case -> ('a, 'p) Generators.generator -> 'a
+
+(**/**)
+
+(** [draw_silent_named ~name tc gen] is the naming-aware {!draw_silent} the
+    [let%hegel_test] PPX rewrites bindings to; not intended for direct use
+    (prefer {!draw_silent}). See {!Generators.draw_silent_named}. *)
+val draw_silent_named : name:string -> test_case -> ('a, 'p) Generators.generator -> 'a
+
+(**/**)
+
+(** {3 Guiding generation} *)
+
+(** Raised by {!assume} when its condition is [false] (rejecting the current test
+    case). *)
+exception Assume_rejected
+
+(** [assume tc condition] states a {e precondition}. If [condition] is [false]
+    the current test case is discarded (not failed) and Hegel generates
+    another. Use it to skip inputs that do not apply to a property.
+
+    {[
+      let%hegel_test head_cons_tail_reconstructs tc =
+        let xs = draw tc (lists (integers ()) ()) in
+        (* The property is only meaningful for non-empty lists. *)
+        assume tc (xs <> []);
+        assert (List.hd xs :: List.tl xs = xs)
+    ]}
+
+    Discarding too many cases trips the [Filter_too_much] health check. For a
+    narrow precondition, write a generator that generates valid inputs by 
+    construction (e.g. making the minimum size of the list 1 in the example above). *)
+val assume : test_case -> bool -> unit
+
+(** [target tc value label] sends a target command to guide the search engine
+    toward higher values.
+
+    {[
+      let%hegel_test grow_size tc =
+        let v = draw tc (integers ~min_value:0 ~max_value:1000 ()) in
+        target tc (float_of_int v) "size";
+        assert (v <= 1000)
+    ]} *)
+val target : test_case -> float -> string -> unit
+
+(** {3 Debugging tests} *)
+
+(** [note tc message] prints [message] to stderr subject to the run's verbosity:
+    never under [Quiet], only on the final (failing) replay under [Normal], and
+    on every test case under [Verbose] or [Debug].
+
+    {[
+      let%hegel_test note_value tc =
+        let n = draw tc (integers ~min_value:0 ~max_value:99 ()) in
+        note tc (Printf.sprintf "n is %d" n);
+        assert (n < 100)
+    ]} *)
+val note : test_case -> string -> unit
+
+(** [require tc ?msg condition] fails the current test case when [condition] is
+    [false] by raising [Failure msg] ([msg] defaults to a generic message).
+
+    {[
+      let%hegel_test balanced tc =
+        let l = draw tc (lists (integers ()) ()) in
+        require tc ~msg:"sum must stay non-negative" (running_sum l >= 0)
+    ]} *)
+val require : test_case -> ?msg:string -> bool -> unit
+
+(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
+    the two values render to different sexps under [sexp_of]. The failure
+    report's body shows a structural sexp diff of the two values. Lines
+    marked [-] appear only in [lhs], lines marked [+] only in [rhs].
+    Prefer it over [assert (lhs = rhs)], which reports only that the assertion
+    failed, not the two values or how they differ.
+
+    {[
+      let%hegel_test sort_is_stable tc =
+        let l = draw tc (lists (integers ()) ()) in
+        require_equal
+          tc
+          (Core.List.sexp_of_t Core.Int.sexp_of_t)
+          (List.sort compare l)
+          (stable_sort l)
+    ]} *)
+val require_equal : test_case -> ?msg:string -> ('a -> Core.Sexp.t) -> 'a -> 'a -> unit
 
 (** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding a
     printable generator that {!draw} accepts. This is how a
@@ -353,7 +617,6 @@ val draw_silent : test_case -> ('a, 'p) Generators.generator -> 'a
         let doubled = map (fun x -> x * 2) (integers ~min_value:0 ~max_value:9 ()) in
         let n = draw tc (with_printer Core.Int.sexp_of_t doubled) in
         assert (n >= 0)
-      ;;
     ]} *)
 val with_printer
   :  ('a -> Core.Sexp.t)

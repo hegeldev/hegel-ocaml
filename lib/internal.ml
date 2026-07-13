@@ -136,7 +136,7 @@ let default_settings () =
   ; database = (if in_ci then Disabled else Unset)
   ; suppress_health_check = []
   ; phases = None
-  ; print_blob = false
+  ; print_blob = true
   ; report_multiple_failures = false
   }
 ;;
@@ -183,8 +183,8 @@ let with_phases phases s = { s with phases = Some phases }
 let with_mode mode s = { s with mode }
 
 (** [with_print_blob b s] returns settings [s] with [print_blob] set to [b]. When
-    [true], a failing run prints replay instructions (the failure blob), and
-    replay runs report which blobs reproduced the failure. *)
+    [true] (the default), a failing run's report ends with a copy-pasteable
+    [rerun with:] line encoding the failure. *)
 let with_print_blob b s = { s with print_blob = b }
 
 (** [with_report_multiple_failures b s] returns settings [s] with [report_multiple_failures] 
@@ -195,7 +195,14 @@ let with_report_multiple_failures b s = { s with report_multiple_failures = b }
     native test-case handle, the final-replay flag, whether verbose output is
     on, abort state, the current generation-span depth (used to print only the
     outermost drawn value), and the per-name occurrence counter that numbers
-    repeatable draws. *)
+    repeatable draws. [note_indent] is the nesting depth every {!note}/draw line
+    is indented to (two spaces per level). It starts at 1 on the final replay, so
+    the whole body sits inside the framed failure report, and at 0 otherwise; a
+    caller bumps it further to group sub-output (e.g. the draws made within a
+    stateful step nest under its [Step N] header). [printed_output] records
+    whether any note/draw line printed (the report needs to know whether to
+    separate the body from the exception, and to print that separator only once).
+*)
 type test_case =
   { handle : Ffi.test_case
   ; context : Ffi.context
@@ -204,7 +211,9 @@ type test_case =
   ; is_final : bool
   ; verbosity : verbosity
   ; mutable test_aborted : bool
+  ; mutable printed_output : bool
   ; mutable draw_depth : int
+  ; mutable note_indent : int
   ; draw_counts : int String.Table.t
   }
 
@@ -217,6 +226,14 @@ let incr_draw_depth (tc : test_case) = tc.draw_depth <- tc.draw_depth + 1
 let decr_draw_depth (tc : test_case) = tc.draw_depth <- tc.draw_depth - 1
 let set_test_aborted (tc : test_case) v = tc.test_aborted <- v
 
+(** [with_note_indent tc f] runs [f], nesting every {!note}/draw line it prints
+    one level deeper. The depth is restored when [f] raises, so an aborted or
+    failing step does not over-indent later output. *)
+let with_note_indent (tc : test_case) f =
+  tc.note_indent <- tc.note_indent + 1;
+  Exn.protect ~finally:(fun () -> tc.note_indent <- tc.note_indent - 1) ~f
+;;
+
 (** Domain-local flag to detect nested test cases. *)
 let in_test_context : bool Stdlib.Domain.DLS.key =
   Stdlib.Domain.DLS.new_key (fun () -> false)
@@ -228,13 +245,17 @@ let in_test_context : bool Stdlib.Domain.DLS.key =
     groups probes for the same bug while keeping failures at distinct source
     lines apart (see {!Ffi.mark_complete}).
 
-    [failwith] and [invalid_arg] raise from within the runtime ([stdlib.ml]), so
-    the innermost backtrace slot is the runtime, not the assertion's true source.
-    Such frames are skipped so the origin points at the caller's line; without
-    this, every same-typed exception in a run would collapse to one origin. *)
+    [failwith] and [invalid_arg] raise from within the runtime ([stdlib.ml]),
+    and [require]/[require_equal] raise from within this file, so the innermost
+    backtrace slot is not the assertion's true source. Such frames are skipped
+    so the origin points at the caller's line; without this, every same-typed
+    exception in a run would collapse to one origin. *)
 let extract_origin exn =
   let bt = Stdlib.Printexc.get_raw_backtrace () in
-  let is_runtime_file file = String.is_suffix file ~suffix:"stdlib.ml" in
+  let is_runtime_file file =
+    String.is_suffix file ~suffix:"stdlib.ml"
+    || String.is_suffix file ~suffix:"lib/internal.ml"
+  in
   let user_location =
     match Stdlib.Printexc.backtrace_slots bt with
     | None -> None
@@ -392,21 +413,100 @@ let generate_ipv6 tc =
   with_stop_guard tc (fun () -> Ffi.generate_ipv6 tc.context tc.handle)
 ;;
 
+(* ------------------------------------------------------------------ *)
+(* ANSI colors                                                         *)
+(* ------------------------------------------------------------------ *)
+
+(** ANSI color codes for {!stderr_color}. *)
+let ansi_red = "31"
+
+(** [color_enabled ~override ~isatty] decides whether ANSI colors are on: an
+    [override] of ["1"]/["0"] (the [HEGEL_COLOR] variable) forces it on/off;
+    otherwise follow [isatty]. *)
+let color_enabled ~override ~isatty =
+  match override with
+  | Some "1" -> true
+  | Some "0" -> false
+  | Some _ | None -> isatty
+;;
+
+(** [stderr_color_enabled ()] is {!color_enabled} for the failure report's
+    stream: it reads [HEGEL_COLOR] afresh (tests toggle it) and checks whether
+    stderr is a terminal. *)
+let stderr_color_enabled () =
+  color_enabled
+    ~override:(Sys.getenv "HEGEL_COLOR")
+    ~isatty:(Core_unix.isatty Core_unix.stderr)
+;;
+
+(** [stderr_color code s] wraps [s] in the ANSI SGR [code] when colors are
+    enabled for stderr (see {!stderr_color_enabled}), else returns [s]
+    unchanged. *)
+let stderr_color code s =
+  if stderr_color_enabled () then sprintf "\027[%sm%s\027[0m" code s else s
+;;
+
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)
 let assume _tc condition = if not condition then raise Assume_rejected
 
-(** [note tc message] prints [message] to stderr subject to the run's
-    {!type:verbosity}: never under [Quiet], only on the final (failing) replay
-    under [Normal], and on every test case under [Verbose] or [Debug]. *)
+(** [should_print tc] says whether {!note} output is visible for this test
+    case under the run's {!type:verbosity}: never under [Quiet], only on the
+    final (failing) replay under [Normal], and on every test case under
+    [Verbose] or [Debug]. *)
+let should_print tc =
+  match tc.verbosity with
+  | Quiet -> false
+  | Normal -> tc.is_final
+  | Verbose | Debug -> true
+;;
+
+(** [note tc message] prints [message] to stderr subject to {!should_print}.
+    Inside the framed failure report (the final replay), every line of a
+    (possibly multi-line) message prints indented. *)
 let note tc message =
-  let should_print =
-    match tc.verbosity with
-    | Quiet -> false
-    | Normal -> tc.is_final
-    | Verbose | Debug -> true
-  in
-  if should_print then eprintf "%s\n%!" message
+  if should_print tc
+  then (
+    if tc.note_indent > 0 && not tc.printed_output then eprintf "\n%!";
+    tc.printed_output <- true;
+    let indent = String.make (2 * tc.note_indent) ' ' in
+    let body = String.concat ~sep:("\n" ^ indent) (String.split_lines message) in
+    eprintf "%s%s\n%!" indent body)
+;;
+
+(** [require tc ?msg condition] fails the current test case when [condition] is
+    [false] by raising [Failure msg]. *)
+let require _tc ?(msg = "require: condition was false") condition =
+  if not condition then raise (Failure msg)
+;;
+
+(** [render_diff ~colored ~original ~updated] renders a structural sexp diff
+    of the two values: deletions and additions are marked red and green when
+    [colored], and with [-] and [+] otherwise. *)
+let render_diff ~colored ~original ~updated =
+  let diff = Sexp_diff.Algo.diff ~original ~updated () in
+  let display_options = Sexp_diff.Display.Display_options.create Two_column in
+  if colored
+  then Sexp_diff.Display.display_with_ansi_colors display_options diff
+  else Sexp_diff.Display.display_as_plain_string display_options diff
+;;
+
+(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
+    the two values render to different sexps under [sexp_of]. The failure
+    report's body shows a structural sexp diff of the two values ([-] lines
+    only in [lhs], [+] lines only in [rhs]; red/green on a terminal) before
+    [Failure msg] is raised. The diff is only rendered when notes are visible
+    (see {!should_print}), so shrink probes don't pay for it. *)
+let require_equal tc ?(msg = "require_equal: values differ") sexp_of lhs rhs =
+  let original = sexp_of lhs in
+  let updated = sexp_of rhs in
+  if not (Sexp.equal original updated)
+  then (
+    if should_print tc
+    then (
+      let rendered = render_diff ~colored:(stderr_color_enabled ()) ~original ~updated in
+      note tc (sprintf "%s (- lhs / + rhs):\n%s" msg rendered));
+    raise (Failure msg))
 ;;
 
 (** [draw_display_name tc ~label ~repeatable] returns the display name to print
@@ -471,7 +571,7 @@ let pool_add tc ~pool_id =
 
 (** [pool_generate tc ~pool_id ?consume ()] draws a variable id from [pool_id].
     When [consume] is [true], the variable is also removed from the pool.
-    Drawing from an empty pool raises {!Data_exhausted}. *)
+    Drawing from an empty pool raises {!Assume_rejected}. *)
 let pool_generate tc ~pool_id ?(consume = false) () =
   with_stop_guard tc (fun () -> Ffi.pool_generate tc.context tc.handle ~pool_id ~consume)
 ;;
@@ -548,12 +648,18 @@ let build_ffi_settings ctx (settings : settings) ~database_key =
   s
 ;;
 
-(** [run_test_case ~mode ~verbose ~test_fn handle is_final] runs [test_fn] over a single 
-    native test-case [handle], maps the outcome to a {!Ffi.status}, and marks 
-    the case complete. Returns [Some (origin, exn)] when the case was {e interesting}
-    (the body raised an unexpected exception), otherwise [None]. Shared by the
-    engine-run and failure-blob replay paths. *)
-let run_test_case ~(settings : settings) ~test_fn ctx handle is_final =
+type case_outcome =
+  { status : Ffi.status
+  ; interesting : (string * exn) option
+  ; printed_output : bool
+  }
+
+(** [run_test_case ~settings ~test_fn ?note_indent ctx handle is_final] runs
+    [test_fn] over a single native test-case [handle], maps the outcome to a
+    {!Ffi.status}, and marks the case complete. [note_indent] is the starting
+    nesting depth of note/draw lines. Shared by the engine-run and failure-blob
+    replay paths. *)
+let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle is_final =
   let (tc : test_case) =
     { handle
     ; context = ctx
@@ -562,7 +668,9 @@ let run_test_case ~(settings : settings) ~test_fn ctx handle is_final =
     ; verbosity = settings.verbosity
     ; stateful_step_count = settings.stateful_step_count
     ; test_aborted = false
+    ; printed_output = false
     ; draw_depth = 0
+    ; note_indent
     ; draw_counts = String.Table.create ()
     }
   in
@@ -577,7 +685,7 @@ let run_test_case ~(settings : settings) ~test_fn ctx handle is_final =
   in
   Stdlib.Domain.DLS.set in_test_context false;
   Ffi.mark_complete ctx handle status (Option.map captured ~f:fst);
-  captured
+  { status; interesting = captured; printed_output = tc.printed_output }
 ;;
 
 (** Diagnostic raised when the engine's shrunk counterexample no longer fails on
@@ -595,43 +703,64 @@ let flaky_diagnostic =
     run only explores (generation, shrinking) and never replays a counterexample
     itself, so the client reads the counterexample's reproduction blob and
     replays it as a standalone final test case — re-running the body so its
-    notes and drawn values print for the minimal example. Returns the blob and
-    the test's own exception. The engine just produced the blob, so it always
-    decodes; a replay that no longer fails means the test is non-deterministic
-    and raises {!flaky_diagnostic}. *)
+    notes and drawn values print for the minimal example. Returns the blob, the
+    test's own exception, and whether the replay printed any note/draw line.
+    The engine just produced the blob, so it always decodes; a replay that no
+    longer fails means the test is non-deterministic and raises
+    {!flaky_diagnostic}. *)
 let final_replay ~(settings : settings) ~ffi_settings ~test_fn ctx failure =
   let blob = Option.value_exn (Ffi.failure_blob ctx failure) in
   let tc = Ffi.test_case_from_blob ctx ffi_settings (Some blob) in
   let outcome =
     Exn.protect
       ~finally:(fun () -> Ffi.test_case_free ctx tc)
-      ~f:(fun () -> run_test_case ~settings ~test_fn ctx tc true)
+      ~f:(fun () -> run_test_case ~settings ~test_fn ~note_indent:1 ctx tc true)
   in
-  match outcome with
-  | Some (_origin, exn) -> blob, exn
+  match outcome.interesting with
+  | Some (_origin, exn) -> blob, exn, outcome.printed_output
   | None -> raise (Failure flaky_diagnostic)
 ;;
 
-(** [handle_result ~settings ~ffi_settings ~test_fn ~test_location ~single
-    ~single_outcome ctx result] inspects a finished run's [result]. A clean run
-    returns [unit]. On a run-level error (a failed health check, a
-    nondeterministic test, an engine panic) it raises [Failure] with the
-    engine's message — there is no counterexample to report.
+(** Width the framed failure report's header rule is padded to. *)
+let frame_width = 72
 
-    On a failed property the engine only explored, so the client owns the final
-    replay. In {!Single_test_case} mode the one emitted case already ran as its
-    own final case and its [single_outcome] exception is re-raised directly.
-    Otherwise each discovered counterexample's blob is replayed via
-    {!final_replay} (printing the blob when [settings.print_blob]); a single
-    failure re-raises the test's own exception, several distinct failures raise
-    an aggregated [Failure]. *)
+let print_failure_header ~cases_run ~cases_discarded test_location =
+  let title =
+    match test_location with
+    | None -> "Failure"
+    | Some (loc : Antithesis.test_location) ->
+      sprintf "Failure: %s (%s:%d)" loc.function_name loc.file loc.begin_line
+  in
+  let prefix = sprintf "--- %s " title in
+  let rule = prefix ^ String.make (max 3 (frame_width - String.length prefix)) '-' in
+  eprintf
+    "%s\nFalsified after %d test case%s (%d discarded):\n%!"
+    (stderr_color ansi_red rule)
+    cases_run
+    (if cases_run = 1 then "" else "s")
+    cases_discarded
+;;
+
+let print_failure_body ~(settings : settings) ~from_ppx ~blob ~exn ~printed_output =
+  if printed_output then eprintf "\n%!";
+  eprintf "Exception: %s\n%!" (Stdlib.Printexc.to_string exn);
+  if settings.print_blob
+  then
+    if from_ppx
+    then eprintf "rerun with: [@@failure_blobs [ \"%s\" ]]\n%!" blob
+    else eprintf "rerun with: ~failure_blobs:[ \"%s\" ]\n%!" blob
+;;
+
 let handle_result
       ~(settings : settings)
       ~ffi_settings
       ~test_fn
       ~test_location
+      ~from_ppx
       ~single
       ~single_outcome
+      ~cases_run
+      ~cases_discarded
       ctx
       result
   =
@@ -662,17 +791,24 @@ let handle_result
       ~f:(fun () ->
         match failures with
         | [ failure ] ->
-          let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
-          if settings.print_blob then eprintf "failure blob: \"%s\"" blob;
+          print_failure_header ~cases_run ~cases_discarded test_location;
+          let blob, exn, printed_output =
+            final_replay ~settings ~ffi_settings ~test_fn ctx failure
+          in
+          print_failure_body ~settings ~from_ppx ~blob ~exn ~printed_output;
           raise exn
         | failures ->
           let count = List.length failures in
+          print_failure_header ~cases_run ~cases_discarded test_location;
           List.iteri failures ~f:(fun i failure ->
-            eprintf "\nFailure %d:\n%!" (i + 1);
-            let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
-            eprintf "Exception: %s\n%!" (Exn.to_string exn);
-            if settings.print_blob then eprintf "Failure blob: \"%s\"\n%!" blob);
-          raise (Failure (sprintf "\n%d failures found!" count)))
+            eprintf
+              "\n%s%!"
+              (stderr_color ansi_red (sprintf "Failure %d of %d:" (i + 1) count));
+            let blob, exn, printed_output =
+              final_replay ~settings ~ffi_settings ~test_fn ctx failure
+            in
+            print_failure_body ~settings ~from_ppx ~blob ~exn ~printed_output);
+          raise (Failure (sprintf "%d failures found!" count)))
 ;;
 
 (** [run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location] drives a
@@ -682,13 +818,23 @@ let handle_result
     is the whole run and is run as final, its outcome kept for the report.
     Discovered counterexamples are replayed from their blobs by {!handle_result}.
     The engine [run] handle is always freed. *)
-let run_from_engine ctx ~(settings : settings) ~ffi_settings ~test_fn ~test_location =
+let run_from_engine
+      ctx
+      ~(settings : settings)
+      ~ffi_settings
+      ~test_fn
+      ~test_location
+      ~from_ppx
+  =
   let single =
     match settings.mode with
     | Single_test_case -> true
     | Test_run -> false
   in
   let single_outcome = ref None in
+  let seen_interesting = ref false in
+  let cases_run = ref 0 in
+  let cases_discarded = ref 0 in
   let run = Ffi.run_start ctx ffi_settings in
   Exn.protect
     ~finally:(fun () -> Ffi.run_free ctx run)
@@ -698,16 +844,21 @@ let run_from_engine ctx ~(settings : settings) ~ffi_settings ~test_fn ~test_loca
         | None -> ()
         | Some handle ->
           (* Handles from [next_test_case] are caller-owned; free each once its
-             case has been marked complete by [run_test_case]. *)
+             case has been marked complete by [run_test_case]. In single mode
+             the one emitted case is the whole run, so it runs as final. *)
           Exn.protect
             ~finally:(fun () -> Ffi.test_case_free ctx handle)
             ~f:(fun () ->
-              if single
-              then single_outcome := run_test_case ~settings ~test_fn ctx handle true
-              else
-                ignore
-                  (run_test_case ~settings ~test_fn ctx handle false
-                   : (string * exn) option));
+              let outcome = run_test_case ~settings ~test_fn ctx handle single in
+              if not !seen_interesting
+              then (
+                match outcome.status with
+                | Ffi.Interesting ->
+                  Int.incr cases_run;
+                  seen_interesting := true
+                | Ffi.Valid -> Int.incr cases_run
+                | Ffi.Invalid | Ffi.Overrun -> Int.incr cases_discarded);
+              if single then single_outcome := outcome.interesting);
           loop ()
       in
       loop ();
@@ -721,8 +872,11 @@ let run_from_engine ctx ~(settings : settings) ~ffi_settings ~test_fn ~test_loca
             ~ffi_settings
             ~test_fn
             ~test_location
+            ~from_ppx
             ~single
             ~single_outcome:!single_outcome
+            ~cases_run:!cases_run
+            ~cases_discarded:!cases_discarded
             ctx
             result))
 ;;
@@ -738,7 +892,8 @@ let replay_from_blob ~(settings : settings) ~ffi_settings ~test_fn blob ctx =
     Exn.protect
       ~finally:(fun () -> Ffi.test_case_free ctx tc)
       ~f:(fun () ->
-        match run_test_case ~settings ~test_fn ctx tc true with
+        let outcome = run_test_case ~settings ~test_fn ctx tc true in
+        match outcome.interesting with
         | None -> Did_not_reproduce
         | Some (_, exn) -> Reproduced exn)
 ;;
@@ -752,7 +907,7 @@ let run_from_blob ctx ~(settings : settings) ~ffi_settings ~test_fn blob =
   | Undecodable msg -> raise (Failure msg)
   | Did_not_reproduce -> raise (Failure "The failure blob did not reproduce an error")
   | Reproduced exn ->
-    printf "%s\n" "The failure blob reproduced an error:";
+    eprintf "The failure blob reproduced an error:\n%!";
     raise exn
 ;;
 
@@ -769,6 +924,10 @@ let run_from_blob ctx ~(settings : settings) ~ffi_settings ~test_fn blob =
     source location of the test, used by the Antithesis integration.
     Provided automatically by the [let%hegel_test] PPX. When omitted, no
     Antithesis assertion is emitted.
+    @param from_ppx
+    [true] when the run is driven by the [let%hegel_test] PPX; only set by the
+    PPX. Selects the [[@@failure_blobs [...]]] attribute form of the [rerun with:]
+    hint vs. the [~failure_blobs] argument form a plain caller would use.
     @param database_key
     optional key scoping persisted/replayed failing examples and, under [derandomize],
     the per-test seed. Defaults to the test's [test_location] (as
@@ -783,6 +942,7 @@ let run_from_blob ctx ~(settings : settings) ~ffi_settings ~test_fn blob =
 let run_test
       ~(settings : settings)
       ?test_location
+      ?(from_ppx = false)
       ?database_key
       ?(failure_blobs = [])
       test_fn
@@ -803,7 +963,7 @@ let run_test
   let ffi_settings = build_ffi_settings ctx settings ~database_key in
   let run_body () =
     match failure_blobs with
-    | [] -> run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location
+    | [] -> run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location ~from_ppx
     | blob :: _ -> run_from_blob ctx ~settings ~ffi_settings ~test_fn blob
   in
   Exn.protect
@@ -825,9 +985,10 @@ let run_test
 let run_hegel_test
       ?(settings = default_settings ())
       ?test_location
+      ?from_ppx
       ?database_key
       ?failure_blobs
       test_fn
   =
-  run_test ~settings ?test_location ?database_key ?failure_blobs test_fn
+  run_test ~settings ?test_location ?from_ppx ?database_key ?failure_blobs test_fn
 ;;

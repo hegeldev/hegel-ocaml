@@ -36,7 +36,16 @@ let%expect_test "Quiet suppresses notes entirely" =
 let%expect_test "Normal notes only on the final failing replay" =
   run_passing Normal;
   run_failing Normal;
-  [%expect {| NOTE_MARKER |}]
+  [%expect
+    {|
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      NOTE_MARKER
+
+    Exception: Failure("boom")
+    rerun with: ~failure_blobs:[ "AAAAAAA=" ]
+    |}]
 ;;
 
 let%expect_test "Verbose notes on every case (not just the final replay)" =

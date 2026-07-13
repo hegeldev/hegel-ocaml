@@ -288,6 +288,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -320,3 +323,61 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           HEGEL_RELEASE_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: python .github/scripts/release.py release
+
+      - name: Emit version
+        if: steps.check.outputs.skip != 'true'
+        id: version
+        run: |
+          VERSION=$(sed -n 's/^(version \([0-9.]*\)).*/\1/p' dune-project)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  pr-docs:
+    name: pr-docs
+    needs: [release]
+    if: needs.release.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Generate app token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        id: app-token
+        with:
+          app-id: ${{ vars.HEGEL_RELEASE_APP_ID }}
+          private-key: ${{ secrets.HEGEL_RELEASE_APP_PRIVATE_KEY }}
+          repositories: hegel-ocaml, website
+
+      - name: Checkout hegel-ocaml at release tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: v${{ needs.release.outputs.version }}
+          persist-credentials: false
+
+      - name: Checkout website
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4 # zizmor: ignore[artipacked]
+        with:
+          repository: hegeldev/website
+          token: ${{ steps.app-token.outputs.token }}
+          path: website
+
+      - uses: ./.github/actions/install-tools
+        with:
+          tools: just
+
+      - uses: ./.github/actions/setup-opam
+        with:
+          cache-key: opam-${{ runner.os }}-with-doc-${{ hashFiles('*.opam') }}
+          cache-restore-keys: |
+            opam-${{ runner.os }}-with-doc-
+          deps-flags: --with-doc
+
+      - name: Build docs
+        run: just check-docs
+
+      - name: PR docs to website repo
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HEGEL_RELEASE_APP_ID: ${{ vars.HEGEL_RELEASE_APP_ID }}
+          HEGEL_RELEASE_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: python3 .github/scripts/pr_docs.py

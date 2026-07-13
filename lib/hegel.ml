@@ -1,7 +1,7 @@
 (** The current version of Hegel for OCaml. *)
-let version = "0.8.1"
+let version = "0.10.0"
 
-(** Generator combinators for composable test data generation. *)
+(** Generators for composable test data generation. *)
 module Generators = Generators
 
 (** Stateful property-based testing on top of {!Generators}. *)
@@ -79,9 +79,23 @@ exception Assume_rejected = Internal.Assume_rejected
 
 (** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
     runs a property test against the native engine, defaulting to
-    {!default_settings}. This is the entry point the [let%hegel_test] PPX
-    targets. *)
-let run_hegel_test = Internal.run_hegel_test
+    {!default_settings}. The [let%hegel_test] PPX runs tests through the
+    equivalent {!run_hegel_test_ppx}. *)
+let run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn =
+  Internal.run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn
+;;
+
+(** [run_hegel_test_ppx] is {!run_hegel_test} with the PPX replay hint enabled;
+    the [let%hegel_test] PPX targets it. Not for direct use. *)
+let run_hegel_test_ppx ?settings ?test_location ?database_key ?failure_blobs test_fn =
+  Internal.run_hegel_test
+    ?settings
+    ?test_location
+    ~from_ppx:true
+    ?database_key
+    ?failure_blobs
+    test_fn
+;;
 
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)
@@ -91,6 +105,15 @@ let assume = Internal.assume
     never under [Quiet], only on the final (failing) replay under [Normal], and
     on every test case under [Verbose] or [Debug]. *)
 let note = Internal.note
+
+(** [require tc ?msg condition] fails the current test case when [condition]
+    is [false]. See {!Internal.require}. *)
+let require = Internal.require
+
+(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
+    the two values render to different sexps, printing a sexp diff in the
+    failure report. See {!Internal.require_equal}. *)
+let require_equal = Internal.require_equal
 
 (** [target tc value label] sends a target command to guide the search engine
     toward higher values. *)
@@ -109,6 +132,11 @@ let draw_named = Generators.draw_named
 (** [draw_silent tc gen] is {!draw} without printing the value on the final
     replay, and accepts a generator with no printer. *)
 let draw_silent = Generators.draw_silent
+
+(** [draw_silent_named ~name tc gen] is the naming-aware {!draw_silent} the
+    [let%hegel_test] PPX rewrites bindings to; not intended for direct use
+    (prefer {!draw_silent}). See {!Generators.draw_silent_named}. *)
+let draw_silent_named = Generators.draw_silent_named
 
 (** [with_printer sexp_of gen] attaches [sexp_of] so [gen] can be drawn with
     {!draw}. See {!Generators.with_printer}. *)

@@ -1,12 +1,13 @@
 (library
  (name hegel)
  (public_name hegel)
- (libraries core core_unix hegel_ffi ipaddr threads.posix yojson)
+ (libraries core core_unix hegel_ffi ipaddr sexp_diff threads.posix yojson)
  (private_modules
   generators_core
   generators_primitives
   generators_collections
-  generators_combinators)
+  generators_combinators
+  generators_functions)
  (preprocess
   (pps ppx_js_style))
  (instrumentation
