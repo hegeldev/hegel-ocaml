@@ -105,7 +105,9 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
             in
             let step_num = steps_run + 1 in
             Internal.note tc (Printf.sprintf "Step %d: %s" step_num rule.Rule.name);
-            let new_state = rule.Rule.step tc state in
+            let new_state =
+              Internal.with_note_indent tc (fun () -> rule.Rule.step tc state)
+            in
             print_state new_state;
             check_invariants ~where:(Printf.sprintf "after step %d" step_num) new_state;
             Internal.stop_span tc;

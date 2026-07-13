@@ -195,21 +195,25 @@ let with_report_multiple_failures b s = { s with report_multiple_failures = b }
     native test-case handle, the final-replay flag, whether verbose output is
     on, abort state, the current generation-span depth (used to print only the
     outermost drawn value), and the per-name occurrence counter that numbers
-    repeatable draws. [indent] is set on the final replay so note/draw lines
-    print indented inside the framed failure report, and [printed_output]
-    records whether any such line printed (the report needs to know whether to
-    separate the body from the exception). *)
+    repeatable draws. [note_indent] is the nesting depth every {!note}/draw line
+    is indented to (two spaces per level). It starts at 1 on the final replay, so
+    the whole body sits inside the framed failure report, and at 0 otherwise; a
+    caller bumps it further to group sub-output (e.g. the draws made within a
+    stateful step nest under its [Step N] header). [printed_output] records
+    whether any note/draw line printed (the report needs to know whether to
+    separate the body from the exception, and to print that separator only once).
+*)
 type test_case =
   { handle : Ffi.test_case
   ; context : Ffi.context
   ; mode : mode
   ; stateful_step_count : int
   ; is_final : bool
-  ; indent : bool
   ; verbosity : verbosity
   ; mutable test_aborted : bool
   ; mutable printed_output : bool
   ; mutable draw_depth : int
+  ; mutable note_indent : int
   ; draw_counts : int String.Table.t
   }
 
@@ -221,6 +225,14 @@ let draw_depth (tc : test_case) = tc.draw_depth
 let incr_draw_depth (tc : test_case) = tc.draw_depth <- tc.draw_depth + 1
 let decr_draw_depth (tc : test_case) = tc.draw_depth <- tc.draw_depth - 1
 let set_test_aborted (tc : test_case) v = tc.test_aborted <- v
+
+(** [with_note_indent tc f] runs [f], nesting every {!note}/draw line it prints
+    one level deeper. The depth is restored when [f] raises, so an aborted or
+    failing step does not over-indent later output. *)
+let with_note_indent (tc : test_case) f =
+  tc.note_indent <- tc.note_indent + 1;
+  Exn.protect ~finally:(fun () -> tc.note_indent <- tc.note_indent - 1) ~f
+;;
 
 (** Domain-local flag to detect nested test cases. *)
 let in_test_context : bool Stdlib.Domain.DLS.key =
@@ -455,9 +467,9 @@ let should_print tc =
 let note tc message =
   if should_print tc
   then (
-    if tc.indent && not tc.printed_output then eprintf "\n%!";
+    if tc.note_indent > 0 && not tc.printed_output then eprintf "\n%!";
     tc.printed_output <- true;
-    let indent = if tc.indent then "  " else "" in
+    let indent = String.make (2 * tc.note_indent) ' ' in
     let body = String.concat ~sep:("\n" ^ indent) (String.split_lines message) in
     eprintf "%s%s\n%!" indent body)
 ;;
@@ -642,23 +654,23 @@ type case_outcome =
   ; printed_output : bool
   }
 
-(** [run_test_case ~settings ~test_fn ?indent ctx handle is_final] runs
+(** [run_test_case ~settings ~test_fn ?note_indent ctx handle is_final] runs
     [test_fn] over a single native test-case [handle], maps the outcome to a
-    {!Ffi.status}, and marks the case complete. [indent] indents note/draw
-    lines, for the body of the framed failure report. Shared by the engine-run
-    and failure-blob replay paths. *)
-let run_test_case ~(settings : settings) ~test_fn ?(indent = false) ctx handle is_final =
+    {!Ffi.status}, and marks the case complete. [note_indent] is the starting
+    nesting depth of note/draw lines. Shared by the engine-run and failure-blob
+    replay paths. *)
+let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle is_final =
   let (tc : test_case) =
     { handle
     ; context = ctx
     ; mode = settings.mode
     ; is_final
-    ; indent
     ; verbosity = settings.verbosity
     ; stateful_step_count = settings.stateful_step_count
     ; test_aborted = false
     ; printed_output = false
     ; draw_depth = 0
+    ; note_indent
     ; draw_counts = String.Table.create ()
     }
   in
@@ -702,7 +714,7 @@ let final_replay ~(settings : settings) ~ffi_settings ~test_fn ctx failure =
   let outcome =
     Exn.protect
       ~finally:(fun () -> Ffi.test_case_free ctx tc)
-      ~f:(fun () -> run_test_case ~settings ~test_fn ~indent:true ctx tc true)
+      ~f:(fun () -> run_test_case ~settings ~test_fn ~note_indent:1 ctx tc true)
   in
   match outcome.interesting with
   | Some (_origin, exn) -> blob, exn, outcome.printed_output

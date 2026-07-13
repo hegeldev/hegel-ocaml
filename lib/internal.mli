@@ -189,6 +189,11 @@ val incr_draw_depth : test_case -> unit
 val decr_draw_depth : test_case -> unit
 val set_test_aborted : test_case -> bool -> unit
 
+(** [with_note_indent tc f] runs [f], nesting every {!note}/draw line it prints
+    one level deeper (restoring the depth even if [f] raises). Used to indent the
+    draws a stateful step makes under its [Step N] header. *)
+val with_note_indent : test_case -> (unit -> 'a) -> 'a
+
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available; derived from the assertion's location so
     the shrinker can group probes for the same bug. *)

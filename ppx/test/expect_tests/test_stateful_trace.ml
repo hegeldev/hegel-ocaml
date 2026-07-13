@@ -84,7 +84,7 @@ let%expect_test "state trace across multiple rules" =
 
       state = ()
       Step 1: push
-      draw_1 = 50
+        draw_1 = 50
       state = (50)
       Step 2: pop
 

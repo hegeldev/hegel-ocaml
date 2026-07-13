@@ -198,7 +198,7 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
     Falsified after 1 test case (0 discarded):
 
       Step 1: push
-      n = 7
+        n = 7
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 192, characters 6-12: Assertion failed
     rerun with: [@@failure_blobs "AXicY2VgYGBkYOACYgYYBeOzAwACrQAw"]
@@ -230,11 +230,11 @@ let%expect_test "stateful tests prints drawn data on passing test verbosity is v
     Starting phase: Generate
     _x = 42
     Step 1: push
-    _n_1 = 7
+      _n_1 = 7
     Step 2: push
-    _n_2 = 7
+      _n_2 = 7
     Step 3: push
-    _n_3 = 7
+      _n_3 = 7
     Ending phase: Generate
     |}]
 ;;
