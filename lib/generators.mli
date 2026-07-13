@@ -175,6 +175,11 @@ val draw_named
     ]} *)
 val draw_silent : Internal.test_case -> ('a, 'p) generator -> 'a
 
+(** [draw_silent_named ~name tc gen] is {!draw_silent} threading the draw-site
+    [name] into a function generator ({!Generators.functions}). Not intended for 
+    direct use (prefer {!draw_silent}). *)
+val draw_silent_named : name:string -> Internal.test_case -> ('a, 'p) generator -> 'a
+
 (** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding
     a printable generator that {!draw} accepts. This is how a [map]/[flat_map]/
     [sampled_from]/[just] result is made drawable with {!draw}.
@@ -528,6 +533,69 @@ val tuples4
   -> ('c, printable) generator
   -> ('d, printable) generator
   -> ('a * 'b * 'c * 'd, printable) generator
+
+(** {2 Function generators} *)
+
+(** [functions ?name ?sexp_of_arg ~returns ()] creates a generator for functions
+    ['a -> 'b] whose results are drawn from [returns].
+
+    The result carries no printer (its output type is a function), so draw it
+    with {!Hegel.draw_silent}. Applying the drawn function to an argument draws a
+    result from [returns] the first time that argument is seen and memoizes it.
+
+    On the failing final replay each top-level application prints as
+    [name arg = result] (applications nested inside a span are suppressed).
+    [name] is [?name] when you pass it — an explicit label always wins — else the
+    draw-site binding name inside a [let%hegel_test], else ["function"].
+
+    The memo table keys on the argument itself (structural hash/equality), so
+    distinct arguments always get independent results. [sexp_of_arg] only renders
+    the argument in the shown pair. An omitted [sexp_of_arg] or a non-printable
+    [returns] shows [<opaque>].
+
+    {[
+      let%hegel_test map_length_preserved tc =
+        let f_gen = functions ~sexp_of_arg:Core.Int.sexp_of_t ~returns:(integers ()) () in
+        let f = draw_silent tc f_gen in
+        let xs = draw tc (lists (integers ()) ()) in
+        assert (List.length (List.map ~f xs) = List.length xs)
+      ;;
+    ]} *)
+val functions
+  :  ?name:string
+  -> ?sexp_of_arg:('a -> Core.Sexp.t)
+  -> returns:('b, _) generator
+  -> unit
+  -> ('a -> 'b, unprintable) generator
+
+(** [functions2 ?name ?sexp_of_arg1 ?sexp_of_arg2 ~returns ()] creates a
+    generator for curried two-argument functions ['a -> 'b -> 'c].
+
+    Sugar over {!functions} keyed on the argument pair: the two arguments form
+    one memo key and are shown uncurried as [name (arg1 arg2) = result]. Draw it
+    with {!draw_silent}. *)
+val functions2
+  :  ?name:string
+  -> ?sexp_of_arg1:('a -> Core.Sexp.t)
+  -> ?sexp_of_arg2:('b -> Core.Sexp.t)
+  -> returns:('c, _) generator
+  -> unit
+  -> ('a -> 'b -> 'c, unprintable) generator
+
+(** [functions3 ?name ?sexp_of_arg1 ?sexp_of_arg2 ?sexp_of_arg3 ~returns ()]
+    creates a generator for curried three-argument functions
+    ['a -> 'b -> 'c -> 'd].
+
+    Like {!functions2}, keyed on the argument triple and shown uncurried as
+    [name (arg1 arg2 arg3) = result]. Draw it with {!draw_silent}. *)
+val functions3
+  :  ?name:string
+  -> ?sexp_of_arg1:('a -> Core.Sexp.t)
+  -> ?sexp_of_arg2:('b -> Core.Sexp.t)
+  -> ?sexp_of_arg3:('c -> Core.Sexp.t)
+  -> returns:('d, _) generator
+  -> unit
+  -> ('a -> 'b -> 'c -> 'd, unprintable) generator
 
 (** {2 Format generators} *)
 

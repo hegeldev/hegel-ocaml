@@ -110,6 +110,11 @@ let draw_named = Generators.draw_named
     replay, and accepts a generator with no printer. *)
 let draw_silent = Generators.draw_silent
 
+(** [draw_silent_named ~name tc gen] is the naming-aware {!draw_silent} the
+    [let%hegel_test] PPX rewrites bindings to; not intended for direct use
+    (prefer {!draw_silent}). See {!Generators.draw_silent_named}. *)
+let draw_silent_named = Generators.draw_silent_named
+
 (** [with_printer sexp_of gen] attaches [sexp_of] so [gen] can be drawn with
     {!draw}. See {!Generators.with_printer}. *)
 let with_printer = Generators.with_printer
