@@ -117,6 +117,9 @@ module Rule : sig
       - [step tc state] performs one application of the rule, drawing any
         arguments it needs from [tc] and returning the new state.
 
+      To trace the state a rule produces on a failing replay, pass
+      [?sexp_of_state] to {!run}.
+
       {[
       let push =
         Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
@@ -138,10 +141,18 @@ end
 (** Executes a stateful test by repeatedly applying randomly chosen [rules] to a
     state threaded from [init], checking each of the [invariants] before the
     first step and after every successful step. Raises [Invalid_argument] if
-    [rules] is empty. *)
+    [rules] is empty.
+
+    When [sexp_of_state] is supplied, a failing replay prints the model state as
+    [state = <value>] after the initial state and after every step, so the trace
+    shows how the state evolved. An invariant that is violated is attributed to its
+    step. The report notes [Invariant N violated after step M] (or
+    [Invariant N violated in the initial state], where [N] is the invariant's
+    index in [invariants]) before re-raising the original exception. *)
 val run
   :  init:'state
   -> rules:'state Rule.t list
   -> ?invariants:('state -> unit) list
+  -> ?sexp_of_state:('state -> Core.Sexp.t)
   -> Internal.test_case
   -> unit

@@ -59,6 +59,21 @@ never replace it.
       stdout for the runner); `HEGEL_COLOR=1|0` forces on/off. The decision logic is the pure
       `Internal.color_enabled`; the runtime carries a small stdlib-only copy
       (new `unix` dep for `isatty`).
+- [x] Stateful trace: state and the failing step. `Stateful.run` takes
+      `?sexp_of_state`, echoing the model state as `state = <value>` after the
+      initial state and after every step, so the trace shows how the state
+      evolved. Draws a rule makes are nested under its `Step N` header (`note`
+      carries a `note_indent` depth). An escaping invariant is attributed to its
+      step — the report notes `Invariant N violated after step M` (or
+      `... in the initial state`, where `N` is the invariant's index) before
+      re-raising the original exception. All routed through `note`, so the trace
+      only surfaces on the final failing replay (or under verbose). Pinned in
+      `ppx/test/expect_tests/test_stateful_trace.ml`. (A per-rule
+      `Rule.create ?sexp_of_result` mirroring qcheck-stm's `cmd : result` was
+      considered and dropped: a rule's `step` returns the new state, so its
+      "result" is just that state — identical to what `?sexp_of_state` already
+      prints. A genuine `cmd : result` would need `step` to return a value
+      distinct from the model state, a larger API change not worth it here.)
 
 ## Todo
 
@@ -69,19 +84,10 @@ Ranked by leverage.
    replay, a depth-0 silent draw should emit a `<no printer>` placeholder line
    (QCheck2 precedent) plus a one-line hint about `with_printer` /
    `[@@deriving sexp_of]`. Cautionary tale: Hedgehog issue #343 (inputs lost
-   on exception paths).
+   on exception paths). (Implemented on branch
+   `never-print-empty-counterexample`, split out of this PR for team review.)
 
-2. **Stateful trace: results, state, and the failing step.** Current output is
-   only `Step N: rule` lines. qcheck-stm prints `cmd : result` with a
-   "Results incompatible with model" diagnosis; quickcheck-state-machine also
-   shows model state per step. Client-side wins in `stateful.ml`:
-   - `?sexp_of_state` on `Stateful.run`, printing state after each step;
-   - mark the failing step — an invariant failure after step N should say
-     `Invariant violated after step N` instead of a bare assertion escape;
-   - `Rule.create ?sexp_of_result` so a rule's return value can print
-     (`cmd : result`, mirroring qcheck-stm).
-
-3. **Statistics / label collection.** No `label`/`collect`/`event` mechanism
+2. **Statistics / label collection.** No `label`/`collect`/`event` mechanism
    exists, and passing runs print nothing — the ICSE'24 paper's OCaml-specific
    critique (discard rates hidden on success). Client-side bookkeeping:
    `Hegel.event tc "label"` aggregated across cases with a QuickCheck-style
@@ -90,12 +96,16 @@ Ranked by leverage.
    (already implemented for base-quickcheck; ~5 fields suffice per the Tyche
    paper).
 
-4. **Verbose mode legibility.** Engine phase lines and client draw lines
+3. **Verbose mode legibility.** Engine phase lines and client draw lines
    interleave with no per-case separator; add a client-printed case separator
    so `Verbose` is usable for watching shrink candidates (falsify's
-   `--falsify-verbose` shrink history is the model).
+   `--falsify-verbose` shrink history is the model). (Investigated: the engine
+   already prints a `Running test case` separator per case in `Verbose`,
+   including shrink candidates, so a client change may be unnecessary. The
+   libhegel 0.29.0 output-redirect callback that would let the client reroute
+   engine output is a separate change — PR #111.)
 
-5. **UTF-8 text readability (low priority).** Sexp escaping renders non-ASCII
+4. **UTF-8 text readability (low priority).** Sexp escaping renders non-ASCII
    counterexamples as byte escapes (`"\194\128"`). The encoding can't change
    (sexp constraint); consider an auxiliary human-readable echo line for
    string draws containing escapes.

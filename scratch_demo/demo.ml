@@ -169,6 +169,7 @@ let scenario_stateful () =
       ~init:0
       ~rules:[ add; double; reset ]
       ~invariants:[ (fun state -> assert (state < 25)) ]
+      ~sexp_of_state:Core.Int.sexp_of_t
       tc)
 ;;
 
