@@ -100,6 +100,3 @@ jobs:
         env:
           HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
         run: just check-tests-no-coverage
-
-      - name: Trim opam cache before it is saved
-        uses: ./.github/actions/trim-opam-cache
