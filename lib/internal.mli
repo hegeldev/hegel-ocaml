@@ -275,6 +275,27 @@ val assume : test_case -> bool -> unit
     under [Normal], and on every test case under [Verbose] or [Debug]. *)
 val note : test_case -> string -> unit
 
+(**/**)
+
+(** [color_enabled ~override ~isatty] decides whether ANSI colors are on: an
+    [override] of ["1"]/["0"] (the [HEGEL_COLOR] variable) forces it on/off;
+    otherwise follow [isatty]. *)
+val color_enabled : override:string option -> isatty:bool -> bool
+
+(** [stderr_color_enabled ()] is {!color_enabled} for the failure report's
+    stream, reading the environment and stderr's tty state afresh. *)
+val stderr_color_enabled : unit -> bool
+
+(** [stderr_color code s] wraps [s] in the ANSI SGR [code] when colors are
+    enabled for stderr, else returns [s] unchanged. *)
+val stderr_color : string -> string -> string
+
+(** [render_diff ~colored ~original ~updated] renders a structural sexp diff of
+    the two values: red/green markings when [colored], [-]/[+] otherwise. *)
+val render_diff : colored:bool -> original:Core.Sexp.t -> updated:Core.Sexp.t -> string
+
+(**/**)
+
 (** [require tc ?msg condition] fails the current test case when [condition] is
     [false] by raising [Failure msg]. Unlike [assert] the failure message is
     yours to choose, and unlike {!assume} the case counts as a genuine failure

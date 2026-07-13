@@ -401,6 +401,39 @@ let generate_ipv6 tc =
   with_stop_guard tc (fun () -> Ffi.generate_ipv6 tc.context tc.handle)
 ;;
 
+(* ------------------------------------------------------------------ *)
+(* ANSI colors                                                         *)
+(* ------------------------------------------------------------------ *)
+
+(** ANSI color codes for {!stderr_color}. *)
+let ansi_red = "31"
+
+(** [color_enabled ~override ~isatty] decides whether ANSI colors are on: an
+    [override] of ["1"]/["0"] (the [HEGEL_COLOR] variable) forces it on/off;
+    otherwise follow [isatty]. *)
+let color_enabled ~override ~isatty =
+  match override with
+  | Some "1" -> true
+  | Some "0" -> false
+  | Some _ | None -> isatty
+;;
+
+(** [stderr_color_enabled ()] is {!color_enabled} for the failure report's
+    stream: it reads [HEGEL_COLOR] afresh (tests toggle it) and checks whether
+    stderr is a terminal. *)
+let stderr_color_enabled () =
+  color_enabled
+    ~override:(Sys.getenv "HEGEL_COLOR")
+    ~isatty:(Core_unix.isatty Core_unix.stderr)
+;;
+
+(** [stderr_color code s] wraps [s] in the ANSI SGR [code] when colors are
+    enabled for stderr (see {!stderr_color_enabled}), else returns [s]
+    unchanged. *)
+let stderr_color code s =
+  if stderr_color_enabled () then sprintf "\027[%sm%s\027[0m" code s else s
+;;
+
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)
 let assume _tc condition = if not condition then raise Assume_rejected
@@ -435,12 +468,23 @@ let require _tc ?(msg = "require: condition was false") condition =
   if not condition then raise (Failure msg)
 ;;
 
+(** [render_diff ~colored ~original ~updated] renders a structural sexp diff
+    of the two values: deletions and additions are marked red and green when
+    [colored], and with [-] and [+] otherwise. *)
+let render_diff ~colored ~original ~updated =
+  let diff = Sexp_diff.Algo.diff ~original ~updated () in
+  let display_options = Sexp_diff.Display.Display_options.create Two_column in
+  if colored
+  then Sexp_diff.Display.display_with_ansi_colors display_options diff
+  else Sexp_diff.Display.display_as_plain_string display_options diff
+;;
+
 (** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
     the two values render to different sexps under [sexp_of]. The failure
     report's body shows a structural sexp diff of the two values ([-] lines
-    only in [lhs], [+] lines only in [rhs]) before [Failure msg] is raised.
-    The diff is only rendered when notes are visible (see {!should_print}),
-    so shrink probes don't pay for it. *)
+    only in [lhs], [+] lines only in [rhs]; red/green on a terminal) before
+    [Failure msg] is raised. The diff is only rendered when notes are visible
+    (see {!should_print}), so shrink probes don't pay for it. *)
 let require_equal tc ?(msg = "require_equal: values differ") sexp_of lhs rhs =
   let original = sexp_of lhs in
   let updated = sexp_of rhs in
@@ -448,12 +492,7 @@ let require_equal tc ?(msg = "require_equal: values differ") sexp_of lhs rhs =
   then (
     if should_print tc
     then (
-      let diff = Sexp_diff.Algo.diff ~original ~updated () in
-      let rendered =
-        Sexp_diff.Display.display_as_plain_string
-          (Sexp_diff.Display.Display_options.create Two_column)
-          diff
-      in
+      let rendered = render_diff ~colored:(stderr_color_enabled ()) ~original ~updated in
       note tc (sprintf "%s (- lhs / + rhs):\n%s" msg rendered));
     raise (Failure msg))
 ;;
@@ -684,7 +723,7 @@ let print_failure_header ~cases_run ~cases_discarded test_location =
   let rule = prefix ^ String.make (max 3 (frame_width - String.length prefix)) '-' in
   eprintf
     "%s\nFalsified after %d test case%s (%d discarded):\n%!"
-    rule
+    (stderr_color ansi_red rule)
     cases_run
     (if cases_run = 1 then "" else "s")
     cases_discarded
@@ -745,7 +784,9 @@ let handle_result
           let count = List.length failures in
           print_failure_header ~cases_run ~cases_discarded test_location;
           List.iteri failures ~f:(fun i failure ->
-            eprintf "\nFailure %d of %d:%!" (i + 1) count;
+            eprintf
+              "\n%s%!"
+              (stderr_color ansi_red (sprintf "Failure %d of %d:" (i + 1) count));
             let blob, exn, printed_output =
               final_replay ~settings ~ffi_settings ~test_fn ctx failure
             in

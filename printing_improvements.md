@@ -52,6 +52,13 @@ never replace it.
       via `Format.asprintf "%s = %a" name Sexp.pp_hum` so the pretty-printer
       breaks the sexp knowing it starts after `name = ` — continuation lines
       align under the value's opening paren instead of landing at column 0.
+- [x] Colors. Failure report headers (`--- Failure ---` rule, `Failure i of
+      n:`) print red on a tty; `require_equal` diffs use `sexp_diff`'s
+      red/green display; the runner's PASS/FAIL and summary lines print
+      green/red. Enabled when the stream is a tty (stderr for the report,
+      stdout for the runner); `HEGEL_COLOR=1|0` forces on/off. The decision logic is the pure
+      `Internal.color_enabled`; the runtime carries a small stdlib-only copy
+      (new `unix` dep for `isatty`).
 
 ## Todo
 
@@ -83,15 +90,12 @@ Ranked by leverage.
    (already implemented for base-quickcheck; ~5 fields suffice per the Tyche
    paper).
 
-4. **Colors.** None anywhere. QCheck2-style red/green on the failure header
-   and runner PASS/FAIL lines — tty-detected, `NO_COLOR`-respecting.
-
-5. **Verbose mode legibility.** Engine phase lines and client draw lines
+4. **Verbose mode legibility.** Engine phase lines and client draw lines
    interleave with no per-case separator; add a client-printed case separator
    so `Verbose` is usable for watching shrink candidates (falsify's
    `--falsify-verbose` shrink history is the model).
 
-6. **UTF-8 text readability (low priority).** Sexp escaping renders non-ASCII
+5. **UTF-8 text readability (low priority).** Sexp escaping renders non-ASCII
    counterexamples as byte escapes (`"\194\128"`). The encoding can't change
    (sexp constraint); consider an auxiliary human-readable echo line for
    string draws containing escapes.

@@ -192,7 +192,9 @@
     A failing run prints a framed report: the shrunk counterexample's draws
     and notes, the exception, and a copy-pasteable [rerun with:] line whose
     base64 blob encodes the choice sequence that caused the failure (disable
-    it with [with_print_blob false]):
+    it with [with_print_blob false]). On a terminal the report headers (and
+    {!require_equal} diffs) print in color; set [HEGEL_COLOR] to [1] or [0]
+    to force colors on or off.
 
     {[
       let%hegel_test every_int_is_small tc =
