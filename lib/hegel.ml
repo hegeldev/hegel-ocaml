@@ -1,5 +1,5 @@
 (** The current version of Hegel for OCaml. *)
-let version = "0.9.0"
+let version = "0.9.2"
 
 (** Generators for composable test data generation. *)
 module Generators = Generators
@@ -118,6 +118,11 @@ let draw_named = Generators.draw_named
 (** [draw_silent tc gen] is {!draw} without printing the value on the final
     replay, and accepts a generator with no printer. *)
 let draw_silent = Generators.draw_silent
+
+(** [draw_silent_named ~name tc gen] is the naming-aware {!draw_silent} the
+    [let%hegel_test] PPX rewrites bindings to; not intended for direct use
+    (prefer {!draw_silent}). See {!Generators.draw_silent_named}. *)
+let draw_silent_named = Generators.draw_silent_named
 
 (** [with_printer sexp_of gen] attaches [sexp_of] so [gen] can be drawn with
     {!draw}. See {!Generators.with_printer}. *)

@@ -322,9 +322,78 @@ let inject_draw ~tc_name (flags : (string, bool) Stdlib.Hashtbl.t) (vb : value_b
   | _ -> vb
 ;;
 
-(** A traversal that applies {!inject_draw} to every [let]-binding in an
-    expression, threading the precomputed [flags], so labels are injected
-    throughout the test body (nested [let]s, helper functions, match arms, …).
+(** [is_draw_silent_lident lid] is [true] when [lid]'s final component is
+    [draw_silent], qualified or not. Distinct from {!is_draw_lident}, which keys
+    on the [draw] component; [draw_silent] is its own name. *)
+let is_draw_silent_lident : longident -> bool = function
+  | Lident "draw_silent" | Ldot (_, "draw_silent") -> true
+  | _ -> false
+;;
+
+(** [draw_silent_named_lident lid] is [lid] with its final [draw_silent]
+    component replaced by [draw_silent_named], preserving the module prefix, so
+    the rewrite targets the same module's internal entry point (e.g.
+    [Hegel.draw_silent] becomes [Hegel.draw_silent_named]). *)
+let draw_silent_named_lident : longident -> longident = function
+  | Lident "draw_silent" -> Lident "draw_silent_named"
+  | Ldot (prefix, "draw_silent") -> Ldot (prefix, "draw_silent_named")
+  | other -> other
+;;
+
+(** [has_name_arg args] is [true] when an application already passes [~name] (or
+    [?name]) explicitly, in which case the hand-written name wins. *)
+let has_name_arg (args : (arg_label * expression) list) : bool =
+  List.exists
+    (fun (lbl, _) ->
+       match lbl with
+       | Labelled "name" | Optional "name" -> true
+       | _ -> false)
+    args
+;;
+
+(** [draw_silent_binding_name ~tc_name vb] returns [Some name] when [vb] is
+    [let <name> = draw_silent tc …] — a simple-variable binding whose right-hand
+    side is a [draw_silent] application on the test's own [tc] — and [None]
+    otherwise. *)
+let draw_silent_binding_name ~tc_name (vb : value_binding) : string option =
+  match vb.pvb_pat.ppat_desc, vb.pvb_expr.pexp_desc with
+  | ( Ppat_var { txt = name; _ }
+    , Pexp_apply ({ pexp_desc = Pexp_ident { txt = lid; _ }; _ }, args) )
+    when is_draw_silent_lident lid && tc_arg_is ~tc_name args -> Some name
+  | _ -> None
+;;
+
+(** [inject_draw_silent ~tc_name vb] rewrites [let x = draw_silent tc gen] into
+    [let x = draw_silent_named ~name:"x" tc gen], so a function generator
+    ({!Hegel.Generators.functions}) drawn there labels its shown pairs
+    [x arg = result]. [~name] is ignored for every other generator, so the
+    rewrite is harmless. Like {!inject_draw} it targets the internal
+    [draw_silent_named] (keeping [~name] off the public [draw_silent]) and keeps
+    the module prefix the user wrote. It fires only for a simple-variable binding
+    whose right-hand side is a [draw_silent] application on [tc] with no explicit
+    [~name]. *)
+let inject_draw_silent ~tc_name (vb : value_binding) : value_binding =
+  match draw_silent_binding_name ~tc_name vb, vb.pvb_expr.pexp_desc with
+  | ( Some name
+    , Pexp_apply (({ pexp_desc = Pexp_ident ({ txt = lid; _ } as ident); _ } as fn), args)
+    )
+    when not (has_name_arg args) ->
+    let loc = vb.pvb_expr.pexp_loc in
+    let named_fn =
+      { fn with pexp_desc = Pexp_ident { ident with txt = draw_silent_named_lident lid } }
+    in
+    let named_args = [ Labelled "name", Ast_builder.Default.estring ~loc name ] in
+    { vb with
+      pvb_expr = Ast_builder.Default.pexp_apply ~loc named_fn (named_args @ args)
+    }
+  | _ -> vb
+;;
+
+(** A traversal that applies {!inject_draw} and {!inject_draw_silent} to every
+    [let]-binding in an expression, threading the precomputed [flags], so labels
+    are injected throughout the test body (nested [let]s, helper functions, match
+    arms, …). Each binding is at most one of a [draw] or a [draw_silent] on [tc],
+    so the two injectors compose (each leaves the other's bindings untouched).
     Draws nested inside a generation span are still suppressed at runtime by the
     depth gate, so labeling them is harmless. *)
 let label_injector ~tc_name flags =
@@ -333,7 +402,9 @@ let label_injector ~tc_name flags =
 
     method! expression e =
       let e = super#expression e in
-      Ppx_compat.map_let_value_bindings (List.map (inject_draw ~tc_name flags)) e
+      Ppx_compat.map_let_value_bindings
+        (List.map (fun vb -> inject_draw_silent ~tc_name (inject_draw ~tc_name flags vb)))
+        e
   end
 ;;
 

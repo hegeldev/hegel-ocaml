@@ -492,6 +492,15 @@ val draw_named
     ]} *)
 val draw_silent : test_case -> ('a, 'p) Generators.generator -> 'a
 
+(**/**)
+
+(** [draw_silent_named ~name tc gen] is the naming-aware {!draw_silent} the
+    [let%hegel_test] PPX rewrites bindings to; not intended for direct use
+    (prefer {!draw_silent}). See {!Generators.draw_silent_named}. *)
+val draw_silent_named : name:string -> test_case -> ('a, 'p) Generators.generator -> 'a
+
+(**/**)
+
 (** {3 Guiding generation} *)
 
 (** Raised by {!assume} when its condition is [false] (rejecting the current test

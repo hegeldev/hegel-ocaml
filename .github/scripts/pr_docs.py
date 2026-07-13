@@ -45,6 +45,12 @@ def main() -> None:
     # rewrite below.
     shutil.copytree(DOCS_SRC, DOCS_DEST, copy_function=shutil.copyfile)
     inject_base_href(DOCS_DEST)
+    # Serve the Hegel module page at /ocaml. The odoc-generated /ocaml index is
+    # just a package listing; readers want the module docs. Safe because
+    # inject_base_href already gave this file an absolute
+    # `<base href="/ocaml/hegel/Hegel/">`, so its relative links keep resolving
+    # after the copy regardless of the URL it is served at.
+    shutil.copyfile(DOCS_DEST / "hegel" / "Hegel" / "index.html", DOCS_DEST / "index.html")
 
     git("config", "user.name", f"{app_slug}[bot]")
     git("config", "user.email", f"{app_id}+{app_slug}[bot]@users.noreply.github.com")
