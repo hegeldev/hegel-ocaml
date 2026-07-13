@@ -140,19 +140,36 @@ like `lists` that expect a *printable* element generator — attach a printer wi
 
 ## Debug your failing test cases
 
-When a test fails, Hegel replays the minimal failing example and prints each
-value you drew as an s-expression, named after the `let` binding it was bound
-to:
+When a test fails, Hegel replays the minimal failing example and prints a
+report: the test's name and source location, how many cases ran, the values you
+drew (as s-expressions, named after their `let` binding), the exception, and a
+copy-pasteable line that replays the exact case.
 
 ```ocaml
 let%hegel_test reverse_is_identity tc =
   let xs = draw tc (lists (integers ()) ()) in
   assert (xs = List.rev xs)
 ;;
-
-(* On failure, prints:
-     xs = (0 1)  *)
 ```
+
+On failure this prints:
+
+```
+--- Failure: reverse_is_identity (test/my_tests.ml:1) ------------------
+Falsified after 8 test cases (0 discarded):
+
+  xs = (0 1)
+
+Exception: File "test/my_tests.ml", line 3, characters 2-8: Assertion failed
+rerun with: [@@failure_blobs "AXic..."]
+```
+
+`Falsified after N test cases (M discarded)` counts the cases that ran before
+the failure (`M` of them were rejected, for example by `assume`). The final line
+is a `[@@failure_blobs "..."]` attribute you can paste onto the test to replay
+this exact case deterministically. On a terminal the header prints in red. Set
+`HEGEL_COLOR=0` to disable color (or `1` to force it on). Add
+`with_print_blob false` to your `[@@settings ...]` to omit the blob line.
 
 A value that is shadowed or drawn inside a loop is numbered (`x_1`, `x_2`, …):
 
@@ -204,6 +221,76 @@ let%hegel_test addition_commutes tc =
   assert (x + y = y + x)
 ;;
 ```
+
+## Assert with `require` and `require_equal`
+
+`assert` works, `require_equal` provides more information. It compares two values 
+and prints a structural s-expression diff of them in the report. `-` lines appear only in the first value and `+` lines only in the second. It takes a printer (`'a -> Core.Sexp.t`)
+for the values; build one from `Core`'s `sexp_of_t` functions, or with a
+`[%sexp_of: ...]` from `ppx_sexp_conv`:
+
+```ocaml
+let%hegel_test reverse_is_identity tc =
+  let xs = draw tc (lists (integers ()) ()) in
+  require_equal tc (Core.List.sexp_of_t Core.Int.sexp_of_t) xs (List.rev xs)
+;;
+```
+
+On failure the report body shows exactly which parts differ:
+
+```
+  xs = (0 1)
+  require_equal: values differ (- lhs / + rhs):
+  -(0 1)  +(1 0)
+```
+
+For a plain boolean check with a custom message, use `require`, which raises
+`Failure msg` when the condition is false:
+
+```ocaml
+require tc ~msg:"list must stay sorted" (is_sorted xs)
+```
+
+## Stateful testing
+
+`Hegel.Stateful` applies a random sequence of *rules* to a model and checks 
+invariants after every step. Pass `?sexp_of_state` to `Stateful.run` to trace 
+the model state through a failing sequence:
+
+```ocaml
+let push =
+  Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
+    draw tc (integers ~min_value:0 ~max_value:9 ()) :: stack)
+
+let%hegel_test stack_stays_small tc =
+  Stateful.run
+    ~init:[]
+    ~rules:[ push ]
+    ~invariants:[ (fun stack -> assert (List.length stack <= 2)) ]
+    ~sexp_of_state:(Core.List.sexp_of_t Core.Int.sexp_of_t)
+    tc
+;;
+```
+
+When a sequence fails, the report shows each step, the draws it made, the state 
+after it, and which step broke the invariant:
+
+```
+  state = ()
+  Step 1: push
+    draw_1 = 0
+  state = (0)
+  Step 2: push
+    draw_2 = 0
+  state = (0 0)
+  Step 3: push
+    draw_3 = 0
+  state = (0 0 0)
+  Invariant 0 violated after step 3.
+```
+
+See the `Hegel.Stateful` API docs for invariants across multiple
+rules and for value pools that let one rule act on data an earlier rule produced.
 
 ## Change the number of test cases
 

@@ -43,7 +43,7 @@ type mode =
 
 (** Randomness backend ([hegel_backend_t]), selected via {!settings_backend}.
 
-    - [Auto]: choose automatically (the default) — urandom under Antithesis,
+    - [Auto]: choose automatically (the default). urandom under Antithesis,
       otherwise the seeded PRNG.
     - [Default]: expand a single seeded PRNG; runs are reproducible and
       shrinking / replay work as usual.
@@ -73,8 +73,8 @@ type status =
     - [Run_passed]: the property held across every generated test case.
     - [Run_failed]: the property failed; inspect each distinct counterexample
       via {!result_failures}.
-    - [Run_error]: the run itself failed — a failed health check, a
-      nondeterministic test, an engine panic — and produced no verdict on the
+    - [Run_error]: the run itself failed: a failed health check, a
+      nondeterministic test, an engine panic. It produced no verdict on the
       property. There are no failures to inspect; the message is read via
       {!result_error}. *)
 type run_status =
@@ -82,11 +82,11 @@ type run_status =
   | Run_failed
   | Run_error
 
-(** Raised when a primitive returns [HEGEL_E_STOP_TEST] — the engine has
+(** Raised when a primitive returns [HEGEL_E_STOP_TEST]. The engine has
     exhausted its choice budget for the current test case. *)
 exception Stop_test
 
-(** Raised when a primitive returns [HEGEL_E_ASSUME] — the engine rejected the
+(** Raised when a primitive returns [HEGEL_E_ASSUME]. The engine rejected the
     current test case as invalid (e.g. an impossible uniqueness constraint that
     exceeds the collection reject limit). Carries no diagnostic. *)
 exception Assume_rejected
@@ -189,7 +189,7 @@ val next_test_case : context -> run -> test_case option
 (** [test_case_from_blob ctx settings blob] builds a standalone test case that
     replays the example encoded in a base64 failure [blob]. Raises
     {!Backend_error} (with the engine's diagnostic) when the blob is missing,
-    not UTF-8, or cannot be decoded — the engine never returns a null handle
+    not UTF-8, or cannot be decoded. The engine never returns a null handle
     without setting an error. The handle must be freed with
     {!test_case_free}. *)
 val test_case_from_blob : context -> settings -> string option -> test_case
@@ -366,8 +366,8 @@ val mark_complete : context -> test_case -> status -> string option -> unit
 val result_status : context -> run_result -> run_status
 
 (** [result_error ctx r] is the run-level error message when the run ended in
-    {!Run_error} — a failed health check, a nondeterministic test, or an
-    engine panic — or [None] when it completed normally. *)
+    {!Run_error}. A failed health check, a nondeterministic test, or an
+    engine panic or [None] when it completed normally. *)
 val result_error : context -> run_result -> string option
 
 val result_failure_count : context -> run_result -> int

@@ -214,7 +214,8 @@ let%hegel_test draw_silent_scalar_stays_silent tc =
 let%expect_test "a scalar drawn with draw_silent prints nothing even when named" =
   (try draw_silent_scalar_stays_silent () with
    | _ -> ());
-  [%expect {|
+  [%expect
+    {|
     --- Failure: draw_silent_scalar_stays_silent (ppx/test/expect_tests/test_functions_printing.ml:165) ---
     Falsified after 1 test case (0 discarded):
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 168, characters 2-8: Assertion failed
@@ -310,7 +311,8 @@ let%hegel_test application_inside_span_is_suppressed tc =
 let%expect_test "a function applied inside a span prints nothing" =
   (try application_inside_span_is_suppressed () with
    | _ -> ());
-  [%expect {|
+  [%expect
+    {|
     --- Failure: application_inside_span_is_suppressed (ppx/test/expect_tests/test_functions_printing.ml:236) ---
     Falsified after 1 test case (0 discarded):
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 247, characters 2-8: Assertion failed

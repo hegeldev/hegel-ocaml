@@ -24,9 +24,16 @@
           assume tc (not (List.is_empty stack));
           List.tl stack)
 
-    let%hegel_test test_integer_stack tc =
-      Stateful.run ~init:[] ~rules:[ push; pop ] tc
-    ]} *)
+    let%hegel_test integer_stack tc =
+      Stateful.run
+        ~init:[]
+        ~rules:[ push; pop ]
+        ~sexp_of_state:(Core.List.sexp_of_t Core.Int.sexp_of_t)
+        tc
+    ]}
+
+    Passing [?sexp_of_state] makes a failing sequence print the model state after
+    each step, so you can see how it evolved; see {!run}. *)
 
 (** {2 Submodules} *)
 
@@ -143,12 +150,23 @@ end
     first step and after every successful step. Raises [Invalid_argument] if
     [rules] is empty.
 
-    When [sexp_of_state] is supplied, a failing replay prints the model state as
-    [state = <value>] after the initial state and after every step, so the trace
-    shows how the state evolved. An invariant that is violated is attributed to its
-    step. The report notes [Invariant N violated after step M] (or
-    [Invariant N violated in the initial state], where [N] is the invariant's
-    index in [invariants]) before re-raising the original exception. *)
+    On a failing replay, each applied rule prints as [Step N: <name>], with the
+    values the rule draws nested under it. When [sexp_of_state] is supplied, the
+    model state also prints as [state = <value>] after the initial state and
+    after every step. An invariant that is violated prints 
+    [Invariant N violated after step M] or [Invariant N violated in the initial state],
+    where [N] is the invariant's index in [invariants].
+
+    {v
+      state = 0
+      Step 1: add
+        draw_1 = 3
+      state = 3
+      Step 2: add
+        draw_2 = 7
+      state = 10
+      Invariant 0 violated after step 2.
+    v} *)
 val run
   :  init:'state
   -> rules:'state Rule.t list

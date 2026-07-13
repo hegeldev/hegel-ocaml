@@ -4,30 +4,19 @@ This release overhauls what Hegel prints when a property fails.
 
 Failing runs now produce a framed report: a header naming the test and its
 source location, a `Falsified after N test cases (M discarded):` line, an
-indented body of the drawn values and `note`s that led to the failure, the
-exception, and a copy-pasteable `rerun with: [@@failure_blobs "..."]` line
-(printed by default — disable with `with_print_blob false`). A run that finds
-multiple failures reports each in its own numbered section, and on a terminal
-the report is colorized (`HEGEL_COLOR=1|0` forces it on or off).
+indented body of the drawn values and `note`s, the exception, and 
+`rerun with: [@@failure_blobs "..."]`. Failure blobs are now printed by default. 
+A run that finds multiple failures reports each in its own numbered section, and
+on a terminal the report is colorized (`HEGEL_COLOR=1|0` forces it on or off).
+
+In stateful testing, the draws a rule makes are nested under its step header, 
+and an invariant violation is attributed to the index of the invariant in the 
+invariant list (`Invariant N violated after step M`).
 
 It also adds two ways to make a failure more informative:
 
 - `require` and `require_equal` for assertions inside a test. `require_equal`
-  renders a structural s-expression diff of the two values in the report, so you
-  can see exactly which parts differ:
-
-  ```ocaml
-  let%hegel_test rev_involutive tc =
-    let xs =
-      draw tc (Generators.lists (Generators.integers ~min_value:0 ~max_value:9 ()) ())
-    in
-    require_equal tc (Core.List.sexp_of_t Core.Int.sexp_of_t) (List.rev (List.rev xs)) xs
-  ```
+  renders a structural s-expression diff of the two values in the report
 
 - `?sexp_of_state` on `Stateful.run`, which prints the model state after the
-  initial state and after each step so a failing sequence shows how the state
-  evolved. The draws a rule makes are nested under its `Step N` header, and an
-  invariant that fails is attributed to the step it broke on
-  (`Invariant N violated after step M`).
-
-`require_equal`'s diff is rendered with `sexp_diff`.
+  initial state and after each step. 

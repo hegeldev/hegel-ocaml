@@ -56,8 +56,15 @@
       let%hegel_test commutative_addition tc =
         let a = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
         let b = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
-        assert (a + b = b + a)
+        require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
     ]}
+
+    We check the property with {!require_equal} rather than
+    [assert (a + b = b + a)]. It takes a printer for the values and, when they
+    differ, shows a structural diff of the two sides in the failure report
+    instead of a bare "assertion failed". Use {!require} for a boolean check with
+    a custom message. A plain [assert] can be used as well, but it does not provide
+    as much information as {!require_equal} and {!require}.
 
     Run [dune runtest]. You should see that the test passes. Hegel generates up to 100 random input pairs and reports the
     minimal counterexample if it finds one. When a test fails, Hegel prints each
@@ -79,15 +86,19 @@
         assert (n < 50)
     ]}
 
-    This test asserts that any integer is less than 50, which is obviously incorrect. 
-    Hegel will find a test case that makes this assertion fail, and then shrink it to
-    find the smallest counterexample (n = 50). The runner prints a [FAIL] line with the 
-    re-raised assertion, and the final replay prints each drawn value named after its binding:
+    This test asserts that any integer is less than 50, which is obviously
+    incorrect. Hegel finds a test case that makes the assertion fail, then shrinks
+    it to the smallest counterexample ([n = 50]). The final replay prints the 
+    drawn values, the exception, and a [rerun with:] line that replays the exact case:
 
     {v
-      FAIL  every_int_is_small (my_tests.ml:3)
-            File "my_tests.ml", line 5: Assertion failed
-      n = 50
+      --- Failure: every_int_is_small (my_tests.ml:3) ------------------
+      Falsified after 1 test case (0 discarded):
+
+        n = 50
+
+      Exception: File "my_tests.ml", line 5, characters 2-8: Assertion failed
+      rerun with: [@@failure_blobs "AAEAAAAACgEAAAAy"]
     v}
 
     To fix this test, you can constrain the integers you generate with [min_value] and [max_value]:
@@ -114,7 +125,8 @@
         let xs = draw tc (lists (integers ()) ()) in
         let initial_length = List.length xs in
         let xs = draw tc (integers ()) :: xs in
-        assert (List.length xs > initial_length)
+        require tc ~msg:"prepending an element must grow the list"
+          (List.length xs > initial_length)
     ]}
 
     Custom generators are also supported. Suppose you have a [person] record that
@@ -163,7 +175,7 @@
       let%hegel_test commutative_addition tc =
         let a = draw tc (integers ()) in
         let b = draw tc (integers ()) in
-        assert (a + b = b + a)
+        require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
       [@@settings Hegel.settings ~test_cases:500 ()]
     ]}
 
@@ -174,7 +186,7 @@
       let%hegel_test commutative_addition tc =
         let a = draw tc (integers ()) in
         let b = draw tc (integers ()) in
-        assert (a + b = b + a)
+        require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
       [@@settings Hegel.settings ~test_cases:500 () |> with_seed 5 |> with_verbosity Verbose]
     ]}
     
@@ -195,6 +207,10 @@
     it with [with_print_blob false]). On a terminal the report headers (and
     {!require_equal} diffs) print in color; set [HEGEL_COLOR] to [1] or [0]
     to force colors on or off.
+
+    For an equality property, prefer {!require_equal} over [assert (x = y)]: it
+    adds a structural diff of the two values to this report, so you see exactly
+    how they differ. {!require} is the message-carrying boolean variant.
 
     {[
       let%hegel_test every_int_is_small tc =

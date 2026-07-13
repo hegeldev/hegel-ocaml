@@ -14,7 +14,8 @@
         let x = draw tc (integers ~min_value:0 ~max_value:100 ()) in
         let y = draw tc (integers ~min_value:0 ~max_value:100 ()) in
         let p = { x; y } in
-        assert (p.x <= 100 && p.y <= 100)
+        require tc ~msg:"point coordinates stay in range"
+          (p.x <= 100 && p.y <= 100)
       ;;
     ]}
 
@@ -137,7 +138,7 @@ val collection_reject : collection -> Internal.test_case -> unit
     {!draw_silent} or attach a printer with {!with_printer}.
 
     Inside a [let%hegel_test], the PPX supplies the binding name as the label, so
-    [let x = draw tc gen] prints its value as [x = value] — you rarely pass
+    [let x = draw tc gen] prints its value as [x = value]. You rarely pass
     [?label] by hand. When the same name is shadowed or drawn in a loop, its
     draws are numbered [x_1], [x_2], … in draw order; pass [?label] to override
     the name (e.g. [draw ~label:"y" tc gen]).
@@ -153,8 +154,8 @@ val draw : ?label:string -> Internal.test_case -> ('a, printable) generator -> '
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
     [let%hegel_test] PPX rewrites bindings to; not intended for direct use
     (prefer {!draw}). It prints [label = value] (bare), or [label_1 = value],
-    [label_2 = value], … when [repeatable] is set — which the PPX does for a
-    binding name that is reused or drawn in a loop. *)
+    [label_2 = value], … when [repeatable] is set. The PPX sets [repeatable = true]  
+    for a binding name that is reused or drawn in a loop. *)
 val draw_named
   :  label:string
   -> repeatable:bool
@@ -545,8 +546,8 @@ val tuples4
 
     On the failing final replay each top-level application prints as
     [name arg = result] (applications nested inside a span are suppressed).
-    [name] is [?name] when you pass it — an explicit label always wins — else the
-    draw-site binding name inside a [let%hegel_test], else ["function"].
+    [name] is [?name] when you pass it. Otherwise, the draw-site binding name 
+    inside a [let%hegel_test], else ["function"].
 
     The memo table keys on the argument itself (structural hash/equality), so
     distinct arguments always get independent results. [sexp_of_arg] only renders
