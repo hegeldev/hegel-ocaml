@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.2 - 2026-07-13
+
+This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.28.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.28.0) to [0.29.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.29.0).
+
 ## 0.9.1 - 2026-07-13
 
 This patch adds `functions`, `functions2`, and `functions3` in `Hegel.Generators` for 
