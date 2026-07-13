@@ -63,7 +63,7 @@ let%expect_test "recording then replay round-trips the failure blob" =
   (try Hegel.run_hegel_test ~settings:(settings ()) ~failure_blobs:[] prop with
    | _ -> ());
   let recorded = [%expect.output] in
-  assert (contains ~needle:"failure blob:" recorded);
+  assert (contains ~needle:"Failure blob:" recorded);
   let blob = extract_blob recorded in
   (try Hegel.run_hegel_test ~settings:(settings ()) ~failure_blobs:[ blob ] prop with
    | _ -> ());
@@ -140,14 +140,13 @@ let%expect_test "recording groups each failure's draws with its diagnostic" =
     {|
     Failure 1:
     v = 60
-    Exception: (Expect_tests.Test_failure_blobs_record.A)
+    Exception: Expect_tests.Test_failure_blobs_record.A
     Failure blob: "AAEAAAAACgEAAAA8"
 
     Failure 2:
     v = 0
-    Exception: (Expect_tests.Test_failure_blobs_record.B)
+    Exception: Expect_tests.Test_failure_blobs_record.B
     Failure blob: "AAEAAAAACgEAAAAA"
-
     2 failures found!
     |}]
 ;;
@@ -166,12 +165,11 @@ let%expect_test "the multi-failure report omits blobs when print_blob is off" =
     {|
     Failure 1:
     draw_1 = 60
-    Exception: (Expect_tests.Test_failure_blobs_record.A)
+    Exception: Expect_tests.Test_failure_blobs_record.A
 
     Failure 2:
     draw_1 = 0
-    Exception: (Expect_tests.Test_failure_blobs_record.B)
-
+    Exception: Expect_tests.Test_failure_blobs_record.B
     2 failures found!
     |}]
 ;;

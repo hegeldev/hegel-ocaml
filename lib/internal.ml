@@ -663,16 +663,16 @@ let handle_result
         match failures with
         | [ failure ] ->
           let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
-          if settings.print_blob then eprintf "failure blob: \"%s\"" blob;
+          if settings.print_blob then eprintf "Failure blob: \"%s\"\n%!" blob;
           raise exn
         | failures ->
           let count = List.length failures in
           List.iteri failures ~f:(fun i failure ->
             eprintf "\nFailure %d:\n%!" (i + 1);
             let blob, exn = final_replay ~settings ~ffi_settings ~test_fn ctx failure in
-            eprintf "Exception: %s\n%!" (Exn.to_string exn);
+            eprintf "Exception: %s\n%!" (Stdlib.Printexc.to_string exn);
             if settings.print_blob then eprintf "Failure blob: \"%s\"\n%!" blob);
-          raise (Failure (sprintf "\n%d failures found!" count)))
+          raise (Failure (sprintf "%d failures found!" count)))
 ;;
 
 (** [run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location] drives a
@@ -752,7 +752,7 @@ let run_from_blob ctx ~(settings : settings) ~ffi_settings ~test_fn blob =
   | Undecodable msg -> raise (Failure msg)
   | Did_not_reproduce -> raise (Failure "The failure blob did not reproduce an error")
   | Reproduced exn ->
-    printf "%s\n" "The failure blob reproduced an error:";
+    eprintf "The failure blob reproduced an error:\n%!";
     raise exn
 ;;
 
