@@ -44,7 +44,7 @@ let%expect_test "Normal notes only on the final failing replay" =
       NOTE_MARKER
 
     Exception: Failure("boom")
-    rerun with: [@@failure_blobs "AAAAAAA="]
+    rerun with: ~failure_blobs:[ "AAAAAAA=" ]
     |}]
 ;;
 

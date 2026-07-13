@@ -15,17 +15,19 @@ let contains ~needle s =
   nl = 0 || go 0
 ;;
 
-(* Pull the blob out of the report's [rerun with: [@@failure_blobs "..."]]
-   line. *)
+(* Pull the blob out of the report's [rerun with: ...] line: the substring
+   between the first quote after [failure_blobs] and the next quote. Works for
+   both the [[@@failure_blobs [ "..." ]]] and [~failure_blobs:[ "..." ]] forms. *)
 let extract_blob out =
-  let marker = {|[@@failure_blobs "|} in
+  let marker = "failure_blobs" in
   let ml = String.length marker in
   let rec find i =
     if String.equal (String.sub out i ml) marker then i + ml else find (i + 1)
   in
-  let i = find 0 in
-  let j = String.index_from out i '"' in
-  String.sub out i (j - i)
+  let after = find 0 in
+  let q1 = String.index_from out after '"' in
+  let q2 = String.index_from out (q1 + 1) '"' in
+  String.sub out (q1 + 1) (q2 - q1 - 1)
 ;;
 
 let count ~needle s =
@@ -70,7 +72,7 @@ let%expect_test "recording then replay round-trips the failure blob" =
   (try Hegel.run_hegel_test ~settings:(settings ()) ~failure_blobs:[] prop with
    | _ -> ());
   let recorded = [%expect.output] in
-  assert (contains ~needle:{|rerun with: [@@failure_blobs "|} recorded);
+  assert (contains ~needle:{|rerun with: ~failure_blobs:[ "|} recorded);
   let blob = extract_blob recorded in
   (try Hegel.run_hegel_test ~settings:(settings ()) ~failure_blobs:[ blob ] prop with
    | _ -> ());
@@ -145,20 +147,20 @@ let%expect_test "recording groups each failure's draws with its diagnostic" =
   Printf.printf "%s" (normalize [%expect.output]);
   [%expect
     {|
-    --- Failure: multi_fail_test (ppx/test/expect_tests/test_failure_blobs_record.ml:131) ---
+    --- Failure: multi_fail_test (ppx/test/expect_tests/test_failure_blobs_record.ml:133) ---
     Falsified after 1 test case (0 discarded):
 
     Failure 1 of 2:
       v = 60
 
     Exception: Expect_tests.Test_failure_blobs_record.A
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAA8"]
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAA8" ]]
 
     Failure 2 of 2:
       v = 0
 
     Exception: Expect_tests.Test_failure_blobs_record.B
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAA"]
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAA" ]]
     2 failures found!
     |}]
 ;;

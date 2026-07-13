@@ -106,7 +106,7 @@ type settings =
     (** [None] uses the engine's default phase list (all phases); [Some xs]
           restricts execution to [xs]. *)
   ; print_blob : bool
-    (** print a [rerun with: [@@failure_blobs "..."]] line for a failure;
+    (** print a [rerun with:] line for a failure;
         [true] by default *)
   ; report_multiple_failures : bool (** false by default *)
   }
@@ -167,7 +167,7 @@ val with_mode : mode -> settings -> settings
 
 (** [with_print_blob b s] returns settings [s] with [print_blob] set to [b]. When
     [true] (the default), a failing run's report ends with a copy-pasteable
-    [rerun with: [@@failure_blobs "..."]] line encoding the failure. *)
+    [rerun with:] line encoding the failure. *)
 val with_print_blob : bool -> settings -> settings
 
 (** [with_report_multiple_failures b s] returns settings [s] with [report_multiple_failures] 
@@ -402,14 +402,19 @@ val state_machine_next_rule : test_case -> state_machine_id:int -> int
     [file:function_name]) so each [let%hegel_test] gets a stable, distinct
     key; pass an explicit key to override. When both are absent, the engine
     uses its own default key.
+    @param from_ppx
+    [true] when the run is driven by the [let%hegel_test] PPX; only set by the
+    PPX. Selects the [[@@failure_blobs [...]]] attribute form of the [rerun with:]
+    hint vs. the [~failure_blobs] argument form a plain caller would use.
     @param failure_blobs
-    a list of base64 encoded strings (blobs), where each string encodes the choices 
-    made in a failing test run. When the list is nonempty, only the first blob 
-    is decoded and run. The blob is only guaranteed to reproduce a failure within 
+    a list of base64 encoded strings (blobs), where each string encodes the choices
+    made in a failing test run. When the list is nonempty, only the first blob
+    is decoded and run. The blob is only guaranteed to reproduce a failure within
     a specific version of Hegel *)
 val run_test
   :  settings:settings
   -> ?test_location:Antithesis.test_location
+  -> ?from_ppx:bool
   -> ?database_key:string
   -> ?failure_blobs:string list
   -> (test_case -> unit)
@@ -429,6 +434,7 @@ val run_test
 val run_hegel_test
   :  ?settings:settings
   -> ?test_location:Antithesis.test_location
+  -> ?from_ppx:bool
   -> ?database_key:string
   -> ?failure_blobs:string list
   -> (test_case -> unit)

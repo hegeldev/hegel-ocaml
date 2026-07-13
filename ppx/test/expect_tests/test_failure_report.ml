@@ -12,7 +12,7 @@ let%expect_test "no-draw failure prints a bodyless singular report" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
     Exception: Failure("boom")
-    rerun with: [@@failure_blobs "AAAAAAA="]
+    rerun with: ~failure_blobs:[ "AAAAAAA=" ]
     |}]
 ;;
 
@@ -34,7 +34,7 @@ let%expect_test "later falsification counts plural test cases" =
       draw_1 = 60
 
     Exception: Failure("large values are broken")
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAA8"]
+    rerun with: ~failure_blobs:[ "AAEAAAAACgEAAAA8" ]
     |}]
 ;;
 
@@ -68,6 +68,6 @@ let%expect_test "a multiline drawn value aligns under its name" =
            00000 00000 00000 00000 00000 00000 00000 00000)
 
     Exception: File "ppx/test/expect_tests/test_failure_report.ml", line 59, characters 10-16: Assertion failed
-    rerun with: [@@failure_blobs "AXic7ckxDQAACMTAfgJi2PCvDgTggB+aDleAFLnrI9N3YgAeKxPH"]
+    rerun with: ~failure_blobs:[ "AXic7ckxDQAACMTAfgJi2PCvDgTggB+aDleAFLnrI9N3YgAeKxPH" ]
     |}]
 ;;

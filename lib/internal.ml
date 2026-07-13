@@ -184,7 +184,7 @@ let with_mode mode s = { s with mode }
 
 (** [with_print_blob b s] returns settings [s] with [print_blob] set to [b]. When
     [true] (the default), a failing run's report ends with a copy-pasteable
-    [rerun with: [@@failure_blobs "..."]] line encoding the failure. *)
+    [rerun with:] line encoding the failure. *)
 let with_print_blob b s = { s with print_blob = b }
 
 (** [with_report_multiple_failures b s] returns settings [s] with [report_multiple_failures] 
@@ -741,10 +741,14 @@ let print_failure_header ~cases_run ~cases_discarded test_location =
     cases_discarded
 ;;
 
-let print_failure_body ~(settings : settings) ~blob ~exn ~printed_output =
+let print_failure_body ~(settings : settings) ~from_ppx ~blob ~exn ~printed_output =
   if printed_output then eprintf "\n%!";
   eprintf "Exception: %s\n%!" (Stdlib.Printexc.to_string exn);
-  if settings.print_blob then eprintf "rerun with: [@@failure_blobs \"%s\"]\n%!" blob
+  if settings.print_blob
+  then
+    if from_ppx
+    then eprintf "rerun with: [@@failure_blobs [ \"%s\" ]]\n%!" blob
+    else eprintf "rerun with: ~failure_blobs:[ \"%s\" ]\n%!" blob
 ;;
 
 let handle_result
@@ -752,6 +756,7 @@ let handle_result
       ~ffi_settings
       ~test_fn
       ~test_location
+      ~from_ppx
       ~single
       ~single_outcome
       ~cases_run
@@ -790,7 +795,7 @@ let handle_result
           let blob, exn, printed_output =
             final_replay ~settings ~ffi_settings ~test_fn ctx failure
           in
-          print_failure_body ~settings ~blob ~exn ~printed_output;
+          print_failure_body ~settings ~from_ppx ~blob ~exn ~printed_output;
           raise exn
         | failures ->
           let count = List.length failures in
@@ -802,7 +807,7 @@ let handle_result
             let blob, exn, printed_output =
               final_replay ~settings ~ffi_settings ~test_fn ctx failure
             in
-            print_failure_body ~settings ~blob ~exn ~printed_output);
+            print_failure_body ~settings ~from_ppx ~blob ~exn ~printed_output);
           raise (Failure (sprintf "%d failures found!" count)))
 ;;
 
@@ -813,7 +818,14 @@ let handle_result
     is the whole run and is run as final, its outcome kept for the report.
     Discovered counterexamples are replayed from their blobs by {!handle_result}.
     The engine [run] handle is always freed. *)
-let run_from_engine ctx ~(settings : settings) ~ffi_settings ~test_fn ~test_location =
+let run_from_engine
+      ctx
+      ~(settings : settings)
+      ~ffi_settings
+      ~test_fn
+      ~test_location
+      ~from_ppx
+  =
   let single =
     match settings.mode with
     | Single_test_case -> true
@@ -860,6 +872,7 @@ let run_from_engine ctx ~(settings : settings) ~ffi_settings ~test_fn ~test_loca
             ~ffi_settings
             ~test_fn
             ~test_location
+            ~from_ppx
             ~single
             ~single_outcome:!single_outcome
             ~cases_run:!cases_run
@@ -911,6 +924,10 @@ let run_from_blob ctx ~(settings : settings) ~ffi_settings ~test_fn blob =
     source location of the test, used by the Antithesis integration.
     Provided automatically by the [let%hegel_test] PPX. When omitted, no
     Antithesis assertion is emitted.
+    @param from_ppx
+    [true] when the run is driven by the [let%hegel_test] PPX; only set by the
+    PPX. Selects the [[@@failure_blobs [...]]] attribute form of the [rerun with:]
+    hint vs. the [~failure_blobs] argument form a plain caller would use.
     @param database_key
     optional key scoping persisted/replayed failing examples and, under [derandomize],
     the per-test seed. Defaults to the test's [test_location] (as
@@ -925,6 +942,7 @@ let run_from_blob ctx ~(settings : settings) ~ffi_settings ~test_fn blob =
 let run_test
       ~(settings : settings)
       ?test_location
+      ?(from_ppx = false)
       ?database_key
       ?(failure_blobs = [])
       test_fn
@@ -945,7 +963,7 @@ let run_test
   let ffi_settings = build_ffi_settings ctx settings ~database_key in
   let run_body () =
     match failure_blobs with
-    | [] -> run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location
+    | [] -> run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location ~from_ppx
     | blob :: _ -> run_from_blob ctx ~settings ~ffi_settings ~test_fn blob
   in
   Exn.protect
@@ -967,9 +985,10 @@ let run_test
 let run_hegel_test
       ?(settings = default_settings ())
       ?test_location
+      ?from_ppx
       ?database_key
       ?failure_blobs
       test_fn
   =
-  run_test ~settings ?test_location ?database_key ?failure_blobs test_fn
+  run_test ~settings ?test_location ?from_ppx ?database_key ?failure_blobs test_fn
 ;;

@@ -43,7 +43,7 @@ let%expect_test "labeled draw prints name = value on final replay" =
       x = 7
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 37, characters 4-10: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAH"]
+    rerun with: ~failure_blobs:[ "AAEAAAAACgEAAAAH" ]
     |}]
 ;;
 
@@ -59,7 +59,7 @@ let%expect_test "unlabeled draw is auto-named draw_N on final replay" =
       draw_1 = 123456
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 53, characters 4-10: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgMAAABA4gE="]
+    rerun with: ~failure_blobs:[ "AAEAAAAACgMAAABA4gE=" ]
     |}]
 ;;
 
@@ -77,7 +77,7 @@ let%expect_test "successive unlabeled draws number draw_1, draw_2" =
       draw_2 = 2
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 70, characters 4-10: Assertion failed
-    rerun with: [@@failure_blobs "AAIAAAAACgEAAAABAAoBAAAAAg=="]
+    rerun with: ~failure_blobs:[ "AAIAAAAACgEAAAABAAoBAAAAAg==" ]
     |}]
 ;;
 
@@ -100,7 +100,7 @@ let%expect_test "with_printer supplies the printer draw renders with" =
       h = 0xff
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 94, characters 4-10: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgIAAAD/AA=="]
+    rerun with: ~failure_blobs:[ "AAEAAAAACgIAAAD/AA==" ]
     |}]
 ;;
 
@@ -116,7 +116,7 @@ let%expect_test "with_printer makes an unprintable sampled_from drawable" =
       c = 9
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 110, characters 4-10: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAA"]
+    rerun with: ~failure_blobs:[ "AAEAAAAACgEAAAAA" ]
     |}]
 ;;
 
@@ -137,7 +137,7 @@ let%expect_test "draw nested in a span (depth > 0) is suppressed" =
       ran
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 130, characters 4-10: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAH"]
+    rerun with: ~failure_blobs:[ "AAEAAAAACgEAAAAH" ]
     |}]
 ;;
 
@@ -160,7 +160,7 @@ let%expect_test "a tuple draw prints as one sexp" =
       pair = (7 8)
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 154, characters 4-10: Assertion failed
-    rerun with: [@@failure_blobs "AAIAAAAACgEAAAAHAAoBAAAACA=="]
+    rerun with: ~failure_blobs:[ "AAIAAAAACgEAAAAHAAoBAAAACA==" ]
     |}]
 ;;
 
@@ -181,7 +181,7 @@ let%expect_test "a list draw prints as one sexp" =
       xs = (7 7)
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 175, characters 4-10: Assertion failed
-    rerun with: [@@failure_blobs "AXicY2IAAi5GIMEOpQABRAAn"]
+    rerun with: ~failure_blobs:[ "AXicY2IAAi5GIMEOpQABRAAn" ]
     |}]
 ;;
 
@@ -201,7 +201,7 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
         n = 7
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 192, characters 6-12: Assertion failed
-    rerun with: [@@failure_blobs "AXicY2VgYGBkYOACYgYYBeOzAwACrQAw"]
+    rerun with: ~failure_blobs:[ "AXicY2VgYGBkYOACYgYYBeOzAwACrQAw" ]
     |}]
 ;;
 
@@ -262,7 +262,7 @@ let%expect_test "a derived value prints as one sexp via with_printer" =
       draw_1 = Only
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 256, characters 4-10: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAA"]
+    rerun with: ~failure_blobs:[ "AAEAAAAACgEAAAAA" ]
     |}]
 ;;
 
@@ -278,7 +278,7 @@ let%expect_test "a nested derived record prints as one sexp via with_printer" =
       draw_1 = ((tag Only))
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 272, characters 4-10: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAA"]
+    rerun with: ~failure_blobs:[ "AAEAAAAACgEAAAAA" ]
     |}]
 ;;
 
@@ -294,7 +294,7 @@ let%expect_test
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 290, characters 4-10: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAA"]
+    rerun with: ~failure_blobs:[ "AAEAAAAACgEAAAAA" ]
     |}]
 ;;
 
@@ -324,7 +324,7 @@ let%expect_test "ppx injects ~label from the binding name" =
       x = 7
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 312, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAH"]
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAH" ]]
     |}]
 ;;
 
@@ -350,7 +350,7 @@ let%expect_test "a Generators-qualified draw is labeled (prefix preserved)" =
       g = 9
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 338, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAJ"]
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAJ" ]]
     |}]
 ;;
 
@@ -383,7 +383,7 @@ let%expect_test "a local non-Hegel draw (not on tc) is not rewritten" =
       z = 1
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 369, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAB"]
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAB" ]]
     |}]
 ;;
 
@@ -415,7 +415,7 @@ let%expect_test "a reused binding name numbers x_1, x_2, x_3" =
       x_3 = 3
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 401, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AXicY2YAAi5GIMEIoZggFDMAAjAAKw=="]
+    rerun with: [@@failure_blobs [ "AXicY2YAAi5GIMEIoZggFDMAAjAAKw==" ]]
     |}]
 ;;
 
@@ -443,7 +443,7 @@ let%expect_test "a draw inside a loop numbers x_1, x_2" =
       x_2 = 2
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line 430, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAIAAAAACgEAAAABAAoBAAAAAg=="]
+    rerun with: [@@failure_blobs [ "AAIAAAAACgEAAAABAAoBAAAAAg==" ]]
     |}]
 ;;
 

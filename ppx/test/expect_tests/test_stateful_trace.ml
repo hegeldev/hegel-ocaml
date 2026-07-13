@@ -34,7 +34,7 @@ let%expect_test "state trace; invariant marks the failing step" =
       Invariant 0 violated after step 2.
 
     Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line 21, characters 30-36: Assertion failed
-    rerun with: [@@failure_blobs "AXicY2dgYGBkYOACYgYYxYgQYWQAAAODAC0="]
+    rerun with: ~failure_blobs:[ "AXicY2dgYGBkYOACYgYYxYgQYWQAAAODAC0=" ]
     |}]
 ;;
 
@@ -50,7 +50,7 @@ let%expect_test "invariant violated in the initial state" =
       Invariant 0 violated in the initial state.
 
     Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line 44, characters 67-73: Assertion failed
-    rerun with: [@@failure_blobs "AAAAAAA="]
+    rerun with: ~failure_blobs:[ "AAAAAAA=" ]
     |}]
 ;;
 
@@ -89,6 +89,6 @@ let%expect_test "state trace across multiple rules" =
       Step 2: pop
 
     Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line 71, characters 8-14: Assertion failed
-    rerun with: [@@failure_blobs "AXic42BgYGBkYOACYgYYBeMbwRiMjAwAB6AAbA=="]
+    rerun with: ~failure_blobs:[ "AXic42BgYGBkYOACYgYYBeMbwRiMjAwAB6AAbA==" ]
     |}]
 ;;

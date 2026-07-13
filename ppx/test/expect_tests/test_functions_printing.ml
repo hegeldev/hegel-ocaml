@@ -35,7 +35,7 @@ let%expect_test "a function is named from its binding" =
       f 42 = 10
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 23, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAK"]
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAK" ]]
     |}]
 ;;
 
@@ -57,13 +57,13 @@ let%expect_test "a function drawn inline is also named from its binding" =
    | _ -> ());
   [%expect
     {|
-    --- Failure: binding_name_inline (ppx/test/expect_tests/test_functions_printing.ml:36) ---
+    --- Failure: binding_name_inline (ppx/test/expect_tests/test_functions_printing.ml:42) ---
     Falsified after 2 test cases (0 discarded):
 
       f 42 = 10
 
-    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 45, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAK"]
+    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 51, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAK" ]]
     |}]
 ;;
 
@@ -86,13 +86,13 @@ let%expect_test "an explicit ~name wins over the draw-site binding name" =
    | _ -> ());
   [%expect
     {|
-    --- Failure: explicit_name_beats_binding (ppx/test/expect_tests/test_functions_printing.ml:58) ---
+    --- Failure: explicit_name_beats_binding (ppx/test/expect_tests/test_functions_printing.ml:70) ---
     Falsified after 2 test cases (0 discarded):
 
       chosen 42 = 10
 
-    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 68, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAK"]
+    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 80, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAK" ]]
     |}]
 ;;
 
@@ -114,8 +114,8 @@ let%expect_test "without a binding the function falls back to its default name" 
 
       function 42 = 10
 
-    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 91, characters 4-10: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAK"]
+    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 109, characters 4-10: Assertion failed
+    rerun with: ~failure_blobs:[ "AAEAAAAACgEAAAAK" ]
     |}]
 ;;
 
@@ -138,8 +138,8 @@ let%expect_test "an explicit ~name is used when there is no binding name" =
 
       myfun 42 = 10
 
-    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 109, characters 4-10: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAK"]
+    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 133, characters 4-10: Assertion failed
+    rerun with: ~failure_blobs:[ "AAEAAAAACgEAAAAK" ]
     |}]
 ;;
 
@@ -162,13 +162,13 @@ let%expect_test "functions2 shows its table uncurried, named from its binding" =
    | _ -> ());
   [%expect
     {|
-    --- Failure: functions2_binding (ppx/test/expect_tests/test_functions_printing.ml:116) ---
+    --- Failure: functions2_binding (ppx/test/expect_tests/test_functions_printing.ml:146) ---
     Falsified after 2 test cases (0 discarded):
 
       g (3 true) = 10
 
-    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 126, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAK"]
+    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 156, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAK" ]]
     |}]
 ;;
 
@@ -192,13 +192,13 @@ let%expect_test "functions3 shows its table uncurried, named from its binding" =
    | _ -> ());
   [%expect
     {|
-    --- Failure: functions3_binding (ppx/test/expect_tests/test_functions_printing.ml:139) ---
+    --- Failure: functions3_binding (ppx/test/expect_tests/test_functions_printing.ml:175) ---
     Falsified after 2 test cases (0 discarded):
 
       h (1 true 2) = 10
 
-    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 150, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAK"]
+    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 186, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAK" ]]
     |}]
 ;;
 
@@ -216,10 +216,10 @@ let%expect_test "a scalar drawn with draw_silent prints nothing even when named"
    | _ -> ());
   [%expect
     {|
-    --- Failure: draw_silent_scalar_stays_silent (ppx/test/expect_tests/test_functions_printing.ml:165) ---
+    --- Failure: draw_silent_scalar_stays_silent (ppx/test/expect_tests/test_functions_printing.ml:207) ---
     Falsified after 1 test case (0 discarded):
-    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 168, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAF"]
+    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 210, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAF" ]]
     |}]
 ;;
 
@@ -243,14 +243,14 @@ let%expect_test "a printable function generator prints with its sexp_of" =
    | _ -> ());
   [%expect
     {|
-    --- Failure: printable_function_draw (ppx/test/expect_tests/test_functions_printing.ml:178) ---
+    --- Failure: printable_function_draw (ppx/test/expect_tests/test_functions_printing.ml:226) ---
     Falsified after 2 test cases (0 discarded):
 
       f = <fun>
       f 42 = 10
 
-    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 189, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAK"]
+    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 237, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAK" ]]
     |}]
 ;;
 
@@ -280,13 +280,13 @@ let%expect_test "a function drawn nested keeps its label but suppresses its valu
    | _ -> ());
   [%expect
     {|
-    --- Failure: printable_function_drawn_nested (ppx/test/expect_tests/test_functions_printing.ml:207) ---
+    --- Failure: printable_function_drawn_nested (ppx/test/expect_tests/test_functions_printing.ml:261) ---
     Falsified after 2 test cases (0 discarded):
 
       f 42 = 10
 
-    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 220, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAK"]
+    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 274, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAK" ]]
     |}]
 ;;
 
@@ -313,10 +313,10 @@ let%expect_test "a function applied inside a span prints nothing" =
    | _ -> ());
   [%expect
     {|
-    --- Failure: application_inside_span_is_suppressed (ppx/test/expect_tests/test_functions_printing.ml:236) ---
+    --- Failure: application_inside_span_is_suppressed (ppx/test/expect_tests/test_functions_printing.ml:296) ---
     Falsified after 1 test case (0 discarded):
-    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 247, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAA"]
+    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 307, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAA" ]]
     |}]
 ;;
 
@@ -339,14 +339,14 @@ let%expect_test "partially printable applications" =
    | _ -> ());
   [%expect
     {|
-    --- Failure: partially_printable_args_and_ret (ppx/test/expect_tests/test_functions_printing.ml:257) ---
+    --- Failure: partially_printable_args_and_ret (ppx/test/expect_tests/test_functions_printing.ml:323) ---
     Falsified after 2 test cases (0 discarded):
 
       f 1 = <opaque>
       function <opaque> = 1
 
-    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 267, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAB"]
+    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 333, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAB" ]]
     |}]
 ;;
 
@@ -362,13 +362,13 @@ let%expect_test "unprintable applications" =
    | _ -> ());
   [%expect
     {|
-    --- Failure: unprintable_args_and_ret (ppx/test/expect_tests/test_functions_printing.ml:281) ---
+    --- Failure: unprintable_args_and_ret (ppx/test/expect_tests/test_functions_printing.ml:353) ---
     Falsified after 2 test cases (0 discarded):
 
       f <opaque> = <opaque>
       function <opaque> = 1
 
-    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 284, characters 2-8: Assertion failed
-    rerun with: [@@failure_blobs "AAEAAAAACgEAAAAB"]
+    Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line 356, characters 2-8: Assertion failed
+    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAB" ]]
     |}]
 ;;

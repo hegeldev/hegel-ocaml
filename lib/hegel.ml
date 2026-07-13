@@ -79,9 +79,23 @@ exception Assume_rejected = Internal.Assume_rejected
 
 (** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
     runs a property test against the native engine, defaulting to
-    {!default_settings}. This is the entry point the [let%hegel_test] PPX
-    targets. *)
-let run_hegel_test = Internal.run_hegel_test
+    {!default_settings}. The [let%hegel_test] PPX runs tests through the
+    equivalent {!run_hegel_test_ppx}. *)
+let run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn =
+  Internal.run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn
+;;
+
+(** [run_hegel_test_ppx] is {!run_hegel_test} with the PPX replay hint enabled;
+    the [let%hegel_test] PPX targets it. Not for direct use. *)
+let run_hegel_test_ppx ?settings ?test_location ?database_key ?failure_blobs test_fn =
+  Internal.run_hegel_test
+    ?settings
+    ?test_location
+    ~from_ppx:true
+    ?database_key
+    ?failure_blobs
+    test_fn
+;;
 
 (** [assume tc condition] rejects the current test case if [condition] is
     [false]. *)

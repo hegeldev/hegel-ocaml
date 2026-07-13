@@ -161,15 +161,16 @@ Falsified after 8 test cases (0 discarded):
   xs = (0 1)
 
 Exception: File "test/my_tests.ml", line 3, characters 2-8: Assertion failed
-rerun with: [@@failure_blobs "AXic..."]
+rerun with: [@@failure_blobs [ "AXic..." ]]
 ```
 
 `Falsified after N test cases (M discarded)` counts the cases that ran before
 the failure (`M` of them were rejected, for example by `assume`). The final line
-is a `[@@failure_blobs "..."]` attribute you can paste onto the test to replay
-this exact case deterministically. On a terminal the header prints in red. Set
-`HEGEL_COLOR=0` to disable color (or `1` to force it on). Add
-`with_print_blob false` to your `[@@settings ...]` to omit the blob line.
+replays the exact case. Under `let%hegel_test` it is a `[@@failure_blobs [ "..." ]]` 
+attribute you paste onto the test, while a plain `run_hegel_test` caller gets a
+`~failure_blobs:[ "..." ]` argument to pass. On a terminal the header prints in 
+red. Set `HEGEL_COLOR=0` to disable color (or `1` to force it on). Add 
+`with_print_blob false` to your `[@@settings ...]` to omit the line.
 
 A value that is shadowed or drawn inside a loop is numbered (`x_1`, `x_2`, …):
 

@@ -98,7 +98,7 @@
         n = 50
 
       Exception: File "my_tests.ml", line 5, characters 2-8: Assertion failed
-      rerun with: [@@failure_blobs "AAEAAAAACgEAAAAy"]
+      rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAy" ]]
     v}
 
     To fix this test, you can constrain the integers you generate with [min_value] and [max_value]:
@@ -225,7 +225,7 @@
         n = 50
 
       Exception: File "my_tests.ml", line 5, characters 2-8: Assertion failed
-      rerun with: [@@failure_blobs "AAEAAAAACgEAAAAy"]
+      rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAy" ]]
     v}
 
     The blob can then be used to replay the failing test case:
@@ -335,7 +335,7 @@ type settings = Internal.settings =
     (** [None] uses the engine's default phase list (all phases); [Some xs]
           restricts execution to [xs]. *)
   ; print_blob : bool
-    (** Print a [rerun with: [@@failure_blobs "..."]] line whose base64 blob
+    (** Print a [rerun with:] line whose base64 blob
         encodes the engine choices that led to a failure. [true] by default. *)
   ; report_multiple_failures : bool (** [false] by default. *)
   }
@@ -398,7 +398,7 @@ val with_phases : phase list -> settings -> settings
 val with_mode : mode -> settings -> settings
 
 (** [with_print_blob b s] controls whether a failing run's report ends with a
-    copy-pasteable [rerun with: [@@failure_blobs "..."]] line encoding the
+    copy-pasteable [rerun with:] line encoding the
     engine choices that led to the failure. On by default. *)
 val with_print_blob : bool -> settings -> settings
 
@@ -420,8 +420,7 @@ type test_location = Antithesis.test_location =
 
 (** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
     runs a property test against the native engine, defaulting to
-    {!default_settings}. This is the entry point the [let%hegel_test] PPX targets;
-    it can also be called directly, e.g. to drive a property from a plain
+    {!default_settings}. Call it directly to drive a property from a plain
     executable or another test harness:
 
     {[
@@ -453,6 +452,22 @@ val run_hegel_test
   -> ?failure_blobs:string list
   -> (test_case -> unit)
   -> unit
+
+(**/**)
+
+(** [run_hegel_test_ppx] is {!run_hegel_test} with the PPX replay hint enabled,
+    so a failing run suggests the [[@@failure_blobs [...]]] attribute rather than
+    the [~failure_blobs] argument. The [let%hegel_test] PPX targets it; not for
+    direct use. *)
+val run_hegel_test_ppx
+  :  ?settings:settings
+  -> ?test_location:test_location
+  -> ?database_key:string
+  -> ?failure_blobs:string list
+  -> (test_case -> unit)
+  -> unit
+
+(**/**)
 
 (** {3 Drawing values} *)
 

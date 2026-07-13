@@ -18,7 +18,7 @@ let%expect_test "require fails with the default message" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
     Exception: Failure("require: condition was false")
-    rerun with: [@@failure_blobs "AAAAAAA="]
+    rerun with: ~failure_blobs:[ "AAAAAAA=" ]
     |}]
 ;;
 
@@ -33,7 +33,7 @@ let%expect_test "require fails with a custom message" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
     Exception: Failure("the invariant broke")
-    rerun with: [@@failure_blobs "AAAAAAA="]
+    rerun with: ~failure_blobs:[ "AAAAAAA=" ]
     |}]
 ;;
 
@@ -55,7 +55,7 @@ let%expect_test "require_equal prints a sexp diff of the two values" =
         3)    3)
 
     Exception: Failure("require_equal: values differ")
-    rerun with: [@@failure_blobs "AAAAAAA="]
+    rerun with: ~failure_blobs:[ "AAAAAAA=" ]
     |}]
 ;;
 
