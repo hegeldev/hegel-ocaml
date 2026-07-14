@@ -13,8 +13,9 @@
   test_derive
   test_stateful
   test_single_test_case
-  test_antithesis)
- (libraries hegel alcotest core core_unix threads.posix yojson)
+  test_antithesis
+  test_loader)
+ (libraries hegel hegel_ffi alcotest core core_unix threads.posix yojson)
  (preprocess
   (pps ppx_js_style -- -allow-unannotated-ignores))
  (foreign_stubs

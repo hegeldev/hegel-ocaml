@@ -175,6 +175,62 @@ let from_sibling ext =
   List.find_opt is_file [ candidate "release"; candidate "debug" ]
 ;;
 
+(* Download [url] into [cache_path], failing unless the payload's SHA-256 is
+   [expected]. The payload is fetched to a temporary file in the cache
+   directory, verified, and then renamed into place. Exposed (rather than
+   inlined in [from_cache_or_download]) so the test suite can exercise the
+   download protocol against a stubbed [curl] and its own checksum. *)
+let download_verified ~url ~expected ~cache_path =
+  mkdir_p (Filename.dirname cache_path);
+  (* Concurrent processes (e.g. several test binaries starting with a cold
+     cache) may all reach this point at once, so each must download to its
+     OWN temporary file: a shared temporary path would let one process rename
+     (or delete) a file another is still writing. The PID makes the name
+     unique across live processes on this host; the random salt guards
+     against PID reuse colliding with a stale file left by a killed process
+     (such leftovers are otherwise inert: nothing else ever reads them). The
+     temporary file stays in the cache directory so the rename below cannot
+     cross filesystems. *)
+  let tmp =
+    Printf.sprintf
+      "%s.%d.%06x.tmp"
+      cache_path
+      (Unix.getpid ())
+      (Random.State.bits (Random.State.make_self_init ()) land 0xFFFFFF)
+  in
+  let remove_tmp () =
+    try Sys.remove tmp with
+    | _ -> ()
+  in
+  let rc =
+    Sys.command
+      (Printf.sprintf "curl -fsSL %s -o %s" (Filename.quote url) (Filename.quote tmp))
+  in
+  if rc <> 0
+  then (
+    remove_tmp ();
+    failwith (Printf.sprintf "hegel: failed to download %s (curl exit %d)" url rc));
+  let actual = sha256_of_file tmp in
+  if not (String.equal actual expected)
+  then (
+    remove_tmp ();
+    failwith
+      (Printf.sprintf
+         "hegel: SHA-256 mismatch for downloaded libhegel (expected %s, got %s)"
+         expected
+         actual));
+  (* Atomic publish. If a concurrent process won the race, POSIX [rename]
+     silently (and atomically) replaces its identical, verified copy. On
+     platforms where replacing an in-use file can fail (e.g. Windows), fall
+     back to the winner's copy when it verifies. *)
+  (try Sys.rename tmp cache_path with
+   | Sys_error _ as e ->
+     remove_tmp ();
+     if not (is_file cache_path && String.equal (sha256_of_file cache_path) expected)
+     then raise e);
+  cache_path
+;;
+
 (* 4. Cached download (fetching + verifying on first use). *)
 let from_cache_or_download os_id ext =
   let key = os_id ^ "-" ^ arch_id () in
@@ -206,29 +262,7 @@ let from_cache_or_download os_id ext =
             cache_path)
      | None -> ());
     let url = Printf.sprintf "%s/%s" release_base (release_artifact key ext) in
-    mkdir_p (cache_dir ());
-    let tmp = cache_path ^ ".tmp" in
-    let rc =
-      Sys.command
-        (Printf.sprintf "curl -fsSL %s -o %s" (Filename.quote url) (Filename.quote tmp))
-    in
-    if rc <> 0
-    then (
-      (try Sys.remove tmp with
-       | _ -> ());
-      failwith (Printf.sprintf "hegel: failed to download %s (curl exit %d)" url rc));
-    let actual = sha256_of_file tmp in
-    if not (String.equal actual expected)
-    then (
-      (try Sys.remove tmp with
-       | _ -> ());
-      failwith
-        (Printf.sprintf
-           "hegel: SHA-256 mismatch for downloaded libhegel (expected %s, got %s)"
-           expected
-           actual));
-    Sys.rename tmp cache_path;
-    cache_path)
+    download_verified ~url ~expected ~cache_path)
 ;;
 
 (** [locate ()] returns the path to a usable libhegel shared library, downloading

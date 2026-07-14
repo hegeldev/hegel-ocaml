@@ -11,5 +11,6 @@ let () =
     ; "stateful", Test_stateful.tests
     ; "single_test_case", Test_single_test_case.tests
     ; "antithesis", Test_antithesis.tests
+    ; "loader", Test_loader.tests
     ]
 ;;
