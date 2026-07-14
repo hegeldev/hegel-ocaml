@@ -49,17 +49,12 @@ check-docs:
     #!/usr/bin/env bash
     set -euo pipefail
     eval $(opam env)
-    # Scope to the `hegel` package so the internal ppx_hegel_* packages (and the
-    # unpublished vendored `cbor` library) are excluded from the generated docs.
-    # odoc warnings don't fail the build and are hidden by dune's cache on
-    # rebuilds, so build the doc tree cold and fail on ANY output.
-    rm -rf _build/default/_doc
-    out=$(dune build @doc --only-packages hegel 2>&1)
-    if [ -n "$out" ]; then
-      echo "$out"
-      echo "check-docs: odoc warnings found (see above)" >&2
-      exit 1
-    fi
+    # Scope to the `hegel` package so the internal ppx_hegel_* packages are
+    # excluded from the generated docs. odoc warnings are fatal in the dev
+    # profile (see the root `dune` file), so a cached success is genuinely
+    # warning-free — no cold rebuild needed. (Deleting _build/default/_doc to
+    # force one corrupted dune's incremental odoc state after source edits.)
+    dune build @doc --only-packages hegel
 
 docs: check-docs
     open _build/default/_doc/_html/index.html

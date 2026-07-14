@@ -381,11 +381,14 @@ draw, and always freed (`Internal.with_string_generator`).
 
 ### Documentation and Polish Stage
 
-7. **Zero odoc warnings is enforced by `just check-docs`, not by dune**: `dune build @doc`
-   exits 0 even when odoc emits warnings (bad references, undocumented values), and dune's
-   cache hides the warnings entirely on rebuilds — a warm `dune build @doc` prints nothing
-   even if the doc comments are broken. The `check-docs` recipe therefore removes
-   `_build/default/_doc` first and fails on any output. All lib modules must have
+7. **Zero odoc warnings is enforced by fatal warnings in the dev profile**: the root
+   `dune` file sets `(env (dev (odoc (warnings fatal))))`, so `dune build @doc` (and
+   `just check-docs`) fails outright on any odoc warning (e.g. a bad reference), on cold
+   and warm builds alike. (By default odoc warnings don't fail the build and dune's cache
+   hides them on rebuilds; the recipe used to force a cold build by deleting
+   `_build/default/_doc` and failing on any output, but that delete corrupted dune's
+   incremental odoc state whenever sources had changed since the last doc build.) All lib
+   modules must have
    `(** ... *)` doc comments on every public type, function, constant, and exception.
    References to non-public modules (e.g. `Internal`) must be code spans (`[Internal.note]`),
    not `{!...}` links — the target isn't in the doc tree, so the link can't resolve.
