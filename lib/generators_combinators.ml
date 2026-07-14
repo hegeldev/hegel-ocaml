@@ -25,7 +25,10 @@ let sampled_from options =
     An index is drawn inside a {!Labels.one_of} span and that branch is
     generated compositionally. Each draw records the chosen branch's printer, so
     the drawn value renders through the printer of the branch it actually came
-    from; before any draw, the printer defaults to the first branch's. *)
+    from; before any draw, the printer defaults to the first branch's. The
+    record is per generator value: if one [one_of] generator is drawn several
+    times before printing (e.g. as the element generator of [lists]), every
+    value renders through the most recently drawn branch's printer. *)
 let one_of (generators : ('a, printable) generator list) : ('a, printable) generator =
   match generators with
   | [] -> failwith "one_of requires at least one generator"

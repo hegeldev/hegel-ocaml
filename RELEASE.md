@@ -52,7 +52,10 @@ let s = Ipaddr.to_string ip in
 
 `one_of` now prints a drawn value through the printer of the branch it was
 actually drawn from. Previously every branch's values printed through the
-first branch's printer.
+first branch's printer. The recorded branch is per generator value, so one
+`one_of` generator drawn several times before printing (e.g. as the element
+generator of `lists`) still prints every value through a single branch's
+printer — now the most recently drawn branch rather than the first.
 
 The internal PPX/engine plumbing that `Hegel.Generators` previously exposed
 at its top level (`Labels`, `group`, `discardable_group`, `new_collection`,

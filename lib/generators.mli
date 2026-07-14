@@ -367,7 +367,10 @@ val sampled_from : 'a list -> ('a, unprintable) generator
 (** [one_of generators] creates a generator that picks from one of the given
     printable [generators]. Requires at least one generator. On a failing
     replay, the drawn value prints through the printer of the branch it was
-    drawn from.
+    drawn from. The recorded branch is per generator value: if one [one_of]
+    generator is drawn several times before printing (e.g. as the element
+    generator of {!lists}), every value prints through the most recently drawn
+    branch's printer.
 
     {[
       let%hegel_test one_of_example tc =
