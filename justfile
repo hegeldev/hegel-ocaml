@@ -77,7 +77,11 @@ check-tests-no-coverage:
     # ppx_expect tests are an inline-tests library (no standalone exe), so run
     # them through dune. --force ensures they execute even if dune considers
     # them cached.
-    dune runtest ppx/test/expect_tests --force
+    if [ "${HEGEL_SKIP_EXPECT_TESTS:-}" = "1" ]; then
+      echo "Skipping ppx_expect suite (HEGEL_SKIP_EXPECT_TESTS=1)"
+    else
+      dune runtest ppx/test/expect_tests --force
+    fi
 
 # these aliases are provided as ux improvements for local developers. CI should use the longer
 # forms.

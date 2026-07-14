@@ -51,7 +51,12 @@ runs:
       id: cache-opam
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
-        path: ~/.opam
+        path: |
+          ~/.opam
+          !~/.opam/**/.opam-switch/build
+          !~/.opam/**/.opam-switch/sources
+          !~/.opam/download-cache
+          !~/.opam/log
         key: ${{ inputs.cache-key }}
         restore-keys: ${{ inputs.cache-restore-keys }}
 
