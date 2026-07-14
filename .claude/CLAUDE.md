@@ -304,8 +304,7 @@ in an `Exn.protect ~finally`.
 - `test/` must build under `-p hegel` (opam-repo-ci runs it): plain Alcotest
   functions calling `Hegel.run_hegel_test`, no `let%hegel_test`, no PPX beyond
   the `ppx_js_style` linter. White-box tests use the doc-hidden `(**/**)`
-  re-exports `Hegel.{Internal,Antithesis}` and the doc-hidden date/time
-  `format_*` helpers in `Hegel.Generators`; `Hegel.Derive` is
+  re-exports `Hegel.{Internal,Antithesis}`; `Hegel.Derive` is
   doc-hidden too because PPX-generated code calls it. Only `Generators`,
   `Stateful`, and the values/types directly under `Hegel` are documented API
 - PPX E2E tests live under `ppx/test/`, attributed via `(package ...)` to
@@ -331,7 +330,7 @@ typed FFI call (`Hegel_ffi.Ffi` / `Internal.generate_*`):
 - `binary` → `generate_bytes ~min_size ~max_size`
 - `text` / `characters` → build a text `string_generator` handle (codec / codepoint bounds / categories / include-exclude chars) then `generate_string`; surrogates auto-excluded
 - `from_regex` / `emails` / `urls` / `domains` → the matching `string_generator_*` handle + `generate_string`
-- `dates` / `times` / `datetimes` → `generate_date`/`time`/`datetime` structs, formatted to ISO 8601 strings client-side (`format_date`/`format_time`/`format_datetime`)
+- `dates` / `times` / `datetimes` → `generate_date`/`time`/`datetime` structs, converted client-side to typed `Core.Date.t` / `Core.Time_ns.Ofday.t` values (render with Core's own stringifiers)
 - `ip_addresses` → `generate_ipv4`/`generate_ipv6` raw bytes, rendered to strings by the `ipaddr` library (`Ipaddr.V4/V6.{of_octets_exn, to_string}`; RFC 5952 for v6)
 - `sampled_from` → `generate_integer 0 (n-1)` then index into the values array
 - `just` → a Leaf whose `draw` ignores the engine and returns the constant

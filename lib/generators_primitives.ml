@@ -330,34 +330,14 @@ let time_of_parts (hour, minute, second, microsecond) =
   Time_ns.Ofday.create ~hr:hour ~min:minute ~sec:second ~us:microsecond ()
 ;;
 
-(** [format_date date] renders a date as an ISO 8601 [YYYY-MM-DD] string. *)
-let format_date date = Date.to_string date
-
-(** [format_time time] renders a time of day as an ISO 8601 [HH:MM:SS] string,
-    appending [.ffffff] when the microsecond component is non-zero (sub-µs
-    precision is truncated). *)
-let format_time time =
-  let parts = Time_ns.Ofday.to_parts time in
-  let microsecond = (parts.ms * 1000) + parts.us in
-  if microsecond = 0
-  then sprintf "%02d:%02d:%02d" parts.hr parts.min parts.sec
-  else sprintf "%02d:%02d:%02d.%06d" parts.hr parts.min parts.sec microsecond
-;;
-
-(** [format_datetime (date, time)] renders a datetime as an ISO 8601
-    [YYYY-MM-DDTHH:MM:SS\[.ffffff\]] string. *)
-let format_datetime (date, time) = format_date date ^ "T" ^ format_time time
-
 (** [dates ()] creates a generator for [Core.Date.t] values, with year in
-    [\[1, 9999\]] and calendar-valid month/day. Use {!format_date} to render a
-    drawn date as an ISO 8601 string. *)
+    [\[1, 9999\]] and calendar-valid month/day. *)
 let dates () =
   leaf ~draw:(fun tc -> date_of_parts (Internal.generate_date tc)) ~sexp_of:Date.sexp_of_t
 ;;
 
 (** [times ()] creates a generator for [Core.Time_ns.Ofday.t] times of day with
-    microsecond precision. Use {!format_time} to render a drawn time as an
-    ISO 8601 string. *)
+    microsecond precision. *)
 let times () =
   leaf
     ~draw:(fun tc -> time_of_parts (Internal.generate_time tc))
@@ -366,8 +346,7 @@ let times () =
 
 (** [datetimes ()] creates a generator for naive datetimes as
     [(Core.Date.t, Core.Time_ns.Ofday.t)] pairs, combining {!dates} and
-    {!times}. Use {!format_datetime} to render a drawn pair as an ISO 8601
-    string. *)
+    {!times}. *)
 let datetimes () =
   leaf
     ~draw:(fun tc ->

@@ -212,18 +212,18 @@ let test_domains_e2e () =
 ;;
 
 (** Test: dates generates typed [Core.Date.t] values with year in [1, 9999],
-    rendered to ISO 8601 by [format_date]. *)
+    rendered by [Core.Date.to_string]. *)
 let test_dates_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let d = Hegel.draw tc (dates ()) in
     let y = Core.Date.year d in
     assert (y >= 1 && y <= 9999);
-    let s = format_date d in
+    let s = Core.Date.to_string d in
     assert (String.length s = 10 && String.contains s '-'))
 ;;
 
 (** Test: times generates typed [Core.Time_ns.Ofday.t] values within the day,
-    rendered to ISO 8601 by [format_time]. *)
+    rendered by [Core.Time_ns.Ofday.to_string]. *)
 let test_times_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let t = Hegel.draw tc (times ()) in
@@ -231,17 +231,19 @@ let test_times_e2e () =
       Core.Time_ns.Span.to_int_ns (Core.Time_ns.Ofday.to_span_since_start_of_day t)
     in
     assert (ns >= 0 && ns < 86_400_000_000_000);
-    assert (String.contains (format_time t) ':'))
+    assert (String.contains (Core.Time_ns.Ofday.to_string t) ':'))
 ;;
 
-(** Test: datetimes generates typed (date, time-of-day) pairs, rendered to
-    ISO 8601 by [format_datetime]. *)
+(** Test: datetimes generates typed (date, time-of-day) pairs. *)
 let test_datetimes_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let d, t = Hegel.draw tc (datetimes ()) in
     let y = Core.Date.year d in
     assert (y >= 1 && y <= 9999);
-    assert (String.contains (format_datetime (d, t)) 'T'))
+    let ns =
+      Core.Time_ns.Span.to_int_ns (Core.Time_ns.Ofday.to_span_since_start_of_day t)
+    in
+    assert (ns >= 0 && ns < 86_400_000_000_000))
 ;;
 
 (** Test: text with a category restriction (a non-surrogate category). *)
@@ -291,38 +293,6 @@ let test_characters_categories_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (characters ~categories:[ "Lu" ] ()) in
     assert (String.length v >= 1))
-;;
-
-(* Deterministic tests for the pure date/time formatters, so the microsecond
-   fractional-part branch does not depend on the engine drawing a zero. *)
-let test_format_date () =
-  Alcotest.(check string)
-    "date"
-    "2024-03-07"
-    (format_date (Core.Date.create_exn ~y:2024 ~m:Core.Month.Mar ~d:7))
-;;
-
-let test_format_time_no_fraction () =
-  Alcotest.(check string)
-    "no fraction"
-    "13:05:09"
-    (format_time (Core.Time_ns.Ofday.create ~hr:13 ~min:5 ~sec:9 ()))
-;;
-
-let test_format_time_with_fraction () =
-  Alcotest.(check string)
-    "fraction"
-    "13:05:09.000042"
-    (format_time (Core.Time_ns.Ofday.create ~hr:13 ~min:5 ~sec:9 ~us:42 ()))
-;;
-
-let test_format_datetime () =
-  Alcotest.(check string)
-    "datetime"
-    "2024-03-07T13:05:09"
-    (format_datetime
-       ( Core.Date.create_exn ~y:2024 ~m:Core.Month.Mar ~d:7
-       , Core.Time_ns.Ofday.create ~hr:13 ~min:5 ~sec:9 () ))
 ;;
 
 let tests =
@@ -394,9 +364,5 @@ let tests =
       test_text_exclude_characters_e2e
   ; Alcotest.test_case "text alphabet e2e" `Quick test_text_alphabet_e2e
   ; Alcotest.test_case "characters categories e2e" `Quick test_characters_categories_e2e
-  ; Alcotest.test_case "format_date" `Quick test_format_date
-  ; Alcotest.test_case "format_time no fraction" `Quick test_format_time_no_fraction
-  ; Alcotest.test_case "format_time with fraction" `Quick test_format_time_with_fraction
-  ; Alcotest.test_case "format_datetime" `Quick test_format_datetime
   ]
 ;;
