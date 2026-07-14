@@ -211,25 +211,37 @@ let test_domains_e2e () =
     assert (String.length v > 0))
 ;;
 
-(** Test: dates generates YYYY-MM-DD strings. *)
+(** Test: dates generates typed [Core.Date.t] values with year in [1, 9999],
+    rendered to ISO 8601 by [format_date]. *)
 let test_dates_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
-    let v = Hegel.draw tc (dates ()) in
-    assert (String.contains v '-'))
+    let d = Hegel.draw tc (dates ()) in
+    let y = Core.Date.year d in
+    assert (y >= 1 && y <= 9999);
+    let s = format_date d in
+    assert (String.length s = 10 && String.contains s '-'))
 ;;
 
-(** Test: times generates strings with colons. *)
+(** Test: times generates typed [Core.Time_ns.Ofday.t] values within the day,
+    rendered to ISO 8601 by [format_time]. *)
 let test_times_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
-    let v = Hegel.draw tc (times ()) in
-    assert (String.contains v ':'))
+    let t = Hegel.draw tc (times ()) in
+    let ns =
+      Core.Time_ns.Span.to_int_ns (Core.Time_ns.Ofday.to_span_since_start_of_day t)
+    in
+    assert (ns >= 0 && ns < 86_400_000_000_000);
+    assert (String.contains (format_time t) ':'))
 ;;
 
-(** Test: datetimes generates strings with T. *)
+(** Test: datetimes generates typed (date, time-of-day) pairs, rendered to
+    ISO 8601 by [format_datetime]. *)
 let test_datetimes_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
-    let v = Hegel.draw tc (datetimes ()) in
-    assert (String.contains v 'T'))
+    let d, t = Hegel.draw tc (datetimes ()) in
+    let y = Core.Date.year d in
+    assert (y >= 1 && y <= 9999);
+    assert (String.contains (format_datetime (d, t)) 'T'))
 ;;
 
 (** Test: text with a category restriction (a non-surrogate category). *)
@@ -284,22 +296,33 @@ let test_characters_categories_e2e () =
 (* Deterministic tests for the pure date/time formatters, so the microsecond
    fractional-part branch does not depend on the engine drawing a zero. *)
 let test_format_date () =
-  Alcotest.(check string) "date" "2024-03-07" (format_date (2024, 3, 7))
+  Alcotest.(check string)
+    "date"
+    "2024-03-07"
+    (format_date (Core.Date.create_exn ~y:2024 ~m:Core.Month.Mar ~d:7))
 ;;
 
 let test_format_time_no_fraction () =
-  Alcotest.(check string) "no fraction" "13:05:09" (format_time (13, 5, 9, 0))
+  Alcotest.(check string)
+    "no fraction"
+    "13:05:09"
+    (format_time (Core.Time_ns.Ofday.create ~hr:13 ~min:5 ~sec:9 ()))
 ;;
 
 let test_format_time_with_fraction () =
-  Alcotest.(check string) "fraction" "13:05:09.000042" (format_time (13, 5, 9, 42))
+  Alcotest.(check string)
+    "fraction"
+    "13:05:09.000042"
+    (format_time (Core.Time_ns.Ofday.create ~hr:13 ~min:5 ~sec:9 ~us:42 ()))
 ;;
 
 let test_format_datetime () =
   Alcotest.(check string)
     "datetime"
     "2024-03-07T13:05:09"
-    (format_datetime ((2024, 3, 7), (13, 5, 9, 0)))
+    (format_datetime
+       ( Core.Date.create_exn ~y:2024 ~m:Core.Month.Mar ~d:7
+       , Core.Time_ns.Ofday.create ~hr:13 ~min:5 ~sec:9 () ))
 ;;
 
 let tests =

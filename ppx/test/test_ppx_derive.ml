@@ -75,7 +75,24 @@ type label = string [@@deriving hegel_generator]
 (** A type with a list field. *)
 type int_list_wrapper = { items : int list } [@@deriving hegel_generator]
 
+(** A record with an int field, used to check that derived ints span the full
+    native-int range (regression for the old ±2³⁰−1 clamp). *)
+type full_range = { n : int } [@@deriving hegel_generator]
+
 (* ==== Tests ==== *)
+
+(** Test: derived [int] fields use the same full default range as
+    [integers ()], not the old 30-bit clamp. The engine over-weights boundary
+    values (empirically ~36% of unbounded draws exceed 2³⁰−1 in magnitude), so
+    200 cases see one with near-certainty. *)
+let test_int_full_range_e2e () =
+  let clamp = 1073741823 in
+  let saw_beyond_clamp = ref false in
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:200 ()) (fun tc ->
+    let r = Hegel.draw_silent tc full_range_generator in
+    if r.n > clamp || r.n < -clamp then saw_beyond_clamp := true);
+  assert !saw_beyond_clamp
+;;
 
 (** Test: derived point generator produces valid points. *)
 let%hegel_test test_point_e2e tc =
@@ -211,6 +228,7 @@ let () =
     "hegel-ppx-derive"
     [ ( "ppx_derive"
       , [ Alcotest.test_case "derived point" `Quick test_point_e2e
+        ; Alcotest.test_case "derived int full range" `Quick test_int_full_range_e2e
         ; Alcotest.test_case "derived person" `Quick test_person_e2e
         ; Alcotest.test_case "derived color covers all" `Quick test_color_e2e
         ; Alcotest.test_case "derived shape covers all" `Quick test_shape_e2e

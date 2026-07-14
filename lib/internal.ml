@@ -170,11 +170,10 @@ let with_derandomize b s = { s with derandomize = b }
 (** [with_database db s] returns settings [s] with [database] set to [db]. *)
 let with_database db s = { s with database = db }
 
-(** [with_suppress_health_check checks s] returns settings [s] with additional
-    health checks suppressed. *)
-let with_suppress_health_check checks s =
-  { s with suppress_health_check = s.suppress_health_check @ checks }
-;;
+(** [with_suppress_health_check checks s] returns settings [s] with
+    [suppress_health_check] set to [checks], replacing any previously suppressed
+    list. *)
+let with_suppress_health_check checks s = { s with suppress_health_check = checks }
 
 (** [with_phases phases s] returns settings [s] with [phases] set. *)
 let with_phases phases s = { s with phases = Some phases }
@@ -447,7 +446,9 @@ let stderr_color code s =
 ;;
 
 (** [assume tc condition] rejects the current test case if [condition] is
-    [false]. *)
+    [false]. The [tc] handle is accepted for API symmetry with the other
+    per-test-case primitives; the rejection is client-side (raising
+    {!Assume_rejected}) and does not consult [tc]. *)
 let assume _tc condition = if not condition then raise Assume_rejected
 
 (** [should_print tc] says whether {!note} output is visible for this test

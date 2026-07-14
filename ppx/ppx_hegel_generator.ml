@@ -11,19 +11,20 @@
 
     Supported types:
     - Records: generates all fields, then constructs the record
-    - Variants: picks a constructor uniformly at random, then generates args
+    - Variants: picks a constructor via [sampled_from] (engine-biased toward
+      earlier constructors), then generates args
     - Type aliases: delegates to the generator for the aliased type
 
     Supported field/argument types:
-    - [int] -> generates via [integers ~min_value:(-1073741823)
-      ~max_value:1073741823 ()] (30-bit bound; keeps products like [x*x]
-      from overflowing native [int])
+    - [int] -> generates via [integers ()] (the full native [int] range, like a
+      hand-written [integers ()])
     - [bool] -> generates via [booleans()]
     - [float] -> generates via
       [floats ~allow_nan:false ~allow_infinity:false ()]
     - [string] -> generates via [text()]
-    - [t list] -> generates a list length, then generates each element
-    - [t option] -> generates [Some v] or [None]
+    - [t list] -> engine-driven list via the collection protocol (as
+      [Generators.lists]: no fixed length cap, element-deletion shrinking)
+    - [t option] -> generates [Some v] or [None] (as [Generators.optional])
     - Named type [t] -> draws [t_generator] (assumes it exists in scope) *)
 
 open Ppxlib
@@ -34,11 +35,7 @@ let rec generate_expr_of_core_type (ct : core_type) : expression =
   let loc = ct.ptyp_loc in
   match ct.ptyp_desc with
   | Ptyp_constr ({ txt = Lident "int"; _ }, []) ->
-    [%expr
-      fun _hegel_tc ->
-        Hegel.draw
-          _hegel_tc
-          (Hegel.Generators.integers ~min_value:(-1073741823) ~max_value:1073741823 ())]
+    [%expr fun _hegel_tc -> Hegel.draw _hegel_tc (Hegel.Generators.integers ())]
   | Ptyp_constr ({ txt = Lident "bool"; _ }, []) ->
     [%expr fun _hegel_tc -> Hegel.draw _hegel_tc (Hegel.Generators.booleans ())]
   | Ptyp_constr ({ txt = Lident "float"; _ }, []) ->
@@ -282,8 +279,8 @@ and generator_of_data_variant ~loc (constrs : constructor_declaration list) : ex
   (* Wrap the index-then-arguments draw in an [enum_variant] span so the engine
      shrinks the chosen constructor and its fields together as one unit. *)
   [%expr
-    Hegel.Generators.composite_with_label
-      ~label:Hegel.Generators.Labels.enum_variant
+    Hegel.Generators.Ppx_internal.composite_with_label
+      ~label:Hegel.Generators.Ppx_internal.Labels.enum_variant
       (fun _hegel_tc ->
          let _variant_idx =
            Hegel.draw_silent

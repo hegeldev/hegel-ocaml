@@ -115,6 +115,21 @@ let stateful_no_rules_test () =
     (String.equal !raised_msg "Cannot run a state machine with no rules.")
 ;;
 
+(* Pins the engine-side contract documented on [Internal.pool_generate]:
+   drawing from an empty pool rejects the test case with [Assume_rejected],
+   not [Data_exhausted]. *)
+let empty_pool_draw_rejects_test () =
+  let saw_reject = ref false in
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
+    let pool_id = Hegel.Internal.new_pool tc in
+    match Hegel.Internal.pool_generate tc ~pool_id () with
+    | (_ : int) -> Alcotest.fail "expected Assume_rejected"
+    | exception Hegel.Internal.Assume_rejected ->
+      saw_reject := true;
+      raise Hegel.Internal.Assume_rejected);
+  Alcotest.(check bool) "empty pool draw raised Assume_rejected" true !saw_reject
+;;
+
 let always_reject_rule =
   let module S = Hegel.Stateful in
   S.Rule.create ~name:"reject" ~step:(fun tc s ->
@@ -205,6 +220,10 @@ let tests =
       stateful_variables_draw_test
   ; Alcotest.test_case "stateful: rule name accessor" `Quick stateful_rule_name_test
   ; Alcotest.test_case "stateful: empty rules raises" `Quick stateful_no_rules_test
+  ; Alcotest.test_case
+      "stateful: empty pool draw rejects"
+      `Quick
+      empty_pool_draw_rejects_test
   ; Alcotest.test_case
       "stateful: all-rejected test case is invalid"
       `Quick

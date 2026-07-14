@@ -33,30 +33,6 @@
     Primitive generators are {!printable} and may be drawn with {!Hegel.draw},
     which prints the drawn value on a failing replay. *)
 
-(**/**)
-
-(** Constants for span labels used in generation tracking. *)
-module Labels : sig
-  val list : int
-  val list_element : int
-  val set : int
-  val set_element : int
-  val map : int
-  val map_entry : int
-  val tuple : int
-  val one_of : int
-  val optional : int
-  val fixed_dict : int
-  val flat_map : int
-  val filter : int
-  val mapped : int
-  val sampled_from : int
-  val enum_variant : int
-  val stateful_rule : int
-end
-
-(**/**)
-
 (** A generator producing values of type ['a]. The phantom ['p] is {!printable}
     when the generator carries a printer (and so may be drawn with {!Hegel.draw})
     and {!unprintable} otherwise. *)
@@ -81,50 +57,6 @@ type printable
 type unprintable
 
 (**/**)
-
-(** Maximum number of filter attempts before calling [assume false]. *)
-val max_filter_attempts : int
-
-(** [group label data f] runs [f ()] inside a span with the given [label]. The
-    span is stopped with [discard:false] regardless of whether [f] raises. *)
-val group : int -> Internal.test_case -> (unit -> 'a) -> 'a
-
-(** [discardable_group label data f] runs [f ()] inside a span with [label]. If
-    [f] raises, the span is stopped with [discard:true]; otherwise
-    [discard:false]. *)
-val discardable_group : int -> Internal.test_case -> (unit -> 'a) -> 'a
-
-(** [resolve_draw values ~consume id] resolves a drawn pool [id] against the
-    local [values] table, removing it when [consume]. Raises
-    [Internal.Flaky_strategy] on an unknown id (an engine-contract violation,
-    unreachable through the normal engine-driven path). Exposed only so that
-    branch can be unit-tested. *)
-val resolve_draw : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
-
-(** A collection handle for generating variable-length sequences. *)
-type collection =
-  { mutable finished : bool
-  ; mutable collection_id : int option
-  ; min_size : int
-  ; max_size : int option
-  }
-
-(** [new_collection ~min_size ?max_size data ()] creates a new collection
-    handle. *)
-val new_collection
-  :  min_size:int
-  -> ?max_size:int
-  -> Internal.test_case
-  -> unit
-  -> collection
-
-(** [collection_more coll data] returns [true] if more elements should be
-    generated, [false] when the collection is complete. *)
-val collection_more : collection -> Internal.test_case -> bool
-
-(** [collection_reject coll data] rejects the last element of the collection.
-    Raises [Internal.Data_exhausted] on StopTest. *)
-val collection_reject : collection -> Internal.test_case -> unit
 
 (** [draw ?label tc gen] produces a typed value from the printable generator
     [gen] using test case [tc].
@@ -201,28 +133,6 @@ val with_printer : ('a -> Core.Sexp.t) -> ('a, 'p) generator -> ('a, printable) 
 
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
 val printer : ('a, printable) generator -> 'a -> Core.Sexp.t
-
-(** [pool_values ~pool_id ~values ~consume] builds a generator that picks a value
-    from the engine pool [pool_id], resolving the drawn id against the local
-    [values] table. When [consume], the picked value is removed from the pool.
-    Carries no printer, so it is {!unprintable}. *)
-val pool_values
-  :  pool_id:int
-  -> values:(int, 'a) Core.Hashtbl.t
-  -> consume:bool
-  -> ('a, unprintable) generator
-
-(** [format_date (year, month, day)] renders a drawn date as [YYYY-MM-DD].
-    Exposed for white-box testing. *)
-val format_date : int * int * int -> string
-
-(** [format_time (hour, minute, second, microsecond)] renders a drawn time as
-    [HH:MM:SS\[.ffffff\]]. Exposed for white-box testing. *)
-val format_time : int * int * int * int -> string
-
-(** [format_datetime (date, time)] renders a drawn datetime as
-    [YYYY-MM-DDTHH:MM:SS\[.ffffff\]]. Exposed for white-box testing. *)
-val format_datetime : (int * int * int) * (int * int * int * int) -> string
 
 (**/**)
 
@@ -439,9 +349,12 @@ val hash_tables
   -> unit
   -> (('a, 'b) Core.Hashtbl.t, printable) generator
 
-(** [sampled_from options] creates a generator that samples uniformly from a
-    non-empty list of values. The output type is the caller's, so the result
-    carries no printer.
+(** [sampled_from options] creates a generator that samples from a non-empty
+    list of values. Sampling is {e not} uniform: the engine's bounded-integer
+    draw deliberately over-weights boundary and "interesting" indices, so the
+    first element (and, to a lesser extent, the last) is drawn noticeably more
+    often than the middle ones, matching the sibling Hegel client libraries.
+    The output type is the caller's, so the result carries no printer.
 
     {[
       let%hegel_test sampled_from_example tc =
@@ -452,7 +365,12 @@ val hash_tables
 val sampled_from : 'a list -> ('a, unprintable) generator
 
 (** [one_of generators] creates a generator that picks from one of the given
-    printable [generators]. Requires at least one generator.
+    printable [generators]. Requires at least one generator. On a failing
+    replay, the drawn value prints through the printer of the branch it was
+    drawn from. The recorded branch is per generator value: if one [one_of]
+    generator is drawn several times before printing (e.g. as the element
+    generator of {!lists}), every value prints through the most recently drawn
+    branch's printer.
 
     {[
       let%hegel_test one_of_example tc =
@@ -649,51 +567,68 @@ val urls : unit -> (string, printable) generator
     ]} *)
 val domains : ?max_length:int -> unit -> (string, printable) generator
 
-(** [dates ()] creates a generator for ISO 8601 date strings ([YYYY-MM-DD]),
-    with year in [\[1, 9999\]] and calendar-valid month/day.
+(** [dates ()] creates a generator for calendar dates as [Core.Date.t] values,
+    with year in [\[1, 9999\]] and calendar-valid month/day. Use {!format_date}
+    to render a drawn date as an ISO 8601 string.
 
     {[
       let%hegel_test dates_example tc =
         let d = draw tc (dates ()) in
-        assert (String.length d = 10)
+        assert (Core.Date.year d >= 1 && Core.Date.year d <= 9999)
       ;;
     ]} *)
-val dates : unit -> (string, printable) generator
+val dates : unit -> (Core.Date.t, printable) generator
 
-(** [times ()] creates a generator for ISO 8601 time strings ([HH:MM:SS] or
-    [HH:MM:SS.ffffff], the fractional part present only when microseconds are
-    non-zero).
+(** [times ()] creates a generator for times of day as [Core.Time_ns.Ofday.t]
+    values with microsecond precision. Use {!format_time} to render a drawn
+    time as an ISO 8601 string.
 
     {[
       let%hegel_test times_example tc =
         let t = draw tc (times ()) in
-        assert (String.length t > 0)
+        assert (String.length (format_time t) > 0)
       ;;
     ]} *)
-val times : unit -> (string, printable) generator
+val times : unit -> (Core.Time_ns.Ofday.t, printable) generator
 
-(** [datetimes ()] creates a generator for ISO 8601 datetime strings
-    ([YYYY-MM-DDTHH:MM:SS\[.ffffff\]]), combining {!dates} and {!times}.
+(** [datetimes ()] creates a generator for naive datetimes as
+    [(Core.Date.t, Core.Time_ns.Ofday.t)] pairs, combining {!dates} and
+    {!times}. Use {!format_datetime} to render a drawn pair as an ISO 8601
+    string.
 
     {[
       let%hegel_test datetimes_example tc =
-        let dt = draw tc (datetimes ()) in
-        assert (String.length dt > 0)
+        let d, t = draw tc (datetimes ()) in
+        assert (String.length (format_datetime (d, t)) > 0)
       ;;
     ]} *)
-val datetimes : unit -> (string, printable) generator
+val datetimes : unit -> (Core.Date.t * Core.Time_ns.Ofday.t, printable) generator
 
-(** [ip_addresses ?version ()] creates a generator for IP address strings.
-    [version] selects IPv4 (dotted-decimal, RFC 791) or IPv6 (colon-hex,
-    RFC 4291); when omitted, either version is generated.
+(** [format_date date] renders a date as an ISO 8601 [YYYY-MM-DD] string. *)
+val format_date : Core.Date.t -> string
+
+(** [format_time time] renders a time of day as an ISO 8601 [HH:MM:SS] string,
+    appending [.ffffff] when the microsecond component is non-zero (sub-µs
+    precision is truncated). *)
+val format_time : Core.Time_ns.Ofday.t -> string
+
+(** [format_datetime (date, time)] renders a datetime pair as an ISO 8601
+    [YYYY-MM-DDTHH:MM:SS\[.ffffff\]] string. *)
+val format_datetime : Core.Date.t * Core.Time_ns.Ofday.t -> string
+
+(** [ip_addresses ?version ()] creates a generator for typed [Ipaddr.t] IP
+    addresses. [version] selects IPv4 ([`V4], RFC 791) or IPv6 ([`V6],
+    RFC 4291); when omitted, either version is generated. Render a drawn
+    address with [Ipaddr.to_string] (RFC 5952 canonical form for v6).
 
     {[
       let%hegel_test ip_addresses_example tc =
-        let ip = draw tc (ip_addresses ~version:4 ()) in
-        assert (String.contains ip '.')
+        match draw tc (ip_addresses ~version:`V4 ()) with
+        | Ipaddr.V4 _ as ip -> assert (String.contains (Ipaddr.to_string ip) '.')
+        | Ipaddr.V6 _ -> assert false
       ;;
     ]} *)
-val ip_addresses : ?version:int -> unit -> (string, printable) generator
+val ip_addresses : ?version:[ `V4 | `V6 ] -> unit -> (Ipaddr.t, printable) generator
 
 (** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
     a regular expression [pattern], written in the syntax of Python's [re]
@@ -723,19 +658,6 @@ val from_regex : string -> ?fullmatch:bool -> unit -> (string, printable) genera
       ;;
     ]} *)
 val composite : (Internal.test_case -> 'a) -> ('a, unprintable) generator
-
-(**/**)
-
-(** [composite_with_label ~label generate_fn] is {!composite} but tags the span
-    with [label] instead of the fixed struct/record label. Internal: used by the
-    derive PPX to tag composites (e.g. {!Labels.enum_variant}); not for direct
-    use. *)
-val composite_with_label
-  :  label:int
-  -> (Internal.test_case -> 'a)
-  -> ('a, unprintable) generator
-
-(**/**)
 
 (** [map f gen] transforms values from [gen] using [f].
 
@@ -776,3 +698,94 @@ val flat_map
       ;;
     ]} *)
 val filter : ('a -> bool) -> ('a, 'p) generator -> ('a, 'p) generator
+
+(**/**)
+
+(** Internal plumbing consumed by the [ppx_hegel_generator] deriver, the
+    library's own modules, and white-box tests. Not for direct use — no
+    stability guarantees. *)
+module Ppx_internal : sig
+  (** Constants for span labels used in generation tracking. *)
+  module Labels : sig
+    val list : int
+    val list_element : int
+    val set : int
+    val set_element : int
+    val map : int
+    val map_entry : int
+    val tuple : int
+    val one_of : int
+    val optional : int
+    val fixed_dict : int
+    val flat_map : int
+    val filter : int
+    val mapped : int
+    val sampled_from : int
+    val enum_variant : int
+    val stateful_rule : int
+  end
+
+  (** Maximum number of filter attempts before calling [assume false]. *)
+  val max_filter_attempts : int
+
+  (** [group label data f] runs [f ()] inside a span with the given [label]. The
+      span is stopped with [discard:false] regardless of whether [f] raises. *)
+  val group : int -> Internal.test_case -> (unit -> 'a) -> 'a
+
+  (** [discardable_group label data f] runs [f ()] inside a span with [label].
+      If [f] raises, the span is stopped with [discard:true]; otherwise
+      [discard:false]. *)
+  val discardable_group : int -> Internal.test_case -> (unit -> 'a) -> 'a
+
+  (** [resolve_draw values ~consume id] resolves a drawn pool [id] against the
+      local [values] table, removing it when [consume]. Raises
+      [Internal.Flaky_strategy] on an unknown id (an engine-contract violation,
+      unreachable through the normal engine-driven path). Exposed only so that
+      branch can be unit-tested. *)
+  val resolve_draw : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
+
+  (** A collection handle for generating variable-length sequences. *)
+  type collection =
+    { mutable finished : bool
+    ; mutable collection_id : int option
+    ; min_size : int
+    ; max_size : int option
+    }
+
+  (** [new_collection ~min_size ?max_size data ()] creates a new collection
+      handle. *)
+  val new_collection
+    :  min_size:int
+    -> ?max_size:int
+    -> Internal.test_case
+    -> unit
+    -> collection
+
+  (** [collection_more coll data] returns [true] if more elements should be
+      generated, [false] when the collection is complete. *)
+  val collection_more : collection -> Internal.test_case -> bool
+
+  (** [collection_reject coll data] rejects the last element of the collection.
+      Raises [Internal.Data_exhausted] on StopTest. *)
+  val collection_reject : collection -> Internal.test_case -> unit
+
+  (** [pool_values ~pool_id ~values ~consume] builds a generator that picks a
+      value from the engine pool [pool_id], resolving the drawn id against the
+      local [values] table. When [consume], the picked value is removed from the
+      pool. Carries no printer, so it is {!unprintable}. *)
+  val pool_values
+    :  pool_id:int
+    -> values:(int, 'a) Core.Hashtbl.t
+    -> consume:bool
+    -> ('a, unprintable) generator
+
+  (** [composite_with_label ~label generate_fn] is {!composite} but tags the
+      span with [label] instead of the fixed struct/record label. Used by the
+      derive PPX to tag composites (e.g. {!Labels.enum_variant}). *)
+  val composite_with_label
+    :  label:int
+    -> (Internal.test_case -> 'a)
+    -> ('a, unprintable) generator
+end
+
+(**/**)

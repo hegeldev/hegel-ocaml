@@ -1,0 +1,9 @@
+; Make odoc warnings (broken references etc.) fail `dune build @doc` in the
+; dev profile. `just check-docs` relies on this: a cached doc build that
+; succeeded is genuinely warning-free, so the recipe never needs to force a
+; cold rebuild.
+
+(env
+ (dev
+  (odoc
+   (warnings fatal))))

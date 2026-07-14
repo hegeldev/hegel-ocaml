@@ -191,8 +191,9 @@ value named `<t>_generator` from type declarations annotated with
 
 1. For **records**: generates each field by calling the appropriate primitive
    generator, then constructs the record value.
-2. For **variants**: picks a constructor index uniformly at random via
-   `sampled_from`, then generates arguments for the chosen constructor. A
+2. For **variants**: picks a constructor index via `sampled_from` (the
+   engine's bounded-integer draw is non-uniform, over-weighting boundary
+   indices), then generates arguments for the chosen constructor. A
    data-carrying variant wraps the index-plus-arguments draw in an
    `enum_variant` span (so the constructor choice and its fields shrink as one
    unit, matching the engine's own derived-enum generator); an all-nullary enum
@@ -239,11 +240,11 @@ through `with_printer`:
 `Hegel.draw tc (Hegel.with_printer sexp_of_point point_generator)`.
 
 **Supported field types:**
-- `int` — bounded integers (±1073741823 to fit OCaml native int)
+- `int` — integers over the full native `int` range (same default as `integers ()`)
 - `bool` — booleans
 - `float` — finite floats (NaN and infinity disabled)
 - `string` — text strings
-- `t list` — lists of derived elements (max size 20)
+- `t list` — lists of derived elements (engine-driven length via the collection protocol, like `lists`)
 - `t option` — `Some v` or `None`
 - Named types `t` — draws `t_generator` via `draw_silent` (must be in scope)
 - Tuples `(t1 * t2 * ...)` — generates each component
@@ -380,11 +381,14 @@ draw, and always freed (`Internal.with_string_generator`).
 
 ### Documentation and Polish Stage
 
-7. **Zero odoc warnings is enforced by `just check-docs`, not by dune**: `dune build @doc`
-   exits 0 even when odoc emits warnings (bad references, undocumented values), and dune's
-   cache hides the warnings entirely on rebuilds — a warm `dune build @doc` prints nothing
-   even if the doc comments are broken. The `check-docs` recipe therefore removes
-   `_build/default/_doc` first and fails on any output. All lib modules must have
+7. **Zero odoc warnings is enforced by fatal warnings in the dev profile**: the root
+   `dune` file sets `(env (dev (odoc (warnings fatal))))`, so `dune build @doc` (and
+   `just check-docs`) fails outright on any odoc warning (e.g. a bad reference), on cold
+   and warm builds alike. (By default odoc warnings don't fail the build and dune's cache
+   hides them on rebuilds; the recipe used to force a cold build by deleting
+   `_build/default/_doc` and failing on any output, but that delete corrupted dune's
+   incremental odoc state whenever sources had changed since the last doc build.) All lib
+   modules must have
    `(** ... *)` doc comments on every public type, function, constant, and exception.
    References to non-public modules (e.g. `Internal`) must be code spans (`[Internal.note]`),
    not `{!...}` links — the target isn't in the doc tree, so the link can't resolve.

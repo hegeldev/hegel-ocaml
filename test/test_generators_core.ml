@@ -1,5 +1,6 @@
 open Hegel
 open Generators
+open Generators.Ppx_internal
 
 (* ==== Unit tests (no engine needed) ==== *)
 

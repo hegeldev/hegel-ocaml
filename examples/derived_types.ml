@@ -37,11 +37,16 @@ type entity =
   }
 [@@deriving hegel_generator]
 
-(** Property: the distance from any point to the origin is non-negative. *)
+(** Property: the distance from any point to the origin is non-negative.
+    Derived [int] fields span the full native range, so the squares are
+    computed in floating point — [p.x * p.x] would wrap around for large
+    coordinates. *)
 let%hegel_test test_point_distance_nonnegative tc =
   let p = Hegel.draw_silent tc point_generator in
-  let dist_sq = (p.x * p.x) + (p.y * p.y) in
-  assert (dist_sq >= 0)
+  let x = float_of_int p.x
+  and y = float_of_int p.y in
+  let dist = sqrt ((x *. x) +. (y *. y)) in
+  assert (dist >= 0.0)
 [@@settings Hegel.settings ~test_cases:100 ()]
 ;;
 
