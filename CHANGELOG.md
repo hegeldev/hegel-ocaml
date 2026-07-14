@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.0 - 2026-07-14
+
+Removed `format_time`, `format_date`, and `format_datetime` as they duplicated
+functionality from `Core`.
+
 ## 0.11.0 - 2026-07-14
 
 This release cleans up several generator APIs where documentation and behavior disagreed.
