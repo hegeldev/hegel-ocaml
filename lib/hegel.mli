@@ -527,6 +527,38 @@ val draw_named
     ]} *)
 val draw_silent : test_case -> ('a, 'p) Generators.generator -> 'a
 
+(** [with_clone tc f] runs [f] with a fresh {e clone} of [tc] (an independent
+    stream of the same test case) and frees the clone when [f] returns. Use it 
+    to generate from another thread. A single [test_case] handle must not be 
+    drawn from concurrently, so hand each thread its own clone.
+
+    Each clone draws from its own choice sequence, but the clones share the test
+    case's outcome and budget. A failure still shrinks and replays as normal. If
+    threads race on {e your} state, the test may not reproduce.
+
+    Join every worker before [f] returns. The clone is freed at that point, so a
+    draw on a clone that outlives [f] is a use-after-free.
+
+    {[
+      let%hegel_test concurrent_draws tc =
+        let result = ref 0 in
+        with_clone tc (fun worker ->
+          let t = Thread.create (fun () ->
+            result := draw_silent worker (integers ~min_value:0 ~max_value:9 ()))
+            ()
+          in
+          let main = draw_silent tc (integers ~min_value:0 ~max_value:9 ()) in
+          Thread.join t;
+          assert (main >= 0 && !result >= 0))
+    ]}
+
+    Clones may themselves be cloned.
+    
+    Engine-managed collections, pools, and state machines are shared across the
+    test cases. Do not drive a shared object from two threads at once, or the 
+    test case may not shrink or replay reliably. *)
+val with_clone : test_case -> (test_case -> 'a) -> 'a
+
 (**/**)
 
 (** [draw_silent_named ~name tc gen] is the naming-aware {!draw_silent} the

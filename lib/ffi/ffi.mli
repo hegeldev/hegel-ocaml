@@ -213,6 +213,18 @@ val failure_free : context -> failure -> unit
     (run-owned from {!next_test_case}, cloned, or from a failure blob). *)
 val test_case_free : context -> test_case -> unit
 
+(** [test_case_clone ctx tc] forks a fresh handle onto an {e independent stream}
+    of the same underlying test case ([hegel_test_case_clone]). The clone shares
+    the family's outcome and choice budget. Completing any handle completes them
+    all. The handle draws from its own choice sequence, so it may be driven from
+    another thread concurrently with [tc]. Cloning occupies one choice position
+    on [tc]'s stream and takes [tc]'s lock, so [ctx] is used only for the error 
+    diagnostic. Drive the returned handle through a {e separate} context. The 
+    handle is caller-owned and must be freed with {!test_case_free}. Raises 
+    {!Backend_error} on concurrent use of [tc] or once the family has already 
+    completed. *)
+val test_case_clone : context -> test_case -> test_case
+
 (** {2 Per-test-case primitives} *)
 
 (** [generate_boolean ctx tc p forced] draws a boolean that is [true] with

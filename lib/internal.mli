@@ -197,6 +197,11 @@ val set_test_aborted : test_case -> bool -> unit
     draws a stateful step makes under its [Step N] header. *)
 val with_note_indent : test_case -> (unit -> 'a) -> 'a
 
+(** [with_clone tc f] runs [f] with a fresh clone of [tc] on an independent
+    choice stream (its own native handle and context), and always frees the clone
+    afterwards. Re-exported as [Hegel.with_clone]. *)
+val with_clone : test_case -> (test_case -> 'a) -> 'a
+
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available; derived from the assertion's location so
     the shrinker can group probes for the same bug. *)

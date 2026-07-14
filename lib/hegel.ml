@@ -138,6 +138,11 @@ let draw_silent = Generators.draw_silent
     (prefer {!draw_silent}). See {!Generators.draw_silent_named}. *)
 let draw_silent_named = Generators.draw_silent_named
 
+(** [with_clone tc f] runs [f] with an independent clone of [tc] and frees it
+    afterwards, so generation can be driven from another thread. See
+    {!Internal.with_clone}. *)
+let with_clone = Internal.with_clone
+
 (** [with_printer sexp_of gen] attaches [sexp_of] so [gen] can be drawn with
     {!draw}. See {!Generators.with_printer}. *)
 let with_printer = Generators.with_printer
