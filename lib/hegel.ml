@@ -143,6 +143,16 @@ let draw_silent_named = Generators.draw_silent_named
     {!Internal.with_clone}. *)
 let with_clone = Internal.with_clone
 
+type 'a worker = 'a Internal.worker
+
+(** [spawn tc f] runs [f] on a fresh clone of [tc] on a new thread. See
+    {!Internal.spawn}. *)
+let spawn = Internal.spawn
+
+(** [join w] waits for worker [w], frees its clone, and returns its result,
+    re-raising any exception the worker raised. See {!Internal.join}. *)
+let join = Internal.join
+
 (** [with_printer sexp_of gen] attaches [sexp_of] so [gen] can be drawn with
     {!draw}. See {!Generators.with_printer}. *)
 let with_printer = Generators.with_printer

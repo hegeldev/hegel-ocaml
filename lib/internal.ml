@@ -292,6 +292,34 @@ let with_clone (tc : test_case) f =
   Exn.protect ~finally:(fun () -> free_clone clone) ~f:(fun () -> f clone)
 ;;
 
+type 'a worker =
+  { thread : Caml_threads.Thread.t
+  ; clone : test_case
+  ; result : ('a, exn) Result.t ref
+  }
+
+let spawn (tc : test_case) f =
+  let clone = clone_test_case tc in
+  let result = ref (Error (Failure "hegel: worker thread did not complete")) in
+  let thread =
+    Caml_threads.Thread.create
+      (fun () ->
+         result
+         := try Ok (f clone) with
+            | exn -> Error exn)
+      ()
+  in
+  { thread; clone; result }
+;;
+
+let join (w : 'a worker) =
+  Caml_threads.Thread.join w.thread;
+  free_clone w.clone;
+  match !(w.result) with
+  | Ok v -> v
+  | Error exn -> raise exn
+;;
+
 (** Domain-local flag to detect nested test cases. *)
 let in_test_context : bool Stdlib.Domain.DLS.key =
   Stdlib.Domain.DLS.new_key (fun () -> false)

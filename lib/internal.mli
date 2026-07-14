@@ -202,6 +202,18 @@ val with_note_indent : test_case -> (unit -> 'a) -> 'a
     afterwards. Re-exported as [Hegel.with_clone]. *)
 val with_clone : test_case -> (test_case -> 'a) -> 'a
 
+(** A running worker spawned by {!spawn}; joined with {!join}. Re-exported as
+    [Hegel.worker]. *)
+type 'a worker
+
+(** [spawn tc f] runs [f] on a fresh clone of [tc] on a new thread, capturing its
+    result or exception. Re-exported as [Hegel.spawn]. *)
+val spawn : test_case -> (test_case -> 'a) -> 'a worker
+
+(** [join w] waits for [w], frees its clone, and returns its result — re-raising
+    any exception the worker raised. Re-exported as [Hegel.join]. *)
+val join : 'a worker -> 'a
+
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available; derived from the assertion's location so
     the shrinker can group probes for the same bug. *)
