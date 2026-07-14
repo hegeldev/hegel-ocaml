@@ -10,9 +10,9 @@ Hegel is a property-based testing library for OCaml based on
 opam install hegel
 ```
 
-The Hegel version in OPAM sometimes lags behind the version in Github. To pin the version in Github:
+The Hegel version in [opam](https://opam.ocaml.org/packages/hegel/) sometimes lags behind the version in Github. To pin the version in Github:
 ```bash
-opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
+opam pin add hegel "git+https://github.com/hegeldev/hegel-ocaml.git"
 ```
 
 Hegel calls the native `libhegel` shared library and locates it automatically
