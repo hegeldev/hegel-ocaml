@@ -24,7 +24,7 @@
     The version of Hegel in OPAM sometimes lags behind the version in Github. To pin the
     version in Github:
     {@shell[
-      opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
+      opam pin add hegel "git+https://github.com/hegeldev/hegel-ocaml.git"
     ]}
 
     Hegel for OCaml supports {b Linux} (amd64/arm64) and {b macOS} (Apple Silicon).
@@ -637,22 +637,25 @@ val with_printer
 
     First, test-case handles may not be shared. A single handle must be drawn
     from by one thread at a time, so give each thread its own {e clone} using
-    {!clone}. A clone has access to an independent choice sequence of the
-    same test case. Drawing from one shared handle on multiple threads trips a
-    concurrent-use error. Concurrently driving one shared collection, pool, or
-    state machine may produce flaky results. Determinism only ever holds as long
-    as {e your} own code is deterministic.
+    {!clone}. A clone has its own choice sequence. Drawing from one shared 
+    handle on multiple threads throws a concurrent-use error. Concurrently 
+    driving one shared collection, pool, or state machine will likely produce 
+    flaky results, so always make a new one per unit of concurrency/parallelism.
 
     Second, a draw is a synchronous engine call that holds its domain's runtime
     lock and never yields, so it cannot cooperate with an event loop or overlap
     another draw on the same domain.
 
-    In the examples, [gen] is a generator:
+    As long as you follow these two rules and your code is deterministic, you
+    will be able to replay failures. 
 
-    {b Threads} for interleaving of concurrent operations and overlapping blocking
-    work, not parallel generation (draws serialize under the runtime lock). You 
-    should use {!spawn} / {!join} rather than [Thread.create]. [Thread.join] 
-    drops a worker's exception, whereas {!join} re-raises it into the runner.
+    Some advice for common concurrency/parallelism libraries:
+
+    Use {b Threads} for interleaving of concurrent operations and overlapping 
+    blocking work, not parallel generation, since draws serialize under the 
+    runtime lock. You should use {!spawn} / {!join} rather than [Thread.create]. 
+    [Thread.join] drops a worker's exception, whereas {!join} re-raises it into
+    the runner.
 
     {[
       let%hegel_test concurrent_workers tc =
@@ -661,10 +664,11 @@ val with_printer
         ignore (mine, join w)
     ]}
 
-    {b Domainslib} (or any domain pool) for when you need true parallelism
-    (such as higher generation throughput). It amortizes the per-spawn cost, so
-    set the pool up once and reuse it. Clone up front, then [Task.async] each
-    clone and [Task.await] it.
+    Use {b Domainslib} or any domain pool for when you need true parallelism, 
+    such as higher generation throughput. We strongly recommend that you do not
+    use domains directly, as they are expensive to create and destruct. Set up
+    the pool once and reuse it. Clone up front then [Task.async] each clone and 
+    [Task.await] it.
 
     {[
       (* the pool is created once and reused across cases *)
@@ -678,10 +682,11 @@ val with_printer
           ignore (mine, Domainslib.Task.await pool p))
     ]}
 
-    {b Eio} drives concurrent generation with structured concurrency. Each fiber
-    should draw its own data from its own clone. Since a draw does not yield,
-    only separate domains make draws truly parallel. Here two workers race 
-    increments onto a shared atomic. The property is that no update is lost.
+    Use {b Eio} for concurrent generation with structured concurrency or if your
+    code already uses Eio. Each fiber should draw its own data from its own clone. 
+    Since a draw does not yield, only separate domains make draws truly parallel. 
+    Here two workers race increments onto a shared atomic. The property is that 
+    no update is lost.
 
     {[
       Eio_main.run @@ fun env ->
@@ -700,9 +705,9 @@ val with_printer
         require_equal tc Core.Int.sexp_of_t (sum_a + sum_b) (Atomic.get counter))
     ]} *)
 
-(** [clone tc] forks a fresh clone of [tc], an independent stream of the same
-    test case, for driving generation from another thread. A single [test_case]
-    handle must not be drawn from concurrently, so give each thread its own clone.
+(** [clone tc] creates a clone of [tc], an independent stream of the same
+    test case. A single [test_case] handle must not be drawn from concurrently,
+    so give each thread its own clone.
 
     Because [Thread.join] drops a worker's exception, you must capture the 
     worker's result or its exception and re-raise it on the calling thread. 
@@ -729,9 +734,9 @@ val clone : test_case -> test_case
 (** A running worker started by {!spawn} and awaited with {!join}. *)
 type 'a worker
 
-(** [spawn tc f] clones [tc] and runs [f clone] on a fresh thread; {!join} awaits
+(** [spawn tc f] clones [tc] and runs [f clone] on a new thread. {!join} awaits
     it. The example below is functionally identical to the example for {!clone},
-    but clearly more ergonomic.
+    but more ergonomic.
 
     {[
       let%hegel_test two_hands_two_dice tc =
