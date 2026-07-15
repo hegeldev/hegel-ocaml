@@ -192,7 +192,7 @@ let with_report_multiple_failures b s = { s with report_multiple_failures = b }
 
 (** Draw-name bookkeeping: the per-name occurrence counter that numbers
     repeatable draws ([label_1], [label_2], …). Shared across every clone of a
-    test case (see {!clone_test_case}) behind [lock], so concurrent clones number
+    test case (see {!clone}) behind [lock], so concurrent clones number
     their draws in sequence. [lock] serializes only this frontend accounting. *)
 type draw_state =
   { counts : int String.Table.t
@@ -248,73 +248,63 @@ let with_note_indent (tc : test_case) f =
   Exn.protect ~finally:(fun () -> tc.note_indent <- tc.note_indent - 1) ~f
 ;;
 
-(** [clone_test_case tc] forks a fresh {!test_case} onto an independent choice
-    stream of the same underlying native test case (see {!Ffi.test_case_clone}),
-    paired with its own native context so it can be drawn from on another thread
-    concurrently with [tc]. The clone shares [tc]'s outcome and budget but
-    generates from its own stream. The {!draw_state} (repeatable-draw numbering) 
-    is {e shared} with [tc] behind its lock, and the span depth and note indent 
-    are copied so draws forked mid-span stay nested. Only the per-stream abort
-    and print flags start fresh, and the immutable configuration is copied. The
-    clone owns its handle and context and must be released with {!free_clone}. 
-    Only clone from within the test body, before the case completes. *)
-let clone_test_case (tc : test_case) =
+(** [clone tc] forks a fresh {!test_case} onto an independent choice stream of the
+    same underlying native test case (see {!Ffi.test_case_clone}), paired with its
+    own native context so it can be drawn from on another thread concurrently with
+    [tc]. The clone shares [tc]'s outcome and budget but generates from its own
+    stream. The {!draw_state} (repeatable-draw numbering) is {e shared} with [tc]
+    behind its lock, and the span depth and note indent are copied so draws forked
+    mid-span stay nested. Only the per-stream abort and print flags start fresh,
+    and the immutable configuration is copied.
+
+    The native handle and context are freed by a GC finaliser once the clone is
+    unreachable, so a clone may be captured and used freely. *)
+let clone (tc : test_case) =
   let context = Ffi.context_new () in
-  { handle = Ffi.test_case_clone tc.context tc.handle
-  ; context
-  ; mode = tc.mode
-  ; stateful_step_count = tc.stateful_step_count
-  ; is_final = tc.is_final
-  ; verbosity = tc.verbosity
-  ; test_aborted = false
-  ; printed_output = false
-  ; draw_depth = tc.draw_depth
-  ; note_indent = tc.note_indent
-  ; draw_state = tc.draw_state
-  }
-;;
-
-(** [free_clone tc] releases a clone made by {!clone_test_case}. *)
-let free_clone (tc : test_case) =
-  Exn.protect
-    ~finally:(fun () -> Ffi.context_free tc.context)
-    ~f:(fun () -> Ffi.test_case_free tc.context tc.handle)
-;;
-
-(** [with_clone tc f] runs [f] with a fresh clone of [tc] on its own independent
-    stream, and always frees the clone afterwards. Use
-    it to drive generation from another thread. Clone, hand the clone to a worker,
-    and {e join the worker before [f] returns} so the clone outlives every draw
-    made on it. Driving a single clone from two threads at once, or letting a
-    clone escape past [f], is unsupported. *)
-let with_clone (tc : test_case) f =
-  let clone = clone_test_case tc in
-  Exn.protect ~finally:(fun () -> free_clone clone) ~f:(fun () -> f clone)
+  let handle = Ffi.test_case_clone tc.context tc.handle in
+  let c =
+    { handle
+    ; context
+    ; mode = tc.mode
+    ; stateful_step_count = tc.stateful_step_count
+    ; is_final = tc.is_final
+    ; verbosity = tc.verbosity
+    ; test_aborted = false
+    ; printed_output = false
+    ; draw_depth = tc.draw_depth
+    ; note_indent = tc.note_indent
+    ; draw_state = tc.draw_state
+    }
+  in
+  Stdlib.Gc.finalise_last
+    (fun () ->
+       Ffi.test_case_free context handle;
+       Ffi.context_free context)
+    c;
+  c
 ;;
 
 type 'a worker =
   { thread : Caml_threads.Thread.t
-  ; clone : test_case
   ; result : ('a, exn) Result.t ref
   }
 
 let spawn (tc : test_case) f =
-  let clone = clone_test_case tc in
+  let c = clone tc in
   let result = ref (Error (Failure "hegel: worker thread did not complete")) in
   let thread =
     Caml_threads.Thread.create
       (fun () ->
          result
-         := try Ok (f clone) with
+         := try Ok (f c) with
             | exn -> Error exn)
       ()
   in
-  { thread; clone; result }
+  { thread; result }
 ;;
 
 let join (w : 'a worker) =
   Caml_threads.Thread.join w.thread;
-  free_clone w.clone;
   match !(w.result) with
   | Ok v -> v
   | Error exn -> raise exn

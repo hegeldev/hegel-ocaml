@@ -11,9 +11,9 @@ let test_clone_draws () =
   let parent = ref (-1) in
   let cloned = ref (-1) in
   Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
-    with_clone tc (fun worker ->
-      cloned := Hegel.draw_silent worker small_int;
-      parent := Hegel.draw_silent tc small_int));
+    let worker = Hegel.clone tc in
+    cloned := Hegel.draw_silent worker small_int;
+    parent := Hegel.draw_silent tc small_int);
   Alcotest.(check bool) "parent value in range" true (!parent >= 0 && !parent <= 9);
   Alcotest.(check bool) "clone value in range" true (!cloned >= 0 && !cloned <= 9)
 ;;
@@ -23,15 +23,15 @@ let test_clone_draws () =
 let test_clone_concurrent () =
   let worker_value = ref (-1) in
   Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
-    with_clone tc (fun worker ->
-      let t =
-        Caml_threads.Thread.create
-          (fun () -> worker_value := Hegel.draw_silent worker small_int)
-          ()
-      in
-      let main = Hegel.draw_silent tc small_int in
-      Caml_threads.Thread.join t;
-      Alcotest.(check bool) "main value in range" true (main >= 0 && main <= 9)));
+    let worker = Hegel.clone tc in
+    let t =
+      Caml_threads.Thread.create
+        (fun () -> worker_value := Hegel.draw_silent worker small_int)
+        ()
+    in
+    let main = Hegel.draw_silent tc small_int in
+    Caml_threads.Thread.join t;
+    Alcotest.(check bool) "main value in range" true (main >= 0 && main <= 9));
   Alcotest.(check bool)
     "worker value in range"
     true
@@ -47,7 +47,7 @@ let test_clone_reproducible () =
       ~settings:(single_settings () |> with_seed (Some 42))
       (fun tc ->
          let p = Hegel.draw_silent tc small_int in
-         let c = with_clone tc (fun worker -> Hegel.draw_silent worker small_int) in
+         let c = Hegel.draw_silent (Hegel.clone tc) small_int in
          pair := p, c);
     !pair
   in
@@ -60,22 +60,22 @@ let test_clone_reproducible () =
 let test_clone_of_clone () =
   let value = ref (-1) in
   Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
-    with_clone tc (fun c1 ->
-      with_clone c1 (fun c2 -> value := Hegel.draw_silent c2 small_int)));
+    let c1 = Hegel.clone tc in
+    let c2 = Hegel.clone c1 in
+    value := Hegel.draw_silent c2 small_int);
   Alcotest.(check bool) "nested clone value in range" true (!value >= 0 && !value <= 9)
 ;;
 
-(* An exception raised inside [with_clone]'s body still propagates; the clone is
-   released by the [finally] regardless. *)
-let test_clone_frees_on_exception () =
-  let raised = ref false in
+(* Dropping a clone and forcing a collection runs its finaliser, which releases
+   the native handle and context. *)
+let test_clone_finalized () =
   Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
-    (try with_clone tc (fun _worker -> failwith "boom") with
-     | Failure _ -> raised := true);
-    (* Draw after the aborted clone to show the parent handle is still usable. *)
-    let (_ : int) = Hegel.draw_silent tc small_int in
-    ());
-  Alcotest.(check bool) "with_clone body exception propagated" true !raised
+    for _ = 1 to 3 do
+      let (_ : int) = Hegel.draw_silent (Hegel.clone tc) small_int in
+      ()
+    done;
+    Stdlib.Gc.full_major ());
+  Alcotest.(check pass) "dropped clones finalised without error" () ()
 ;;
 
 (* The repeatable-draw name counter is shared across the family: a clone
@@ -85,8 +85,7 @@ let test_clone_shares_draw_names () =
   Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
     let n0 = Hegel.Internal.draw_display_name tc ~label:"x" ~repeatable:true in
     let n1 =
-      with_clone tc (fun worker ->
-        Hegel.Internal.draw_display_name worker ~label:"x" ~repeatable:true)
+      Hegel.Internal.draw_display_name (Hegel.clone tc) ~label:"x" ~repeatable:true
     in
     let n2 = Hegel.Internal.draw_display_name tc ~label:"x" ~repeatable:true in
     names := [ n0; n1; n2 ]);
@@ -102,11 +101,11 @@ let test_clone_copies_draw_depth () =
   Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
     Hegel.Internal.incr_draw_depth tc;
     Hegel.Internal.incr_draw_depth tc;
-    with_clone tc (fun worker ->
-      Alcotest.(check int)
-        "clone inherits parent span depth"
-        2
-        (Hegel.Internal.draw_depth worker));
+    let worker = Hegel.clone tc in
+    Alcotest.(check int)
+      "clone inherits parent span depth"
+      2
+      (Hegel.Internal.draw_depth worker);
     Hegel.Internal.decr_draw_depth tc;
     Hegel.Internal.decr_draw_depth tc)
 ;;
@@ -143,7 +142,7 @@ let tests =
   ; Alcotest.test_case "clone concurrent" `Quick test_clone_concurrent
   ; Alcotest.test_case "clone reproducible" `Quick test_clone_reproducible
   ; Alcotest.test_case "clone of clone" `Quick test_clone_of_clone
-  ; Alcotest.test_case "clone frees on exception" `Quick test_clone_frees_on_exception
+  ; Alcotest.test_case "clone finalised" `Quick test_clone_finalized
   ; Alcotest.test_case "clone shares draw names" `Quick test_clone_shares_draw_names
   ; Alcotest.test_case "clone copies draw depth" `Quick test_clone_copies_draw_depth
   ; Alcotest.test_case "spawn/join returns value" `Quick test_spawn_join_returns_value

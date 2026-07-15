@@ -7,7 +7,6 @@ clone draws from its own independent stream while the clones share the test case
 outcome and budget, so a failure still shrinks and its blob replays deterministically
 (as long as your own code is deterministic).
 
-`Hegel.with_clone tc f` runs `f` with a fresh clone and frees it when `f` returns.
-Use it when you drive the worker thread yourself. `Hegel.spawn` / `Hegel.join` wrap
-the common pattern: `spawn` clones `tc` and runs the worker on a new thread, and
-`join` waits for it, frees the clone, and re-raises any exception the worker raised.
+`Hegel.clone tc` returns a fresh clone. `Hegel.spawn` clones `tc` and runs the
+worker on a new thread, and `Hegel.join` waits for it and re-raises any exception 
+the worker raised.

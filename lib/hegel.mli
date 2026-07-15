@@ -635,9 +635,9 @@ val with_printer
     Hegel can drive generation from more than one thread or domain within a 
     single test. Two rules govern it.
 
-    First, test-case handles may not be shared. A single handle must be drawn 
-    from by one thread at a time, so give each thread its own {e clone} using 
-    {!with_clone}. A clone has access to an independent choice sequence of the 
+    First, test-case handles may not be shared. A single handle must be drawn
+    from by one thread at a time, so give each thread its own {e clone} using
+    {!clone}. A clone has access to an independent choice sequence of the
     same test case. Drawing from one shared handle on multiple threads trips a
     concurrent-use error. Concurrently driving one shared collection, pool, or
     state machine may produce flaky results. Determinism only ever holds as long
@@ -672,10 +672,10 @@ val with_printer
 
       let%hegel_test parallel_generation tc =
         Domainslib.Task.run pool (fun () ->
-          with_clone tc (fun worker ->
-            let p = Domainslib.Task.async pool (fun () -> draw_silent worker gen) in
-            let mine = draw_silent tc gen in
-            ignore (mine, Domainslib.Task.await pool p)))
+          let worker = clone tc in
+          let p = Domainslib.Task.async pool (fun () -> draw_silent worker gen) in
+          let mine = draw_silent tc gen in
+          ignore (mine, Domainslib.Task.await pool p))
     ]}
 
     {b Eio} drives concurrent generation with structured concurrency. Each fiber
@@ -695,42 +695,42 @@ val with_printer
             ignore (Atomic.fetch_and_add counter n : int);
             n)
         in
-        with_clone tc (fun worker_b ->
-          let sum_a, sum_b = Eio.Fiber.pair (worker tc) (worker worker_b) in
-          require_equal tc Core.Int.sexp_of_t (sum_a + sum_b) (Atomic.get counter)))
+        let worker_b = clone tc in
+        let sum_a, sum_b = Eio.Fiber.pair (worker tc) (worker worker_b) in
+        require_equal tc Core.Int.sexp_of_t (sum_a + sum_b) (Atomic.get counter))
     ]} *)
 
-(** [with_clone tc f] runs [f] with a fresh clone of [tc] and frees the clone
-    when [f] returns. Use it when you drive the worker thread yourself. Join the
-    worker before [f] returns, since the clone is freed at that point (a draw on a
-    clone that outlives [f] is a use-after-free). Because [Thread.join] drops a
-    worker's exception, store the worker's result or its exception back to
-    the runner thread and re-raise it there. {!spawn} / {!join} wrap this pattern 
-    for you.
+(** [clone tc] forks a fresh clone of [tc], an independent stream of the same
+    test case, for driving generation from another thread. A single [test_case]
+    handle must not be drawn from concurrently, so give each thread its own clone.
+
+    Because [Thread.join] drops a worker's exception, you must capture the 
+    worker's result or its exception and re-raise it on the calling thread. 
+    {!spawn} / {!join} wrap that pattern for you.
 
     {[
       let%hegel_test two_hands_two_dice_manual tc =
         let die = integers ~min_value:1 ~max_value:6 () in
-        with_clone tc (fun other_hand ->
-          let out = ref (Error (Failure "unset")) in
-          let rolling =
-            Thread.create
-              (fun () -> out := (try Ok (draw_silent other_hand die) with e -> Error e))
-              ()
-          in
-          let right_hand = draw_silent tc die in
-          Thread.join rolling;
-          match !out with
-          | Ok left_hand -> assert (right_hand + left_hand >= 2)
-          | Error e -> raise e)
+        let other_hand = clone tc in
+        let out = ref (Error (Failure "unset")) in
+        let rolling =
+          Thread.create
+            (fun () -> out := (try Ok (draw_silent other_hand die) with e -> Error e))
+            ()
+        in
+        let right_hand = draw_silent tc die in
+        Thread.join rolling;
+        match !out with
+        | Ok left_hand -> assert (right_hand + left_hand >= 2)
+        | Error e -> raise e
     ]} *)
-val with_clone : test_case -> (test_case -> 'a) -> 'a
+val clone : test_case -> test_case
 
 (** A running worker started by {!spawn} and awaited with {!join}. *)
 type 'a worker
 
 (** [spawn tc f] clones [tc] and runs [f clone] on a fresh thread; {!join} awaits
-    it. The example below is functionally identical to the example for {!with_clone},
+    it. The example below is functionally identical to the example for {!clone},
     but clearly more ergonomic.
 
     {[
@@ -742,7 +742,7 @@ type 'a worker
     ]} *)
 val spawn : test_case -> (test_case -> 'a) -> 'a worker
 
-(** [join w] waits for worker [w] to finish, frees its clone, and returns its
-    result. It re-raises any exception [w] raised on the caller's thread. Join 
-    before the test body returns. *)
+(** [join w] waits for worker [w] to finish and returns its result. It re-raises
+    any exception [w] raised on the caller's thread. Join before the test body
+    returns. *)
 val join : 'a worker -> 'a

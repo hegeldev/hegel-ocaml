@@ -197,10 +197,10 @@ val set_test_aborted : test_case -> bool -> unit
     draws a stateful step makes under its [Step N] header. *)
 val with_note_indent : test_case -> (unit -> 'a) -> 'a
 
-(** [with_clone tc f] runs [f] with a fresh clone of [tc] on an independent
-    choice stream (its own native handle and context), and always frees the clone
-    afterwards. Re-exported as [Hegel.with_clone]. *)
-val with_clone : test_case -> (test_case -> 'a) -> 'a
+(** [clone tc] forks a fresh clone of [tc] on an independent choice stream (its
+    own native handle and context), freed by a GC finaliser once unreachable.
+    Re-exported as [Hegel.clone]. *)
+val clone : test_case -> test_case
 
 (** A running worker spawned by {!spawn}; joined with {!join}. Re-exported as
     [Hegel.worker]. *)
@@ -210,8 +210,8 @@ type 'a worker
     result or exception. Re-exported as [Hegel.spawn]. *)
 val spawn : test_case -> (test_case -> 'a) -> 'a worker
 
-(** [join w] waits for [w], frees its clone, and returns its result — re-raising
-    any exception the worker raised. Re-exported as [Hegel.join]. *)
+(** [join w] waits for [w] and returns its result — re-raising any exception the
+    worker raised. Re-exported as [Hegel.join]. *)
 val join : 'a worker -> 'a
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
