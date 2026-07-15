@@ -190,18 +190,33 @@ let with_print_blob b s = { s with print_blob = b }
     set to [b]. When [true], a failing run reports all the failures it found *)
 let with_report_multiple_failures b s = { s with report_multiple_failures = b }
 
+(** Draw-name bookkeeping: the per-name occurrence counter that numbers
+    repeatable draws ([label_1], [label_2], …). Shared across every clone of a
+    test case (see {!clone}) behind [lock], so concurrent clones number
+    their draws in sequence. [lock] serializes only this frontend accounting. *)
+type draw_state =
+  { counts : int String.Table.t
+  ; lock : Caml_threads.Mutex.t
+  }
+
+(** [new_draw_state ()] is a fresh, unshared draw-name counter with its own lock,
+    for a test case at the head of a clone family. *)
+let new_draw_state () =
+  { counts = String.Table.create (); lock = Caml_threads.Mutex.create () }
+;;
+
 (** Per-test-case state passed explicitly to the test function. Holds the
     native test-case handle, the final-replay flag, whether verbose output is
     on, abort state, the current generation-span depth (used to print only the
-    outermost drawn value), and the per-name occurrence counter that numbers
-    repeatable draws. [note_indent] is the nesting depth every {!note}/draw line
-    is indented to (two spaces per level). It starts at 1 on the final replay, so
-    the whole body sits inside the framed failure report, and at 0 otherwise; a
-    caller bumps it further to group sub-output (e.g. the draws made within a
-    stateful step nest under its [Step N] header). [printed_output] records
-    whether any note/draw line printed (the report needs to know whether to
-    separate the body from the exception, and to print that separator only once).
-*)
+    outermost drawn value), and the {!draw_state} numbering repeatable draws (the
+    only field shared across a clone family). [note_indent] is the nesting depth
+    every {!note}/draw line is indented to (two spaces per level). It starts at 1
+    on the final replay, so the whole body sits inside the framed failure report,
+    and at 0 otherwise; a caller bumps it further to group sub-output (e.g. the
+    draws made within a stateful step nest under its [Step N] header).
+    [printed_output] records whether any note/draw line printed (the report needs
+    to know whether to separate the body from the exception, and to print that
+    separator only once). *)
 type test_case =
   { handle : Ffi.test_case
   ; context : Ffi.context
@@ -213,7 +228,7 @@ type test_case =
   ; mutable printed_output : bool
   ; mutable draw_depth : int
   ; mutable note_indent : int
-  ; draw_counts : int String.Table.t
+  ; draw_state : draw_state
   }
 
 (* Accessors so other library modules can read the internal fields they need
@@ -231,6 +246,68 @@ let set_test_aborted (tc : test_case) v = tc.test_aborted <- v
 let with_note_indent (tc : test_case) f =
   tc.note_indent <- tc.note_indent + 1;
   Exn.protect ~finally:(fun () -> tc.note_indent <- tc.note_indent - 1) ~f
+;;
+
+(** [clone tc] forks a fresh {!test_case} onto an independent choice stream of the
+    same underlying native test case (see {!Ffi.test_case_clone}), paired with its
+    own native context so it can be drawn from on another thread concurrently with
+    [tc]. The clone shares [tc]'s outcome and budget but generates from its own
+    stream. The {!draw_state} (repeatable-draw numbering) is {e shared} with [tc]
+    behind its lock, and the span depth and note indent are copied so draws forked
+    mid-span stay nested. Only the per-stream abort and print flags start fresh,
+    and the immutable configuration is copied.
+
+    The native handle and context are freed by a GC finaliser once the clone is
+    unreachable, so a clone may be captured and used freely. *)
+let clone (tc : test_case) =
+  let context = Ffi.context_new () in
+  let handle = Ffi.test_case_clone tc.context tc.handle in
+  let c =
+    { handle
+    ; context
+    ; mode = tc.mode
+    ; stateful_step_count = tc.stateful_step_count
+    ; is_final = tc.is_final
+    ; verbosity = tc.verbosity
+    ; test_aborted = false
+    ; printed_output = false
+    ; draw_depth = tc.draw_depth
+    ; note_indent = tc.note_indent
+    ; draw_state = tc.draw_state
+    }
+  in
+  Stdlib.Gc.finalise_last
+    (fun () ->
+       Ffi.test_case_free context handle;
+       Ffi.context_free context)
+    c;
+  c
+;;
+
+type 'a worker =
+  { thread : Caml_threads.Thread.t
+  ; result : ('a, exn) Result.t ref
+  }
+
+let spawn (tc : test_case) f =
+  let c = clone tc in
+  let result = ref (Error (Failure "hegel: worker thread did not complete")) in
+  let thread =
+    Caml_threads.Thread.create
+      (fun () ->
+         result
+         := try Ok (f c) with
+            | exn -> Error exn)
+      ()
+  in
+  { thread; result }
+;;
+
+let join (w : 'a worker) =
+  Caml_threads.Thread.join w.thread;
+  match !(w.result) with
+  | Ok v -> v
+  | Error exn -> raise exn
 ;;
 
 (** Domain-local flag to detect nested test cases. *)
@@ -511,12 +588,20 @@ let require_equal tc ?(msg = "require_equal: values differ") sexp_of lhs rhs =
 ;;
 
 (** [draw_display_name tc ~label ~repeatable] returns the display name to print
-    for a drawn value, bumping the per-test-case occurrence counter for [label].
-    A [repeatable] name is numbered on every occurrence ([label_1], [label_2],
-    …), while a non-repeatable name is printed bare. *)
+    for a drawn value, bumping the occurrence counter for [label]. A [repeatable]
+    name is numbered on every occurrence ([label_1], [label_2], …), while a
+    non-repeatable name is printed bare. The counter is shared across test cases. *)
 let draw_display_name tc ~label ~repeatable =
-  let n = Option.value (Hashtbl.find tc.draw_counts label) ~default:0 + 1 in
-  Hashtbl.set tc.draw_counts ~key:label ~data:n;
+  let ds = tc.draw_state in
+  Caml_threads.Mutex.lock ds.lock;
+  let n =
+    Exn.protect
+      ~finally:(fun () -> Caml_threads.Mutex.unlock ds.lock)
+      ~f:(fun () ->
+        let n = Option.value (Hashtbl.find ds.counts label) ~default:0 + 1 in
+        Hashtbl.set ds.counts ~key:label ~data:n;
+        n)
+  in
   if repeatable then sprintf "%s_%d" label n else label
 ;;
 
@@ -672,7 +757,7 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
     ; printed_output = false
     ; draw_depth = 0
     ; note_indent
-    ; draw_counts = String.Table.create ()
+    ; draw_state = new_draw_state ()
     }
   in
   Stdlib.Domain.DLS.set in_test_context true;

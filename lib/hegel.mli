@@ -24,7 +24,7 @@
     The version of Hegel in OPAM sometimes lags behind the version in Github. To pin the
     version in Github:
     {@shell[
-      opam pin add hegel "git+ssh://git@github.com/hegeldev/hegel-ocaml.git"
+      opam pin add hegel "git+https://github.com/hegeldev/hegel-ocaml.git"
     ]}
 
     Hegel for OCaml supports {b Linux} (amd64/arm64) and {b macOS} (Apple Silicon).
@@ -629,3 +629,125 @@ val with_printer
   :  ('a -> Core.Sexp.t)
   -> ('a, 'p) Generators.generator
   -> ('a, Generators.printable) Generators.generator
+
+(** {3 Concurrency and parallelism}
+
+    Hegel can drive generation from more than one thread or domain within a 
+    single test. Two rules govern it.
+
+    First, test-case handles may not be shared. A single handle must be drawn
+    from by one thread at a time, so give each thread its own {e clone} using
+    {!clone}. A clone has its own choice sequence. Drawing from one shared 
+    handle on multiple threads throws a concurrent-use error. Concurrently 
+    driving one shared collection, pool, or state machine will likely produce 
+    flaky results, so always make a new one per unit of concurrency/parallelism.
+
+    Second, a draw is a synchronous engine call that holds its domain's runtime
+    lock and never yields, so it cannot cooperate with an event loop or overlap
+    another draw on the same domain.
+
+    As long as you follow these two rules and your code is deterministic, you
+    will be able to replay failures. 
+
+    Some advice for common concurrency/parallelism libraries:
+
+    Use {b Threads} for interleaving of concurrent operations and overlapping 
+    blocking work, not parallel generation, since draws serialize under the 
+    runtime lock. You should use {!spawn} / {!join} rather than [Thread.create]. 
+    [Thread.join] drops a worker's exception, whereas {!join} re-raises it into
+    the runner.
+
+    {[
+      let%hegel_test concurrent_workers tc =
+        let w = spawn tc (fun worker -> draw_silent worker gen) in
+        let mine = draw_silent tc gen in
+        ignore (mine, join w)
+    ]}
+
+    Use {b Domainslib} or any domain pool for when you need true parallelism, 
+    such as higher generation throughput. We strongly recommend that you do not
+    use domains directly, as they are expensive to create and destruct. Set up
+    the pool once and reuse it. Clone up front then [Task.async] each clone and 
+    [Task.await] it.
+
+    {[
+      (* the pool is created once and reused across cases *)
+      let pool = Domainslib.Task.setup_pool ~num_domains:2 ()
+
+      let%hegel_test parallel_generation tc =
+        Domainslib.Task.run pool (fun () ->
+          let worker = clone tc in
+          let p = Domainslib.Task.async pool (fun () -> draw_silent worker gen) in
+          let mine = draw_silent tc gen in
+          ignore (mine, Domainslib.Task.await pool p))
+    ]}
+
+    Use {b Eio} for concurrent generation with structured concurrency or if your
+    code already uses Eio. Each fiber should draw its own data from its own clone. 
+    Since a draw does not yield, only separate domains make draws truly parallel. 
+    Here two workers race increments onto a shared atomic. The property is that 
+    no update is lost.
+
+    {[
+      Eio_main.run @@ fun env ->
+      let dmgr = Eio.Stdenv.domain_mgr env in
+      run_hegel_test (fun tc ->
+        let counter = Atomic.make 0 in
+        let amounts = integers ~min_value:0 ~max_value:100 () in
+        let worker g () =
+          Eio.Domain_manager.run dmgr (fun () ->
+            let n = draw_silent g amounts in
+            ignore (Atomic.fetch_and_add counter n : int);
+            n)
+        in
+        let worker_b = clone tc in
+        let sum_a, sum_b = Eio.Fiber.pair (worker tc) (worker worker_b) in
+        require_equal tc Core.Int.sexp_of_t (sum_a + sum_b) (Atomic.get counter))
+    ]} *)
+
+(** [clone tc] creates a clone of [tc], an independent stream of the same
+    test case. A single [test_case] handle must not be drawn from concurrently,
+    so give each thread its own clone.
+
+    Because [Thread.join] drops a worker's exception, you must capture the 
+    worker's result or its exception and re-raise it on the calling thread. 
+    {!spawn} / {!join} wrap that pattern for you.
+
+    {[
+      let%hegel_test two_hands_two_dice_manual tc =
+        let die = integers ~min_value:1 ~max_value:6 () in
+        let other_hand = clone tc in
+        let out = ref (Error (Failure "unset")) in
+        let rolling =
+          Thread.create
+            (fun () -> out := (try Ok (draw_silent other_hand die) with e -> Error e))
+            ()
+        in
+        let right_hand = draw_silent tc die in
+        Thread.join rolling;
+        match !out with
+        | Ok left_hand -> assert (right_hand + left_hand >= 2)
+        | Error e -> raise e
+    ]} *)
+val clone : test_case -> test_case
+
+(** A running worker started by {!spawn} and awaited with {!join}. *)
+type 'a worker
+
+(** [spawn tc f] clones [tc] and runs [f clone] on a new thread. {!join} awaits
+    it. The example below is functionally identical to the example for {!clone},
+    but more ergonomic.
+
+    {[
+      let%hegel_test two_hands_two_dice tc =
+        let die = integers ~min_value:1 ~max_value:6 () in
+        let other_hand = spawn tc (fun worker -> draw_silent worker die) in
+        let this_hand = draw_silent tc die in
+        assert (this_hand + join other_hand >= 2)
+    ]} *)
+val spawn : test_case -> (test_case -> 'a) -> 'a worker
+
+(** [join w] waits for worker [w] to finish and returns its result. It re-raises
+    any exception [w] raised on the caller's thread. Join before the test body
+    returns. *)
+val join : 'a worker -> 'a

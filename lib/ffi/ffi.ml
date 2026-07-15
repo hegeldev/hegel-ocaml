@@ -202,6 +202,12 @@ let c_test_case_free =
   foreign "hegel_test_case_free" (ptr void @-> ptr void @-> returning int)
 ;;
 
+let c_test_case_clone =
+  foreign
+    "hegel_test_case_clone"
+    (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+;;
+
 let c_generate_boolean =
   foreign
     "hegel_generate_boolean"
@@ -526,6 +532,7 @@ let e_invalid_arg = -5
 let e_already_complete = -6
 let e_not_complete = -7
 let e_internal = -8
+let e_concurrent_use = -9
 
 (* Phase bitmask values [HEGEL_PHASE_*]. *)
 let phase_explicit = 1
@@ -594,6 +601,8 @@ let check_rc ctx rc =
       then "previous test case not complete"
       else if rc = e_internal
       then "internal error"
+      else if rc = e_concurrent_use
+      then "concurrent use of a test-case handle"
       else Printf.sprintf "unknown error code %d" rc
     in
     let msg = c_last_error_message ctx in
@@ -696,6 +705,12 @@ let run_free ctx run = check_rc ctx (c_run_free ctx run)
 let run_result_free ctx r = check_rc ctx (c_run_result_free ctx r)
 let failure_free ctx f = check_rc ctx (c_failure_free ctx f)
 let test_case_free ctx tc = check_rc ctx (c_test_case_free ctx tc)
+
+let test_case_clone ctx tc =
+  let out = allocate (ptr void) null in
+  check_rc ctx (c_test_case_clone ctx tc out);
+  !@out
+;;
 
 (* ------------------------------------------------------------------ *)
 (* Per-test-case primitives                                            *)

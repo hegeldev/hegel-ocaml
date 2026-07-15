@@ -5,6 +5,7 @@
   test_hegel
   test_helpers
   test_client
+  test_clone
   test_generators_core
   test_generators_primitives
   test_generators_collections
