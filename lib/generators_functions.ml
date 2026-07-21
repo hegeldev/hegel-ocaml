@@ -46,15 +46,17 @@ let make
     in
     let table = Hashtbl.Poly.create () in
     let base arg =
-      let ret =
+      let ret, is_fresh =
         match Hashtbl.find table arg with
-        | Some v -> v
+        | Some ret -> ret, false
         | None ->
-          let v = group Labels.function_result tc (fun () -> do_draw ret tc) in
-          Hashtbl.set table ~key:arg ~data:v;
-          v
+          let ret = group Labels.function_result tc (fun () -> do_draw ret tc) in
+          Hashtbl.set table ~key:arg ~data:ret;
+          ret, true
       in
-      if Internal.draw_depth tc = 0
+      (* print every function call in verbose/debug verbosity, print only the first
+         invocation in normal verbosity. *)
+      if Internal.draw_depth tc = 0 && (is_fresh || Internal.is_high_verbosity tc)
       then
         Internal.note
           tc
