@@ -187,6 +187,7 @@ type test_case
 
 val mode : test_case -> mode
 val stateful_step_count : test_case -> int
+val is_high_verbosity : test_case -> bool
 val draw_depth : test_case -> int
 val incr_draw_depth : test_case -> unit
 val decr_draw_depth : test_case -> unit

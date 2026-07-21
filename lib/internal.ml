@@ -235,6 +235,13 @@ type test_case =
    without the record being exposed (the type is abstract in the interface). *)
 let mode (tc : test_case) = tc.mode
 let stateful_step_count (tc : test_case) = tc.stateful_step_count
+
+let is_high_verbosity (tc : test_case) =
+  match tc.verbosity with
+  | Debug | Verbose -> true
+  | _ -> false
+;;
+
 let draw_depth (tc : test_case) = tc.draw_depth
 let incr_draw_depth (tc : test_case) = tc.draw_depth <- tc.draw_depth + 1
 let decr_draw_depth (tc : test_case) = tc.draw_depth <- tc.draw_depth - 1
