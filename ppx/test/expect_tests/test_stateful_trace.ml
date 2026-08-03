@@ -21,6 +21,7 @@ let%expect_test "state trace; invariant marks the failing step" =
       ~invariants:[ (fun n -> assert (n <= 1)) ]
       ~sexp_of_state:Int.sexp_of_t
       tc);
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     --- Failure ------------------------------------------------------------
@@ -33,8 +34,8 @@ let%expect_test "state trace; invariant marks the failing step" =
       state = 2
       Invariant 0 violated after step 2.
 
-    Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line 21, characters 30-36: Assertion failed
-    rerun with: ~failure_blobs:[ "AXicY2dgYGBkYOACYgYYxYgQYWQAAAODAC0=" ]
+    Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line LINE, characters C1-C2: Assertion failed
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
 
@@ -42,6 +43,7 @@ let%expect_test "invariant violated in the initial state" =
   let noop = Stateful.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) in
   run_failing (fun tc ->
     Stateful.run ~init:() ~rules:[ noop ] ~invariants:[ (fun () -> assert false) ] tc);
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     --- Failure ------------------------------------------------------------
@@ -49,8 +51,8 @@ let%expect_test "invariant violated in the initial state" =
 
       Invariant 0 violated in the initial state.
 
-    Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line 44, characters 67-73: Assertion failed
-    rerun with: ~failure_blobs:[ "AAAAAAA=" ]
+    Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line LINE, characters C1-C2: Assertion failed
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
 
@@ -77,6 +79,7 @@ let%expect_test "state trace across multiple rules" =
       ~rules:[ push; pop ]
       ~sexp_of_state:(sexp_of_list sexp_of_int)
       tc);
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     --- Failure ------------------------------------------------------------
@@ -88,7 +91,7 @@ let%expect_test "state trace across multiple rules" =
       state = (50)
       Step 2: pop
 
-    Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line 71, characters 8-14: Assertion failed
-    rerun with: ~failure_blobs:[ "AXic42BgYGBkYOACYgYYBeMbwRiMjAwAB6AAbA==" ]
+    Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line LINE, characters C1-C2: Assertion failed
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
