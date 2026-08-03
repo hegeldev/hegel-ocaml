@@ -8,7 +8,7 @@
  (name test_ppx_derive)
  (package ppx_hegel_generator)
  (modules test_ppx_derive)
- (libraries hegel hegel.test_runtime alcotest core core_unix threads.posix)
+ (libraries hegel alcotest core core_unix threads.posix)
  (preprocess
   (pps
    ppx_js_style
@@ -24,16 +24,3 @@
  (libraries hegel alcotest core core_unix threads.posix yojson)
  (preprocess
   (pps ppx_js_style ppx_hegel_test -- -allow-unannotated-ignores)))
-
-; Tests hegel.test_runtime (the PPX's runtime registry/runner) directly, with
-; no let%hegel_test in the process, so run_all's failure count is exact. The
-; exit-code tests re-spawn this same binary with a magic argv (see the top of
-; test_hegel_test_runtime.ml).
-
-(test
- (name test_hegel_test_runtime)
- (package ppx_hegel_test)
- (modules test_hegel_test_runtime)
- (libraries hegel.test_runtime alcotest unix)
- (preprocess
-  (pps ppx_js_style -- -allow-unannotated-ignores)))

@@ -24,13 +24,8 @@
  (kind ppx_rewriter)
  (libraries ppxlib ppx_hegel_compat)
  (modules ppx_hegel_test)
- (ppx_runtime_libraries hegel.test_runtime)
  (preprocess
-  (pps ppx_js_style ppxlib.metaquot))
- (inline_tests.backend
-  (runner_libraries hegel.test_runtime)
-  (generate_runner
-   (echo "let () = Hegel_test_runtime.test_main ();;"))))
+  (pps ppx_js_style ppxlib.metaquot)))
 
 (rule
  (target ppx_compat.ml)

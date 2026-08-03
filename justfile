@@ -13,12 +13,10 @@ check-tests:
     dune build --instrument-with bisect_ppx \
       test/test_hegel.exe \
       ppx/test/test_ppx_derive.exe \
-      ppx/test/test_ppx_hegel_test.exe \
-      ppx/test/test_hegel_test_runtime.exe
+      ppx/test/test_ppx_hegel_test.exe
     export BISECT_FILE="$PWD/_build/default/test/bisect"
     ./_build/default/ppx/test/test_ppx_derive.exe
     ./_build/default/ppx/test/test_ppx_hegel_test.exe
-    ./_build/default/ppx/test/test_hegel_test_runtime.exe
     ./_build/default/test/test_hegel.exe
     # The ppx_expect tests are an inline-tests library (no standalone exe), so
     # run them through dune; coverage merges via BISECT_FILE.
@@ -64,10 +62,9 @@ check-tests-no-coverage:
     set -euo pipefail
     eval $(opam env)
     dune build test/test_hegel.exe ppx/test/test_ppx_derive.exe \
-      ppx/test/test_ppx_hegel_test.exe ppx/test/test_hegel_test_runtime.exe
+      ppx/test/test_ppx_hegel_test.exe
     ./_build/default/ppx/test/test_ppx_derive.exe
     ./_build/default/ppx/test/test_ppx_hegel_test.exe
-    ./_build/default/ppx/test/test_hegel_test_runtime.exe
     ./_build/default/test/test_hegel.exe
     # ppx_expect tests are an inline-tests library (no standalone exe), so run
     # them through dune. --force ensures they execute even if dune considers

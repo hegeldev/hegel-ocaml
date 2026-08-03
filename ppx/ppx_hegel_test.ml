@@ -15,20 +15,10 @@
           ~failure_blobs:[ "<base64>"; ... ]
           (fun tc -> body)
       ;;
-
-      let () =
-        Hegel_test_runtime.register
-          ~name:"my_test"
-          ~file:"…"
-          ~line:…
-          my_test
     ]}
 
-    The generated function remains directly callable, but is also auto-registered
-    with [Hegel_test_runtime] so that [dune runtest] (via the [ppx_hegel_test]
-    inline-tests backend) discovers and runs it.
-
-    The [@@settings ...] and [@@failure_blobs ...] attributes are both optional. *)
+    [my_test] is has the type [unit -> unit]. The [@@settings ...] and
+    [@@failure_blobs ...] attributes are both optional. *)
 
 open Ppxlib
 
@@ -120,16 +110,13 @@ let build_location_record ~loc ~function_name : expression =
     }]
 ;;
 
-(** [build_items ~loc ~function_name ~settings_expr ~body_fn] returns the pair
-    of structure items the expander splices in:
+(** [build_items ~loc ~function_name ~settings_expr ~body_fn] returns the single
+    structure item the expander splices in:
 
     {[
       let function_name () =
         Hegel.run_hegel_test [?settings] location body_fn
       ;;
-
-      let () =
-        Hegel_test_runtime.register ~name:.. ~file:.. ~line:.. function_name
     ]} *)
 let build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn
   : structure_item list
@@ -152,21 +139,7 @@ let build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn
   in
   let pat = Ast_builder.Default.pvar ~loc function_name in
   let definition = [%stri let [%p pat] = fun () -> [%e call]] in
-  let name_e = Ast_builder.Default.estring ~loc function_name in
-  let file_e = Ast_builder.Default.estring ~loc loc.loc_start.pos_fname in
-  let line_e = Ast_builder.Default.eint ~loc loc.loc_start.pos_lnum in
-  let ident = Ast_builder.Default.evar ~loc function_name in
-  let registration =
-    [%stri
-      let () =
-        Hegel_test_runtime.register
-          ~name:[%e name_e]
-          ~file:[%e file_e]
-          ~line:[%e line_e]
-          [%e ident]
-      ;;]
-  in
-  [ definition; registration ]
+  [ definition ]
 ;;
 
 (** [is_draw_lident lid] is [true] when [lid]'s final component is [draw],
@@ -431,11 +404,10 @@ let expand_value_binding ~loc (vb : value_binding) : structure_item list =
 ;;
 
 (** The [hegel_test] extension is attached to [structure_item] (top-level
-    [let%hegel_test]). It supports only the non-recursive single-binding
-    form. The expander splices in two top-level items: the test function
-    itself and a [Hegel_test_runtime.register] side effect so that
-    [dune runtest] (via the [ppx_hegel_test] inline-tests backend) discovers
-    and runs the test. *)
+    [let%hegel_test]). It supports only the non-recursive single-binding form.
+    The expander splices in a single top-level item: the test function itself,
+    an ordinary [unit -> unit] value with no registration or execution side
+    effect. *)
 let extension =
   Extension.declare_inline
     "hegel_test"
