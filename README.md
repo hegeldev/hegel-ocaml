@@ -48,11 +48,11 @@ Add `hegel` and `alcotest` to your dune test stanza:
 Write a property test using `let%hegel_test`:
 
 ```ocaml
-open Hegel.Generators
+open Hegel
 
 let%hegel_test commutative_addition tc =
-  let a = Hegel.draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
-  let b = Hegel.draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
+  let a = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
+  let b = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
   assert (a + b = b + a)
 ;;
 
@@ -68,7 +68,7 @@ minimal counterexample if it finds one. When a test fails, Hegel prints a
 report naming each value you drew from the failing case (`a = …`, `b = …`, named
 after the `let` binding) and a copy-pasteable line to replay it, and Alcotest
 reports the test as failed and exits non-zero. For equality checks,
-`Hegel.require_equal` can be used to print a structural diff of the two values 
+`require_equal` can be used to print a structural diff of the two values 
 instead of a bare `assert`. See [Debugging failures](docs/getting-started.md#debug-your-failing-test-cases)
 for details.
 
@@ -76,10 +76,10 @@ To override the default settings, attach a `[@@settings ...]` attribute:
 
 ```ocaml
 let%hegel_test commutative_addition tc =
-  let a = Hegel.draw tc (integers ()) in
-  let b = Hegel.draw tc (integers ()) in
+  let a = draw tc (Generators.integers ()) in
+  let b = draw tc (Generators.integers ()) in
   assert (a + b = b + a)
-[@@settings Hegel.settings ~test_cases:500 ()]
+[@@settings settings ~test_cases:500 ()]
 ;;
 ```
 

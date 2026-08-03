@@ -31,19 +31,17 @@
     macOS amd64 (Intel) has no published [libhegel] artifact, so on that platform point
     [HEGEL_LIBHEGEL_PATH] at a locally built [libhegel.dylib].
 
-    Add [hegel] to your dune library dependencies:
+    Hegel works with whatever test framework your project already uses. The
+    examples below use {{:https://github.com/mirage/alcotest} Alcotest}.
+
+    Add [hegel] and [alcotest] to your dune test stanza:
 
     {[
-      (library
+      (test
        (name my_tests)
-       (libraries hegel)
-       (inline_tests (backend ppx_hegel_test))
+       (libraries hegel alcotest)
        (preprocess (pps ppx_hegel_test)))
     ]}
-
-    [ppx_hegel_test] is not required to use Hegel, but strongly recommended as it
-    adds many convenience features and integration with [dune runtest]. The examples
-    below assume [ppx_hegel_test] is used.
 
     {3 Write your first test}
 
@@ -51,12 +49,16 @@
 
     {[
       open Hegel
-      open Hegel.Generators
 
       let%hegel_test commutative_addition tc =
-        let a = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
-        let b = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
+        let a = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
+        let b = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
         require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
+
+      let () =
+        Alcotest.run
+          "my_tests"
+          [ "properties", [ Alcotest.test_case "commutative addition" `Quick commutative_addition ] ]
     ]}
 
     We check the property with {!require_equal} rather than
@@ -66,29 +68,27 @@
     a custom message. A plain [assert] can be used as well, but it does not provide
     as much information as {!require_equal} and {!require}.
 
-    Run [dune runtest]. You should see that the test passes. Hegel generates up to 100 random input pairs and reports the
-    minimal counterexample if it finds one. When a test fails, Hegel prints each
+    Run [dune runtest]. You should see Alcotest report the test as passing.
+    Hegel generates up to 100 random input pairs and reports the minimal
+    counterexample if it finds one. When a test fails, Hegel prints each
     value you drew from the failing case, named after the [let] binding it was
     bound to ([a = …], [b = …]).
 
-    [let%hegel_test name tc = body] also defines [name] as a plain
-    [unit -> unit] function, so you can still call it directly from an
-    executable or hand it to another test harness like Alcotest. 
+    The rest of the examples in the documentation assume you have [open Hegel]
+    at the top of the test file like in the example above, and refer to
+    generators as [Generators.foo].
 
-    The rest of the examples in the documentation assume you have [open Hegel] and
-    [open Hegel.Generators] at the top of the test file like in the example above.
-    
     Next, let's try a test that fails.
 
     {[
       let%hegel_test every_int_is_small tc =
-        let n = draw tc (integers ()) in
+        let n = draw tc (Generators.integers ()) in
         assert (n < 50)
     ]}
 
     This test asserts that any integer is less than 50, which is obviously
     incorrect. Hegel finds a test case that makes the assertion fail, then shrinks
-    it to the smallest counterexample ([n = 50]). The final replay prints the 
+    it to the smallest counterexample ([n = 50]). The final replay prints the
     drawn values, the exception, and a [rerun with:] line that replays the exact case:
 
     {v
@@ -105,7 +105,7 @@
 
     {[
       let%hegel_test every_int_is_small tc =
-        let n = draw tc (integers ~min_value:0 ~max_value:49 ()) in
+        let n = draw tc (Generators.integers ~min_value:0 ~max_value:49 ()) in
         assert (n < 50)
     ]}
 
@@ -122,9 +122,9 @@
 
     {[
       let%hegel_test append_increases_length tc =
-        let xs = draw tc (lists (integers ()) ()) in
+        let xs = draw tc (Generators.lists (Generators.integers ()) ()) in
         let initial_length = List.length xs in
-        let xs = draw tc (integers ()) :: xs in
+        let xs = draw tc (Generators.integers ()) :: xs in
         require tc ~msg:"prepending an element must grow the list"
           (List.length xs > initial_length)
     ]}
@@ -140,9 +140,9 @@
         }
 
       let person =
-        composite (fun tc ->
-          let age = draw_silent tc (integers ()) in
-          let name = draw_silent tc (text ()) in
+        Generators.composite (fun tc ->
+          let age = draw_silent tc (Generators.integers ()) in
+          let name = draw_silent tc (Generators.text ()) in
           { age; name })
     ]}
 
@@ -158,11 +158,11 @@
         }
 
       let person =
-        composite (fun tc ->
-          let age = draw_silent tc (integers ()) in
-          let name = draw_silent tc (text ()) in
+        Generators.composite (fun tc ->
+          let age = draw_silent tc (Generators.integers ()) in
+          let name = draw_silent tc (Generators.text ()) in
           let driving_license =
-            if age >= 18 then draw_silent tc (booleans ()) else false
+            if age >= 18 then draw_silent tc (Generators.booleans ()) else false
           in
           { age; name; driving_license })
     ]}
@@ -173,10 +173,10 @@
 
     {[
       let%hegel_test commutative_addition tc =
-        let a = draw tc (integers ()) in
-        let b = draw tc (integers ()) in
+        let a = draw tc (Generators.integers ()) in
+        let b = draw tc (Generators.integers ()) in
         require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
-      [@@settings Hegel.settings ~test_cases:500 ()]
+      [@@settings settings ~test_cases:500 ()]
     ]}
 
     This increases the number of test cases run from 100 to 500.
@@ -184,23 +184,23 @@
     You can also update settings using the [with_*] functions:
     {[
       let%hegel_test commutative_addition tc =
-        let a = draw tc (integers ()) in
-        let b = draw tc (integers ()) in
+        let a = draw tc (Generators.integers ()) in
+        let b = draw tc (Generators.integers ()) in
         require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
-      [@@settings Hegel.settings ~test_cases:500 () |> with_seed 5 |> with_verbosity Verbose]
+      [@@settings settings ~test_cases:500 () |> with_seed 5 |> with_verbosity Verbose]
     ]}
-    
+
     {3 Debugging failing test cases}
 
     Use {!note} to attach debug information:
-    
+
     {[
       let%hegel_test every_int_is_small tc =
-        let n = draw tc (integers ()) in
-        note tc (Printf.sprintf "n is %d" n); 
+        let n = draw tc (Generators.integers ()) in
+        note tc (Printf.sprintf "n is %d" n);
         assert (n < 50)
     ]}
-    
+
     A failing run prints a framed report: the shrunk counterexample's draws
     and notes, the exception, and a copy-pasteable [rerun with:] line whose
     base64 blob encodes the choice sequence that caused the failure (disable
@@ -214,7 +214,7 @@
 
     {[
       let%hegel_test every_int_is_small tc =
-        let n = draw tc (integers ()) in
+        let n = draw tc (Generators.integers ()) in
         assert (n < 50)
     ]}
 
@@ -232,7 +232,7 @@
 
     {[
       let%hegel_test every_int_is_small tc =
-        let n = draw tc (integers ()) in
+        let n = draw tc (Generators.integers ()) in
         assert (n < 50)
       [@@failure_blobs [ "AAEAAAAACgEAAAAy" ]]
     ]}
@@ -280,7 +280,7 @@ module Antithesis = Antithesis
 
     {[
       let%hegel_test many_cases tc =
-        let n = draw tc (integers ~min_value:0 ~max_value:99 ()) in
+        let n = draw tc (Generators.integers ~min_value:0 ~max_value:99 ()) in
         assert (n < 100)
       [@@settings settings ~test_cases:500 () |> with_verbosity Verbose]
     ]} *)
