@@ -8,7 +8,7 @@
  (name expect_tests)
  (enabled_if
   (<> %{profile} release))
- (libraries hegel hegel.test_runtime core core_unix expect_test_helpers_core)
+ (libraries hegel core core_unix expect_test_helpers_core)
  (inline_tests
   (backend ppx_inline_test))
  (preprocess

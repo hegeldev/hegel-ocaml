@@ -33,38 +33,42 @@ macOS amd64 (Intel) has no published `libhegel` artifact, so on that platform po
 
 ## Quick start
 
-Add `hegel` to your dune library dependencies:
+Hegel works with whatever test framework your project already uses. The examples below use
+[Alcotest](https://github.com/mirage/alcotest).
+
+Add `hegel` and `alcotest` to your dune test stanza:
 
 ```
-(library
+(test
  (name my_tests)
- (libraries hegel)
- (inline_tests (backend ppx_hegel_test))
+ (libraries hegel alcotest)
  (preprocess (pps ppx_hegel_test)))
 ```
-
-`ppx_hegel_test` is not required to use Hegel, but strongly recommended as it 
-adds many convenience features and integration with `dune runtest`. The examples
-below assume `ppx_hegel_test` is used.
 
 Write a property test using `let%hegel_test`:
 
 ```ocaml
 open Hegel
-open Hegel.Generators
 
 let%hegel_test commutative_addition tc =
-  let a = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
-  let b = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
+  let a = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
+  let b = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
   assert (a + b = b + a)
+;;
+
+let () =
+  Alcotest.run
+    "my_tests"
+    [ "properties", [ Alcotest.test_case "commutative addition" `Quick commutative_addition ] ]
 ;;
 ```
 
 Run `dune runtest`. Hegel generates up to 100 random input pairs and reports the
 minimal counterexample if it finds one. When a test fails, Hegel prints a
 report naming each value you drew from the failing case (`a = …`, `b = …`, named
-after the `let` binding) and a copy-pasteable line to replay it. For equality
-checks, `require_equal` can be used to print a structural diff of the two values 
+after the `let` binding) and a copy-pasteable line to replay it, and Alcotest
+reports the test as failed and exits non-zero. For equality checks,
+`require_equal` can be used to print a structural diff of the two values 
 instead of a bare `assert`. See [Debugging failures](docs/getting-started.md#debug-your-failing-test-cases)
 for details.
 
@@ -72,16 +76,12 @@ To override the default settings, attach a `[@@settings ...]` attribute:
 
 ```ocaml
 let%hegel_test commutative_addition tc =
-  let a = draw tc (integers ()) in
-  let b = draw tc (integers ()) in
+  let a = draw tc (Generators.integers ()) in
+  let b = draw tc (Generators.integers ()) in
   assert (a + b = b + a)
-[@@settings Hegel.settings ~test_cases:500 ()]
+[@@settings settings ~test_cases:500 ()]
 ;;
 ```
-
-`let%hegel_test name tc = body` also defines `name` as a plain
-`unit -> unit` function, so you can still call it directly from an
-executable or hand it to another test harness like Alcotest.
 
 For a full walkthrough, see [docs/getting-started.md](docs/getting-started.md).
 

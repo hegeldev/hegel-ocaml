@@ -46,24 +46,20 @@ lib/                         # Library source
   derive.ml                  # Runtime support for [@@deriving hegel_generator]
   stateful.ml                # Stateful testing: Rule.create + run over action sequences
   antithesis.ml              # Antithesis integration (emits an always-typed assertion)
-  test_runtime/              # Inline-test registry + runner for [let%hegel_test]
-    hegel_test_runtime.ml    # Registry, run_all, test_main (called by dune-generated runner)
 
 ppx/                         # PPX rewriters and derivers
-  dune                       # PPX library build configs; ppx_hegel_test declares
-                             # (inline_tests.backend ...) + (ppx_runtime_libraries hegel_test_runtime);
-                             # a rule generates ppx_compat.ml from one variant below
+  dune                       # PPX library build configs; a rule generates
+                             #   ppx_compat.ml from one variant below
   ppx_hegel_generator.ml     # Deriver: reads type decls, emits generator functions
   ppx_hegel_test.ml          # Expander: rewrites [let%hegel_test name tc = body]
-                             # into a callable function plus a Hegel_test_runtime.register call
+                             # into a plain callable function (no registration,
+                             # no runtime library — see Inline Test Integration below)
   ppx_compat_pre-53.ml       # AST compat shim for ppxlib < 0.36 (OCaml < 5.3)
   ppx_compat_post-53.ml      # AST compat shim for ppxlib >= 0.36 (OCaml >= 5.3)
   ppx_compat_oxcaml.ml       # AST compat shim for the OxCaml compiler
   test/                      # PPX E2E tests, package-attributed so opam-repo-ci runs them
     test_ppx_derive.ml       # PPX deriver E2E tests (package ppx_hegel_generator)
     test_ppx_hegel_test.ml   # ppx_hegel_test expander E2E tests (package ppx_hegel_test)
-    test_hegel_test_runtime.ml # Inline-test runner behavior (re-spawns itself;
-                             #   package ppx_hegel_test)
     expect_tests/            # ppx_expect tests (dev-only, disabled in release profile)
                              # (one of the three is copied to ppx_compat.ml = ppx_hegel_compat lib)
 
@@ -140,13 +136,20 @@ Generators are a discriminated union:
 - **Composite** — a `generate_fn` thunk run inside a labeled span; used by tuples, one_of, `lists ~unique`, and hashmaps (all of which now always drive the collection protocol / draw sub-values directly — there is no schema fast path).
 - **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (memoized on the argument via structural hash/equality — a `Hashtbl.Poly` — so `sexp_of_arg` is display-only and an omitted one shows `<opaque>` without collapsing the key) and shows applied pairs as `name arg = result` via `note` on the final replay. Only *top-level* applications print — a pair applied at draw depth > 0 (inside a span) is suppressed, like a nested draw. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); the name threads even when the function is drawn nested. Result draws are wrapped in a `Labels.function_result` span.
 
-### Inline Test Integration (ppx/ppx_hegel_test.ml + lib/test_runtime/)
+### Inline Test Integration (ppx/ppx_hegel_test.ml)
 
-The `ppx_hegel_test` PPX rewrites `let%hegel_test name tc = body` into two
-top-level items: (1) `let name = fun () -> Hegel.run_hegel_test ...
-(fun tc -> body)`, and (2) `let () = Hegel_test_runtime.register ~name ~file
-~line name`. The function remains directly callable; the registration is a
-side effect run at module init.
+The `ppx_hegel_test` PPX rewrites `let%hegel_test name tc = body` into a
+single top-level item: `let name = fun () -> Hegel.run_hegel_test ... (fun tc
+-> body)`. That's it — `name` is an ordinary `unit -> unit` value with no
+registration, no runtime library, and no side effect at module init. Hegel
+has no test runner of its own and no `(inline_tests (backend ...))` stanza:
+the project's own tests wire each `let%hegel_test`-produced function into
+whatever test framework the project already uses (see `examples/*.ml`, which
+each end with a plain `let () = test_foo (); test_bar (); ...`, and
+`ppx/test/test_ppx_derive.ml` / `test_ppx_hegel_test.ml`, which build an
+`Alcotest.test_case` list by hand). `dune runtest` then works exactly like it
+does for any other test executable in that framework — there is nothing
+hegel-specific to integrate.
 
 Within the body the PPX also injects binding names into draws: `let x = draw tc g`
 becomes `draw_named ~label:"x" ~repeatable:.. tc g`, and `let x = draw_silent tc g`
@@ -162,26 +165,14 @@ A function made printable (via `with_printer`) is drawn with
 the usual `x = value` line — the function renders as `<fun>` through its printer —
 only at the top level, suppressing it when nested like any other draw.
 
-`ppx_hegel_test`'s dune stanza declares `(inline_tests.backend ...)` with a
-generated runner that calls `Hegel_test_runtime.test_main ()`, and
-`(ppx_runtime_libraries hegel_test_runtime)` so the runtime is auto-linked
-into any library that uses the PPX. Users opt in per-library with
-`(inline_tests (backend ppx_hegel_test))`, after which `dune runtest`
-discovers and runs every `let%hegel_test`. The runtime's `test_main ()`
-iterates the registry, wraps each test in try/with, prints PASS/FAIL per
-test, and exits non-zero on any failure.
-
-Libraries that don't opt in still get the registration side effect (the
-PPX always emits it) — entries just sit unused. That's harmless and lets
-tests built around alternative harnesses (Alcotest, raw `let () = name ()`)
-keep working unchanged. The runner's behavior is verified in
-`ppx/test/test_hegel_test_runtime.ml`, which re-spawns itself with a magic
-`--__hegel_test_runtime_demo MODE` argv that the top of the same file
-intercepts to register a single test and call
-`Hegel_test_runtime.test_main`; the subprocess's exit code is then
-asserted. Spawning itself (rather than a separate demo executable)
-sidesteps the build-ordering trap that would otherwise hit any recipe
-invoking the test binary directly.
+Because the PPX only produces a callable and never calls it, a
+`let%hegel_test` composes with any test framework: drop the produced
+function into `Alcotest.test_case "name" `Quick name`, an OUnit test, a
+`let%expect_test` body (see `ppx/test/expect_tests/`), or just call it
+directly from `let () = ...`. Nothing about `let%hegel_test` opts a library
+into an inline-tests backend or auto-discovery — the user always writes the
+`dune runtest`-facing entry point themselves, exactly as they would for a
+handwritten property test built on `Hegel.run_hegel_test` directly.
 
 ### Type-Directed Derivation (ppx/ + lib/derive.ml)
 
@@ -216,7 +207,6 @@ because generated code in user projects calls it.
 
 ```ocaml
 (* In your dune file, add:
-     (inline_tests (backend ppx_hegel_test))
      (preprocess (pps ppx_hegel_generator ppx_hegel_test)) *)
 
 type point = { x : int; y : int } [@@deriving hegel_generator]
@@ -233,6 +223,10 @@ let%hegel_test derived_types_smoke tc =
   (* p.x, p.y are ints; c is Red|Green|Blue; e has typed fields *)
   ignore (p, c, e)
 ;;
+
+(* let%hegel_test only produces a callable; wire it into your own test
+   framework, e.g. Alcotest.test_case "derived_types_smoke" `Quick
+   derived_types_smoke, or just call it directly. *)
 ```
 
 To print a derived value on a failing replay, add `[@@deriving sexp_of]` and draw
@@ -309,8 +303,9 @@ in an `Exn.protect ~finally`.
   `Stateful`, and the values/types directly under `Hegel` are documented API
 - PPX E2E tests live under `ppx/test/`, attributed via `(package ...)` to
   `ppx_hegel_generator` (`test_ppx_derive.ml`) and `ppx_hegel_test`
-  (`test_ppx_hegel_test.ml`, `test_hegel_test_runtime.ml`) so
-  `dune runtest -p <pkg>` runs them; `ppx/test/expect_tests/` stays
+  (`test_ppx_hegel_test.ml`) so `dune runtest -p <pkg>` runs them; each builds
+  its own `Alcotest.test_case` list from the PPX-produced functions, same as
+  any other consumer would. `ppx/test/expect_tests/` stays
   package-less and dev-only (`enabled_if (<> %{profile} release)`)
 - 100% branch and line coverage is mandatory — no exceptions, no `[@coverage off]`
 

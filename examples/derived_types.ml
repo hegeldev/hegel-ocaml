@@ -4,8 +4,10 @@
     data for user-defined types. Instead of manually constructing generators,
     you annotate your types with [@@deriving hegel_generator] and get a
     [<type>_generator : (<type>, unprintable) generator] value for free, drawn
-    with [Hegel.draw_silent]. (No [@@deriving sexp_of] is needed; add it and use
-    [Hegel.with_printer] if you want the value printed on a failing replay.) *)
+    with [draw_silent]. (No [@@deriving sexp_of] is needed; add it and use
+    [with_printer] if you want the value printed on a failing replay.) *)
+
+open Hegel
 
 (** A 2D point with integer coordinates. *)
 type point =
@@ -42,25 +44,25 @@ type entity =
     computed in floating point — [p.x * p.x] would wrap around for large
     coordinates. *)
 let%hegel_test test_point_distance_nonnegative tc =
-  let p = Hegel.draw_silent tc point_generator in
+  let p = draw_silent tc point_generator in
   let x = float_of_int p.x
   and y = float_of_int p.y in
   let dist = sqrt ((x *. x) +. (y *. y)) in
   assert (dist >= 0.0)
-[@@settings Hegel.settings ~test_cases:100 ()]
+[@@settings settings ~test_cases:100 ()]
 ;;
 
 (** Property: color_generator covers all three constructors. *)
 let saw_colors = Hashtbl.create 3
 
 let%hegel_test test_color_all_variants tc =
-  let c = Hegel.draw_silent tc color_generator in
+  let c = draw_silent tc color_generator in
   (match c with
    | Red -> Hashtbl.replace saw_colors "red" true
    | Green -> Hashtbl.replace saw_colors "green" true
    | Blue -> Hashtbl.replace saw_colors "blue" true);
   assert (Hashtbl.length saw_colors >= 1)
-[@@settings Hegel.settings ~test_cases:50 ()]
+[@@settings settings ~test_cases:50 ()]
 ;;
 
 let saw_circle = ref false
@@ -69,7 +71,7 @@ let saw_labeled = ref false
 let saw_dot = ref false
 
 let%hegel_test test_shape_all_variants tc =
-  let s = Hegel.draw_silent tc shape_generator in
+  let s = draw_silent tc shape_generator in
   match s with
   | Circle r ->
     assert (Float.is_finite r);
@@ -81,20 +83,20 @@ let%hegel_test test_shape_all_variants tc =
     ignore (String.length s);
     saw_labeled := true
   | Dot -> saw_dot := true
-[@@settings Hegel.settings ~test_cases:100 ()]
+[@@settings settings ~test_cases:100 ()]
 ;;
 
 let saw_tagged = ref false
 let saw_untagged = ref false
 
 let%hegel_test test_entity_valid tc =
-  let e = Hegel.draw_silent tc entity_generator in
+  let e = draw_silent tc entity_generator in
   ignore (String.length e.name);
   ignore e.active;
   match e.tag with
   | Some _ -> saw_tagged := true
   | None -> saw_untagged := true
-[@@settings Hegel.settings ~test_cases:50 ()]
+[@@settings settings ~test_cases:50 ()]
 ;;
 
 let () =

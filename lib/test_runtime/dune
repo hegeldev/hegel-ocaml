@@ -1,7 +1,0 @@
-(library
- (name hegel_test_runtime)
- (public_name hegel.test_runtime)
- (wrapped false)
- (libraries unix)
- (instrumentation
-  (backend bisect_ppx)))

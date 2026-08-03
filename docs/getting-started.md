@@ -17,13 +17,15 @@ supported platforms.
 
 ## Write your first test
 
-You're now ready to write your first test. Add `hegel` to your dune library dependencies:
+You're now ready to write your first test. Hegel works with whatever test 
+framework your project already uses. This guide uses [Alcotest](https://github.com/mirage/alcotest).
+
+Add `hegel` and `alcotest` to your dune test stanza:
 
 ```
-(library
+(test
  (name my_tests)
- (libraries hegel)
- (inline_tests (backend ppx_hegel_test))
+ (libraries hegel alcotest)
  (preprocess (pps ppx_hegel_test)))
 ```
 
@@ -31,44 +33,62 @@ Then create a test file:
 
 ```ocaml
 open Hegel
-open Hegel.Generators
 
 let%hegel_test integer_self_equality tc =
-  let n = draw tc (integers ()) in
+  let n = draw tc (Generators.integers ()) in
   assert (n = n)
+;;
+
+let () =
+  Alcotest.run
+    "my_tests"
+    [ "properties", [ Alcotest.test_case "integer self equality" `Quick integer_self_equality ] ]
 ;;
 ```
 
-Run it with `dune runtest`. You should see a `PASS` line for the test.
+Run it with `dune runtest`. You should see Alcotest report the test as `OK`.
 
 Let's look at what's happening in more detail. The `let%hegel_test name tc =
 body` extension defines `name` as a `unit -> unit` function that runs `body`
-many times (100, by default) and *also* registers it with Hegel's runtime so
-`dune runtest` finds it. The `tc` parameter is a test case, which is passed
-to `draw` to draw different values each iteration. The example above draws a
-random integer and checks that it is equal to itself.
+100 times by default. The `tc` parameter is a test case, which represents the 
+state of the Hegel test. The example above draws a random integer and checks 
+that it is equal to itself.
 
 Next, try a test that fails:
 
 ```ocaml
 let%hegel_test integer_under_fifty tc =
-  let n = draw tc (integers ()) in
+  let n = draw tc (Generators.integers ()) in
   assert (n < 50)  (* this will fail! *)
 ;;
 ```
 
 This test asserts that any integer is less than 50, which is obviously incorrect.
 Hegel will find a test case that makes this assertion fail, and then shrink it
-to find the smallest counterexample (`n = 50`). `dune runtest`
-will print a `FAIL` line, report the drawn value as `n = 50` (named after the
-`let` binding), and exit non-zero.
+to find the smallest counterexample (`n = 50`). Add it to the Alcotest list
+alongside the first test:
+
+```ocaml
+let () =
+  Alcotest.run
+    "my_tests"
+    [ ( "properties"
+      , [ Alcotest.test_case "integer self equality" `Quick integer_self_equality
+        ; Alcotest.test_case "integer under fifty" `Quick integer_under_fifty
+        ] )
+    ]
+;;
+```
+
+`dune runtest` will now report `integer under fifty` as failed, print the
+drawn value as `n = 50` (named after the `let` binding), and exit non-zero.
 
 To fix this test, you can constrain the integers you generate with `min_value`
 and `max_value`:
 
 ```ocaml
 let%hegel_test integer_under_fifty tc =
-  let n = draw tc (integers ~min_value:0 ~max_value:49 ()) in
+  let n = draw tc (Generators.integers ~min_value:0 ~max_value:49 ()) in
   assert (n < 50)
 ;;
 ```
@@ -80,15 +100,15 @@ Run `dune runtest` again. It should now pass.
 Hegel provides a rich library of generators that you can use out of the box.
 There are primitive generators, such as `integers`, `floats`, and `text`, and
 generators for collections, such as `lists` and `tuples`, and generator combinators,
-such as `map` and `flat_map`.
+such as `map` and `flat_map`. All of these live in the `Generators` module.
 
 For example, you can use `lists` to generate a list of integers:
 
 ```ocaml
 let%hegel_test prepend_increases_length tc =
-  let lst = draw tc (lists (integers ()) ()) in
+  let lst = draw tc (Generators.lists (Generators.integers ()) ()) in
   let initial_length = List.length lst in
-  let extended = draw tc (integers ()) :: lst in
+  let extended = draw tc (Generators.integers ()) :: lst in
   assert (List.length extended > initial_length)
 ;;
 ```
@@ -104,8 +124,8 @@ you want to generate:
 type person = { age : int; name : string }
 
 let generate_person tc =
-  let age = draw tc (integers ~min_value:0 ~max_value:120 ()) in
-  let name = draw tc (text ()) in
+  let age = draw tc (Generators.integers ~min_value:0 ~max_value:120 ()) in
+  let name = draw tc (Generators.text ()) in
   { age; name }
 ```
 
@@ -123,7 +143,7 @@ let%hegel_test person_has_nonnegative_age tc =
 If you instead want a first-class `generator` value wrap the function with `composite`:
 
 ```ocaml
-let person_generator = composite generate_person
+let person_generator = Generators.composite generate_person
 (* person_generator : (person, unprintable) generator *)
 
 let%hegel_test people_are_generatable tc =
@@ -146,7 +166,7 @@ copy-pasteable line that replays the exact case.
 
 ```ocaml
 let%hegel_test reverse_is_identity tc =
-  let xs = draw tc (lists (integers ()) ()) in
+  let xs = draw tc (Generators.lists (Generators.integers ()) ()) in
   assert (xs = List.rev xs)
 ;;
 ```
@@ -176,7 +196,7 @@ A value that is shadowed or drawn inside a loop is numbered (`x_1`, `x_2`, …):
 ```ocaml
 let%hegel_test all_draws_below_ten tc =
   for _ = 1 to 3 do
-    let x = draw tc (integers ()) in
+    let x = draw tc (Generators.integers ()) in
     assert (x < 10)
   done
 ;;
@@ -189,33 +209,34 @@ let%hegel_test all_draws_below_ten tc =
 
 The same `let x` runs on each iteration, so Hegel disambiguates the draws as
 `x_1`, `x_2`, `x_3` in draw order. You can override the name with `~label`:
-`draw ~label:"y" tc (integers ())`.
+`draw ~label:"y" tc (Generators.integers ())`.
 
 Some combinators hand the result type to your own code and so carry no printer:
 `map`, `flat_map`, `sampled_from`, `just`, and generators from `[@@deriving
 hegel_generator]`. Either draw it with `draw_silent` (which prints nothing):
 
 ```ocaml
-let parity = draw_silent tc (map (fun n -> n mod 2) (integers ()))
+let parity = draw_silent tc (Generators.map (fun n -> n mod 2) (Generators.integers ()))
 ```
 or attach a printer with `with_printer`. The printer is any `'a -> Sexp.t`. 
 Note that `Sexp` requires `open Core`.
 ```ocaml
 let parity =
-  draw tc (with_printer (fun n -> Sexp.Atom (Int.to_string n))
-             (map (fun n -> n mod 2) (integers ())))
+  draw tc (Generators.with_printer (fun n -> Sexp.Atom (Int.to_string n))
+             (Generators.map (fun n -> n mod 2) (Generators.integers ())))
 ```
 If you have [`ppx_sexp_conv`](https://github.com/janestreet/ppx_sexp_conv) in your
 `(preprocess (pps ...))`, `[%sexp_of: int]` is a shorthand for that printer:
 ```ocaml
-let parity = draw tc (with_printer [%sexp_of: int] (map (fun n -> n mod 2) (integers ())))
+let parity =
+  draw tc (Generators.with_printer [%sexp_of: int] (Generators.map (fun n -> n mod 2) (Generators.integers ())))
 ```
 
 You can also attach your own debug information with `note`:
 
 ```ocaml
 let%hegel_test remainder_below_divisor tc =
-  let n = draw tc (integers ~min_value:0 ~max_value:1000 ()) in
+  let n = draw tc (Generators.integers ~min_value:0 ~max_value:1000 ()) in
   let r = n mod 7 in
   note tc (Printf.sprintf "n mod 7 = %d" r);
   assert (r < 7)
@@ -233,7 +254,7 @@ It takes a printer (`'a -> Core.Sexp.t`) for the values; build one from `Core`'s
 
 ```ocaml
 let%hegel_test reverse_is_identity tc =
-  let xs = draw tc (lists (integers ()) ()) in
+  let xs = draw tc (Generators.lists (Generators.integers ()) ()) in
   require_equal tc (Core.List.sexp_of_t Core.Int.sexp_of_t) xs (List.rev xs)
 ;;
 ```
@@ -255,14 +276,14 @@ require tc ~msg:"list must stay sorted" (is_sorted xs)
 
 ## Stateful testing
 
-`Hegel.Stateful` applies a random sequence of *rules* to a model and checks 
-invariants after every step. Pass `?sexp_of_state` to `Stateful.run` to trace 
-the model state through a failing sequence:
+`Stateful` applies a random sequence of *rules* to a model and checks 
+invariants after every step. Pass `?sexp_of_state` to `Stateful.run` to
+trace the model state through a failing sequence:
 
 ```ocaml
 let push =
   Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
-    draw tc (integers ~min_value:0 ~max_value:9 ()) :: stack)
+    draw tc (Generators.integers ~min_value:0 ~max_value:9 ()) :: stack)
 
 let%hegel_test stack_stays_small tc =
   Stateful.run
@@ -301,9 +322,9 @@ By default Hegel runs 100 test cases. To override this, attach a
 
 ```ocaml
 let%hegel_test integer_self_equality tc =
-  let n = draw tc (integers ()) in
+  let n = draw tc (Generators.integers ()) in
   assert (n = n)
-[@@settings Hegel.settings ~test_cases:500 ()]
+[@@settings settings ~test_cases:500 ()]
 ;;
 ```
 
