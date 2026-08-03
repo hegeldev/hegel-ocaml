@@ -7,12 +7,13 @@ let%expect_test "no-draw failure prints a bodyless singular report" =
        (fun _tc -> failwith "boom")
    with
    | _ -> ());
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
     Exception: Failure("boom")
-    rerun with: ~failure_blobs:[ "AAAAAAA=" ]
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
 
@@ -26,6 +27,7 @@ let%expect_test "later falsification counts plural test cases" =
           if v >= 60 then failwith "large values are broken")
    with
    | _ -> ());
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     --- Failure ------------------------------------------------------------
@@ -34,7 +36,7 @@ let%expect_test "later falsification counts plural test cases" =
       draw_1 = 60
 
     Exception: Failure("large values are broken")
-    rerun with: ~failure_blobs:[ "AAEAAAAACgEAAAA8" ]
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
 
@@ -59,6 +61,7 @@ let%expect_test "a multiline drawn value aligns under its name" =
           assert (List.length l < 20))
    with
    | _ -> ());
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     --- Failure ------------------------------------------------------------
@@ -67,7 +70,7 @@ let%expect_test "a multiline drawn value aligns under its name" =
       l = (00000 00000 00000 00000 00000 00000 00000 00000 00000 00000 00000 00000
            00000 00000 00000 00000 00000 00000 00000 00000)
 
-    Exception: File "ppx/test/expect_tests/test_failure_report.ml", line 59, characters 10-16: Assertion failed
-    rerun with: ~failure_blobs:[ "AXic7ckxDQAACMTAfgJi2PCvDgTggB+aDleAFLnrI9N3YgAeKxPH" ]
+    Exception: File "ppx/test/expect_tests/test_failure_report.ml", line LINE, characters C1-C2: Assertion failed
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;

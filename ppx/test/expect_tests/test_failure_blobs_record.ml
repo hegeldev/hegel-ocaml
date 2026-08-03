@@ -144,23 +144,23 @@ let%expect_test "recording groups each failure's draws with its diagnostic" =
   (match multi_fail_test () with
    | () -> assert false
    | exception Failure msg -> Printf.printf "%s" msg);
-  Printf.printf "%s" (normalize [%expect.output]);
+  Printf.printf "%s" (Expect_scrub.scrub_report (normalize [%expect.output]));
   [%expect
     {|
-    --- Failure: multi_fail_test (ppx/test/expect_tests/test_failure_blobs_record.ml:133) ---
+    --- Failure: multi_fail_test (ppx/test/expect_tests/test_failure_blobs_record.ml:<LINE>) ---
     Falsified after 1 test case (0 discarded):
 
     Failure 1 of 2:
       v = 60
 
     Exception: Expect_tests.Test_failure_blobs_record.A
-    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAA8" ]]
+    rerun with: [@@failure_blobs [ "<BLOB>" ]]
 
     Failure 2 of 2:
       v = 0
 
     Exception: Expect_tests.Test_failure_blobs_record.B
-    rerun with: [@@failure_blobs [ "AAEAAAAACgEAAAAA" ]]
+    rerun with: [@@failure_blobs [ "<BLOB>" ]]
     2 failures found!
     |}]
 ;;
@@ -176,7 +176,7 @@ let%expect_test "the multi-failure report omits blobs when print_blob is off" =
   (match Hegel.run_hegel_test ~settings multi_prop with
    | () -> assert false
    | exception Failure msg -> Printf.printf "%s" msg);
-  Printf.printf "%s" (normalize [%expect.output]);
+  Printf.printf "%s" (Expect_scrub.scrub_report (normalize [%expect.output]));
   [%expect
     {|
     --- Failure ------------------------------------------------------------

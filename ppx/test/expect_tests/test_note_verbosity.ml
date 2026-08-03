@@ -30,12 +30,14 @@ let run_failing verbosity =
 
 let%expect_test "Quiet suppresses notes entirely" =
   run_passing Quiet;
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect {| |}]
 ;;
 
 let%expect_test "Normal notes only on the final failing replay" =
   run_passing Normal;
   run_failing Normal;
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     --- Failure ------------------------------------------------------------
@@ -44,12 +46,13 @@ let%expect_test "Normal notes only on the final failing replay" =
       NOTE_MARKER
 
     Exception: Failure("boom")
-    rerun with: ~failure_blobs:[ "AAAAAAA=" ]
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
 
 let%expect_test "Verbose notes on every case (not just the final replay)" =
   run_passing Verbose;
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     Starting phase: Generate
@@ -73,6 +76,7 @@ let%expect_test "Verbose notes on every case (not just the final replay)" =
 
 let%expect_test "Debug notes on every case (not just the final replay)" =
   run_passing Debug;
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     Starting phase: Generate

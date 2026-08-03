@@ -13,12 +13,13 @@ let%expect_test "require fails with the default message" =
        Hegel.require tc false)
    with
    | _ -> ());
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
     Exception: Failure("require: condition was false")
-    rerun with: ~failure_blobs:[ "AAAAAAA=" ]
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
 
@@ -28,12 +29,13 @@ let%expect_test "require fails with a custom message" =
        Hegel.require tc ~msg:"the invariant broke" false)
    with
    | _ -> ());
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
     Exception: Failure("the invariant broke")
-    rerun with: ~failure_blobs:[ "AAAAAAA=" ]
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
 
@@ -44,6 +46,7 @@ let%expect_test "require_equal prints a sexp diff of the two values" =
        Hegel.require_equal tc sexp_of_int_list [ 1; 2; 3 ] [ 1; 9; 3 ])
    with
    | _ -> ());
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     --- Failure ------------------------------------------------------------
@@ -55,7 +58,7 @@ let%expect_test "require_equal prints a sexp diff of the two values" =
         3)    3)
 
     Exception: Failure("require_equal: values differ")
-    rerun with: ~failure_blobs:[ "AAAAAAA=" ]
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
 
@@ -79,6 +82,7 @@ let%expect_test "require failures get caller-derived origins" =
           Hegel.require tc ~msg:"too small" (v > 30))
    with
    | _ -> ());
+  print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     --- Failure ------------------------------------------------------------
