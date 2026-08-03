@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.0 - 2026-08-03
+
+This release removes `hegel_test_runtime`. Users are are now expected to run
+Hegel tests using a test framework like Alcotest.
+
 ## 0.12.2 - 2026-07-21
 
 This patch fixes redundant output from generated functions on a failing replay.
