@@ -24,8 +24,9 @@ let lib =
 
 let foreign name typ = Foreign.foreign ~from:lib name typ
 
-(* [hegel_next_test_case] blocks on the engine's worker-thread channel, so it
-   must release the OCaml runtime lock while it waits. *)
+(* [hegel_next_test_case] runs the engine on the calling thread. An engine call
+   can take a while, so release the OCaml runtime lock for its duration to let 
+   other OCaml threads run. *)
 let foreign_blocking name typ =
   Foreign.foreign ~from:lib ~release_runtime_lock:true name typ
 ;;
@@ -179,7 +180,7 @@ let c_settings_suppress_health_check =
 
 (* [hegel_run_start]'s [callback]/[user_data] (the third and fourth arguments)
    redirect the engine's own output off stderr. We always pass NULL for both,
-   keeping it on stderr. We do not yet install a callback. *)
+   keeping it on stderr. *)
 let c_run_start =
   foreign
     "hegel_run_start"

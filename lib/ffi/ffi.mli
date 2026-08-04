@@ -199,8 +199,9 @@ val test_case_from_blob : context -> settings -> string option -> test_case
     {!Backend_error} if the run has not finished. *)
 val run_result : context -> run -> run_result
 
-(** [run_free ctx run] frees a run handle, draining the worker thread. Run-result
-    and failure snapshots are independent and outlive it; free them separately. *)
+(** [run_free ctx run] frees a run handle. If the run was abandoned mid-run, the
+    rest of the exploration is simply dropped. Run-result and failure snapshots
+    are independent and outlive it; free them separately. *)
 val run_free : context -> run -> unit
 
 (** [run_result_free ctx r] frees a run-result snapshot from {!val:run_result}. *)
