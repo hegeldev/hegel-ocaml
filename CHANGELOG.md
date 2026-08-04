@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.1 - 2026-08-04
+
+This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.29.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.29.0) to [0.30.5](https://github.com/hegeldev/hegel-rust/releases/tag/v0.30.5).
+
 ## 0.13.0 - 2026-08-03
 
 This release removes `hegel_test_runtime`. Users are are now expected to run
