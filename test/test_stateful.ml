@@ -130,19 +130,29 @@ let empty_pool_draw_rejects_test () =
   Alcotest.(check bool) "empty pool draw raised Assume_rejected" true !saw_reject
 ;;
 
-let always_reject_rule =
+let stateful_step_count_forwarded_test () =
   let module S = Hegel.Stateful in
-  S.Rule.create ~name:"reject" ~step:(fun tc s ->
-    Hegel.assume tc false;
-    s)
-;;
-
-let stateful_retry_budget_floor_test () =
+  let steps_this_case = ref 0 in
+  let max_steps = ref 0 in
+  let count_rule =
+    S.Rule.create ~name:"count" ~step:(fun _tc () -> incr steps_this_case)
+  in
   Hegel.run_hegel_test
     ~settings:
-      (Hegel.settings ~test_cases:1 ~seed:0 ()
-       |> Hegel.with_suppress_health_check [ Hegel.Filter_too_much ])
-    (fun tc -> Hegel.Stateful.run ~init:() ~rules:[ always_reject_rule ] tc)
+      (Hegel.settings ~test_cases:20 ~seed:0 () |> Hegel.with_stateful_step_count 5)
+    (fun tc ->
+       steps_this_case := 0;
+       S.run ~init:() ~rules:[ count_rule ] tc;
+       max_steps := max !max_steps !steps_this_case);
+  Alcotest.(check bool) "no case exceeded the configured cap" true (!max_steps <= 5)
+;;
+
+(* A stateful step count below one is a usage error, rejected eagerly by the
+   settings builder. *)
+let stateful_step_count_below_one_test () =
+  match Hegel.settings () |> Hegel.with_stateful_step_count 0 with
+  | (_ : Hegel.settings) -> Alcotest.fail "expected Invalid_argument"
+  | exception Invalid_argument _ -> ()
 ;;
 
 let test_stateful_bounded_steps () =
@@ -225,9 +235,13 @@ let tests =
       `Quick
       empty_pool_draw_rejects_test
   ; Alcotest.test_case
-      "stateful: all-rejected test case is invalid"
+      "stateful: step count is forwarded to the engine"
       `Quick
-      stateful_retry_budget_floor_test
+      stateful_step_count_forwarded_test
+  ; Alcotest.test_case
+      "stateful: step count below one is rejected"
+      `Quick
+      stateful_step_count_below_one_test
   ; Alcotest.test_case
       "stateful: with_stateful_step_count bounds steps"
       `Quick
