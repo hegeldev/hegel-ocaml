@@ -18,7 +18,7 @@ module Labels = struct
   let sampled_from = 14
   let enum_variant = 15
   let _feature_flag = 16
-  let stateful_rule = 1000
+  let stateful_rule = 31
   let function_result = 1001
 end
 

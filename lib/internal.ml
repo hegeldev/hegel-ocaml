@@ -154,7 +154,8 @@ let settings ?(test_cases = 100) ?seed () =
 (** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
 let with_test_cases n s = { s with test_cases = n }
 
-(** [with_stateful_step_count n s] returns settings [s] with [stateful_step_count] set to [n]. *)
+(** [with_stateful_step_count n s] returns settings [s] with [stateful_step_count]
+    set to [n]. [n] must be at least 1. *)
 let with_stateful_step_count n s = { s with stateful_step_count = n }
 
 (** [with_verbosity v s] returns settings [s] with [verbosity] set to [v]. *)
@@ -220,8 +221,6 @@ let new_draw_state () =
 type test_case =
   { handle : Ffi.test_case
   ; context : Ffi.context
-  ; mode : mode
-  ; stateful_step_count : int
   ; is_final : bool
   ; verbosity : verbosity
   ; mutable test_aborted : bool
@@ -233,9 +232,6 @@ type test_case =
 
 (* Accessors so other library modules can read the internal fields they need
    without the record being exposed (the type is abstract in the interface). *)
-let mode (tc : test_case) = tc.mode
-let stateful_step_count (tc : test_case) = tc.stateful_step_count
-
 let is_high_verbosity (tc : test_case) =
   match tc.verbosity with
   | Debug | Verbose -> true
@@ -272,8 +268,6 @@ let clone (tc : test_case) =
   let c =
     { handle
     ; context
-    ; mode = tc.mode
-    ; stateful_step_count = tc.stateful_step_count
     ; is_final = tc.is_final
     ; verbosity = tc.verbosity
     ; test_aborted = false
@@ -678,8 +672,9 @@ let new_state_machine tc ~rule_names ~invariant_names =
 ;;
 
 (** [state_machine_next_rule tc ~state_machine_id] draws the index of the next
-    rule to run. Raises {!Data_exhausted} when the engine's choice budget is
-    exhausted. *)
+    rule to run, or [None] when the engine's step budget for the test case is
+    exhausted and the caller should stop running rules. Raises
+    {!Data_exhausted} when the engine's choice budget is exhausted. *)
 let state_machine_next_rule tc ~state_machine_id =
   with_stop_guard tc (fun () ->
     Ffi.state_machine_next_rule tc.context tc.handle ~state_machine_id)
@@ -722,23 +717,30 @@ let bitmask bit_of items = List.fold items ~init:0 ~f:(fun acc x -> acc lor bit_
     settings handle from the OCaml [settings]. The caller must free it. *)
 let build_ffi_settings ctx (settings : settings) ~database_key =
   let s = Ffi.settings_new ctx in
-  Ffi.settings_mode ctx s (ffi_mode settings.mode);
-  Ffi.settings_test_cases ctx s settings.test_cases;
-  Ffi.settings_verbosity ctx s (ffi_verbosity settings.verbosity);
-  Ffi.settings_seed ctx s settings.seed;
-  Ffi.settings_derandomize ctx s settings.derandomize;
-  Ffi.settings_report_multiple_failures ctx s settings.report_multiple_failures;
-  (match settings.database with
-   | Unset -> ()
-   | Disabled -> Ffi.settings_database ctx s (Some "")
-   | Path p -> Ffi.settings_database ctx s (Some p));
-  Option.iter database_key ~f:(fun k -> Ffi.settings_database_key ctx s (Some k));
-  Option.iter settings.phases ~f:(fun phases ->
-    Ffi.settings_phases ctx s (bitmask phase_bit phases));
-  (match settings.suppress_health_check with
-   | [] -> ()
-   | checks -> Ffi.settings_suppress_health_check ctx s (bitmask health_check_bit checks));
-  s
+  try
+    Ffi.settings_mode ctx s (ffi_mode settings.mode);
+    Ffi.settings_test_cases ctx s settings.test_cases;
+    Ffi.settings_stateful_step_count ctx s settings.stateful_step_count;
+    Ffi.settings_verbosity ctx s (ffi_verbosity settings.verbosity);
+    Ffi.settings_seed ctx s settings.seed;
+    Ffi.settings_derandomize ctx s settings.derandomize;
+    Ffi.settings_report_multiple_failures ctx s settings.report_multiple_failures;
+    (match settings.database with
+     | Unset -> ()
+     | Disabled -> Ffi.settings_database ctx s (Some "")
+     | Path p -> Ffi.settings_database ctx s (Some p));
+    Option.iter database_key ~f:(fun k -> Ffi.settings_database_key ctx s (Some k));
+    Option.iter settings.phases ~f:(fun phases ->
+      Ffi.settings_phases ctx s (bitmask phase_bit phases));
+    (match settings.suppress_health_check with
+     | [] -> ()
+     | checks ->
+       Ffi.settings_suppress_health_check ctx s (bitmask health_check_bit checks));
+    s
+  with
+  | e ->
+    Ffi.settings_free ctx s;
+    raise e
 ;;
 
 type case_outcome =
@@ -756,10 +758,8 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
   let (tc : test_case) =
     { handle
     ; context = ctx
-    ; mode = settings.mode
     ; is_final
     ; verbosity = settings.verbosity
-    ; stateful_step_count = settings.stateful_step_count
     ; test_aborted = false
     ; printed_output = false
     ; draw_depth = 0

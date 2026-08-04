@@ -151,6 +151,7 @@ val settings_mode : context -> settings -> mode -> unit
 val settings_backend : context -> settings -> backend -> unit
 
 val settings_test_cases : context -> settings -> int -> unit
+val settings_stateful_step_count : context -> settings -> int -> unit
 val settings_verbosity : context -> settings -> verbosity -> unit
 
 (** [settings_seed ctx s seed] sets the RNG seed ([None] picks a fresh random
@@ -360,9 +361,11 @@ val new_state_machine
   -> int
 
 (** [state_machine_next_rule ctx tc ~state_machine_id] draws the index of the next
-    rule to run, in [\[0, num_rules)]. Raises {!Stop_test} when the engine's
+    rule to run, in [\[0, num_rules)], or returns [None] when the engine's step
+    budget for the test case is exhausted ([HEGEL_STATE_MACHINE_DONE]) and the
+    caller should stop running rules. Raises {!Stop_test} when the engine's
     choice budget is exhausted. *)
-val state_machine_next_rule : context -> test_case -> state_machine_id:int -> int
+val state_machine_next_rule : context -> test_case -> state_machine_id:int -> int option
 
 (** [target ctx tc value label] records a targeting observation. *)
 val target : context -> test_case -> float -> string -> unit

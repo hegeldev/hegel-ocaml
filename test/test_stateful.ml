@@ -147,12 +147,21 @@ let stateful_step_count_forwarded_test () =
   Alcotest.(check bool) "no case exceeded the configured cap" true (!max_steps <= 5)
 ;;
 
-(* A stateful step count below one is a usage error, rejected eagerly by the
-   settings builder. *)
+(* A stateful step count below one is a usage error: the engine rejects it
+   ([HEGEL_E_INVALID_ARG]) when the run's settings are built, matching
+   hegel-rust (the [with_*] builders do not validate). *)
 let stateful_step_count_below_one_test () =
-  match Hegel.settings () |> Hegel.with_stateful_step_count 0 with
-  | (_ : Hegel.settings) -> Alcotest.fail "expected Invalid_argument"
-  | exception Invalid_argument _ -> ()
+  match
+    Hegel.run_hegel_test
+      ~settings:(Hegel.settings () |> Hegel.with_stateful_step_count 0)
+      (fun _tc -> ())
+  with
+  | () -> Alcotest.fail "expected Backend_error"
+  | exception Hegel_ffi.Ffi.Backend_error msg ->
+    Alcotest.(check bool)
+      "diagnostic names the constraint"
+      true
+      (String.is_substring msg ~substring:"step count must be at least 1")
 ;;
 
 let test_stateful_bounded_steps () =
