@@ -111,9 +111,11 @@ typed draws (`generate_integer`, `generate_boolean`, `generate_float`,
 constructors, `generate_date`/`time`/`datetime`, `generate_ipv4`/`ipv6`), spans,
 collections, pools, `target`, `mark_complete`. There is no CBOR: each value is
 drawn by a dedicated typed call rather than a schema round-trip (this replaced the
-removed `hegel_generate`/CBOR-schema path in libhegel 0.26.0). `hegel_next_test_case`
-blocks on the engine's worker thread, so its binding releases the OCaml runtime
-lock. The `ffi` library is deliberately NOT bisect_ppx-instrumented, keeping its
+removed `hegel_generate`/CBOR-schema path in libhegel 0.26.0). There is no
+engine thread (removed in libhegel 0.30.1): `hegel_next_test_case` runs all
+engine work between test cases on the calling thread, so its binding releases
+the OCaml runtime lock for the call's duration. The `ffi` library is
+deliberately NOT bisect_ppx-instrumented, keeping its
 mechanical marshalling out of the 100%-coverage gate (no `[@coverage off]`).
 
 `lib/protocol.ml`, `lib/connection.ml`, `lib/cbor/`, `lib/cbor_helpers.ml`, and

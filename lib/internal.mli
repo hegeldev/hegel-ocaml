@@ -136,7 +136,8 @@ val is_in_ci : unit -> bool
 (** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
 val with_test_cases : int -> settings -> settings
 
-(** [with_stateful_step_count n s] returns settings [s] with [stateful_step_count] set to [n]. *)
+(** [with_stateful_step_count n s] returns settings [s] with [stateful_step_count]
+    set to [n]. [n] must be at least 1. *)
 val with_stateful_step_count : int -> settings -> settings
 
 (** [with_verbosity v s] returns settings [s] with [verbosity] set to [v]. *)
@@ -185,8 +186,6 @@ type test_case
 
 (**/**)
 
-val mode : test_case -> mode
-val stateful_step_count : test_case -> int
 val is_high_verbosity : test_case -> bool
 val draw_depth : test_case -> int
 val incr_draw_depth : test_case -> unit
@@ -407,9 +406,10 @@ val new_state_machine
 
 (** [state_machine_next_rule tc ~state_machine_id] draws the index (in
     [\[0, num_rules)]) of the next rule to run, letting the engine choose and
-    shrink the rule sequence. Raises {!Data_exhausted} when the engine's choice
-    budget is exhausted. *)
-val state_machine_next_rule : test_case -> state_machine_id:int -> int
+    shrink the rule sequence, or returns [None] when the engine's step budget
+    for the test case is exhausted and the caller should stop running rules.
+    Raises {!Data_exhausted} when the engine's choice budget is exhausted. *)
+val state_machine_next_rule : test_case -> state_machine_id:int -> int option
 
 (**/**)
 

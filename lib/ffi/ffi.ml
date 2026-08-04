@@ -24,8 +24,9 @@ let lib =
 
 let foreign name typ = Foreign.foreign ~from:lib name typ
 
-(* [hegel_next_test_case] blocks on the engine's worker-thread channel, so it
-   must release the OCaml runtime lock while it waits. *)
+(* [hegel_next_test_case] runs the engine on the calling thread. An engine call
+   can take a while, so release the OCaml runtime lock for its duration to let 
+   other OCaml threads run. *)
 let foreign_blocking name typ =
   Foreign.foreign ~from:lib ~release_runtime_lock:true name typ
 ;;
@@ -125,6 +126,12 @@ let c_settings_test_cases =
     (ptr void @-> ptr void @-> uint64_t @-> returning int)
 ;;
 
+let c_settings_stateful_step_count =
+  foreign
+    "hegel_settings_set_stateful_step_count"
+    (ptr void @-> ptr void @-> int64_t @-> returning int)
+;;
+
 let c_settings_verbosity =
   foreign "hegel_settings_set_verbosity" (ptr void @-> ptr void @-> int @-> returning int)
 ;;
@@ -173,7 +180,7 @@ let c_settings_suppress_health_check =
 
 (* [hegel_run_start]'s [callback]/[user_data] (the third and fourth arguments)
    redirect the engine's own output off stderr. We always pass NULL for both,
-   keeping it on stderr. We do not yet install a callback. *)
+   keeping it on stderr. *)
 let c_run_start =
   foreign
     "hegel_run_start"
@@ -647,6 +654,10 @@ let settings_test_cases ctx s n =
   check_rc ctx (c_settings_test_cases ctx s (Unsigned.UInt64.of_int n))
 ;;
 
+let settings_stateful_step_count ctx s n =
+  check_rc ctx (c_settings_stateful_step_count ctx s (Int64.of_int n))
+;;
+
 let settings_verbosity ctx s v =
   check_rc ctx (c_settings_verbosity ctx s (verbosity_to_int v))
 ;;
@@ -1043,10 +1054,16 @@ let new_state_machine ctx tc ~rule_names ~invariant_names =
   Int64.to_int !@out
 ;;
 
+(* [HEGEL_STATE_MACHINE_DONE]: written to the out parameter by
+   [hegel_state_machine_next_rule] when the engine's step budget for the test
+   case is exhausted and the caller should stop running rules. *)
+let state_machine_done = -1
+
 let state_machine_next_rule ctx tc ~state_machine_id =
   let out = allocate int64_t 0L in
   check_rc ctx (c_state_machine_next_rule ctx tc (Int64.of_int state_machine_id) out);
-  Int64.to_int !@out
+  let index = Int64.to_int !@out in
+  if index = state_machine_done then None else Some index
 ;;
 
 let target ctx tc value label = check_rc ctx (c_target ctx tc value label)

@@ -357,8 +357,9 @@ val settings : ?test_cases:int -> ?seed:int -> unit -> settings
 (** [with_test_cases n s] sets the number of test cases to run. *)
 val with_test_cases : int -> settings -> settings
 
-(** [with_stateful_step_count n s] sets the maximum number of steps per stateful
-    test (see {!Stateful}). *)
+(** [with_stateful_step_count n s] sets the target number of steps per stateful
+    test case (see {!Stateful}). Each case runs at least one step and at most
+    [n]. Defaults to 50. [n] must be at least 1. *)
 val with_stateful_step_count : int -> settings -> settings
 
 (** [with_verbosity v s] sets how much printed output the run produces.

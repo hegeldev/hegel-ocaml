@@ -44,11 +44,6 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
   match rules with
   | [] -> invalid_arg "Cannot run a state machine with no rules."
   | _ ->
-    let is_single =
-      match Internal.mode tc with
-      | Internal.Single_test_case -> true
-      | Test_run -> false
-    in
     let rule_array = Array.of_list rules in
     let invariant_names =
       List.mapi invariants ~f:(fun i _ -> Printf.sprintf "invariant_%d" i)
@@ -73,55 +68,27 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
     in
     print_state init;
     check_invariants ~where:"in the initial state" init;
-    let max_steps =
-      if is_single then Int.max_value else Internal.stateful_step_count tc
-    in
-    (* We basically always want to run the maximum number of steps, but leave a
-       small probability of terminating early so the shrinker can reduce the
-       step count once a failing case is found: stop with probability 2^-16
-       during normal operation, and force a stop once enough steps have run. *)
-    let rec loop ~state ~num_steps_succeeded ~steps_run =
+    let rec loop ~state ~steps_attempted =
       Internal.start_span ~label:Generators.Ppx_internal.Labels.stateful_rule tc;
-      let p_stop = 2.0 ** -16.0 in
-      let must_stop =
-        if is_single
-        then Some false
-        else if steps_run >= max_steps
-        then Some true
-        else if steps_run <= 0
-        then Some false
-        else None
-      in
-      (* Stop: mirror Hypothesis, which breaks out of the loop leaving this span
-         open (the engine freezes it on completion), so the terminating stop
-         boolean stays recorded inside its own span. *)
-      if Internal.generate_boolean tc p_stop must_stop
-      then (if num_steps_succeeded = 0 then Internal.assume tc false)
-      else (
-        let next_state, num_steps_succeeded =
-          try
-            let rule =
-              rule_array.(Internal.state_machine_next_rule tc ~state_machine_id)
-            in
-            let step_num = steps_run + 1 in
-            Internal.note tc (Printf.sprintf "Step %d: %s" step_num rule.Rule.name);
-            let new_state =
-              Internal.with_note_indent tc (fun () -> rule.Rule.step tc state)
-            in
-            print_state new_state;
-            check_invariants ~where:(Printf.sprintf "after step %d" step_num) new_state;
-            Internal.stop_span tc;
-            new_state, num_steps_succeeded + 1
-          with
-          | Internal.Assume_rejected ->
-            Internal.note tc "Rule stopped early due to violated assumption.";
-            Internal.stop_span ~discard:true tc;
-            state, num_steps_succeeded
-          | e ->
-            Internal.stop_span tc;
-            raise e
-        in
-        loop ~state:next_state ~num_steps_succeeded ~steps_run:(steps_run + 1))
+      match Internal.state_machine_next_rule tc ~state_machine_id with
+      | None -> ()
+      | Some rule_index ->
+        let rule = rule_array.(rule_index) in
+        let step_num = steps_attempted + 1 in
+        Internal.note tc (Printf.sprintf "Step %d: %s" step_num rule.Rule.name);
+        (match Internal.with_note_indent tc (fun () -> rule.Rule.step tc state) with
+         | new_state ->
+           Internal.stop_span tc;
+           print_state new_state;
+           check_invariants ~where:(Printf.sprintf "after step %d" step_num) new_state;
+           loop ~state:new_state ~steps_attempted:step_num
+         | exception Internal.Assume_rejected ->
+           Internal.stop_span ~discard:true tc;
+           Internal.note tc "Rule stopped early due to violated assumption.";
+           loop ~state ~steps_attempted:step_num
+         | exception e ->
+           Internal.stop_span tc;
+           raise e)
     in
-    loop ~state:init ~num_steps_succeeded:0 ~steps_run:0
+    loop ~state:init ~steps_attempted:0
 ;;
