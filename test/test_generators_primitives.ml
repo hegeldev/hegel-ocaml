@@ -28,6 +28,34 @@ let test_integers_min_greater_than_max () =
   | _ -> Alcotest.fail "expected Invalid_argument"
 ;;
 
+(** Test: booleans raises when p is below 0. *)
+let test_booleans_probability_too_low () =
+  match booleans ~p:(-0.1) () with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+;;
+
+(** Test: booleans raises when p is above 1. *)
+let test_booleans_probability_too_high () =
+  match booleans ~p:1.1 () with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "expected Invalid_argument"
+;;
+
+(** Test: booleans ~p:1.0 always draws true. *)
+let test_booleans_probability_one_e2e () =
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+    let b = Hegel.draw tc (booleans ~p:1.0 ()) in
+    assert b)
+;;
+
+(** Test: booleans ~p:0.0 always draws false. *)
+let test_booleans_probability_zero_e2e () =
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+    let b = Hegel.draw tc (booleans ~p:0.0 ()) in
+    assert (not b))
+;;
+
 (** Test: floats raises when allow_nan=true with min_value set. *)
 let test_floats_nan_with_min () =
   match floats ~allow_nan:true ~min_value:0.0 () with
@@ -314,6 +342,22 @@ let tests =
   [ Alcotest.test_case "integers in range" `Quick test_integers_in_range
   ; Alcotest.test_case "integers unbounded e2e" `Quick test_integers_unbounded_e2e
   ; Alcotest.test_case "integers min > max" `Quick test_integers_min_greater_than_max
+  ; Alcotest.test_case
+      "booleans probability too low"
+      `Quick
+      test_booleans_probability_too_low
+  ; Alcotest.test_case
+      "booleans probability too high"
+      `Quick
+      test_booleans_probability_too_high
+  ; Alcotest.test_case
+      "booleans probability one e2e"
+      `Quick
+      test_booleans_probability_one_e2e
+  ; Alcotest.test_case
+      "booleans probability zero e2e"
+      `Quick
+      test_booleans_probability_zero_e2e
   ; Alcotest.test_case "floats nan with min" `Quick test_floats_nan_with_min
   ; Alcotest.test_case "floats nan with max" `Quick test_floats_nan_with_max
   ; Alcotest.test_case "floats min > max" `Quick test_floats_min_greater_than_max

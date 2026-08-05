@@ -15,9 +15,12 @@ let integers ?(min_value = Int.min_int) ?(max_value = Int.max_int) () =
     ~sexp_of:sexp_of_int
 ;;
 
-(** [booleans ()] creates a generator for boolean values. *)
-let booleans () =
-  leaf ~draw:(fun tc -> Internal.generate_boolean tc 0.5 None) ~sexp_of:sexp_of_bool
+(** [booleans ?p ()] creates a generator for boolean values,
+    [true] with probability [p] (default [0.5]). *)
+let booleans ?(p = 0.5) () =
+  if p < 0.0 || p > 1.0
+  then raise (Invalid_argument (Printf.sprintf "p=%g must be between 0 and 1" p));
+  leaf ~draw:(fun tc -> Internal.generate_boolean tc p None) ~sexp_of:sexp_of_bool
 ;;
 
 (** The smallest positive (subnormal) 64-bit float. Passed as

@@ -148,15 +148,16 @@ val printer : ('a, printable) generator -> 'a -> Sexplib0.Sexp.t
 
 (** {2 Primitive generators} *)
 
-(** [booleans ()] creates a generator for boolean values.
+(** [booleans ?p ()] creates a generator for boolean values, [true] with
+    probability [p] (default [0.5]). [p] must be between 0 and 1.
 
     {[
       let%hegel_test booleans_example tc =
-        let b = draw tc (Generators.booleans ()) in
+        let b = draw tc (Generators.booleans ~p:0.9 ()) in
         assert (b = true || b = false)
       ;;
     ]} *)
-val booleans : unit -> (bool, printable) generator
+val booleans : ?p:float -> unit -> (bool, printable) generator
 
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
     the given bounds.
