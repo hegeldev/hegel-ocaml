@@ -277,14 +277,12 @@ let test_printer_assoc_list_composite () =
     "((1 2))"
 ;;
 
-(* Hash tables render through [Hashtbl.Poly.sexp_of_t]; a single entry keeps
+(* Hash tables render by folding the [Stdlib.Hashtbl]; a single entry keeps
    the iteration order deterministic. *)
 let test_printer_hash_table () =
-  check_printer
-    "hash table"
-    (hash_tables (integers ()) (integers ()) ())
-    (Core.Hashtbl.Poly.of_alist_exn [ 1, 2 ])
-    "((1 2))"
+  let table = Stdlib.Hashtbl.create 1 in
+  Stdlib.Hashtbl.replace table 1 2;
+  check_printer "hash table" (hash_tables (integers ()) (integers ()) ()) table "((1 2))"
 ;;
 
 (* optional composes an ['a option] printer from the element's, rendering
@@ -308,19 +306,21 @@ let test_printer_optional_composite () =
     "(7)"
 ;;
 
+module Pool_gen = Make_pool (Int_table)
+
 let test_resolve_draw () =
-  let tbl = Core.Hashtbl.create (module Core.Int) in
-  Core.Hashtbl.set tbl ~key:7 ~data:"v";
+  let tbl = Int_table.create 4 in
+  Int_table.replace tbl 7 "v";
   (* consume:false keeps the entry *)
-  Alcotest.(check string) "draw" "v" (resolve_draw tbl ~consume:false 7);
-  Alcotest.(check int) "still present" 1 (Core.Hashtbl.length tbl);
+  Alcotest.(check string) "draw" "v" (Pool_gen.resolve_draw tbl ~consume:false 7);
+  Alcotest.(check int) "still present" 1 (Int_table.length tbl);
   (* consume:true removes it *)
-  Alcotest.(check string) "consume" "v" (resolve_draw tbl ~consume:true 7);
-  Alcotest.(check int) "removed" 0 (Core.Hashtbl.length tbl);
+  Alcotest.(check string) "consume" "v" (Pool_gen.resolve_draw tbl ~consume:true 7);
+  Alcotest.(check int) "removed" 0 (Int_table.length tbl);
   (* unknown id raises Flaky_strategy *)
   let raised =
     try
-      ignore (resolve_draw tbl ~consume:false 99 : string);
+      ignore (Pool_gen.resolve_draw tbl ~consume:false 99 : string);
       false
     with
     | Internal.Flaky_strategy -> true

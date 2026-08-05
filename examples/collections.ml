@@ -39,7 +39,7 @@ let%hegel_test test_list_min_size tc =
 let%hegel_test test_map_combinator tc =
   let abs_gen =
     Generators.with_printer
-      (fun i -> Core.Sexp.Atom (string_of_int i))
+      (fun i -> Sexplib0.Sexp.Atom (string_of_int i))
       (Generators.map
          (fun v -> abs v)
          (Generators.integers ~min_value:(-100) ~max_value:100 ()))
@@ -79,7 +79,7 @@ let%hegel_test test_sampled_from tc =
     draw
       tc
       (Generators.with_printer
-         (fun i -> Core.Sexp.Atom (string_of_int i))
+         (fun i -> Sexplib0.Sexp.Atom (string_of_int i))
          (Generators.sampled_from options))
   in
   assert (v = 10 || v = 20 || v = 30 || v = 40)
@@ -116,7 +116,7 @@ let%hegel_test test_hash_table_size tc =
          ~max_size:6
          ())
   in
-  let n = Core.Hashtbl.length table in
+  let n = Hashtbl.length table in
   assert (n >= 2 && n <= 6)
 [@@settings settings ~test_cases:50 ()]
 ;;

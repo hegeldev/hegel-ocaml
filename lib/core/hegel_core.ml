@@ -3,13 +3,13 @@
 open! Core
 module G = Hegel.Generators
 
-let hash_tables keys values ?(min_size = 0) ?max_size () =
+let hash_tables keys values ?min_size ?max_size () =
   G.hash_tables_core
     ~of_pairs:Hashtbl.Poly.of_alist_exn
     ~sexp_of_t:Hashtbl.Poly.sexp_of_t
     keys
     values
-    ~min_size
+    ?min_size
     ?max_size
     ()
 ;;

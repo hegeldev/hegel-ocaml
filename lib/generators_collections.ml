@@ -92,7 +92,7 @@ let hash_tables_core
 
 (** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
     polymorphic [Stdlib.Hashtbl.t] tables over printable [keys] and [values]. *)
-let hash_tables keys values ?(min_size = 0) ?max_size () =
+let hash_tables keys values ?min_size ?max_size () =
   hash_tables_core
     ~of_pairs:(fun pairs ->
       let table = Stdlib.Hashtbl.create (List.length pairs) in
@@ -103,7 +103,7 @@ let hash_tables keys values ?(min_size = 0) ?max_size () =
         (Stdlib.Hashtbl.fold (fun k v acc -> Sexp.List [ pk k; pv v ] :: acc) table []))
     keys
     values
-    ~min_size
+    ?min_size
     ?max_size
     ()
 ;;

@@ -770,12 +770,12 @@ val flat_map
     ]} *)
 val filter : ('a -> bool) -> ('a, 'p) generator -> ('a, 'p) generator
 
-(** {2 Pool generators}
-
+(**/**)
+(*
     The engine-pool generator ([Stateful.Pool]) resolves engine-drawn variable
-    ids against the client-side pool.*)
+    ids against the client-side pool.
+*)
 
-(** Defined for convenience *)
 module Int_table : Stdlib.Hashtbl.S with type key = int
 
 (** [Make_pool (Tbl)] specializes the pool-drawing machinery to the concrete
@@ -789,8 +789,6 @@ module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) : sig
     -> consume:bool
     -> ('a, unprintable) generator
 end
-
-(**/**)
 
 (** Internal plumbing consumed by the [ppx_hegel_generator] deriver, the
     library's own modules, and white-box tests. Not for direct use — no
