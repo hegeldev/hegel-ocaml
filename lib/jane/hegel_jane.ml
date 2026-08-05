@@ -29,6 +29,8 @@ let datetimes () =
     ()
 ;;
 
+let char () = G.make_characters ~of_char:Fun.id ~sexp_of:Char.sexp_of_t ()
+
 let hash_tables keys values ?min_size ?max_size () =
   G.make_hash_tables
     ~of_pairs:Hashtbl.Poly.of_alist_exn

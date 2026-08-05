@@ -300,6 +300,16 @@ let test_characters_categories_e2e () =
     assert (String.length v >= 1))
 ;;
 
+(** Test: char draws native [char] values across the full Latin-1 range
+    (codepoints 0-255) — not just the ASCII subset. *)
+let test_char_e2e () =
+  let saw_above_ascii = ref false in
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
+    let c = Hegel.draw tc (char ()) in
+    if Char.code c > 127 then saw_above_ascii := true);
+  assert !saw_above_ascii
+;;
+
 let tests =
   [ Alcotest.test_case "integers in range" `Quick test_integers_in_range
   ; Alcotest.test_case "integers unbounded e2e" `Quick test_integers_unbounded_e2e
@@ -369,5 +379,6 @@ let tests =
       test_text_exclude_characters_e2e
   ; Alcotest.test_case "text alphabet e2e" `Quick test_text_alphabet_e2e
   ; Alcotest.test_case "characters categories e2e" `Quick test_characters_categories_e2e
+  ; Alcotest.test_case "char e2e" `Quick test_char_e2e
   ]
 ;;

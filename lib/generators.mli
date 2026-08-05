@@ -268,6 +268,26 @@ val characters
   -> unit
   -> (string, printable) generator
 
+(** [make_characters ~of_char ~sexp_of ()] builds a generator for single
+    characters over any representation ['a], covering the full native [char]
+    range (codepoints 0-255, i.e. Latin-1). *)
+val make_characters
+  :  of_char:(char -> 'a)
+  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> unit
+  -> ('a, printable) generator
+
+(** [char ()] creates a generator for single characters (codepoints 0-255,
+    i.e. Latin-1) as native [char] values.
+
+    {[
+      let%hegel_test char_example tc =
+        let c = draw tc (Generators.char ()) in
+        assert (Char.code c >= 0 && Char.code c <= 0xFF)
+      ;;
+    ]} *)
+val char : unit -> (char, printable) generator
+
 (** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.
 
     {[

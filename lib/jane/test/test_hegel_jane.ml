@@ -7,6 +7,18 @@ let check_printer name gen value expected =
     (Core.Sexp.to_string (Generators.printer gen value))
 ;;
 
+(** Test: char draws [Core.Char.t] values across the full Latin-1 range
+    (codepoints 0-255) — not just the ASCII subset — printed via
+    [Core.Char.sexp_of_t]. *)
+let test_char_e2e () =
+  let saw_above_ascii = ref false in
+  run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+    let c = draw tc (Hegel_jane.char ()) in
+    if Core.Char.to_int c > 127 then saw_above_ascii := true);
+  assert !saw_above_ascii;
+  check_printer "char" (Hegel_jane.char ()) 'a' "a"
+;;
+
 (** Test: dates generates typed [Core.Date.t] values with year in [1, 9999],
     rendered by [Core.Date.to_string]. *)
 let test_dates_e2e () =
@@ -128,7 +140,8 @@ let () =
   Alcotest.run
     "hegel_jane"
     [ ( "hegel_jane"
-      , [ Alcotest.test_case "dates e2e" `Quick test_dates_e2e
+      , [ Alcotest.test_case "char e2e" `Quick test_char_e2e
+        ; Alcotest.test_case "dates e2e" `Quick test_dates_e2e
         ; Alcotest.test_case "times e2e" `Quick test_times_e2e
         ; Alcotest.test_case "datetimes e2e" `Quick test_datetimes_e2e
         ; Alcotest.test_case "hash_tables e2e" `Quick test_hash_tables_e2e

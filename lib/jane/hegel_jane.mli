@@ -44,6 +44,10 @@ val datetimes
        , Hegel.Generators.printable )
        Hegel.Generators.generator
 
+(** [char ()] creates a generator for single characters (codepoints 0-255,
+    i.e. Latin-1) as [Core.Char.t] values. *)
+val char : unit -> (Core.Char.t, Hegel.Generators.printable) Hegel.Generators.generator
+
 (** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
     polymorphic [Core.Hashtbl.t] tables over printable [keys] and [values].
     [Hegel.Generators.make_hash_tables] closed over [Core.Hashtbl]. *)
