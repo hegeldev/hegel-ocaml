@@ -1,13 +1,16 @@
 (executable
  (name test_hegel_jane)
  (modules test_hegel_jane)
- (libraries hegel hegel_jane alcotest core))
+ (optional)
+ (libraries hegel hegel_jane alcotest core sexp_diff))
 
 (library
  (name expect_tests_jane)
  (modules test_require_jane)
  (enabled_if
-  (<> %{profile} release))
+  (and
+   (<> %{profile} release)
+   %{lib-available:hegel_jane}))
  (libraries hegel hegel_jane core expect_tests expect_test_helpers_core)
  (inline_tests
   (backend ppx_inline_test))
