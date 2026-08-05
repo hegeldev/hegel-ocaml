@@ -18,6 +18,7 @@ depends: [
   "ipaddr" {>= "5.0"}
   "dune-site" {>= "3.16"}
   "alcotest" {with-test & >= "1.7"}
+  "core_unix" {with-test & >= "v0.17"}
   "ppx_expect" {with-test & >= "v0.17"}
   "ocplib-endian" {>= "1.2"}
   "ppx_js_style" {>= "v0.17"}

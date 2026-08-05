@@ -41,6 +41,10 @@
    (and
     :with-test
     (>= 1.7)))
+  (core_unix
+   (and
+    :with-test
+    (>= v0.17)))
   (ppx_expect
    (and
     :with-test
