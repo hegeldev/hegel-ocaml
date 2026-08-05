@@ -47,9 +47,13 @@ lib/                         # Library source
   derive.ml                  # Runtime support for [@@deriving hegel_generator]
   stateful.ml                # Stateful testing: Rule.create + run over action sequences
   antithesis.ml              # Antithesis integration (emits an always-typed assertion)
-  core/                      # Optional hegel.jane sublibrary ((optional) in dune; NOT
-    hegel_jane.ml/.mli       #   instrumented). Core.Hashtbl hash_tables + pool helpers
-                             #   and the sexp_diff require_equal renderer (set_sexp_diff)
+  jane/                      # Optional hegel.jane sublibrary ((optional) in dune).
+    hegel_jane.ml/.mli       #   Core.Hashtbl hash_tables + pool helpers and the
+    test/                    #   sexp_diff require_equal renderer (set_sexp_diff);
+                             #   instrumented + coverage-gated like lib/ (its own
+                             #   test/ dir, gated behind HEGEL_SKIP_JANE_TESTS in
+                             #   check-tests-no-coverage since it needs the core/
+                             #   sexp_diff opam depopts — see justfile)
 
 ppx/                         # PPX rewriters and derivers
   dune                       # PPX library build configs; a rule generates
@@ -143,8 +147,16 @@ each side instantiates them:
 - require_equal diff: `Internal.set_diff_renderer` hook ← default prints both values (`-`/`+`, red/green); `Hegel_jane.set_sexp_diff ()` installs the `sexp_diff` two-column renderer
 
 The test suite still links `core`/`core_unix` (test-only dependencies; users
-never install them). `lib/jane/` is not bisect_ppx-instrumented (same
-exclusion as ffi and the PPXes).
+never install them). `core`/`sexp_diff` being opam depopts is about the
+published `hegel` package's dependency footprint for its *users* — a hegel
+*developer* running `just check` is still expected to have them installed:
+`lib/jane/` is bisect_ppx-instrumented and 100%-coverage-gated like `lib/`
+(unlike `ffi`/the PPXes, which stay excluded), with its own `lib/jane/test/`
+suite (`test_hegel_jane.ml` Alcotest, `test_require_jane.ml` a
+[sexp_diff] snapshot). `just check-tests` (the coverage-enforcing recipe)
+always runs it; `just check-tests-no-coverage` (the `compat`/`oxcaml` CI jobs,
+which don't install `core`/`sexp_diff`) skips it via `HEGEL_SKIP_JANE_TESTS=1`
+— see the justfile.
 
 ### Generator System (generators_core.ml + generators_{primitives,collections,combinators}.ml)
 

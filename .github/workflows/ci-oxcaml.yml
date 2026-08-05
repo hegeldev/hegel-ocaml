@@ -103,4 +103,7 @@ jobs:
         env:
           HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
           HEGEL_SKIP_EXPECT_TESTS: "1"
+          # core/sexp_diff (hegel.jane's deps) aren't installed on this
+          # switch; see the "Install OCaml dependencies" step above.
+          HEGEL_SKIP_JANE_TESTS: "1"
         run: just check-tests-no-coverage

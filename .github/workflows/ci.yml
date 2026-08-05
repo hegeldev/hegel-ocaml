@@ -102,6 +102,10 @@ jobs:
       - name: Run tests (no coverage)
         env:
           HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
+          # This job installs deps via `--deps-only --with-test`, which
+          # doesn't pull the core/sexp_diff opam depopts that hegel.jane
+          # needs.
+          HEGEL_SKIP_JANE_TESTS: "1"
         run: just check-tests-no-coverage
 
       - name: Mirror opam-repo-ci (isolated release build + tests)
@@ -149,6 +153,14 @@ jobs:
         run: |
           eval $(opam env)
           opam install bisect_ppx.2.8.3 --yes
+
+      - name: Install hegel.jane test dependencies
+        run: |
+          eval $(opam env)
+          # core/sexp_diff are opam depopts (not pulled by --deps-only
+          # --with-test); install them so the hegel.jane sublibrary and its
+          # regression suite (lib/jane/test) build and run here.
+          opam install core sexp_diff --yes
 
       - name: Stage libhegel from the matching GitHub release
         id: libhegel
