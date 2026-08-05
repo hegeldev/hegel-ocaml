@@ -17,7 +17,10 @@ let%hegel_test map_fusion tc =
   let int_fn () =
     draw_silent
       tc
-      (Generators.functions ~sexp_of_arg:Core.Int.sexp_of_t ~returns:small_int ())
+      (Generators.functions
+         ~sexp_of_arg:Sexplib0.Sexp_conv.sexp_of_int
+         ~returns:small_int
+         ())
   in
   let f = int_fn () in
   let g = int_fn () in
@@ -33,7 +36,7 @@ let%hegel_test filter_keeps_matching tc =
     draw_silent
       tc
       (Generators.functions
-         ~sexp_of_arg:Core.Int.sexp_of_t
+         ~sexp_of_arg:Sexplib0.Sexp_conv.sexp_of_int
          ~returns:(Generators.booleans ())
          ())
   in
@@ -56,8 +59,8 @@ let%hegel_test flip_flip_is_identity tc =
     draw_silent
       tc
       (Generators.functions2
-         ~sexp_of_arg1:Core.Int.sexp_of_t
-         ~sexp_of_arg2:Core.Int.sexp_of_t
+         ~sexp_of_arg1:Sexplib0.Sexp_conv.sexp_of_int
+         ~sexp_of_arg2:Sexplib0.Sexp_conv.sexp_of_int
          ~returns:small_int
          ())
   in
@@ -76,9 +79,9 @@ let%hegel_test functions_are_deterministic tc =
     draw_silent
       tc
       (Generators.functions3
-         ~sexp_of_arg1:Core.Int.sexp_of_t
-         ~sexp_of_arg2:Core.Bool.sexp_of_t
-         ~sexp_of_arg3:Core.Int.sexp_of_t
+         ~sexp_of_arg1:Sexplib0.Sexp_conv.sexp_of_int
+         ~sexp_of_arg2:Sexplib0.Sexp_conv.sexp_of_bool
+         ~sexp_of_arg3:Sexplib0.Sexp_conv.sexp_of_int
          ~returns:small_int
          ())
   in

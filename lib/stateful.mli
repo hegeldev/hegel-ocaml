@@ -28,7 +28,7 @@
       Stateful.run
         ~init:[]
         ~rules:[ push; pop ]
-        ~sexp_of_state:(Core.List.sexp_of_t Core.Int.sexp_of_t)
+        ~sexp_of_state:[%sexp_of: int list]
         tc
     ]}
 
@@ -171,6 +171,6 @@ val run
   :  init:'state
   -> rules:'state Rule.t list
   -> ?invariants:('state -> unit) list
-  -> ?sexp_of_state:('state -> Core.Sexp.t)
+  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
   -> Internal.test_case
   -> unit

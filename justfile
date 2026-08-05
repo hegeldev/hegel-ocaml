@@ -21,6 +21,9 @@ check-tests:
     # The ppx_expect tests are an inline-tests library (no standalone exe), so
     # run them through dune; coverage merges via BISECT_FILE.
     dune runtest ppx/test/expect_tests --instrument-with bisect_ppx --force
+    dune build --instrument-with bisect_ppx lib/jane/test/test_hegel_jane.exe
+    ./_build/default/lib/jane/test/test_hegel_jane.exe
+    dune runtest lib/jane/test --instrument-with bisect_ppx --force
     python3 scripts/check-coverage.py
     
 format:
@@ -73,6 +76,15 @@ check-tests-no-coverage:
       echo "Skipping ppx_expect suite (HEGEL_SKIP_EXPECT_TESTS=1)"
     else
       dune runtest ppx/test/expect_tests --force
+    fi
+    # The hegel.jane regression suite needs the core/sexp_diff opam depopts;
+    # skip it on environments that don't install them.
+    if [ "${HEGEL_SKIP_JANE_TESTS:-}" = "1" ]; then
+      echo "Skipping hegel.jane suite (HEGEL_SKIP_JANE_TESTS=1)"
+    else
+      dune build lib/jane/test/test_hegel_jane.exe
+      ./_build/default/lib/jane/test/test_hegel_jane.exe
+      dune runtest lib/jane/test --force
     fi
 
 # these aliases are provided as ux improvements for local developers. CI should use the longer

@@ -211,37 +211,42 @@ let test_domains_e2e () =
     assert (String.length v > 0))
 ;;
 
-(** Test: dates generates typed [Core.Date.t] values with year in [1, 9999],
-    rendered by [Core.Date.to_string]. *)
+(** Test: dates generates ISO 8601 [YYYY-MM-DD] strings that parse as valid
+    calendar dates with year in [1, 9999] (round-tripped through
+    [Core.Date.of_string]). *)
 let test_dates_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let d = Hegel.draw tc (dates ()) in
-    let y = Core.Date.year d in
-    assert (y >= 1 && y <= 9999);
-    let s = Core.Date.to_string d in
-    assert (String.length s = 10 && String.contains s '-'))
+    assert (String.length d = 10 && d.[4] = '-' && d.[7] = '-');
+    let y = Core.Date.year (Core.Date.of_string d) in
+    assert (y >= 1 && y <= 9999))
 ;;
 
-(** Test: times generates typed [Core.Time_ns.Ofday.t] values within the day,
-    rendered by [Core.Time_ns.Ofday.to_string]. *)
+(** Test: times generates ISO 8601 [HH:MM:SS.ffffff] strings that parse as
+    times within the day (round-tripped through [Core.Time_ns.Ofday.of_string]).
+*)
 let test_times_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let t = Hegel.draw tc (times ()) in
+    assert (String.length t = 15 && t.[2] = ':' && t.[5] = ':' && t.[8] = '.');
+    let ofday = Core.Time_ns.Ofday.of_string t in
     let ns =
-      Core.Time_ns.Span.to_int_ns (Core.Time_ns.Ofday.to_span_since_start_of_day t)
+      Core.Time_ns.Span.to_int_ns (Core.Time_ns.Ofday.to_span_since_start_of_day ofday)
     in
-    assert (ns >= 0 && ns < 86_400_000_000_000);
-    assert (String.contains (Core.Time_ns.Ofday.to_string t) ':'))
+    assert (ns >= 0 && ns < 86_400_000_000_000))
 ;;
 
-(** Test: datetimes generates typed (date, time-of-day) pairs. *)
+(** Test: datetimes generates ISO 8601 [YYYY-MM-DDTHH:MM:SS.ffffff] strings
+    whose date and time parts both parse. *)
 let test_datetimes_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
-    let d, t = Hegel.draw tc (datetimes ()) in
-    let y = Core.Date.year d in
+    let dt = Hegel.draw tc (datetimes ()) in
+    assert (String.length dt = 26 && dt.[10] = 'T');
+    let y = Core.Date.year (Core.Date.of_string (String.sub dt 0 10)) in
     assert (y >= 1 && y <= 9999);
+    let ofday = Core.Time_ns.Ofday.of_string (String.sub dt 11 15) in
     let ns =
-      Core.Time_ns.Span.to_int_ns (Core.Time_ns.Ofday.to_span_since_start_of_day t)
+      Core.Time_ns.Span.to_int_ns (Core.Time_ns.Ofday.to_span_since_start_of_day ofday)
     in
     assert (ns >= 0 && ns < 86_400_000_000_000))
 ;;

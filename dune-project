@@ -27,9 +27,7 @@
  (depends
   (ocaml
    (>= 5.1))
-  (core
-   (>= v0.17))
-  (core_unix
+  (sexplib0
    (>= v0.17))
   (ctypes
    (>= 0.20))
@@ -37,14 +35,16 @@
    (>= 0.20))
   (ipaddr
    (>= 5.0))
-  (sexp_diff
-   (>= v0.17))
   (dune-site
    (>= 3.16))
   (alcotest
    (and
     :with-test
     (>= 1.7)))
+  (core_unix
+   (and
+    :with-test
+    (>= v0.17)))
   (ppx_expect
    (and
     :with-test
@@ -63,7 +63,12 @@
     (= 0.29.0)))
   (yojson
    (>= 1.7))
-  (odoc :with-doc)))
+  (odoc :with-doc))
+ (depopts
+  (core
+   (>= v0.17))
+  (sexp_diff
+   (>= v0.17))))
 
 (package
  (name ppx_hegel_compat)

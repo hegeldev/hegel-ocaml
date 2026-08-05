@@ -202,9 +202,9 @@ let test_hash_tables_e2e () =
         ()
     in
     let table = Hegel.draw tc gen in
-    let n = Core.Hashtbl.length table in
+    let n = Stdlib.Hashtbl.length table in
     assert (n >= 1 && n <= 5);
-    Core.Hashtbl.iteri table ~f:(fun ~key ~data:_ -> assert (key >= 0 && key <= 100)))
+    Stdlib.Hashtbl.iter (fun key _ -> assert (key >= 0 && key <= 100)) table)
 ;;
 
 (** Test: hash_tables rejects crossed size bounds like assoc_lists. *)

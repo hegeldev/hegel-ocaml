@@ -7,8 +7,16 @@
     - Helper functions (assume, note, target, the typed generate_* draws)
     - Origin extraction for error reporting *)
 
-open! Core
+module Sexp = Sexplib0.Sexp
 module Ffi = Hegel_ffi.Ffi
+
+(** A string-keyed hashtable module for the draw-name counters. *)
+module String_table = Stdlib.Hashtbl.Make (struct
+    type t = string
+
+    let equal = String.equal
+    let hash = Stdlib.Hashtbl.hash
+  end)
 
 (** Raised when {!assume} condition is [false]. *)
 exception Assume_rejected
@@ -116,11 +124,13 @@ let ci_vars =
 
 (** [is_in_ci ()] returns [true] if a CI environment is detected. *)
 let is_in_ci () =
-  List.exists ci_vars ~f:(fun (key, expected) ->
-    match Sys.getenv key, expected with
-    | Some _, None -> true
-    | Some v, Some exp -> String.equal v exp
-    | None, _ -> false)
+  List.exists
+    (fun (key, expected) ->
+       match Sys.getenv_opt key, expected with
+       | Some _, None -> true
+       | Some v, Some exp -> String.equal v exp
+       | None, _ -> false)
+    ci_vars
 ;;
 
 (** [default_settings ()] creates settings with defaults. Detects CI
@@ -196,15 +206,13 @@ let with_report_multiple_failures b s = { s with report_multiple_failures = b }
     test case (see {!clone}) behind [lock], so concurrent clones number
     their draws in sequence. [lock] serializes only this frontend accounting. *)
 type draw_state =
-  { counts : int String.Table.t
-  ; lock : Caml_threads.Mutex.t
+  { counts : int String_table.t
+  ; lock : Mutex.t
   }
 
 (** [new_draw_state ()] is a fresh, unshared draw-name counter with its own lock,
     for a test case at the head of a clone family. *)
-let new_draw_state () =
-  { counts = String.Table.create (); lock = Caml_threads.Mutex.create () }
-;;
+let new_draw_state () = { counts = String_table.create 16; lock = Mutex.create () }
 
 (** Per-test-case state passed explicitly to the test function. Holds the
     native test-case handle, the final-replay flag, whether verbose output is
@@ -248,7 +256,7 @@ let set_test_aborted (tc : test_case) v = tc.test_aborted <- v
     failing step does not over-indent later output. *)
 let with_note_indent (tc : test_case) f =
   tc.note_indent <- tc.note_indent + 1;
-  Exn.protect ~finally:(fun () -> tc.note_indent <- tc.note_indent - 1) ~f
+  Fun.protect ~finally:(fun () -> tc.note_indent <- tc.note_indent - 1) f
 ;;
 
 (** [clone tc] forks a fresh {!test_case} onto an independent choice stream of the
@@ -286,15 +294,15 @@ let clone (tc : test_case) =
 ;;
 
 type 'a worker =
-  { thread : Caml_threads.Thread.t
-  ; result : ('a, exn) Result.t ref
+  { thread : Thread.t
+  ; result : ('a, exn) result ref
   }
 
 let spawn (tc : test_case) f =
   let c = clone tc in
   let result = ref (Error (Failure "hegel: worker thread did not complete")) in
   let thread =
-    Caml_threads.Thread.create
+    Thread.create
       (fun () ->
          result
          := try Ok (f c) with
@@ -305,7 +313,7 @@ let spawn (tc : test_case) f =
 ;;
 
 let join (w : 'a worker) =
-  Caml_threads.Thread.join w.thread;
+  Thread.join w.thread;
   match !(w.result) with
   | Ok v -> v
   | Error exn -> raise exn
@@ -330,23 +338,25 @@ let in_test_context : bool Stdlib.Domain.DLS.key =
 let extract_origin exn =
   let bt = Stdlib.Printexc.get_raw_backtrace () in
   let is_runtime_file file =
-    String.is_suffix file ~suffix:"stdlib.ml"
-    || String.is_suffix file ~suffix:"lib/internal.ml"
+    String.ends_with file ~suffix:"stdlib.ml"
+    || String.ends_with file ~suffix:"lib/internal.ml"
   in
   let user_location =
     match Stdlib.Printexc.backtrace_slots bt with
     | None -> None
     | Some slots ->
-      Array.find_map slots ~f:(fun slot ->
-        match Stdlib.Printexc.Slot.location slot with
-        | Some (loc : Stdlib.Printexc.location) when not (is_runtime_file loc.filename) ->
-          Some (loc.filename, loc.line_number)
-        | _ -> None)
+      Array.find_map
+        (fun slot ->
+           match Stdlib.Printexc.Slot.location slot with
+           | Some (loc : Stdlib.Printexc.location) when not (is_runtime_file loc.filename)
+             -> Some (loc.filename, loc.line_number)
+           | _ -> None)
+        slots
   in
   match user_location with
-  | None -> sprintf "%s at :0" (Stdlib.Printexc.exn_slot_name exn)
+  | None -> Printf.sprintf "%s at :0" (Stdlib.Printexc.exn_slot_name exn)
   | Some (file, line) ->
-    sprintf "%s at %s:%d" (Stdlib.Printexc.exn_slot_name exn) file line
+    Printf.sprintf "%s at %s:%d" (Stdlib.Printexc.exn_slot_name exn) file line
 ;;
 
 (** [with_stop_guard tc f] runs [f ()], translating the engine's per-case abort
@@ -417,9 +427,9 @@ let generate_bytes tc ~min_size ~max_size =
 let with_string_generator tc make =
   with_stop_guard tc (fun () ->
     let sg = make tc.context in
-    Exn.protect
+    Fun.protect
       ~finally:(fun () -> Ffi.string_generator_free tc.context sg)
-      ~f:(fun () -> Ffi.generate_string tc.context tc.handle sg))
+      (fun () -> Ffi.generate_string tc.context tc.handle sg))
 ;;
 
 (** [generate_text tc ...] draws a text string over the described alphabet. *)
@@ -494,8 +504,10 @@ let generate_ipv6 tc =
 (* ANSI colors                                                         *)
 (* ------------------------------------------------------------------ *)
 
-(** ANSI color codes for {!stderr_color}. *)
+(** ANSI color codes for {!stderr_color} and the default {!render_diff}. *)
 let ansi_red = "31"
+
+let ansi_green = "32"
 
 (** [color_enabled ~override ~isatty] decides whether ANSI colors are on: an
     [override] of ["1"]/["0"] (the [HEGEL_COLOR] variable) forces it on/off;
@@ -511,16 +523,14 @@ let color_enabled ~override ~isatty =
     stream: it reads [HEGEL_COLOR] afresh (tests toggle it) and checks whether
     stderr is a terminal. *)
 let stderr_color_enabled () =
-  color_enabled
-    ~override:(Sys.getenv "HEGEL_COLOR")
-    ~isatty:(Core_unix.isatty Core_unix.stderr)
+  color_enabled ~override:(Sys.getenv_opt "HEGEL_COLOR") ~isatty:(Unix.isatty Unix.stderr)
 ;;
 
 (** [stderr_color code s] wraps [s] in the ANSI SGR [code] when colors are
     enabled for stderr (see {!stderr_color_enabled}), else returns [s]
     unchanged. *)
 let stderr_color code s =
-  if stderr_color_enabled () then sprintf "\027[%sm%s\027[0m" code s else s
+  if stderr_color_enabled () then Printf.sprintf "\027[%sm%s\027[0m" code s else s
 ;;
 
 (** [assume tc condition] rejects the current test case if [condition] is
@@ -546,11 +556,11 @@ let should_print tc =
 let note tc message =
   if should_print tc
   then (
-    if tc.note_indent > 0 && not tc.printed_output then eprintf "\n%!";
+    if tc.note_indent > 0 && not tc.printed_output then Printf.eprintf "\n%!";
     tc.printed_output <- true;
     let indent = String.make (2 * tc.note_indent) ' ' in
-    let body = String.concat ~sep:("\n" ^ indent) (String.split_lines message) in
-    eprintf "%s%s\n%!" indent body)
+    let body = String.concat ("\n" ^ indent) (String.split_on_char '\n' message) in
+    Printf.eprintf "%s%s\n%!" indent body)
 ;;
 
 (** [require tc ?msg condition] fails the current test case when [condition] is
@@ -559,15 +569,37 @@ let require _tc ?(msg = "require: condition was false") condition =
   if not condition then raise (Failure msg)
 ;;
 
-(** [render_diff ~colored ~original ~updated] renders a structural sexp diff
-    of the two values: deletions and additions are marked red and green when
-    [colored], and with [-] and [+] otherwise. *)
+(** sexp_diff can set itself as the renderer when it is a dependency *)
+let diff_renderer
+  : (colored:bool -> original:Sexp.t -> updated:Sexp.t -> string) option ref
+  =
+  ref None
+;;
+
+(** [set_diff_renderer renderer] sets the renderer {!render_diff} delegates to. *)
+let set_diff_renderer renderer = diff_renderer := renderer
+
+(* [render_values_line ~colored ~code ~prefix sexp] renders one side of the
+   default diff: the value prefixed with [-]/[+], wrapped in the ANSI SGR
+   [code] when [colored]. *)
+let render_values_line ~colored ~code ~prefix sexp =
+  let line = Printf.sprintf "%s %s" prefix (Sexp.to_string_hum sexp) in
+  if colored then Printf.sprintf "\027[%sm%s\027[0m" code line else line
+;;
+
+(** [render_diff ~colored ~original ~updated] renders the two differing values.
+    By default both values print in full ([-] the original, [+] the updated,
+    red/green when [colored]). When a structural diff renderer is installed
+    (see {!set_diff_renderer}, it renders the diff instead. *)
 let render_diff ~colored ~original ~updated =
-  let diff = Sexp_diff.Algo.diff ~original ~updated () in
-  let display_options = Sexp_diff.Display.Display_options.create Two_column in
-  if colored
-  then Sexp_diff.Display.display_with_ansi_colors display_options diff
-  else Sexp_diff.Display.display_as_plain_string display_options diff
+  match !diff_renderer with
+  | Some renderer -> renderer ~colored ~original ~updated
+  | None ->
+    String.concat
+      "\n"
+      [ render_values_line ~colored ~code:ansi_red ~prefix:"-" original
+      ; render_values_line ~colored ~code:ansi_green ~prefix:"+" updated
+      ]
 ;;
 
 (** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
@@ -584,7 +616,7 @@ let require_equal tc ?(msg = "require_equal: values differ") sexp_of lhs rhs =
     if should_print tc
     then (
       let rendered = render_diff ~colored:(stderr_color_enabled ()) ~original ~updated in
-      note tc (sprintf "%s (- lhs / + rhs):\n%s" msg rendered));
+      note tc (Printf.sprintf "%s (- lhs / + rhs):\n%s" msg rendered));
     raise (Failure msg))
 ;;
 
@@ -594,16 +626,13 @@ let require_equal tc ?(msg = "require_equal: values differ") sexp_of lhs rhs =
     non-repeatable name is printed bare. The counter is shared across test cases. *)
 let draw_display_name tc ~label ~repeatable =
   let ds = tc.draw_state in
-  Caml_threads.Mutex.lock ds.lock;
   let n =
-    Exn.protect
-      ~finally:(fun () -> Caml_threads.Mutex.unlock ds.lock)
-      ~f:(fun () ->
-        let n = Option.value (Hashtbl.find ds.counts label) ~default:0 + 1 in
-        Hashtbl.set ds.counts ~key:label ~data:n;
-        n)
+    Mutex.protect ds.lock (fun () ->
+      let n = Option.value (String_table.find_opt ds.counts label) ~default:0 + 1 in
+      String_table.replace ds.counts label n;
+      n)
   in
-  if repeatable then sprintf "%s_%d" label n else label
+  if repeatable then Printf.sprintf "%s_%d" label n else label
 ;;
 
 (** [target tc value label] records a targeting observation to guide the search
@@ -711,7 +740,7 @@ let health_check_bit = function
   | Large_initial_test_case -> Ffi.hc_large_initial_test_case
 ;;
 
-let bitmask bit_of items = List.fold items ~init:0 ~f:(fun acc x -> acc lor bit_of x)
+let bitmask bit_of items = List.fold_left (fun acc x -> acc lor bit_of x) 0 items
 
 (** [build_ffi_settings ctx settings ~database_key] allocates and populates a native
     settings handle from the OCaml [settings]. The caller must free it. *)
@@ -729,9 +758,10 @@ let build_ffi_settings ctx (settings : settings) ~database_key =
      | Unset -> ()
      | Disabled -> Ffi.settings_database ctx s (Some "")
      | Path p -> Ffi.settings_database ctx s (Some p));
-    Option.iter database_key ~f:(fun k -> Ffi.settings_database_key ctx s (Some k));
-    Option.iter settings.phases ~f:(fun phases ->
-      Ffi.settings_phases ctx s (bitmask phase_bit phases));
+    Option.iter (fun k -> Ffi.settings_database_key ctx s (Some k)) database_key;
+    Option.iter
+      (fun phases -> Ffi.settings_phases ctx s (bitmask phase_bit phases))
+      settings.phases;
     (match settings.suppress_health_check with
      | [] -> ()
      | checks ->
@@ -777,7 +807,7 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
     | exception exn -> Ffi.Interesting, Some (extract_origin exn, exn)
   in
   Stdlib.Domain.DLS.set in_test_context false;
-  Ffi.mark_complete ctx handle status (Option.map captured ~f:fst);
+  Ffi.mark_complete ctx handle status (Option.map fst captured);
   { status; interesting = captured; printed_output = tc.printed_output }
 ;;
 
@@ -802,12 +832,12 @@ let flaky_diagnostic =
     longer fails means the test is non-deterministic and raises
     {!flaky_diagnostic}. *)
 let final_replay ~(settings : settings) ~ffi_settings ~test_fn ctx failure =
-  let blob = Option.value_exn (Ffi.failure_blob ctx failure) in
+  let blob = Option.get (Ffi.failure_blob ctx failure) in
   let tc = Ffi.test_case_from_blob ctx ffi_settings (Some blob) in
   let outcome =
-    Exn.protect
+    Fun.protect
       ~finally:(fun () -> Ffi.test_case_free ctx tc)
-      ~f:(fun () -> run_test_case ~settings ~test_fn ~note_indent:1 ctx tc true)
+      (fun () -> run_test_case ~settings ~test_fn ~note_indent:1 ctx tc true)
   in
   match outcome.interesting with
   | Some (_origin, exn) -> blob, exn, outcome.printed_output
@@ -822,11 +852,11 @@ let print_failure_header ~cases_run ~cases_discarded test_location =
     match test_location with
     | None -> "Failure"
     | Some (loc : Antithesis.test_location) ->
-      sprintf "Failure: %s (%s:%d)" loc.function_name loc.file loc.begin_line
+      Printf.sprintf "Failure: %s (%s:%d)" loc.function_name loc.file loc.begin_line
   in
-  let prefix = sprintf "--- %s " title in
+  let prefix = Printf.sprintf "--- %s " title in
   let rule = prefix ^ String.make (max 3 (frame_width - String.length prefix)) '-' in
-  eprintf
+  Printf.eprintf
     "%s\nFalsified after %d test case%s (%d discarded):\n%!"
     (stderr_color ansi_red rule)
     cases_run
@@ -835,13 +865,13 @@ let print_failure_header ~cases_run ~cases_discarded test_location =
 ;;
 
 let print_failure_body ~(settings : settings) ~from_ppx ~blob ~exn ~printed_output =
-  if printed_output then eprintf "\n%!";
-  eprintf "Exception: %s\n%!" (Stdlib.Printexc.to_string exn);
+  if printed_output then Printf.eprintf "\n%!";
+  Printf.eprintf "Exception: %s\n%!" (Stdlib.Printexc.to_string exn);
   if settings.print_blob
   then
     if from_ppx
-    then eprintf "rerun with: [@@failure_blobs [ \"%s\" ]]\n%!" blob
-    else eprintf "rerun with: ~failure_blobs:[ \"%s\" ]\n%!" blob
+    then Printf.eprintf "rerun with: [@@failure_blobs [ \"%s\" ]]\n%!" blob
+    else Printf.eprintf "rerun with: ~failure_blobs:[ \"%s\" ]\n%!" blob
 ;;
 
 let handle_result
@@ -858,7 +888,7 @@ let handle_result
       result
   =
   let emit ~passed =
-    Option.iter test_location ~f:(fun loc -> Antithesis.emit_assertion loc ~passed)
+    Option.iter (fun loc -> Antithesis.emit_assertion loc ~passed) test_location
   in
   match Ffi.result_status ctx result with
   | Run_passed -> emit ~passed:true
@@ -873,35 +903,39 @@ let handle_result
     emit ~passed:false;
     (* The single emitted case already ran as its own final case; re-raise the
        test's own exception. An interesting result always carries one. *)
-    let _origin, exn = Option.value_exn single_outcome in
+    let _origin, exn = Option.get single_outcome in
     raise exn
   | Run_failed ->
     emit ~passed:false;
     (* Failures are caller-owned snapshots, independent of the run result. *)
     let failures = Ffi.result_failures ctx result in
-    Exn.protect
-      ~finally:(fun () -> List.iter failures ~f:(fun f -> Ffi.failure_free ctx f))
-      ~f:(fun () ->
-        match failures with
-        | [ failure ] ->
-          print_failure_header ~cases_run ~cases_discarded test_location;
-          let blob, exn, printed_output =
-            final_replay ~settings ~ffi_settings ~test_fn ctx failure
-          in
-          print_failure_body ~settings ~from_ppx ~blob ~exn ~printed_output;
-          raise exn
-        | failures ->
-          let count = List.length failures in
-          print_failure_header ~cases_run ~cases_discarded test_location;
-          List.iteri failures ~f:(fun i failure ->
-            eprintf
-              "\n%s%!"
-              (stderr_color ansi_red (sprintf "Failure %d of %d:" (i + 1) count));
-            let blob, exn, printed_output =
-              final_replay ~settings ~ffi_settings ~test_fn ctx failure
-            in
-            print_failure_body ~settings ~from_ppx ~blob ~exn ~printed_output);
-          raise (Failure (sprintf "%d failures found!" count)))
+    Fun.protect
+      ~finally:(fun () -> List.iter (fun f -> Ffi.failure_free ctx f) failures)
+      (fun () ->
+         match failures with
+         | [ failure ] ->
+           print_failure_header ~cases_run ~cases_discarded test_location;
+           let blob, exn, printed_output =
+             final_replay ~settings ~ffi_settings ~test_fn ctx failure
+           in
+           print_failure_body ~settings ~from_ppx ~blob ~exn ~printed_output;
+           raise exn
+         | failures ->
+           let count = List.length failures in
+           print_failure_header ~cases_run ~cases_discarded test_location;
+           List.iteri
+             (fun i failure ->
+                Printf.eprintf
+                  "\n%s%!"
+                  (stderr_color
+                     ansi_red
+                     (Printf.sprintf "Failure %d of %d:" (i + 1) count));
+                let blob, exn, printed_output =
+                  final_replay ~settings ~ffi_settings ~test_fn ctx failure
+                in
+                print_failure_body ~settings ~from_ppx ~blob ~exn ~printed_output)
+             failures;
+           raise (Failure (Printf.sprintf "%d failures found!" count)))
 ;;
 
 (** [run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location] drives a
@@ -929,49 +963,49 @@ let run_from_engine
   let cases_run = ref 0 in
   let cases_discarded = ref 0 in
   let run = Ffi.run_start ctx ffi_settings in
-  Exn.protect
+  Fun.protect
     ~finally:(fun () -> Ffi.run_free ctx run)
-    ~f:(fun () ->
-      let rec loop () =
-        match Ffi.next_test_case ctx run with
-        | None -> ()
-        | Some handle ->
-          (* Handles from [next_test_case] are caller-owned; free each once its
+    (fun () ->
+       let rec loop () =
+         match Ffi.next_test_case ctx run with
+         | None -> ()
+         | Some handle ->
+           (* Handles from [next_test_case] are caller-owned; free each once its
              case has been marked complete by [run_test_case]. In single mode
              the one emitted case is the whole run, so it runs as final. *)
-          Exn.protect
-            ~finally:(fun () -> Ffi.test_case_free ctx handle)
-            ~f:(fun () ->
-              let outcome = run_test_case ~settings ~test_fn ctx handle single in
-              if not !seen_interesting
-              then (
-                match outcome.status with
-                | Ffi.Interesting ->
-                  Int.incr cases_run;
-                  seen_interesting := true
-                | Ffi.Valid -> Int.incr cases_run
-                | Ffi.Invalid | Ffi.Overrun -> Int.incr cases_discarded);
-              if single then single_outcome := outcome.interesting);
-          loop ()
-      in
-      loop ();
-      (* The run result is a caller-owned snapshot, independent of the run. *)
-      let result = Ffi.run_result ctx run in
-      Exn.protect
-        ~finally:(fun () -> Ffi.run_result_free ctx result)
-        ~f:(fun () ->
-          handle_result
-            ~settings
-            ~ffi_settings
-            ~test_fn
-            ~test_location
-            ~from_ppx
-            ~single
-            ~single_outcome:!single_outcome
-            ~cases_run:!cases_run
-            ~cases_discarded:!cases_discarded
-            ctx
-            result))
+           Fun.protect
+             ~finally:(fun () -> Ffi.test_case_free ctx handle)
+             (fun () ->
+                let outcome = run_test_case ~settings ~test_fn ctx handle single in
+                if not !seen_interesting
+                then (
+                  match outcome.status with
+                  | Ffi.Interesting ->
+                    incr cases_run;
+                    seen_interesting := true
+                  | Ffi.Valid -> incr cases_run
+                  | Ffi.Invalid | Ffi.Overrun -> incr cases_discarded);
+                if single then single_outcome := outcome.interesting);
+           loop ()
+       in
+       loop ();
+       (* The run result is a caller-owned snapshot, independent of the run. *)
+       let result = Ffi.run_result ctx run in
+       Fun.protect
+         ~finally:(fun () -> Ffi.run_result_free ctx result)
+         (fun () ->
+            handle_result
+              ~settings
+              ~ffi_settings
+              ~test_fn
+              ~test_location
+              ~from_ppx
+              ~single
+              ~single_outcome:!single_outcome
+              ~cases_run:!cases_run
+              ~cases_discarded:!cases_discarded
+              ctx
+              result))
 ;;
 
 (** [replay_from_blob ~settings ~ffi_settings ~test_fn blob] replays a single failure
@@ -982,13 +1016,13 @@ let replay_from_blob ~(settings : settings) ~ffi_settings ~test_fn blob ctx =
   match Ffi.test_case_from_blob ctx ffi_settings (Some blob) with
   | exception Ffi.Backend_error msg -> Undecodable msg
   | tc ->
-    Exn.protect
+    Fun.protect
       ~finally:(fun () -> Ffi.test_case_free ctx tc)
-      ~f:(fun () ->
-        let outcome = run_test_case ~settings ~test_fn ctx tc true in
-        match outcome.interesting with
-        | None -> Did_not_reproduce
-        | Some (_, exn) -> Reproduced exn)
+      (fun () ->
+         let outcome = run_test_case ~settings ~test_fn ctx tc true in
+         match outcome.interesting with
+         | None -> Did_not_reproduce
+         | Some (_, exn) -> Reproduced exn)
 ;;
 
 (** [run_from_blob ~settings ~ffi_settings ~test_fn blob] replays a failure
@@ -1000,7 +1034,7 @@ let run_from_blob ctx ~(settings : settings) ~ffi_settings ~test_fn blob =
   | Undecodable msg -> raise (Failure msg)
   | Did_not_reproduce -> raise (Failure "The failure blob did not reproduce an error")
   | Reproduced exn ->
-    eprintf "The failure blob reproduced an error:\n%!";
+    Printf.eprintf "The failure blob reproduced an error:\n%!";
     raise exn
 ;;
 
@@ -1049,8 +1083,10 @@ let run_test
     match database_key with
     | Some _ as k -> k
     | None ->
-      Option.map test_location ~f:(fun (loc : Antithesis.test_location) ->
-        sprintf "%s:%s" loc.file loc.function_name)
+      Option.map
+        (fun (loc : Antithesis.test_location) ->
+           Printf.sprintf "%s:%s" loc.file loc.function_name)
+        test_location
   in
   let ctx = Ffi.context_new () in
   let ffi_settings = build_ffi_settings ctx settings ~database_key in
@@ -1059,11 +1095,11 @@ let run_test
     | [] -> run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location ~from_ppx
     | blob :: _ -> run_from_blob ctx ~settings ~ffi_settings ~test_fn blob
   in
-  Exn.protect
+  Fun.protect
     ~finally:(fun () ->
       Ffi.settings_free ctx ffi_settings;
       Ffi.context_free ctx)
-    ~f:run_body
+    run_body
 ;;
 
 (** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]

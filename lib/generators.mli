@@ -121,7 +121,8 @@ val draw_silent_named : name:string -> Internal.test_case -> ('a, 'p) generator 
     a printable generator that {!draw} accepts. This is how a [map]/[flat_map]/
     [sampled_from]/[just] result is made drawable with {!draw}.
 
-    The printer is any ['a -> Core.Sexp.t] (Sexp comes from [Core]). 
+    The printer is any ['a -> Sexplib0.Sexp.t].
+
     With [ppx_sexp_conv] in your preprocessor, [\[%sexp_of: t\]] is the idiomatic
     shorthand for that function
 
@@ -135,10 +136,13 @@ val draw_silent_named : name:string -> Internal.test_case -> ('a, 'p) generator 
         assert (n >= 0)
       ;;
     ]} *)
-val with_printer : ('a -> Core.Sexp.t) -> ('a, 'p) generator -> ('a, printable) generator
+val with_printer
+  :  ('a -> Sexplib0.Sexp.t)
+  -> ('a, 'p) generator
+  -> ('a, printable) generator
 
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
-val printer : ('a, printable) generator -> 'a -> Core.Sexp.t
+val printer : ('a, printable) generator -> 'a -> Sexplib0.Sexp.t
 
 (**/**)
 
@@ -332,9 +336,21 @@ val assoc_lists
   -> unit
   -> (('a * 'b) list, printable) generator
 
+(** [make_hash_tables ~of_pairs ~sexp_of_t keys values ?min_size ?max_size ()]
+    builds a hash-table generator over any table type ['t]. *)
+val make_hash_tables
+  :  of_pairs:(('a * 'b) list -> 't)
+  -> sexp_of_t:
+       (('a -> Sexplib0.Sexp.t) -> ('b -> Sexplib0.Sexp.t) -> 't -> Sexplib0.Sexp.t)
+  -> ('a, printable) generator
+  -> ('b, printable) generator
+  -> ?min_size:int
+  -> ?max_size:int
+  -> unit
+  -> ('t, printable) generator
+
 (** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
-    polymorphic hash tables over printable [keys] and [values], with entries
-    generated exactly as {!assoc_lists} generates its pairs.
+    [Stdlib.Hashtbl.t] tables over printable [keys] and [values]
 
     {[
       let%hegel_test hash_tables_example tc =
@@ -346,7 +362,7 @@ val assoc_lists
                ~max_size:5
                ())
         in
-        assert (Core.Hashtbl.length m <= 5)
+        assert (Hashtbl.length m <= 5)
       ;;
     ]} *)
 val hash_tables
@@ -355,7 +371,7 @@ val hash_tables
   -> ?min_size:int
   -> ?max_size:int
   -> unit
-  -> (('a, 'b) Core.Hashtbl.t, printable) generator
+  -> (('a, 'b) Stdlib.Hashtbl.t, printable) generator
 
 (** [sampled_from options] creates a generator that samples from a non-empty
     list of values. Sampling is {e not} uniform: the engine's bounded-integer
@@ -492,16 +508,16 @@ val tuples4
     {[
       let%hegel_test map_length_preserved tc =
         let f_gen =
-          Generators.functions ~sexp_of_arg:Core.Int.sexp_of_t ~returns:(Generators.integers ()) ()
+          Generators.functions ~sexp_of_arg:[%sexp_of: int] ~returns:(Generators.integers ()) ()
         in
         let f = draw_silent tc f_gen in
         let xs = draw tc (Generators.lists (Generators.integers ()) ()) in
-        assert (List.length (List.map ~f xs) = List.length xs)
+        assert (List.length (List.map f xs) = List.length xs)
       ;;
     ]} *)
 val functions
   :  ?name:string
-  -> ?sexp_of_arg:('a -> Core.Sexp.t)
+  -> ?sexp_of_arg:('a -> Sexplib0.Sexp.t)
   -> returns:('b, _) generator
   -> unit
   -> ('a -> 'b, unprintable) generator
@@ -514,8 +530,8 @@ val functions
     with {!draw_silent}. *)
 val functions2
   :  ?name:string
-  -> ?sexp_of_arg1:('a -> Core.Sexp.t)
-  -> ?sexp_of_arg2:('b -> Core.Sexp.t)
+  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t)
+  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t)
   -> returns:('c, _) generator
   -> unit
   -> ('a -> 'b -> 'c, unprintable) generator
@@ -528,9 +544,9 @@ val functions2
     [name (arg1 arg2 arg3) = result]. Draw it with {!draw_silent}. *)
 val functions3
   :  ?name:string
-  -> ?sexp_of_arg1:('a -> Core.Sexp.t)
-  -> ?sexp_of_arg2:('b -> Core.Sexp.t)
-  -> ?sexp_of_arg3:('c -> Core.Sexp.t)
+  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t)
+  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t)
+  -> ?sexp_of_arg3:('c -> Sexplib0.Sexp.t)
   -> returns:('d, _) generator
   -> unit
   -> ('a -> 'b -> 'c -> 'd, unprintable) generator
@@ -586,39 +602,79 @@ val urls : unit -> (string, printable) generator
     ]} *)
 val domains : ?max_length:int -> unit -> (string, printable) generator
 
-(** [dates ()] creates a generator for calendar dates as [Core.Date.t] values,
-    with year in [\[1, 9999\]] and calendar-valid month/day.
+(** [make_dates ~of_parts ~sexp_of ()] builds a date generator over any date
+    representation.
+
+    {[
+      let core_dates =
+        Generators.make_dates
+          ~of_parts:(fun ~year ~month ~day ->
+            Core.Date.create_exn ~y:year ~m:(Core.Month.of_int_exn month) ~d:day)
+          ~sexp_of:Core.Date.sexp_of_t
+          ()
+    ]} *)
+val make_dates
+  :  of_parts:(year:int -> month:int -> day:int -> 'a)
+  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> unit
+  -> ('a, printable) generator
+
+(** [make_times ~of_parts ~sexp_of ()] builds a time-of-day generator over any
+    time representation. *)
+val make_times
+  :  of_parts:(hour:int -> minute:int -> second:int -> microsecond:int -> 'a)
+  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> unit
+  -> ('a, printable) generator
+
+(** [make_datetimes ~of_parts ~sexp_of ()] builds a naive-datetime generator
+    over any representation. *)
+val make_datetimes
+  :  of_parts:
+       (year:int
+        -> month:int
+        -> day:int
+        -> hour:int
+        -> minute:int
+        -> second:int
+        -> microsecond:int
+        -> 'a)
+  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> unit
+  -> ('a, printable) generator
+
+(** [dates ()] creates a generator for calendar dates as ISO 8601 [YYYY-MM-DD]
+    strings, with year in [\[1, 9999\]] and calendar-valid month/day.
 
     {[
       let%hegel_test dates_example tc =
         let d = draw tc (Generators.dates ()) in
-        assert (Core.Date.year d >= 1 && Core.Date.year d <= 9999)
+        assert (String.length d = 10)
       ;;
     ]} *)
-val dates : unit -> (Core.Date.t, printable) generator
+val dates : unit -> (string, printable) generator
 
-(** [times ()] creates a generator for times of day as [Core.Time_ns.Ofday.t]
-    values with microsecond precision.
+(** [times ()] creates a generator for times of day as ISO 8601 [HH:MM:SS.ffffff] 
+    strings.
 
     {[
       let%hegel_test times_example tc =
         let t = draw tc (Generators.times ()) in
-        assert (Core.Time_ns.Ofday.(t >= start_of_day && t < start_of_next_day))
+        assert (String.length t = 15)
       ;;
     ]} *)
-val times : unit -> (Core.Time_ns.Ofday.t, printable) generator
+val times : unit -> (string, printable) generator
 
-(** [datetimes ()] creates a generator for naive datetimes as
-    [(Core.Date.t, Core.Time_ns.Ofday.t)] pairs, combining {!dates} and
-    {!times}.
+(** [datetimes ()] creates a generator for naive datetimes as ISO 8601
+    [YYYY-MM-DDTHH:MM:SS.ffffff] strings.
 
     {[
       let%hegel_test datetimes_example tc =
-        let d, _t = draw tc (Generators.datetimes ()) in
-        assert (Core.Date.year d >= 1)
+        let dt = draw tc (Generators.datetimes ()) in
+        assert (String.contains dt 'T')
       ;;
     ]} *)
-val datetimes : unit -> (Core.Date.t * Core.Time_ns.Ofday.t, printable) generator
+val datetimes : unit -> (string, printable) generator
 
 (** [ip_addresses ?version ()] creates a generator for typed [Ipaddr.t] IP
     addresses. [version] selects IPv4 ([`V4], RFC 791) or IPv6 ([`V6],
@@ -715,6 +771,24 @@ val flat_map
 val filter : ('a -> bool) -> ('a, 'p) generator -> ('a, 'p) generator
 
 (**/**)
+(*
+    The engine-pool generator ([Stateful.Pool]) resolves engine-drawn variable
+    ids against the client-side pool.
+*)
+
+module Int_table : Stdlib.Hashtbl.S with type key = int
+
+(** [Make_pool (Tbl)] specializes the pool-drawing machinery to the concrete
+    int-keyed hashtable module [Tbl]. *)
+module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) : sig
+  val resolve_draw : 'a Tbl.t -> consume:bool -> int -> 'a
+
+  val pool_values
+    :  pool_id:int
+    -> values:'a Tbl.t
+    -> consume:bool
+    -> ('a, unprintable) generator
+end
 
 (** Internal plumbing consumed by the [ppx_hegel_generator] deriver, the
     library's own modules, and white-box tests. Not for direct use — no
@@ -752,12 +826,14 @@ module Ppx_internal : sig
       [discard:false]. *)
   val discardable_group : int -> Internal.test_case -> (unit -> 'a) -> 'a
 
-  (** [resolve_draw values ~consume id] resolves a drawn pool [id] against the
-      local [values] table, removing it when [consume]. Raises
-      [Internal.Flaky_strategy] on an unknown id (an engine-contract violation,
-      unreachable through the normal engine-driven path). Exposed only so that
-      branch can be unit-tested. *)
-  val resolve_draw : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
+  (** [resolve_pool_draw ~find ~remove ~consume id] resolves a drawn pool [id]
+      via the [find] closure. When [consume], the picked value is removed. *)
+  val resolve_pool_draw
+    :  find:(int -> 'a option)
+    -> remove:(int -> unit)
+    -> consume:bool
+    -> int
+    -> 'a
 
   (** A collection handle for generating variable-length sequences. *)
   type collection =
@@ -784,13 +860,14 @@ module Ppx_internal : sig
       Raises [Internal.Data_exhausted] on StopTest. *)
   val collection_reject : collection -> Internal.test_case -> unit
 
-  (** [pool_values ~pool_id ~values ~consume] builds a generator that picks a
-      value from the engine pool [pool_id], resolving the drawn id against the
-      local [values] table. When [consume], the picked value is removed from the
-      pool. Carries no printer, so it is {!unprintable}. *)
-  val pool_values
+  (** [make_pool_values ~pool_id ~find ~remove ~is_empty ~consume] is a
+      generator that picks a value from the engine pool [pool_id]. When [consume],
+      the picked value is removed from the pool. *)
+  val make_pool_values
     :  pool_id:int
-    -> values:(int, 'a) Core.Hashtbl.t
+    -> find:(int -> 'a option)
+    -> remove:(int -> unit)
+    -> is_empty:(unit -> bool)
     -> consume:bool
     -> ('a, unprintable) generator
 

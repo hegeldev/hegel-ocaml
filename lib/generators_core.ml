@@ -1,4 +1,4 @@
-open! Core
+module Sexp = Sexplib0.Sexp
 
 (** Constants for span labels used in generation tracking. *)
 module Labels = struct
@@ -67,7 +67,9 @@ type 'a core =
       -> 'a core
   | Values :
       { pool_id : int
-      ; values : (int, 'a) Base.Hashtbl.t
+      ; find : int -> 'a option
+      ; remove : int -> unit
+      ; is_empty : unit -> bool
       ; consume : bool
       }
       -> 'a core
@@ -147,12 +149,12 @@ let composite_with_label ~label generate_fn =
     whole value prints. *)
 let composite generate_fn = composite_with_label ~label:Labels.fixed_dict generate_fn
 
-(** [pool_values ~pool_id ~values ~consume] builds an unprintable generator that
-    picks a value from the engine pool [pool_id], resolving the drawn id against
-    the local [values] table. When [consume], the picked value is removed from
-    the pool. Carries no printer (the output type is the caller's). *)
-let pool_values ~pool_id ~values ~consume =
-  Unprintable { core = Values { pool_id; values; consume } }
+(** [make_pool_values ~pool_id ~find ~remove ~is_empty ~consume] builds an
+    unprintable generator that picks a value from the engine pool [pool_id],
+    resolving the drawn id via [find]. When [consume], [remove] deletes the
+    picked value. [is_empty] reports whether the backing table is empty. *)
+let make_pool_values ~pool_id ~find ~remove ~is_empty ~consume =
+  Unprintable { core = Values { pool_id; find; remove; is_empty; consume } }
 ;;
 
 (** Maximum number of filter attempts before calling [assume false]. *)
@@ -167,11 +169,11 @@ let max_filter_attempts = 3
 let group label data f =
   Internal.start_span ~label data;
   Internal.incr_draw_depth data;
-  Exn.protect
+  Fun.protect
     ~finally:(fun () ->
       Internal.decr_draw_depth data;
       Internal.stop_span data)
-    ~f
+    f
 ;;
 
 (** [discardable_group label data f] runs [f ()] inside a span with [label],
@@ -248,10 +250,10 @@ let collection_reject coll data =
 ;;
 
 (* separated out for unit testing *)
-let resolve_draw values ~consume variable_id =
-  match Hashtbl.find values variable_id with
+let resolve_pool_draw ~find ~remove ~consume variable_id =
+  match find variable_id with
   | Some v ->
-    if consume then Hashtbl.remove values variable_id;
+    if consume then remove variable_id;
     v
   | None ->
     (* State diverged between the engine and the client, or a bug in the
@@ -259,12 +261,49 @@ let resolve_draw values ~consume variable_id =
     raise Internal.Flaky_strategy
 ;;
 
-let pick tc values pool_id ~consume =
-  Internal.assume tc (not (Hashtbl.is_empty values));
+let pick tc ~find ~remove ~is_empty pool_id ~consume =
+  Internal.assume tc (not (is_empty ()));
   let variable_id = Internal.pool_generate tc ~pool_id ~consume () in
-  let value = resolve_draw values ~consume variable_id in
-  value
+  resolve_pool_draw ~find ~remove ~consume variable_id
 ;;
+
+(** Defined for convenience *)
+module Int_table = Stdlib.Hashtbl.Make (struct
+    type t = int
+
+    let equal = Int.equal
+    let hash = Stdlib.Hashtbl.hash
+  end)
+
+(** [Make_pool (Tbl)] specializes the pool-drawing machinery
+    ({!make_pool_values}/{!resolve_pool_draw}) to a concrete int-keyed hashtable
+    module [Tbl]. *)
+module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) = struct
+  (** [resolve_draw values ~consume variable_id] resolves a drawn pool id
+      against the local [values] table, removing it when [consume]. Raises
+      [Internal.Flaky_strategy] on an unknown id (an engine-contract
+      violation). *)
+  let resolve_draw values ~consume variable_id =
+    resolve_pool_draw
+      ~find:(fun id -> Tbl.find_opt values id)
+      ~remove:(fun id -> Tbl.remove values id)
+      ~consume
+      variable_id
+  ;;
+
+  (** [pool_values ~pool_id ~values ~consume] builds an unprintable generator
+      that picks a value from the engine pool [pool_id], resolving the drawn id
+      against the local [values] table. When [consume], the picked value is
+      removed from the pool. *)
+  let pool_values ~pool_id ~values ~consume =
+    make_pool_values
+      ~pool_id
+      ~find:(fun id -> Tbl.find_opt values id)
+      ~remove:(fun id -> Tbl.remove values id)
+      ~is_empty:(fun () -> Tbl.length values = 0)
+      ~consume
+  ;;
+end
 
 (** [do_draw core data] produces a typed value from generation structure [core]
     using the given test case [data]. *)
@@ -307,7 +346,8 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
       in
       collect [])
   | Composite { label; generate_fn } -> group label data (fun () -> generate_fn data)
-  | Values { pool_id; values; consume } -> pick data values pool_id ~consume
+  | Values { pool_id; find; remove; is_empty; consume } ->
+    pick data ~find ~remove ~is_empty pool_id ~consume
   | Function { build } -> build ~name:None data
 ;;
 
@@ -330,7 +370,10 @@ let draw_named
     let name = Internal.draw_display_name tc ~label ~repeatable in
     let value = build ~name:(Some name) tc in
     if Internal.draw_depth tc = 0
-    then Internal.note tc (sprintf "%s = %s" name (Sexp.to_string_hum (sexp_of value)));
+    then
+      Internal.note
+        tc
+        (Printf.sprintf "%s = %s" name (Sexp.to_string_hum (sexp_of value)));
     value
   | Printable { core; sexp_of } ->
     let value = do_draw core tc in

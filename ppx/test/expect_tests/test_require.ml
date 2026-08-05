@@ -53,9 +53,8 @@ let%expect_test "require_equal prints a sexp diff of the two values" =
     Falsified after 1 test case (0 discarded):
 
       require_equal: values differ (- lhs / + rhs):
-       (1    (1
-      - 2   + 9
-        3)    3)
+      - (1 2 3)
+      + (1 9 3)
 
     Exception: Failure("require_equal: values differ")
     rerun with: ~failure_blobs:[ "<BLOB>" ]

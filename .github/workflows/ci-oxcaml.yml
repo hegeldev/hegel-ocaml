@@ -84,11 +84,7 @@ jobs:
         run: |
           eval $(opam env)
           opam install . --deps-only --yes
-          # alcotest and ppx_expect are with-test deps not pulled by --deps-only;
-          # install them explicitly (avoiding --with-test, which also pulls
-          # ocamlformat/bisect_ppx that need not build on OxCaml). ppx_expect is
-          # required to build and run ppx/test/expect_tests.
-          opam install alcotest ppx_expect --yes
+          opam install alcotest ppx_expect core_unix --yes
 
       - name: Stage libhegel from the matching GitHub release
         id: libhegel
@@ -107,4 +103,7 @@ jobs:
         env:
           HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
           HEGEL_SKIP_EXPECT_TESTS: "1"
+          # core/sexp_diff (hegel.jane's deps) aren't installed on this
+          # switch; see the "Install OCaml dependencies" step above.
+          HEGEL_SKIP_JANE_TESTS: "1"
         run: just check-tests-no-coverage

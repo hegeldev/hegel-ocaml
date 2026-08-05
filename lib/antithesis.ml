@@ -2,8 +2,6 @@
 
     See the [.mli] for the full description. *)
 
-open! Core
-
 type test_location =
   { function_name : string
   ; file : string
@@ -14,17 +12,17 @@ type test_location =
 let antithesis_output_dir_env = "ANTITHESIS_OUTPUT_DIR"
 
 let is_running_in_antithesis () =
-  match Sys.getenv antithesis_output_dir_env with
+  match Sys.getenv_opt antithesis_output_dir_env with
   | None -> false
   | Some dir ->
-    if Stdlib.Sys.file_exists dir && Stdlib.Sys.is_directory dir
+    if Sys.file_exists dir && Sys.is_directory dir
     then true
     else
-      failwithf
-        "Expected %s=%s to exist as a directory when running inside Antithesis"
-        antithesis_output_dir_env
-        dir
-        ()
+      failwith
+        (Printf.sprintf
+           "Expected %s=%s to exist as a directory when running inside Antithesis"
+           antithesis_output_dir_env
+           dir)
 ;;
 
 let extract_file_base path =
@@ -68,15 +66,15 @@ let write_jsonl_line path json =
   let oc =
     Stdlib.open_out_gen [ Open_wronly; Open_creat; Open_append; Open_binary ] 0o644 path
   in
-  Exn.protect
+  Fun.protect
     ~finally:(fun () -> Stdlib.close_out oc)
-    ~f:(fun () -> Stdlib.output_string oc line)
+    (fun () -> Stdlib.output_string oc line)
 ;;
 
 let emit_assertion loc ~passed =
   if is_running_in_antithesis ()
   then (
-    let dir = Sys.getenv_exn antithesis_output_dir_env in
+    let dir = Option.get (Sys.getenv_opt antithesis_output_dir_env) in
     let path = Filename.concat dir "sdk.jsonl" in
     write_jsonl_line path (assertion_json loc ~hit:false ~condition:false);
     write_jsonl_line path (assertion_json loc ~hit:true ~condition:passed))

@@ -13,20 +13,19 @@
     generator, else the draw-site binding name (via [let%hegel_test]), else
     ["function"]. *)
 
-open! Core
 open Generators_core
 
 (* [make ~explicit_name ~sexp_of_arg ~returns ~adapt] builds the shared function
    core behind {!functions}/{!functions2}/{!functions3}. [adapt] is the identity
    function, or currying for the multi-argument variants. [sexp_of_arg] renders
    the argument when a pair is shown. The memo table keys on the argument itself
-   via structural hash/equality (a [Hashtbl.Poly]). The shown
-   label is [explicit_name] when the caller passed [~name], else
-   the draw-site [name] (the binding, via the PPX), else ["function"]. *)
+   via structural hash/equality. The shown label is [explicit_name] when the 
+   caller passed [~name], else the draw-site [name] (the binding, via the PPX), 
+   else ["function"]. *)
 let make
   : type a b c p.
     string option
-    -> (a -> Core.Sexp.t)
+    -> (a -> Sexp.t)
     -> (b, p) generator
     -> ((a -> b) -> c)
     -> (c, unprintable) generator
@@ -44,14 +43,14 @@ let make
       | Some n -> n
       | None -> Option.value name ~default:"function"
     in
-    let table = Hashtbl.Poly.create () in
+    let table : (a, b) Stdlib.Hashtbl.t = Stdlib.Hashtbl.create 16 in
     let base arg =
       let ret, is_fresh =
-        match Hashtbl.find table arg with
+        match Stdlib.Hashtbl.find_opt table arg with
         | Some ret -> ret, false
         | None ->
           let ret = group Labels.function_result tc (fun () -> do_draw ret tc) in
-          Hashtbl.set table ~key:arg ~data:ret;
+          Stdlib.Hashtbl.replace table arg ret;
           ret, true
       in
       (* print every function call in verbose/debug verbosity, print only the first
@@ -60,7 +59,7 @@ let make
       then
         Internal.note
           tc
-          (sprintf
+          (Printf.sprintf
              "%s %s = %s"
              display
              (Sexp.to_string_hum (sexp_of_arg arg))

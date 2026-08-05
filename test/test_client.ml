@@ -394,24 +394,33 @@ let test_stderr_color () =
     Alcotest.(check string) "disabled is identity" "x" (Internal.stderr_color "31" "x"))
 ;;
 
-(** [render_diff] marks changes with ANSI colors or with -/+ prefixes. *)
+(** [render_diff]'s default rendering prints both values in full, [-]/[+]
+    prefixed (red/green when [colored]); an installed renderer (the
+    [hegel.jane] [sexp_diff] hook) replaces it until uninstalled. *)
 let test_render_diff () =
   let original = Sexp.of_string "(1 2 3)" in
   let updated = Sexp.of_string "(1 9 3)" in
   let colored = Internal.render_diff ~colored:true ~original ~updated in
-  Alcotest.(check bool)
-    "colored diff contains an SGR code"
-    true
-    (Test_helpers.contains_substring colored "\027[");
+  Alcotest.(check string)
+    "colored renders both values in red/green"
+    "\027[31m- (1 2 3)\027[0m\n\027[32m+ (1 9 3)\027[0m"
+    colored;
   let plain = Internal.render_diff ~colored:false ~original ~updated in
-  Alcotest.(check bool)
-    "plain diff has no SGR code"
-    false
-    (Test_helpers.contains_substring plain "\027[");
-  Alcotest.(check bool)
-    "plain diff marks the deletion"
-    true
-    (Test_helpers.contains_substring plain "- ")
+  Alcotest.(check string) "plain renders both values" "- (1 2 3)\n+ (1 9 3)" plain;
+  (* An installed renderer takes over; uninstalling restores the default. *)
+  Internal.set_diff_renderer
+    (Some (fun ~colored ~original:_ ~updated:_ -> if colored then "custom!" else "custom"));
+  Exn.protect
+    ~finally:(fun () -> Internal.set_diff_renderer None)
+    ~f:(fun () ->
+      Alcotest.(check string)
+        "installed renderer takes over"
+        "custom"
+        (Internal.render_diff ~colored:false ~original ~updated));
+  Alcotest.(check string)
+    "uninstalling restores the default"
+    "- (1 2 3)\n+ (1 9 3)"
+    (Internal.render_diff ~colored:false ~original ~updated)
 ;;
 
 let test_run_flaky_on_replay () =

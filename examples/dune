@@ -1,14 +1,14 @@
 (executables
  (names basic_properties collections real_world higher_order)
  (modules basic_properties collections real_world higher_order)
- (libraries hegel core)
+ (libraries hegel sexplib0)
  (preprocess
   (pps ppx_js_style ppx_hegel_test -- -allow-unannotated-ignores)))
 
 (executable
  (name derived_types)
  (modules derived_types)
- (libraries hegel core)
+ (libraries hegel sexplib0)
  (preprocess
   (pps
    ppx_js_style

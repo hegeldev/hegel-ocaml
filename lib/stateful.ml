@@ -1,32 +1,33 @@
 (** Stateful property-based testing for Hegel. See [stateful.mli]. *)
 
-open! Core
+module Int_table = Generators.Int_table
+module Pool_gen = Generators.Make_pool (Int_table)
 
 module Pool = struct
   type 'a t =
     { tc : Internal.test_case
     ; pool_id : int
-    ; values : (int, 'a) Hashtbl.t
+    ; values : 'a Int_table.t
     }
 
   let create tc =
     let pool_id = Internal.new_pool tc in
-    { tc; pool_id; values = Hashtbl.create (module Int) }
+    { tc; pool_id; values = Int_table.create 16 }
   ;;
 
   let add t value =
     let variable_id = Internal.pool_add t.tc ~pool_id:t.pool_id in
-    Hashtbl.set t.values ~key:variable_id ~data:value
+    Int_table.replace t.values variable_id value
   ;;
 
-  let size t = Hashtbl.length t.values
+  let size t = Int_table.length t.values
 
   let values_consumed t =
-    Generators.Ppx_internal.pool_values ~pool_id:t.pool_id ~values:t.values ~consume:true
+    Pool_gen.pool_values ~pool_id:t.pool_id ~values:t.values ~consume:true
   ;;
 
   let values_reusable t =
-    Generators.Ppx_internal.pool_values ~pool_id:t.pool_id ~values:t.values ~consume:false
+    Pool_gen.pool_values ~pool_id:t.pool_id ~values:t.values ~consume:false
   ;;
 end
 
@@ -46,25 +47,31 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
   | _ ->
     let rule_array = Array.of_list rules in
     let invariant_names =
-      List.mapi invariants ~f:(fun i _ -> Printf.sprintf "invariant_%d" i)
+      List.mapi (fun i _ -> Printf.sprintf "invariant_%d" i) invariants
     in
     let state_machine_id =
       Internal.new_state_machine
         tc
-        ~rule_names:(List.map rules ~f:Rule.name)
+        ~rule_names:(List.map Rule.name rules)
         ~invariant_names
     in
     let print_state state =
-      Option.iter sexp_of_state ~f:(fun sexp_of ->
-        Internal.note tc (Stdlib.Format.asprintf "state = %a" Sexp.pp_hum (sexp_of state)))
+      Option.iter
+        (fun sexp_of ->
+           Internal.note
+             tc
+             (Stdlib.Format.asprintf "state = %a" Sexplib0.Sexp.pp_hum (sexp_of state)))
+        sexp_of_state
     in
     let check_invariants ~where state =
-      List.iteri invariants ~f:(fun i inv ->
-        match inv state with
-        | () -> ()
-        | exception e ->
-          Internal.note tc (Printf.sprintf "Invariant %d violated %s." i where);
-          raise e)
+      List.iteri
+        (fun i inv ->
+           match inv state with
+           | () -> ()
+           | exception e ->
+             Internal.note tc (Printf.sprintf "Invariant %d violated %s." i where);
+             raise e)
+        invariants
     in
     print_state init;
     check_invariants ~where:"in the initial state" init;

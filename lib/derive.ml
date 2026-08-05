@@ -9,7 +9,6 @@
     same generation machinery as the [Generators.optional] and
     [Generators.lists] combinators. *)
 
-open! Core
 open Generators_core
 
 (** [generate_option tc gen_fn] generates an [option] value through the same

@@ -1,4 +1,3 @@
-open! Core
 open Generators_core
 open Generators_primitives
 
@@ -33,8 +32,8 @@ let one_of (generators : ('a, printable) generator list) : ('a, printable) gener
   match generators with
   | [] -> failwith "one_of requires at least one generator"
   | first :: _ ->
-    let cores = Array.of_list (List.map generators ~f:core_of) in
-    let printers = Array.of_list (List.map generators ~f:printer) in
+    let cores = Array.of_list (List.map core_of generators) in
+    let printers = Array.of_list (List.map printer generators) in
     let n = Array.length cores in
     let drawn_printer = ref (printer first) in
     let core =
@@ -74,7 +73,7 @@ let optional_core (element : 'a core) : 'a option core =
 let optional (element : ('a, printable) generator) : ('a option, printable) generator =
   Printable
     { core = optional_core (core_of element)
-    ; sexp_of = Option.sexp_of_t (printer element)
+    ; sexp_of = Sexplib0.Sexp_conv.sexp_of_option (printer element)
     }
 ;;
 

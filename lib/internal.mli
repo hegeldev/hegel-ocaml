@@ -317,9 +317,21 @@ val stderr_color_enabled : unit -> bool
     enabled for stderr, else returns [s] unchanged. *)
 val stderr_color : string -> string -> string
 
-(** [render_diff ~colored ~original ~updated] renders a structural sexp diff of
-    the two values: red/green markings when [colored], [-]/[+] otherwise. *)
-val render_diff : colored:bool -> original:Core.Sexp.t -> updated:Core.Sexp.t -> string
+(** [set_diff_renderer renderer] sets structural diff renderer {!render_diff} 
+    delegates to. The optional [hegel.jane] library sets a [sexp_diff]-backed 
+    renderer through this hook. Without one, {!render_diff} prints both values in full. *)
+val set_diff_renderer
+  :  (colored:bool -> original:Sexplib0.Sexp.t -> updated:Sexplib0.Sexp.t -> string) option
+  -> unit
+
+(** [render_diff ~colored ~original ~updated] renders the two differing values:
+    both values in full by default ([-]/[+], red/green when [colored]), or a
+    structural sexp diff when a renderer is set (see {!set_diff_renderer}). *)
+val render_diff
+  :  colored:bool
+  -> original:Sexplib0.Sexp.t
+  -> updated:Sexplib0.Sexp.t
+  -> string
 
 (**/**)
 
@@ -330,10 +342,14 @@ val render_diff : colored:bool -> original:Core.Sexp.t -> updated:Core.Sexp.t ->
 val require : test_case -> ?msg:string -> bool -> unit
 
 (** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
-    the two values render to different sexps under [sexp_of], printing a
-    structural sexp diff of the two values in the failure report's body before
-    raising [Failure msg]. *)
-val require_equal : test_case -> ?msg:string -> ('a -> Core.Sexp.t) -> 'a -> 'a -> unit
+    the two values render to different sexps under [sexp_of]. *)
+val require_equal
+  :  test_case
+  -> ?msg:string
+  -> ('a -> Sexplib0.Sexp.t)
+  -> 'a
+  -> 'a
+  -> unit
 
 (**/**)
 
