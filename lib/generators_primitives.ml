@@ -15,9 +15,12 @@ let integers ?(min_value = Int.min_int) ?(max_value = Int.max_int) () =
     ~sexp_of:sexp_of_int
 ;;
 
-(** [booleans ()] creates a generator for boolean values. *)
-let booleans () =
-  leaf ~draw:(fun tc -> Internal.generate_boolean tc 0.5 None) ~sexp_of:sexp_of_bool
+(** [booleans ?p ()] creates a generator for boolean values,
+    [true] with probability [p] (default [0.5]). *)
+let booleans ?(p = 0.5) () =
+  if p < 0.0 || p > 1.0
+  then raise (Invalid_argument (Printf.sprintf "p=%g must be between 0 and 1" p));
+  leaf ~draw:(fun tc -> Internal.generate_boolean tc p None) ~sexp_of:sexp_of_bool
 ;;
 
 (** The smallest positive (subnormal) 64-bit float. Passed as
@@ -255,6 +258,34 @@ let characters
     ?exclude_characters
     ()
 ;;
+
+(** [make_characters ~of_char ~sexp_of ()] builds a generator for single
+    characters over any representation ['a], covering the full native [char]
+    range (codepoints 0-255, i.e. Latin-1). *)
+let make_characters ~of_char ~sexp_of () =
+  leaf
+    ~draw:(fun tc ->
+      let s =
+        Internal.generate_text
+          tc
+          ~min_size:1
+          ~max_size:(Some 1)
+          ~codec:None
+          ~min_codepoint:0
+          ~max_codepoint:0xFF
+          ~categories:None
+          ~exclude_categories:None
+          ~include_characters:None
+          ~exclude_characters:None
+      in
+      let decoded = String.get_utf_8_uchar s 0 in
+      of_char (Char.chr (Uchar.to_int (Uchar.utf_decode_uchar decoded))))
+    ~sexp_of
+;;
+
+(** [char ()] creates a generator for single characters (codepoints 0-255,
+    i.e. Latin-1) as native [char] values. *)
+let char () = make_characters ~of_char:Fun.id ~sexp_of:sexp_of_char ()
 
 (** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.
 *)

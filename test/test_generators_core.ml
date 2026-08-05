@@ -165,6 +165,7 @@ let check_printer name gen value expected =
 let test_printer_int () = check_printer "int" (integers ()) 42 "42"
 let test_printer_bool () = check_printer "bool" (booleans ()) true "true"
 let test_printer_text () = check_printer "text" (text ()) "hi" "hi"
+let test_printer_char () = check_printer "char" (char ()) 'a' "a"
 
 (* [filter] is type-preserving, so it delegates to the source's printer. *)
 let test_printer_filter_delegates () =
@@ -357,6 +358,7 @@ let tests =
   ; Alcotest.test_case "printer int" `Quick test_printer_int
   ; Alcotest.test_case "printer bool" `Quick test_printer_bool
   ; Alcotest.test_case "printer text" `Quick test_printer_text
+  ; Alcotest.test_case "printer char" `Quick test_printer_char
   ; Alcotest.test_case "printer filter delegates" `Quick test_printer_filter_delegates
   ; Alcotest.test_case "with_printer" `Quick test_with_printer
   ; Alcotest.test_case "filter on unprintable" `Quick test_filter_on_unprintable

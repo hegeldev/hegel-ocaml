@@ -144,19 +144,27 @@ val with_printer
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
 val printer : ('a, printable) generator -> 'a -> Sexplib0.Sexp.t
 
+(** [leaf ~draw ~sexp_of] builds a printable generator from a single typed
+    engine draw. Not part of the public API. *)
+val leaf
+  :  draw:(Internal.test_case -> 'a)
+  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> ('a, printable) generator
+
 (**/**)
 
 (** {2 Primitive generators} *)
 
-(** [booleans ()] creates a generator for boolean values.
+(** [booleans ?p ()] creates a generator for boolean values, [true] with
+    probability [p] (default [0.5]). [p] must be between 0 and 1.
 
     {[
       let%hegel_test booleans_example tc =
-        let b = draw tc (Generators.booleans ()) in
+        let b = draw tc (Generators.booleans ~p:0.9 ()) in
         assert (b = true || b = false)
       ;;
     ]} *)
-val booleans : unit -> (bool, printable) generator
+val booleans : ?p:float -> unit -> (bool, printable) generator
 
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
     the given bounds.
@@ -267,6 +275,26 @@ val characters
   -> ?exclude_characters:string
   -> unit
   -> (string, printable) generator
+
+(** [make_characters ~of_char ~sexp_of ()] builds a generator for single
+    characters over any representation ['a], covering the full native [char]
+    range (codepoints 0-255, i.e. Latin-1). *)
+val make_characters
+  :  of_char:(char -> 'a)
+  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> unit
+  -> ('a, printable) generator
+
+(** [char ()] creates a generator for single characters (codepoints 0-255,
+    i.e. Latin-1) as native [char] values.
+
+    {[
+      let%hegel_test char_example tc =
+        let c = draw tc (Generators.char ()) in
+        assert (Char.code c >= 0 && Char.code c <= 0xFF)
+      ;;
+    ]} *)
+val char : unit -> (char, printable) generator
 
 (** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.
 
