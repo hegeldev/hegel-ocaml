@@ -19,6 +19,37 @@ let test_char_e2e () =
   check_printer "char" (Hegel_jane.char ()) 'a' "a"
 ;;
 
+(** Test: time_ns_span draws [Core.Time_ns.Span.t] values across its full
+    representable range, round-tripping through [Int63]. *)
+let test_time_ns_span_e2e () =
+  let saw_negative = ref false in
+  run_hegel_test ~settings:(settings ~test_cases:50 ()) (fun tc ->
+    let span = draw tc (Hegel_jane.time_ns_spans ()) in
+    if Core.Time_ns.Span.( < ) span Core.Time_ns.Span.zero then saw_negative := true;
+    let (_ : int) = Core.Int63.to_int_exn (Core.Time_ns.Span.to_int63_ns span) in
+    ());
+  assert !saw_negative;
+  check_printer
+    "time_ns_span"
+    (Hegel_jane.time_ns_spans ())
+    (Core.Time_ns.Span.of_int63_ns (Core.Int63.of_int 12345))
+    "12.345us"
+;;
+
+(** Test: time_ns draws [Core.Time_ns.t] values across its full representable
+    range, round-tripping through [Int63]. *)
+let test_time_ns_e2e () =
+  run_hegel_test ~settings:(settings ~test_cases:50 ()) (fun tc ->
+    let t = draw tc (Hegel_jane.time_ns ()) in
+    let (_ : int) = Core.Int63.to_int_exn (Core.Time_ns.to_int63_ns_since_epoch t) in
+    ());
+  check_printer
+    "time_ns"
+    (Hegel_jane.time_ns ())
+    (Core.Time_ns.of_int63_ns_since_epoch (Core.Int63.of_int 12345))
+    {|"1970-01-01 00:00:00.000012345Z"|}
+;;
+
 (** Test: dates generates typed [Core.Date.t] values with year in [1, 9999],
     rendered by [Core.Date.to_string]. *)
 let test_dates_e2e () =
@@ -141,6 +172,8 @@ let () =
     "hegel_jane"
     [ ( "hegel_jane"
       , [ Alcotest.test_case "char e2e" `Quick test_char_e2e
+        ; Alcotest.test_case "time_ns_span e2e" `Quick test_time_ns_span_e2e
+        ; Alcotest.test_case "time_ns e2e" `Quick test_time_ns_e2e
         ; Alcotest.test_case "dates e2e" `Quick test_dates_e2e
         ; Alcotest.test_case "times e2e" `Quick test_times_e2e
         ; Alcotest.test_case "datetimes e2e" `Quick test_datetimes_e2e

@@ -144,6 +144,13 @@ val with_printer
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
 val printer : ('a, printable) generator -> 'a -> Sexplib0.Sexp.t
 
+(** [leaf ~draw ~sexp_of] builds a printable generator from a single typed
+    engine draw. Not part of the public API. *)
+val leaf
+  :  draw:(Internal.test_case -> 'a)
+  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> ('a, printable) generator
+
 (**/**)
 
 (** {2 Primitive generators} *)

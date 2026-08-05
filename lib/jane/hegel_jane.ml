@@ -31,6 +31,23 @@ let datetimes () =
 
 let char () = G.make_characters ~of_char:Fun.id ~sexp_of:Char.sexp_of_t ()
 
+let ns_draw tc =
+  Int63.of_int
+    (Hegel.Internal.generate_integer tc ~min_value:Int.min_value ~max_value:Int.max_value)
+;;
+
+let time_ns_spans () =
+  G.leaf
+    ~draw:(fun tc -> Time_ns.Span.of_int63_ns (ns_draw tc))
+    ~sexp_of:Time_ns.Span.sexp_of_t
+;;
+
+let time_ns () =
+  G.leaf
+    ~draw:(fun tc -> Time_ns.of_int63_ns_since_epoch (ns_draw tc))
+    ~sexp_of:Time_ns.Alternate_sexp.sexp_of_t
+;;
+
 let hash_tables keys values ?min_size ?max_size () =
   G.make_hash_tables
     ~of_pairs:Hashtbl.Poly.of_alist_exn
