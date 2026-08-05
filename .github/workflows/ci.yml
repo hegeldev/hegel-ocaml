@@ -215,6 +215,14 @@ jobs:
             opam-${{ runner.os }}-with-doc-
           deps-flags: --with-doc
 
+      - name: Install hegel.jane doc dependencies
+        run: |
+          eval $(opam env)
+          # core/sexp_diff are opam depopts (not pulled by --deps-only
+          # --with-doc); install them so hegel_jane builds and lib/hegel.mli's
+          # {!Hegel_jane...} cross-references resolve instead of erroring.
+          opam install core sexp_diff --yes
+
       - name: Check docs
         run: just check-docs
 
