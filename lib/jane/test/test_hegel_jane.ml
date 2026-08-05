@@ -19,9 +19,9 @@ let test_char_e2e () =
   check_printer "char" (Hegel_jane.char ()) 'a' "a"
 ;;
 
-(** Test: time_ns_span draws [Core.Time_ns.Span.t] values across its full
+(** Test: time_ns_spans draws [Core.Time_ns.Span.t] values across its full
     representable range, round-tripping through [Int63]. *)
-let test_time_ns_span_e2e () =
+let test_time_ns_spans_e2e () =
   let saw_negative = ref false in
   run_hegel_test ~settings:(settings ~test_cases:50 ()) (fun tc ->
     let span = draw tc (Hegel_jane.time_ns_spans ()) in
@@ -30,7 +30,7 @@ let test_time_ns_span_e2e () =
     ());
   assert !saw_negative;
   check_printer
-    "time_ns_span"
+    "time_ns_spans"
     (Hegel_jane.time_ns_spans ())
     (Core.Time_ns.Span.of_int63_ns (Core.Int63.of_int 12345))
     "12.345us"
@@ -172,7 +172,7 @@ let () =
     "hegel_jane"
     [ ( "hegel_jane"
       , [ Alcotest.test_case "char e2e" `Quick test_char_e2e
-        ; Alcotest.test_case "time_ns_span e2e" `Quick test_time_ns_span_e2e
+        ; Alcotest.test_case "time_ns_spans e2e" `Quick test_time_ns_spans_e2e
         ; Alcotest.test_case "time_ns e2e" `Quick test_time_ns_e2e
         ; Alcotest.test_case "dates e2e" `Quick test_dates_e2e
         ; Alcotest.test_case "times e2e" `Quick test_times_e2e
