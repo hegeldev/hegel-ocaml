@@ -20,13 +20,14 @@ supported platforms.
 You're now ready to write your first test. Hegel works with whatever test 
 framework your project already uses. This guide uses [Alcotest](https://github.com/mirage/alcotest).
 
-Add `hegel` and `alcotest` to your dune test stanza:
+Add `hegel` and `alcotest` to your dune test stanza. This guide also uses
+`ppx_sexp_conv` to write value printers with `[%sexp_of: t]`, but it is optional.
 
 ```
 (test
  (name my_tests)
  (libraries hegel alcotest)
- (preprocess (pps ppx_hegel_test)))
+ (preprocess (pps ppx_hegel_test ppx_sexp_conv)))
 ```
 
 Then create a test file:
@@ -218,11 +219,11 @@ hegel_generator]`. Either draw it with `draw_silent` (which prints nothing):
 ```ocaml
 let parity = draw_silent tc (Generators.map (fun n -> n mod 2) (Generators.integers ()))
 ```
-or attach a printer with `with_printer`. The printer is any `'a -> Sexp.t`. 
-Note that `Sexp` requires `open Core`.
+or attach a printer with `with_printer`. A printer is a function of type
+`'a -> Sexplib0.Sexp.t`.
 ```ocaml
 let parity =
-  draw tc (Generators.with_printer (fun n -> Sexp.Atom (Int.to_string n))
+  draw tc (Generators.with_printer (fun n -> Sexplib0.Sexp.Atom (string_of_int n))
              (Generators.map (fun n -> n mod 2) (Generators.integers ())))
 ```
 If you have [`ppx_sexp_conv`](https://github.com/janestreet/ppx_sexp_conv) in your
@@ -245,27 +246,34 @@ let%hegel_test remainder_below_divisor tc =
 
 ## Assert with `require` and `require_equal`
 
-When `assert (a = b)` fails, the report tells you the assertion failed and shows
-the inputs you drew, but not the two sides being compared or how they differ.
-`require_equal` renders both and prints a structural s-expression diff in the
-report. `-` lines appear only in the first value, `+` lines only in the second.
-It takes a printer (`'a -> Core.Sexp.t`) for the values; build one from `Core`'s
-`sexp_of_t` functions, or with a `[%sexp_of: ...]` from `ppx_sexp_conv`:
+When `assert (a = b)` fails, the report shows only the failed assertion and
+the drawn inputs. It does not show the two compared values. `require_equal`
+shows both values in the report. The `-` line shows the first value. The `+`
+line shows the second value. `require_equal` takes a printer
+(`'a -> Sexplib0.Sexp.t`) for the values. Write the printer by hand, or use
+`[%sexp_of: ...]` from `ppx_sexp_conv`:
 
 ```ocaml
 let%hegel_test reverse_is_identity tc =
   let xs = draw tc (Generators.lists (Generators.integers ()) ()) in
-  require_equal tc (Core.List.sexp_of_t Core.Int.sexp_of_t) xs (List.rev xs)
+  require_equal tc [%sexp_of: int list] xs (List.rev xs)
 ;;
 ```
 
-On failure the report body shows exactly which parts differ:
+On failure, the report body shows the two values:
 
 ```
   xs = (0 1)
   require_equal: values differ (- lhs / + rhs):
-  -(0 1)  +(1 0)
+  - (0 1)
+  + (1 0)
 ```
+
+If your project uses Jane Street's `Core`, you can show a structural
+s-expression diff instead. Add the optional `hegel.core` library to your test
+stanza. Then call `Hegel_core.set_sexp_diff ()` before your tests run.
+`require_equal` failures will then show a two-column `sexp_diff` of the two
+values.
 
 For a plain boolean check with a custom message, use `require`, which raises
 `Failure msg` when the condition is false:
@@ -290,7 +298,7 @@ let%hegel_test stack_stays_small tc =
     ~init:[]
     ~rules:[ push ]
     ~invariants:[ (fun stack -> assert (List.length stack <= 2)) ]
-    ~sexp_of_state:(Core.List.sexp_of_t Core.Int.sexp_of_t)
+    ~sexp_of_state:[%sexp_of: int list]
     tc
 ;;
 ```

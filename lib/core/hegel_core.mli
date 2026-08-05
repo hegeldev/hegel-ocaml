@@ -5,6 +5,24 @@
     Each typed generator draws through the corresponding [hegel] generator and 
     converts the result. *)
 
+(** [dates ()] creates a generator for [Core.Date.t] values, with year in
+    [\[1, 9999\]] and calendar-valid month/day. *)
+val dates : unit -> (Core.Date.t, Hegel.Generators.printable) Hegel.Generators.generator
+
+(** [times ()] creates a generator for [Core.Time_ns.Ofday.t] times of day
+    with microsecond precision. *)
+val times
+  :  unit
+  -> (Core.Time_ns.Ofday.t, Hegel.Generators.printable) Hegel.Generators.generator
+
+(** [datetimes ()] creates a generator for naive datetimes as
+    [(Core.Date.t * Core.Time_ns.Ofday.t)] pairs. *)
+val datetimes
+  :  unit
+  -> ( Core.Date.t * Core.Time_ns.Ofday.t
+       , Hegel.Generators.printable )
+       Hegel.Generators.generator
+
 (** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
     polymorphic [Core.Hashtbl.t] tables over printable [keys] and [values].
     [Hegel.Generators.hash_tables_core] closed over [Core.Hashtbl]. *)

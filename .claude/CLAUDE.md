@@ -38,7 +38,8 @@ lib/                         # Library source
   generators_core.ml         # generator type; draw/draw_silent, map/flat_map/filter,
                              #   composite, span labels — the discriminated union
   generators_primitives.ml   # integers, booleans, floats, text, binary, just, formats
-  generators_collections.ml  # lists, hashmaps, sets, and the collection protocol
+  generators_collections.ml  # lists, assoc_lists, hash_tables (+ the table-agnostic
+                             #   hash_tables_core), and the collection protocol
   generators_combinators.ml  # sampled_from, one_of, tuples2/3/4
   generators_functions.ml    # functions/functions2/functions3: memoized
                              #   function generators (Claessen's show/shrink,
@@ -46,6 +47,9 @@ lib/                         # Library source
   derive.ml                  # Runtime support for [@@deriving hegel_generator]
   stateful.ml                # Stateful testing: Rule.create + run over action sequences
   antithesis.ml              # Antithesis integration (emits an always-typed assertion)
+  core/                      # Optional hegel.core sublibrary ((optional) in dune; NOT
+    hegel_core.ml/.mli       #   instrumented). Core.Hashtbl hash_tables + pool helpers
+                             #   and the sexp_diff require_equal renderer (set_sexp_diff)
 
 ppx/                         # PPX rewriters and derivers
   dune                       # PPX library build configs; a rule generates
@@ -122,6 +126,26 @@ mechanical marshalling out of the 100%-coverage gate (no `[@coverage off]`).
 the old Python-subprocess install flow were removed in the native-backend and
 typed-draw migrations.
 
+### Dependencies: core-free main library + optional hegel.core
+
+The `hegel` library depends on the stdlib plus `sexplib0` (printer type
+`'a -> Sexplib0.Sexp.t`, the same type as `Core.Sexp.t`), `unix` (isatty for
+color detection), `threads.posix`, ctypes/ipaddr/yojson/dune-site. `core`,
+`core_unix`, and `sexp_diff` are NOT dependencies of the library: `core` and
+`sexp_diff` are opam depopts that gate the `(optional)` sublibrary
+`hegel.core` (`lib/core/`, module `Hegel_core`). Anywhere the library needs a
+container or renderer a Jane Street type used to provide, the dependency is
+refunctionalized — the code takes the operations as closures/parameters, and
+each side instantiates them:
+- pools: `values_core`/`resolve_draw_core` (find/remove/is_empty closures) ← `Make_pool`+`Int_table` (stdlib) / `Hegel_core` (Core.Hashtbl)
+- hash tables: `hash_tables_core ~of_pairs ~sexp_of_t` ← `hash_tables` (Stdlib.Hashtbl) / `Hegel_core.hash_tables` (Hashtbl.Poly)
+- dates/times: `dates_core`/`times_core`/`datetimes_core ~of_parts ~sexp_of` ← `dates`/`times`/`datetimes` (ISO 8601 strings)
+- require_equal diff: `Internal.set_diff_renderer` hook ← default prints both values (`-`/`+`, red/green); `Hegel_core.set_sexp_diff ()` installs the `sexp_diff` two-column renderer
+
+The test suite still links `core`/`core_unix` (test-only dependencies; users
+never install them). `lib/core/` is not bisect_ppx-instrumented (same
+exclusion as ffi and the PPXes).
+
 ### Generator System (generators_core.ml + generators_{primitives,collections,combinators}.ml)
 
 The generator type and combinators (`draw`, `map`, `flat_map`, `composite`, …)
@@ -135,8 +159,9 @@ Generators are a discriminated union:
 - **FlatMapped** — wraps source + a function returning a generator. Evaluated recursively inside a `flat_map` span.
 - **Filtered** — wraps source + predicate. Up to `max_filter_attempts` retries before `assume false`.
 - **CompositeList** — lists of any element core. Uses the collection protocol (new_collection / collection_more) to generate elements one at a time.
-- **Composite** — a `generate_fn` thunk run inside a labeled span; used by tuples, one_of, `lists ~unique`, and hashmaps (all of which now always drive the collection protocol / draw sub-values directly — there is no schema fast path).
-- **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (memoized on the argument via structural hash/equality — a `Hashtbl.Poly` — so `sexp_of_arg` is display-only and an omitted one shows `<opaque>` without collapsing the key) and shows applied pairs as `name arg = result` via `note` on the final replay. Only *top-level* applications print — a pair applied at draw depth > 0 (inside a span) is suppressed, like a nested draw. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); the name threads even when the function is drawn nested. Result draws are wrapped in a `Labels.function_result` span.
+- **Composite** — a `generate_fn` thunk run inside a labeled span; used by tuples, one_of, `lists ~unique`, and hash tables (all of which now always drive the collection protocol / draw sub-values directly — there is no schema fast path).
+- **Values** — the engine-pool core behind `Stateful.Pool`. Refunctionalized: it stores the table's `find`/`remove`/`is_empty` closures, not a concrete hashtable. `Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int)` (doc-hidden, with the ready-made `Int_table`) closes `values_core`/`resolve_draw_core` over a stdlib table; the optional `hegel.core` library closes the same primitives (via `Ppx_internal`) over `Core.Hashtbl`. `hash_tables` follows the same strategy at the API level: `hash_tables_core ~of_pairs ~sexp_of_t` is table-agnostic, `hash_tables` closes it over `Stdlib.Hashtbl`, `Hegel_core.hash_tables` over `Core.Hashtbl.Poly`.
+- **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (memoized on the argument via structural hash/equality — a polymorphic `Stdlib.Hashtbl` — so `sexp_of_arg` is display-only and an omitted one shows `<opaque>` without collapsing the key) and shows applied pairs as `name arg = result` via `note` on the final replay. Only *top-level* applications print — a pair applied at draw depth > 0 (inside a span) is suppressed, like a nested draw. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); the name threads even when the function is drawn nested. Result draws are wrapped in a `Labels.function_result` span.
 
 ### Inline Test Integration (ppx/ppx_hegel_test.ml)
 
@@ -327,7 +352,7 @@ typed FFI call (`Hegel_ffi.Ffi` / `Internal.generate_*`):
 - `binary` → `generate_bytes ~min_size ~max_size`
 - `text` / `characters` → build a text `string_generator` handle (codec / codepoint bounds / categories / include-exclude chars) then `generate_string`; surrogates auto-excluded
 - `from_regex` / `emails` / `urls` / `domains` → the matching `string_generator_*` handle + `generate_string`
-- `dates` / `times` / `datetimes` → `generate_date`/`time`/`datetime` structs, converted client-side to typed `Core.Date.t` / `Core.Time_ns.Ofday.t` values (render with Core's own stringifiers)
+- `dates` / `times` / `datetimes` → `generate_date`/`time`/`datetime` structs. The parts feed the refunctionalized builders `dates_core`/`times_core`/`datetimes_core` (`~of_parts` constructor + `~sexp_of` printer, labeled args); the public `dates`/`times`/`datetimes` close them over ISO 8601 strings (`YYYY-MM-DD`, `HH:MM:SS.ffffff` with the fraction always printed, joined by `T`). A typed date library plugs in its own `~of_parts` (no string parsing round-trip)
 - `ip_addresses` → `generate_ipv4`/`generate_ipv6` raw bytes, rendered to strings by the `ipaddr` library (`Ipaddr.V4/V6.{of_octets_exn, to_string}`; RFC 5952 for v6)
 - `sampled_from` → `generate_integer 0 (n-1)` then index into the values array
 - `just` → a Leaf whose `draw` ignores the engine and returns the constant

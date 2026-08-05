@@ -3,6 +3,32 @@
 open! Core
 module G = Hegel.Generators
 
+let dates () =
+  G.dates_core
+    ~of_parts:(fun ~year ~month ~day ->
+      Date.create_exn ~y:year ~m:(Month.of_int_exn month) ~d:day)
+    ~sexp_of:Date.sexp_of_t
+    ()
+;;
+
+let times () =
+  G.times_core
+    ~of_parts:(fun ~hour ~minute ~second ~microsecond ->
+      Time_ns.Ofday.create ~hr:hour ~min:minute ~sec:second ~us:microsecond ())
+    ~sexp_of:Time_ns.Ofday.sexp_of_t
+    ()
+;;
+
+let datetimes () =
+  G.datetimes_core
+    ~of_parts:(fun ~year ~month ~day ~hour ~minute ~second ~microsecond ->
+      ( Date.create_exn ~y:year ~m:(Month.of_int_exn month) ~d:day
+      , Time_ns.Ofday.create ~hr:hour ~min:minute ~sec:second ~us:microsecond () ))
+    ~sexp_of:(fun (date, time) ->
+      Sexp.List [ Date.sexp_of_t date; Time_ns.Ofday.sexp_of_t time ])
+    ()
+;;
+
 let hash_tables keys values ?min_size ?max_size () =
   G.hash_tables_core
     ~of_pairs:Hashtbl.Poly.of_alist_exn
