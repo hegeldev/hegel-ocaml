@@ -15,3 +15,5 @@ generates a `Core.Hashtbl.t`.
 
 `require_equal` failures now print the two values in full. The structural Jane 
 Street `sexp_diff` rendering is now opt-in.
+
+Thanks to @c-cube for his help with this release.
