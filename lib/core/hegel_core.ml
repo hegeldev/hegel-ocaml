@@ -4,7 +4,7 @@ open! Core
 module G = Hegel.Generators
 
 let dates () =
-  G.dates_core
+  G.make_dates
     ~of_parts:(fun ~year ~month ~day ->
       Date.create_exn ~y:year ~m:(Month.of_int_exn month) ~d:day)
     ~sexp_of:Date.sexp_of_t
@@ -12,7 +12,7 @@ let dates () =
 ;;
 
 let times () =
-  G.times_core
+  G.make_times
     ~of_parts:(fun ~hour ~minute ~second ~microsecond ->
       Time_ns.Ofday.create ~hr:hour ~min:minute ~sec:second ~us:microsecond ())
     ~sexp_of:Time_ns.Ofday.sexp_of_t
@@ -20,7 +20,7 @@ let times () =
 ;;
 
 let datetimes () =
-  G.datetimes_core
+  G.make_datetimes
     ~of_parts:(fun ~year ~month ~day ~hour ~minute ~second ~microsecond ->
       ( Date.create_exn ~y:year ~m:(Month.of_int_exn month) ~d:day
       , Time_ns.Ofday.create ~hr:hour ~min:minute ~sec:second ~us:microsecond () ))
@@ -30,7 +30,7 @@ let datetimes () =
 ;;
 
 let hash_tables keys values ?min_size ?max_size () =
-  G.hash_tables_core
+  G.make_hash_tables
     ~of_pairs:Hashtbl.Poly.of_alist_exn
     ~sexp_of_t:Hashtbl.Poly.sexp_of_t
     keys
@@ -41,7 +41,7 @@ let hash_tables keys values ?min_size ?max_size () =
 ;;
 
 let resolve_draw values ~consume variable_id =
-  G.Ppx_internal.resolve_draw_core
+  G.Ppx_internal.resolve_pool_draw
     ~find:(Hashtbl.find values)
     ~remove:(Hashtbl.remove values)
     ~consume
@@ -49,7 +49,7 @@ let resolve_draw values ~consume variable_id =
 ;;
 
 let pool_values ~pool_id ~values ~consume =
-  G.Ppx_internal.values_core
+  G.Ppx_internal.make_pool_values
     ~pool_id
     ~find:(Hashtbl.find values)
     ~remove:(Hashtbl.remove values)

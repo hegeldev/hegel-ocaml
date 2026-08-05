@@ -336,9 +336,9 @@ val assoc_lists
   -> unit
   -> (('a * 'b) list, printable) generator
 
-(** [hash_tables_core ~of_pairs ~sexp_of_t keys values ?min_size ?max_size ()]
+(** [make_hash_tables ~of_pairs ~sexp_of_t keys values ?min_size ?max_size ()]
     builds a hash-table generator over any table type ['t]. *)
-val hash_tables_core
+val make_hash_tables
   :  of_pairs:(('a * 'b) list -> 't)
   -> sexp_of_t:
        (('a -> Sexplib0.Sexp.t) -> ('b -> Sexplib0.Sexp.t) -> 't -> Sexplib0.Sexp.t)
@@ -602,34 +602,34 @@ val urls : unit -> (string, printable) generator
     ]} *)
 val domains : ?max_length:int -> unit -> (string, printable) generator
 
-(** [dates_core ~of_parts ~sexp_of ()] builds a date generator over any date
+(** [make_dates ~of_parts ~sexp_of ()] builds a date generator over any date
     representation.
 
     {[
       let core_dates =
-        Generators.dates_core
+        Generators.make_dates
           ~of_parts:(fun ~year ~month ~day ->
             Core.Date.create_exn ~y:year ~m:(Core.Month.of_int_exn month) ~d:day)
           ~sexp_of:Core.Date.sexp_of_t
           ()
     ]} *)
-val dates_core
+val make_dates
   :  of_parts:(year:int -> month:int -> day:int -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
   -> unit
   -> ('a, printable) generator
 
-(** [times_core ~of_parts ~sexp_of ()] builds a time-of-day generator over any
+(** [make_times ~of_parts ~sexp_of ()] builds a time-of-day generator over any
     time representation. *)
-val times_core
+val make_times
   :  of_parts:(hour:int -> minute:int -> second:int -> microsecond:int -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
   -> unit
   -> ('a, printable) generator
 
-(** [datetimes_core ~of_parts ~sexp_of ()] builds a naive-datetime generator
+(** [make_datetimes ~of_parts ~sexp_of ()] builds a naive-datetime generator
     over any representation. *)
-val datetimes_core
+val make_datetimes
   :  of_parts:
        (year:int
         -> month:int
@@ -826,9 +826,9 @@ module Ppx_internal : sig
       [discard:false]. *)
   val discardable_group : int -> Internal.test_case -> (unit -> 'a) -> 'a
 
-  (** [resolve_draw_core ~find ~remove ~consume id] resolves a drawn pool [id]
+  (** [resolve_pool_draw ~find ~remove ~consume id] resolves a drawn pool [id]
       via the [find] closure. When [consume], the picked value is removed. *)
-  val resolve_draw_core
+  val resolve_pool_draw
     :  find:(int -> 'a option)
     -> remove:(int -> unit)
     -> consume:bool
@@ -860,10 +860,10 @@ module Ppx_internal : sig
       Raises [Internal.Data_exhausted] on StopTest. *)
   val collection_reject : collection -> Internal.test_case -> unit
 
-  (** [values_core ~pool_id ~find ~remove ~is_empty ~consume] is a
+  (** [make_pool_values ~pool_id ~find ~remove ~is_empty ~consume] is a
       generator that picks a value from the engine pool [pool_id]. When [consume],
       the picked value is removed from the pool. *)
-  val values_core
+  val make_pool_values
     :  pool_id:int
     -> find:(int -> 'a option)
     -> remove:(int -> unit)

@@ -25,7 +25,7 @@ val datetimes
 
 (** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
     polymorphic [Core.Hashtbl.t] tables over printable [keys] and [values].
-    [Hegel.Generators.hash_tables_core] closed over [Core.Hashtbl]. *)
+    [Hegel.Generators.make_hash_tables] closed over [Core.Hashtbl]. *)
 val hash_tables
   :  ('a, Hegel.Generators.printable) Hegel.Generators.generator
   -> ('b, Hegel.Generators.printable) Hegel.Generators.generator

@@ -64,9 +64,9 @@ let assoc_lists
   Printable { core; sexp_of }
 ;;
 
-(** [hash_tables_core ~of_pairs ~sexp_of_t keys values ?min_size ?max_size ()]
+(** [make_hash_tables ~of_pairs ~sexp_of_t keys values ?min_size ?max_size ()]
     builds a hash-table generator over any table type ['t]. *)
-let hash_tables_core
+let make_hash_tables
       ~of_pairs
       ~sexp_of_t
       (keys : ('a, printable) generator)
@@ -93,7 +93,7 @@ let hash_tables_core
 (** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
     polymorphic [Stdlib.Hashtbl.t] tables over printable [keys] and [values]. *)
 let hash_tables keys values ?min_size ?max_size () =
-  hash_tables_core
+  make_hash_tables
     ~of_pairs:(fun pairs ->
       let table = Stdlib.Hashtbl.create (List.length pairs) in
       List.iter (fun (k, v) -> Stdlib.Hashtbl.replace table k v) pairs;

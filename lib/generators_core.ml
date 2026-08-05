@@ -149,11 +149,11 @@ let composite_with_label ~label generate_fn =
     whole value prints. *)
 let composite generate_fn = composite_with_label ~label:Labels.fixed_dict generate_fn
 
-(** [values_core ~pool_id ~find ~remove ~is_empty ~consume] builds an
+(** [make_pool_values ~pool_id ~find ~remove ~is_empty ~consume] builds an
     unprintable generator that picks a value from the engine pool [pool_id],
     resolving the drawn id via [find]. When [consume], [remove] deletes the
     picked value. [is_empty] reports whether the backing table is empty. *)
-let values_core ~pool_id ~find ~remove ~is_empty ~consume =
+let make_pool_values ~pool_id ~find ~remove ~is_empty ~consume =
   Unprintable { core = Values { pool_id; find; remove; is_empty; consume } }
 ;;
 
@@ -250,7 +250,7 @@ let collection_reject coll data =
 ;;
 
 (* separated out for unit testing *)
-let resolve_draw_core ~find ~remove ~consume variable_id =
+let resolve_pool_draw ~find ~remove ~consume variable_id =
   match find variable_id with
   | Some v ->
     if consume then remove variable_id;
@@ -264,7 +264,7 @@ let resolve_draw_core ~find ~remove ~consume variable_id =
 let pick tc ~find ~remove ~is_empty pool_id ~consume =
   Internal.assume tc (not (is_empty ()));
   let variable_id = Internal.pool_generate tc ~pool_id ~consume () in
-  resolve_draw_core ~find ~remove ~consume variable_id
+  resolve_pool_draw ~find ~remove ~consume variable_id
 ;;
 
 (** Defined for convenience *)
@@ -276,7 +276,7 @@ module Int_table = Stdlib.Hashtbl.Make (struct
   end)
 
 (** [Make_pool (Tbl)] specializes the pool-drawing machinery
-    ({!values_core}/{!resolve_draw_core}) to a concrete int-keyed hashtable
+    ({!make_pool_values}/{!resolve_pool_draw}) to a concrete int-keyed hashtable
     module [Tbl]. *)
 module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) = struct
   (** [resolve_draw values ~consume variable_id] resolves a drawn pool id
@@ -284,7 +284,7 @@ module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) = struct
       [Internal.Flaky_strategy] on an unknown id (an engine-contract
       violation). *)
   let resolve_draw values ~consume variable_id =
-    resolve_draw_core
+    resolve_pool_draw
       ~find:(fun id -> Tbl.find_opt values id)
       ~remove:(fun id -> Tbl.remove values id)
       ~consume
@@ -296,7 +296,7 @@ module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) = struct
       against the local [values] table. When [consume], the picked value is
       removed from the pool. *)
   let pool_values ~pool_id ~values ~consume =
-    values_core
+    make_pool_values
       ~pool_id
       ~find:(fun id -> Tbl.find_opt values id)
       ~remove:(fun id -> Tbl.remove values id)

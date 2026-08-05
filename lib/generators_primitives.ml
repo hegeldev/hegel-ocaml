@@ -326,10 +326,10 @@ let domains ?max_length () =
   leaf ~draw:(fun tc -> Internal.generate_domain tc ~max_length) ~sexp_of:sexp_of_string
 ;;
 
-(** [dates_core ~of_parts ~sexp_of ()] builds a date generator over any date
+(** [make_dates ~of_parts ~sexp_of ()] builds a date generator over any date
     representation. [of_parts] converts the generated date data to the desired
     date representation. *)
-let dates_core ~of_parts ~sexp_of () =
+let make_dates ~of_parts ~sexp_of () =
   leaf
     ~draw:(fun tc ->
       let year, month, day = Internal.generate_date tc in
@@ -337,10 +337,10 @@ let dates_core ~of_parts ~sexp_of () =
     ~sexp_of
 ;;
 
-(** [times_core ~of_parts ~sexp_of ()] builds a time-of-day generator over any
+(** [make_times ~of_parts ~sexp_of ()] builds a time-of-day generator over any
     time representation. [of_parts] converts the generated time data to the 
     desired time representation. *)
-let times_core ~of_parts ~sexp_of () =
+let make_times ~of_parts ~sexp_of () =
   leaf
     ~draw:(fun tc ->
       let hour, minute, second, microsecond = Internal.generate_time tc in
@@ -348,10 +348,10 @@ let times_core ~of_parts ~sexp_of () =
     ~sexp_of
 ;;
 
-(** [datetimes_core ~of_parts ~sexp_of ()] builds a naive-datetime generator
+(** [make_datetimes ~of_parts ~sexp_of ()] builds a naive-datetime generator
     over any representation. [of_parts] converts the generated datetime data
     to the desired representation. *)
-let datetimes_core ~of_parts ~sexp_of () =
+let make_datetimes ~of_parts ~sexp_of () =
   leaf
     ~draw:(fun tc ->
       let (year, month, day), (hour, minute, second, microsecond) =
@@ -369,16 +369,16 @@ let format_time ~hour ~minute ~second ~microsecond =
 ;;
 
 (** [dates ()] is a generator for ISO 8601 [YYYY-MM-DD] date strings. *)
-let dates () = dates_core ~of_parts:format_date ~sexp_of:sexp_of_string ()
+let dates () = make_dates ~of_parts:format_date ~sexp_of:sexp_of_string ()
 
 (** [times ()] is a generator for ISO 8601 [HH:MM:SS.ffffff] time-of-day
     strings. *)
-let times () = times_core ~of_parts:format_time ~sexp_of:sexp_of_string ()
+let times () = make_times ~of_parts:format_time ~sexp_of:sexp_of_string ()
 
 (** [datetimes ()] is a generator for naive ISO 8601 [YYYY-MM-DDTHH:MM:SS.ffffff] 
     datetime strings. *)
 let datetimes () =
-  datetimes_core
+  make_datetimes
     ~of_parts:(fun ~year ~month ~day ~hour ~minute ~second ~microsecond ->
       format_date ~year ~month ~day ^ "T" ^ format_time ~hour ~minute ~second ~microsecond)
     ~sexp_of:sexp_of_string
