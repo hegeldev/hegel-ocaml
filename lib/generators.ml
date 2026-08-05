@@ -17,10 +17,10 @@ module Ppx_internal = struct
   let max_filter_attempts = Generators_core.max_filter_attempts
   let group = Generators_core.group
   let discardable_group = Generators_core.discardable_group
-  let resolve_draw = Generators_core.resolve_draw
+  let resolve_draw_core = Generators_core.resolve_draw_core
   let new_collection = Generators_core.new_collection
   let collection_more = Generators_core.collection_more
   let collection_reject = Generators_core.collection_reject
-  let pool_values = Generators_core.pool_values
+  let values_core = Generators_core.values_core
   let composite_with_label = Generators_core.composite_with_label
 end

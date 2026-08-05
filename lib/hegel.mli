@@ -34,13 +34,15 @@
     Hegel works with whatever test framework your project already uses. The
     examples below use {{:https://github.com/mirage/alcotest} Alcotest}.
 
-    Add [hegel] and [alcotest] to your dune test stanza:
+    Add [hegel] and [alcotest] to your dune test stanza. The examples in this
+    documentation also use [ppx_sexp_conv]'s [\[%sexp_of: t\]] to write value
+    printers.
 
     {[
       (test
        (name my_tests)
        (libraries hegel alcotest)
-       (preprocess (pps ppx_hegel_test)))
+       (preprocess (pps ppx_hegel_test ppx_sexp_conv)))
     ]}
 
     {3 Write your first test}
@@ -53,7 +55,7 @@
       let%hegel_test commutative_addition tc =
         let a = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
         let b = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
-        require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
+        require_equal tc [%sexp_of: int] (a + b) (b + a)
 
       let () =
         Alcotest.run
@@ -175,7 +177,7 @@
       let%hegel_test commutative_addition tc =
         let a = draw tc (Generators.integers ()) in
         let b = draw tc (Generators.integers ()) in
-        require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
+        require_equal tc [%sexp_of: int] (a + b) (b + a)
       [@@settings settings ~test_cases:500 ()]
     ]}
 
@@ -186,7 +188,7 @@
       let%hegel_test commutative_addition tc =
         let a = draw tc (Generators.integers ()) in
         let b = draw tc (Generators.integers ()) in
-        require_equal tc Core.Int.sexp_of_t (a + b) (b + a)
+        require_equal tc [%sexp_of: int] (a + b) (b + a)
       [@@settings settings ~test_cases:500 () |> with_seed 5 |> with_verbosity Verbose]
     ]}
 
@@ -599,22 +601,26 @@ val note : test_case -> string -> unit
 val require : test_case -> ?msg:string -> bool -> unit
 
 (** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
-    the two values render to different sexps under [sexp_of]. The failure
-    report's body shows a structural sexp diff of the two values. Lines
-    marked [-] appear only in [lhs], lines marked [+] only in [rhs].
-    Prefer it over [assert (lhs = rhs)], which reports only that the assertion
-    failed, not the two values or how they differ.
+    the two values render to different sexps under [sexp_of]. With the optional 
+    [hegel.core] library's structural diff set, a [sexp_diff] two-column diff is 
+    printed.
 
     {[
       let%hegel_test sort_is_stable tc =
         let l = draw tc (lists (integers ()) ()) in
         require_equal
           tc
-          (Core.List.sexp_of_t Core.Int.sexp_of_t)
+          [%sexp_of: int list]
           (List.sort compare l)
           (stable_sort l)
     ]} *)
-val require_equal : test_case -> ?msg:string -> ('a -> Core.Sexp.t) -> 'a -> 'a -> unit
+val require_equal
+  :  test_case
+  -> ?msg:string
+  -> ('a -> Sexplib0.Sexp.t)
+  -> 'a
+  -> 'a
+  -> unit
 
 (** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding a
     printable generator that {!draw} accepts. This is how a
@@ -623,11 +629,11 @@ val require_equal : test_case -> ?msg:string -> ('a -> Core.Sexp.t) -> 'a -> 'a 
     {[
       let%hegel_test with_printer_example tc =
         let doubled = map (fun x -> x * 2) (integers ~min_value:0 ~max_value:9 ()) in
-        let n = draw tc (with_printer Core.Int.sexp_of_t doubled) in
+        let n = draw tc (with_printer [%sexp_of: int] doubled) in
         assert (n >= 0)
     ]} *)
 val with_printer
-  :  ('a -> Core.Sexp.t)
+  :  ('a -> Sexplib0.Sexp.t)
   -> ('a, 'p) Generators.generator
   -> ('a, Generators.printable) Generators.generator
 
@@ -703,7 +709,7 @@ val with_printer
         in
         let worker_b = clone tc in
         let sum_a, sum_b = Eio.Fiber.pair (worker tc) (worker worker_b) in
-        require_equal tc Core.Int.sexp_of_t (sum_a + sum_b) (Atomic.get counter))
+        require_equal tc [%sexp_of: int] (sum_a + sum_b) (Atomic.get counter))
     ]} *)
 
 (** [clone tc] creates a clone of [tc], an independent stream of the same

@@ -1,15 +1,15 @@
-open! Core
+open Sexplib0.Sexp_conv
 open Generators_core
 
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
     the given bounds. When a bound is omitted it defaults to the corresponding
     OCaml native [int] limit. *)
-let integers ?(min_value = Int.min_value) ?(max_value = Int.max_value) () =
+let integers ?(min_value = Int.min_int) ?(max_value = Int.max_int) () =
   if min_value > max_value
   then
     raise
       (Invalid_argument
-         (sprintf "Cannot have max_value=%d < min_value=%d" max_value min_value));
+         (Printf.sprintf "Cannot have max_value=%d < min_value=%d" max_value min_value));
   leaf
     ~draw:(fun tc -> Internal.generate_integer tc ~min_value ~max_value)
     ~sexp_of:sexp_of_int
@@ -59,18 +59,21 @@ let floats
   if eff_allow_nan && (has_min || has_max)
   then raise (Invalid_argument "Cannot have allow_nan=true with min_value or max_value");
   (match min_value, max_value with
-   | Some min, Some max when Float.( > ) min max ->
+   | Some min, Some max when min > max ->
      raise
        (Invalid_argument
-          (sprintf "There are no floats between min_value=%g and max_value=%g" min max))
+          (Printf.sprintf
+             "There are no floats between min_value=%g and max_value=%g"
+             min
+             max))
    | _ -> ());
   if eff_allow_infinity && has_min && has_max
   then
     raise
       (Invalid_argument
          "Cannot have allow_infinity=true with both min_value and max_value");
-  let min_value = Option.value min_value ~default:Float.neg_infinity in
-  let max_value = Option.value max_value ~default:Float.infinity in
+  let min_value = Option.value min_value ~default:neg_infinity in
+  let max_value = Option.value max_value ~default:infinity in
   leaf
     ~draw:(fun tc ->
       Internal.generate_float
@@ -101,22 +104,24 @@ let effective_categories ?categories ?exclude_categories () =
   (* Surrogate auto-exclusion *)
   (match categories with
    | Some cats ->
-     List.iter cats ~f:(fun cat ->
-       if List.mem surrogate_categories cat ~equal:String.equal
-       then
-         raise
-           (Invalid_argument
-              (sprintf
-                 "Category %S includes surrogate codepoints (Cs), which OCaml UTF-8 \
-                  strings cannot represent"
-                 cat)))
+     List.iter
+       (fun cat ->
+          if List.mem cat surrogate_categories
+          then
+            raise
+              (Invalid_argument
+                 (Printf.sprintf
+                    "Category %S includes surrogate codepoints (Cs), which OCaml UTF-8 \
+                     strings cannot represent"
+                    cat)))
+       cats
    | None -> ());
   let effective_exclude_categories =
     match categories with
     | Some _ -> exclude_categories
     | None ->
       let excl = Option.value exclude_categories ~default:[] in
-      if List.mem excl "Cs" ~equal:String.equal then Some excl else Some (excl @ [ "Cs" ])
+      if List.mem "Cs" excl then Some excl else Some (excl @ [ "Cs" ])
   in
   categories, effective_exclude_categories
 ;;
@@ -177,13 +182,15 @@ let text
       ()
   =
   if min_size < 0
-  then raise (Invalid_argument (sprintf "min_size=%d must be non-negative" min_size));
+  then
+    raise (Invalid_argument (Printf.sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
    | Some ms when ms < 0 ->
-     raise (Invalid_argument (sprintf "max_size=%d must be non-negative" ms))
+     raise (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
    | Some ms when min_size > ms ->
      raise
-       (Invalid_argument (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
+       (Invalid_argument
+          (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
    | _ -> ());
   let has_char_param =
     Option.is_some codec
@@ -253,13 +260,15 @@ let characters
 *)
 let binary ?(min_size = 0) ?max_size () =
   if min_size < 0
-  then raise (Invalid_argument (sprintf "min_size=%d must be non-negative" min_size));
+  then
+    raise (Invalid_argument (Printf.sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
    | Some ms when ms < 0 ->
-     raise (Invalid_argument (sprintf "max_size=%d must be non-negative" ms))
+     raise (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
    | Some ms when min_size > ms ->
      raise
-       (Invalid_argument (sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
+       (Invalid_argument
+          (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
    | _ -> ());
   leaf
     ~draw:(fun tc -> Internal.generate_bytes tc ~min_size ~max_size)
@@ -310,48 +319,68 @@ let urls () = leaf ~draw:Internal.generate_url ~sexp_of:sexp_of_string
 let domains ?max_length () =
   (match max_length with
    | Some ml when ml < 4 || ml > 255 ->
-     raise (Invalid_argument (sprintf "max_length=%d must be between 4 and 255" ml))
+     raise
+       (Invalid_argument (Printf.sprintf "max_length=%d must be between 4 and 255" ml))
    | _ -> ());
   let max_length = Option.value max_length ~default:255 in
   leaf ~draw:(fun tc -> Internal.generate_domain tc ~max_length) ~sexp_of:sexp_of_string
 ;;
 
-(* [date_of_parts (year, month, day)] converts an engine-drawn Gregorian date
-   into a [Core.Date.t]. The engine only emits calendar-valid dates, so the
-   conversion cannot raise. *)
-let date_of_parts (year, month, day) =
-  Date.create_exn ~y:year ~m:(Month.of_int_exn month) ~d:day
-;;
-
-(* [time_of_parts (hour, minute, second, microsecond)] converts an engine-drawn
-   time of day into a [Core.Time_ns.Ofday.t]. The engine only emits valid times,
-   so the conversion cannot raise. *)
-let time_of_parts (hour, minute, second, microsecond) =
-  Time_ns.Ofday.create ~hr:hour ~min:minute ~sec:second ~us:microsecond ()
-;;
-
-(** [dates ()] creates a generator for [Core.Date.t] values, with year in
-    [\[1, 9999\]] and calendar-valid month/day. *)
-let dates () =
-  leaf ~draw:(fun tc -> date_of_parts (Internal.generate_date tc)) ~sexp_of:Date.sexp_of_t
-;;
-
-(** [times ()] creates a generator for [Core.Time_ns.Ofday.t] times of day with
-    microsecond precision. *)
-let times () =
-  leaf
-    ~draw:(fun tc -> time_of_parts (Internal.generate_time tc))
-    ~sexp_of:Time_ns.Ofday.sexp_of_t
-;;
-
-(** [datetimes ()] creates a generator for naive datetimes as
-    [(Core.Date.t, Core.Time_ns.Ofday.t)] pairs, combining {!dates} and
-    {!times}. *)
-let datetimes () =
+(** [dates_core ~of_parts ~sexp_of ()] builds a date generator over any date
+    representation. [of_parts] converts the generated date data to the desired
+    date representation. *)
+let dates_core ~of_parts ~sexp_of () =
   leaf
     ~draw:(fun tc ->
-      let date, time = Internal.generate_datetime tc in
-      date_of_parts date, time_of_parts time)
-    ~sexp_of:(fun (date, time) ->
-      Sexp.List [ Date.sexp_of_t date; Time_ns.Ofday.sexp_of_t time ])
+      let year, month, day = Internal.generate_date tc in
+      of_parts ~year ~month ~day)
+    ~sexp_of
+;;
+
+(** [times_core ~of_parts ~sexp_of ()] builds a time-of-day generator over any
+    time representation. [of_parts] converts the generated time data to the 
+    desired time representation. *)
+let times_core ~of_parts ~sexp_of () =
+  leaf
+    ~draw:(fun tc ->
+      let hour, minute, second, microsecond = Internal.generate_time tc in
+      of_parts ~hour ~minute ~second ~microsecond)
+    ~sexp_of
+;;
+
+(** [datetimes_core ~of_parts ~sexp_of ()] builds a naive-datetime generator
+    over any representation. [of_parts] converts the generated datetime data
+    to the desired representation. *)
+let datetimes_core ~of_parts ~sexp_of () =
+  leaf
+    ~draw:(fun tc ->
+      let (year, month, day), (hour, minute, second, microsecond) =
+        Internal.generate_datetime tc
+      in
+      of_parts ~year ~month ~day ~hour ~minute ~second ~microsecond)
+    ~sexp_of
+;;
+
+(* [format_date]/[format_time] render engine-drawn parts as ISO 8601 strings. *)
+let format_date ~year ~month ~day = Printf.sprintf "%04d-%02d-%02d" year month day
+
+let format_time ~hour ~minute ~second ~microsecond =
+  Printf.sprintf "%02d:%02d:%02d.%06d" hour minute second microsecond
+;;
+
+(** [dates ()] is a generator for ISO 8601 [YYYY-MM-DD] date strings. *)
+let dates () = dates_core ~of_parts:format_date ~sexp_of:sexp_of_string ()
+
+(** [times ()] is a generator for ISO 8601 [HH:MM:SS.ffffff] time-of-day
+    strings. *)
+let times () = times_core ~of_parts:format_time ~sexp_of:sexp_of_string ()
+
+(** [datetimes ()] is a generator for naive ISO 8601 [YYYY-MM-DDTHH:MM:SS.ffffff] 
+    datetime strings. *)
+let datetimes () =
+  datetimes_core
+    ~of_parts:(fun ~year ~month ~day ~hour ~minute ~second ~microsecond ->
+      format_date ~year ~month ~day ^ "T" ^ format_time ~hour ~minute ~second ~microsecond)
+    ~sexp_of:sexp_of_string
+    ()
 ;;
