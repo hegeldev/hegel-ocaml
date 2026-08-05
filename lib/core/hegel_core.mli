@@ -1,9 +1,30 @@
 (** Jane Street [Core] companion library for Hegel ([hegel.core]).
 
-    It requires the [core] and [sexp_diff] opam packages.
+    It requires the [core] and [sexp_diff] opam packages. Each typed generator 
+    draws through the corresponding [hegel] generator and converts the result.
 
-    Each typed generator draws through the corresponding [hegel] generator and 
-    converts the result. *)
+    To use [hegel.core], add [hegel.core] and [core] to your dune [libraries]:
+
+    {[
+      (test
+       (name my_tests)
+       (libraries hegel hegel.core core alcotest)
+       (preprocess (pps ppx_hegel_test)))
+    ]}
+
+    Then draw [Core] values directly:
+
+    {[
+      open Hegel
+
+      (* Optional: show a structural [sexp_diff] on [require_equal] failures. *)
+      let () = Hegel_core.set_sexp_diff ()
+
+      let%hegel_test dates_are_in_range tc =
+        let d = draw tc (Hegel_core.dates ()) in
+        assert (Core.Date.year d >= 1 && Core.Date.year d <= 9999)
+      ;;
+    ]} *)
 
 (** [dates ()] creates a generator for [Core.Date.t] values, with year in
     [\[1, 9999\]] and calendar-valid month/day. *)
@@ -48,14 +69,19 @@ val pool_values
   -> consume:bool
   -> ('a, Hegel.Generators.unprintable) Hegel.Generators.generator
 
+(**/**)
+
 (** [sexp_diff_renderer ~colored ~original ~updated] renders a structural
     [sexp_diff] two-column diff of the two values: red/green markings when
-    [colored], [-]/[+] otherwise. The renderer {!set_sexp_diff} installs. *)
+    [colored], [-]/[+] otherwise. The renderer {!set_sexp_diff} installs;
+    doc-hidden — use {!set_sexp_diff}. *)
 val sexp_diff_renderer
   :  colored:bool
   -> original:Sexplib0.Sexp.t
   -> updated:Sexplib0.Sexp.t
   -> string
+
+(**/**)
 
 (** [set_sexp_diff ()] makes [Hegel.require_equal] failures print a
     structural [sexp_diff] diff instead of the default both-values rendering.
