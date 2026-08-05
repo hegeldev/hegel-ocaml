@@ -47,8 +47,8 @@ lib/                         # Library source
   derive.ml                  # Runtime support for [@@deriving hegel_generator]
   stateful.ml                # Stateful testing: Rule.create + run over action sequences
   antithesis.ml              # Antithesis integration (emits an always-typed assertion)
-  core/                      # Optional hegel.core sublibrary ((optional) in dune; NOT
-    hegel_core.ml/.mli       #   instrumented). Core.Hashtbl hash_tables + pool helpers
+  core/                      # Optional hegel.jane sublibrary ((optional) in dune; NOT
+    hegel_jane.ml/.mli       #   instrumented). Core.Hashtbl hash_tables + pool helpers
                              #   and the sexp_diff require_equal renderer (set_sexp_diff)
 
 ppx/                         # PPX rewriters and derivers
@@ -126,24 +126,24 @@ mechanical marshalling out of the 100%-coverage gate (no `[@coverage off]`).
 the old Python-subprocess install flow were removed in the native-backend and
 typed-draw migrations.
 
-### Dependencies: core-free main library + optional hegel.core
+### Dependencies: core-free main library + optional hegel.jane
 
 The `hegel` library depends on the stdlib plus `sexplib0` (printer type
 `'a -> Sexplib0.Sexp.t`, the same type as `Core.Sexp.t`), `unix` (isatty for
 color detection), `threads.posix`, ctypes/ipaddr/yojson/dune-site. `core`,
 `core_unix`, and `sexp_diff` are NOT dependencies of the library: `core` and
 `sexp_diff` are opam depopts that gate the `(optional)` sublibrary
-`hegel.core` (`lib/core/`, module `Hegel_core`). Anywhere the library needs a
+`hegel.jane` (`lib/jane/`, module `Hegel_jane`). Anywhere the library needs a
 container or renderer a Jane Street type used to provide, the dependency is
 refunctionalized — the code takes the operations as closures/parameters, and
 each side instantiates them:
-- pools: `make_pool_values`/`resolve_pool_draw` (find/remove/is_empty closures) ← `Make_pool`+`Int_table` (stdlib) / `Hegel_core` (Core.Hashtbl)
-- hash tables: `make_hash_tables ~of_pairs ~sexp_of_t` ← `hash_tables` (Stdlib.Hashtbl) / `Hegel_core.hash_tables` (Hashtbl.Poly)
+- pools: `make_pool_values`/`resolve_pool_draw` (find/remove/is_empty closures) ← `Make_pool`+`Int_table` (stdlib) / `Hegel_jane` (Core.Hashtbl)
+- hash tables: `make_hash_tables ~of_pairs ~sexp_of_t` ← `hash_tables` (Stdlib.Hashtbl) / `Hegel_jane.hash_tables` (Hashtbl.Poly)
 - dates/times: `make_dates`/`make_times`/`make_datetimes ~of_parts ~sexp_of` ← `dates`/`times`/`datetimes` (ISO 8601 strings)
-- require_equal diff: `Internal.set_diff_renderer` hook ← default prints both values (`-`/`+`, red/green); `Hegel_core.set_sexp_diff ()` installs the `sexp_diff` two-column renderer
+- require_equal diff: `Internal.set_diff_renderer` hook ← default prints both values (`-`/`+`, red/green); `Hegel_jane.set_sexp_diff ()` installs the `sexp_diff` two-column renderer
 
 The test suite still links `core`/`core_unix` (test-only dependencies; users
-never install them). `lib/core/` is not bisect_ppx-instrumented (same
+never install them). `lib/jane/` is not bisect_ppx-instrumented (same
 exclusion as ffi and the PPXes).
 
 ### Generator System (generators_core.ml + generators_{primitives,collections,combinators}.ml)
@@ -160,7 +160,7 @@ Generators are a discriminated union:
 - **Filtered** — wraps source + predicate. Up to `max_filter_attempts` retries before `assume false`.
 - **CompositeList** — lists of any element core. Uses the collection protocol (new_collection / collection_more) to generate elements one at a time.
 - **Composite** — a `generate_fn` thunk run inside a labeled span; used by tuples, one_of, `lists ~unique`, and hash tables (all of which now always drive the collection protocol / draw sub-values directly — there is no schema fast path).
-- **Values** — the engine-pool core behind `Stateful.Pool`. Refunctionalized: it stores the table's `find`/`remove`/`is_empty` closures, not a concrete hashtable. `Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int)` (doc-hidden, with the ready-made `Int_table`) closes `make_pool_values`/`resolve_pool_draw` over a stdlib table; the optional `hegel.core` library closes the same primitives (via `Ppx_internal`) over `Core.Hashtbl`. `hash_tables` follows the same strategy at the API level: `make_hash_tables ~of_pairs ~sexp_of_t` is table-agnostic, `hash_tables` closes it over `Stdlib.Hashtbl`, `Hegel_core.hash_tables` over `Core.Hashtbl.Poly`.
+- **Values** — the engine-pool core behind `Stateful.Pool`. Refunctionalized: it stores the table's `find`/`remove`/`is_empty` closures, not a concrete hashtable. `Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int)` (doc-hidden, with the ready-made `Int_table`) closes `make_pool_values`/`resolve_pool_draw` over a stdlib table; the optional `hegel.jane` library closes the same primitives (via `Ppx_internal`) over `Core.Hashtbl`. `hash_tables` follows the same strategy at the API level: `make_hash_tables ~of_pairs ~sexp_of_t` is table-agnostic, `hash_tables` closes it over `Stdlib.Hashtbl`, `Hegel_jane.hash_tables` over `Core.Hashtbl.Poly`.
 - **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (memoized on the argument via structural hash/equality — a polymorphic `Stdlib.Hashtbl` — so `sexp_of_arg` is display-only and an omitted one shows `<opaque>` without collapsing the key) and shows applied pairs as `name arg = result` via `note` on the final replay. Only *top-level* applications print — a pair applied at draw depth > 0 (inside a span) is suppressed, like a nested draw. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); the name threads even when the function is drawn nested. Result draws are wrapped in a `Labels.function_result` span.
 
 ### Inline Test Integration (ppx/ppx_hegel_test.ml)

@@ -318,7 +318,7 @@ val stderr_color_enabled : unit -> bool
 val stderr_color : string -> string -> string
 
 (** [set_diff_renderer renderer] sets structural diff renderer {!render_diff} 
-    delegates to. The optional [hegel.core] library installs a [sexp_diff]-backed 
+    delegates to. The optional [hegel.jane] library sets a [sexp_diff]-backed 
     renderer through this hook. Without one, {!render_diff} prints both values in full. *)
 val set_diff_renderer
   :  (colored:bool -> original:Sexplib0.Sexp.t -> updated:Sexplib0.Sexp.t -> string) option

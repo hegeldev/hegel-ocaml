@@ -69,7 +69,7 @@ report naming each value you drew from the failing case (`a = …`, `b = …`, n
 after the `let` binding) and a copy-pasteable line to replay it, and Alcotest
 reports the test as failed and exits non-zero. For equality checks, use
 `require_equal` instead of `assert`. It shows the two compared values
-in the report. With the optional `hegel.core` library, it shows a structural
+in the report. With the optional `hegel.jane` library, it shows a structural
 `sexp_diff` instead. See [Debugging failures](docs/getting-started.md#debug-your-failing-test-cases)
 for details.
 

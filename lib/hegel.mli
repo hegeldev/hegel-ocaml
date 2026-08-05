@@ -246,7 +246,7 @@
     {3 Jane Street Core support}
 
     Projects that use Jane Street's [Core] can also use the optional
-    {!Hegel_core} library to generate [Core] values. See {!Hegel_core}.
+    {!Hegel_jane} library to generate [Core] values. See {!Hegel_jane}.
 
     {3 Learning more}
     See {!Generators} for the generators and {!Stateful} for state-machine testing.
@@ -607,7 +607,7 @@ val require : test_case -> ?msg:string -> bool -> unit
 
 (** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
     the two values render to different sexps under [sexp_of]. With the optional
-    [hegel.core] library's structural diff set ({!Hegel_core.set_sexp_diff}), a
+    [hegel.jane] library's structural diff set ({!Hegel_jane.set_sexp_diff}), a
     [sexp_diff] two-column diff is printed.
 
     {[

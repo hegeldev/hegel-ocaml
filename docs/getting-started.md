@@ -270,8 +270,8 @@ On failure, the report body shows the two values:
 ```
 
 If your project uses Jane Street's `Core`, you can show a structural
-s-expression diff instead. Add the optional `hegel.core` library to your test
-stanza. Then call `Hegel_core.set_sexp_diff ()` before your tests run.
+s-expression diff instead. Add the optional `hegel.jane` library to your test
+stanza. Then call `Hegel_jane.set_sexp_diff ()` before your tests run.
 `require_equal` failures will then show a two-column `sexp_diff` of the two
 values.
 

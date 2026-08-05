@@ -1,4 +1,4 @@
-(** Core companion library for Hegel. See [hegel_core.mli]. *)
+(** Core companion library for Hegel. See [hegel_jane.mli]. *)
 
 open! Core
 module G = Hegel.Generators

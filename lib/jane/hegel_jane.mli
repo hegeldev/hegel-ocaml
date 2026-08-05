@@ -1,14 +1,14 @@
-(** Jane Street [Core] companion library for Hegel ([hegel.core]).
+(** Jane Street [Core] companion library for Hegel ([hegel.jane]).
 
     It requires the [core] and [sexp_diff] opam packages. Each typed generator 
     draws through the corresponding [hegel] generator and converts the result.
 
-    To use [hegel.core], add [hegel.core] and [core] to your dune [libraries]:
+    To use [hegel.jane], add [hegel.jane] and [core] to your dune [libraries]:
 
     {[
       (test
        (name my_tests)
-       (libraries hegel hegel.core core alcotest)
+       (libraries hegel hegel.jane core alcotest)
        (preprocess (pps ppx_hegel_test)))
     ]}
 
@@ -18,10 +18,10 @@
       open Hegel
 
       (* Optional: show a structural [sexp_diff] on [require_equal] failures. *)
-      let () = Hegel_core.set_sexp_diff ()
+      let () = Hegel_jane.set_sexp_diff ()
 
       let%hegel_test dates_are_in_range tc =
-        let d = draw tc (Hegel_core.dates ()) in
+        let d = draw tc (Hegel_jane.dates ()) in
         assert (Core.Date.year d >= 1 && Core.Date.year d <= 9999)
       ;;
     ]} *)

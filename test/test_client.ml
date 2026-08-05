@@ -396,7 +396,7 @@ let test_stderr_color () =
 
 (** [render_diff]'s default rendering prints both values in full, [-]/[+]
     prefixed (red/green when [colored]); an installed renderer (the
-    [hegel.core] [sexp_diff] hook) replaces it until uninstalled. *)
+    [hegel.jane] [sexp_diff] hook) replaces it until uninstalled. *)
 let test_render_diff () =
   let original = Sexp.of_string "(1 2 3)" in
   let updated = Sexp.of_string "(1 9 3)" in

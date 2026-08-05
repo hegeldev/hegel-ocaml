@@ -2,8 +2,8 @@
 ; Core-typed generators and the sexp_diff-backed require_equal renderer.
 
 (library
- (name hegel_core)
- (public_name hegel.core)
+ (name hegel_jane)
+ (public_name hegel.jane)
  (optional)
  (libraries hegel core sexp_diff)
  (preprocess
