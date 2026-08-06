@@ -7,6 +7,9 @@ module Generators = Generators
 (** Stateful property-based testing on top of {!Generators}. *)
 module Stateful = Stateful
 
+(** Scope-resolved generator names for [@@deriving hegel_generator]. *)
+module Export = Export
+
 (** Runtime support called by [@@deriving hegel_generator]-generated code; not
     intended for direct use. *)
 module Derive = Derive

@@ -269,6 +269,10 @@ module Generators = Generators
 (** Stateful property-based testing. *)
 module Stateful = Stateful
 
+(** Scope-resolved generator names for [@@deriving hegel_generator]. Open this
+    module in each file that uses the deriver. *)
+module Export = Export
+
 (**/**)
 
 (* Excluded from the documentation, not for direct use *)
