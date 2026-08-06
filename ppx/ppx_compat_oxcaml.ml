@@ -6,9 +6,13 @@ let extract_tuple_types ct =
   | _ -> None
 ;;
 
-let extract_constr_tuple_types = function
-  | Pcstr_tuple args -> Some (List.map (fun arg -> arg.pca_type) args)
-  | Pcstr_record _ -> None
+type constr_args =
+  | Tuple of core_type list
+  | Record of label_declaration list
+
+let extract_constr_args = function
+  | Pcstr_tuple args -> Tuple (List.map (fun arg -> arg.pca_type) args)
+  | Pcstr_record labels -> Record labels
 ;;
 
 let extract_expr_tuple e =

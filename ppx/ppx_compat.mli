@@ -11,10 +11,15 @@ open Ppxlib
 *)
 val extract_tuple_types : core_type -> core_type list option
 
-(** [extract_constr_tuple_types args] returns [Some types] if [args] is
-    [Pcstr_tuple], [None] if [Pcstr_record]. On OxCaml, extracts the core types
-    from [constructor_argument] records. *)
-val extract_constr_tuple_types : constructor_arguments -> core_type list option
+(** Constructor arguments with a uniform representation on every platform. *)
+type constr_args =
+  | Tuple of core_type list (** Positional arguments ([C of t1 * t2]). *)
+  | Record of label_declaration list (** Inline-record arguments ([C of { f : t }]). *)
+
+(** [extract_constr_args args] converts [constructor_arguments] to
+    {!constr_args}. On OxCaml, extracts the core types from
+    [constructor_argument] records. *)
+val extract_constr_args : constructor_arguments -> constr_args
 
 (** [extract_expr_tuple e] returns [Some es] if [e] is a tuple expression,
     [None] otherwise. On OxCaml, strips the optional labels from labeled

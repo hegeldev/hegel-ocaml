@@ -151,15 +151,15 @@ let generator_of_data_variant ~loc (constrs : constructor_declaration list) : ex
              ~guard:None
              ~rhs
          in
-         match Ppx_compat.extract_constr_tuple_types cd.pcd_args with
-         | Some [] -> case (Ast_builder.Default.pexp_construct ~loc constr_lid None)
-         | Some [ ct ] ->
+         match Ppx_compat.extract_constr_args cd.pcd_args with
+         | Tuple [] -> case (Ast_builder.Default.pexp_construct ~loc constr_lid None)
+         | Tuple [ ct ] ->
            case
              (Ast_builder.Default.pexp_construct
                 ~loc
                 constr_lid
                 (Some (make_draw_expr ct)))
-         | Some cts ->
+         | Tuple cts ->
            let named =
              List.mapi (fun j ct -> Printf.sprintf "_arg_%d" j, make_draw_expr ct) cts
            in
@@ -181,12 +181,7 @@ let generator_of_data_variant ~loc (constrs : constructor_declaration list) : ex
                (Ast_builder.Default.pexp_construct ~loc constr_lid (Some tuple_expr))
            in
            case inner_body
-         | None ->
-           let labels =
-             match cd.pcd_args with
-             | Pcstr_record labels -> labels
-             | _ -> assert false
-           in
+         | Record labels ->
            case
              (drawn_record
                 ~loc
@@ -230,8 +225,8 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) : express
       ~loc
       "ppx_hegel_generator: all constructors are marked [@hegel.do_not_generate]";
   let is_nullary (cd : constructor_declaration) =
-    match Ppx_compat.extract_constr_tuple_types cd.pcd_args with
-    | Some [] -> true
+    match Ppx_compat.extract_constr_args cd.pcd_args with
+    | Tuple [] -> true
     | _ -> false
   in
   if List.for_all is_nullary constrs
