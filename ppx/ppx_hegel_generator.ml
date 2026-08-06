@@ -31,28 +31,47 @@ let mangle_lid ~loc = function
       "ppx_hegel_generator: functor application types not supported"
 ;;
 
+let generator_override_attribute =
+  Attribute.declare
+    "hegel.generator"
+    Attribute.Context.core_type
+    Ast_pattern.(single_expr_payload __)
+    Fun.id
+;;
+
+let do_not_generate_attribute =
+  Attribute.declare
+    "hegel.do_not_generate"
+    Attribute.Context.constructor_declaration
+    Ast_pattern.(pstr nil)
+    ()
+;;
+
 let rec generator_expr_of_core_type (ct : core_type) : expression =
   let loc = ct.ptyp_loc in
-  match ct.ptyp_desc with
-  | Ptyp_constr ({ txt = lid; _ }, args) ->
-    let gen_ident =
-      Ast_builder.Default.pexp_ident ~loc { txt = mangle_lid ~loc lid; loc }
-    in
-    (match args with
-     | [] -> gen_ident
-     | args ->
-       Ast_builder.Default.pexp_apply
-         ~loc
-         gen_ident
-         (List.map (fun arg -> Nolabel, generator_expr_of_core_type arg) args))
-  | _ ->
-    (match Ppx_compat.extract_tuple_types ct with
-     | Some components ->
-       [%expr Hegel.Generators.composite [%e tuple_thunk ~loc components]]
-     | None ->
-       Location.raise_errorf
-         ~loc
-         "ppx_hegel_generator: unsupported type in [@@deriving hegel_generator]")
+  match Attribute.get generator_override_attribute ct with
+  | Some override -> override
+  | None ->
+    (match ct.ptyp_desc with
+     | Ptyp_constr ({ txt = lid; _ }, args) ->
+       let gen_ident =
+         Ast_builder.Default.pexp_ident ~loc { txt = mangle_lid ~loc lid; loc }
+       in
+       (match args with
+        | [] -> gen_ident
+        | args ->
+          Ast_builder.Default.pexp_apply
+            ~loc
+            gen_ident
+            (List.map (fun arg -> Nolabel, generator_expr_of_core_type arg) args))
+     | _ ->
+       (match Ppx_compat.extract_tuple_types ct with
+        | Some components ->
+          [%expr Hegel.Generators.composite [%e tuple_thunk ~loc components]]
+        | None ->
+          Location.raise_errorf
+            ~loc
+            "ppx_hegel_generator: unsupported type in [@@deriving hegel_generator]"))
 
 and make_draw_expr (ct : core_type) : expression =
   let loc = ct.ptyp_loc in
@@ -193,9 +212,18 @@ let generator_of_data_variant ~loc (constrs : constructor_declaration list) : ex
 ;;
 
 let generator_of_variant ~loc (constrs : constructor_declaration list) : expression =
-  let n = List.length constrs in
-  if n = 0
+  if constrs = []
   then Location.raise_errorf ~loc "ppx_hegel_generator: empty variant types not supported";
+  let constrs =
+    List.filter
+      (fun cd -> Option.is_none (Attribute.get do_not_generate_attribute cd))
+      constrs
+  in
+  if constrs = []
+  then
+    Location.raise_errorf
+      ~loc
+      "ppx_hegel_generator: all constructors are marked [@hegel.do_not_generate]";
   let is_nullary (cd : constructor_declaration) =
     match Ppx_compat.extract_constr_tuple_types cd.pcd_args with
     | Some [] -> true
