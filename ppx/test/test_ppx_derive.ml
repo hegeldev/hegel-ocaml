@@ -77,6 +77,14 @@ type pair_or_single =
   | Single of int
 [@@deriving hegel_generator]
 
+type measured =
+  | Dimensions of
+      { width : int
+      ; height : int
+      }
+  | Unmeasured
+[@@deriving hegel_generator]
+
 (** A type alias to bool. *)
 type flag = bool [@@deriving hegel_generator]
 
@@ -296,6 +304,21 @@ let test_pair_or_single_e2e () =
   assert !saw_single
 ;;
 
+(** Test: derived measured (inline-record constructor, [Pcstr_record]) covers
+    both constructors and draws the inline fields. *)
+let test_inline_record_e2e () =
+  let saw_dimensions = ref false in
+  let saw_unmeasured = ref false in
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
+    match Hegel.draw_silent tc hegel_generator_measured with
+    | Dimensions { width; height } ->
+      ignore ((width, height) : int * int);
+      saw_dimensions := true
+    | Unmeasured -> saw_unmeasured := true);
+  assert !saw_dimensions;
+  assert !saw_unmeasured
+;;
+
 (** Test: derived flag covers both true and false. *)
 let test_flag_e2e () =
   let saw_true = ref false in
@@ -428,9 +451,9 @@ let () =
             test_int_list_wrapper_e2e
         ; Alcotest.test_case "derived char record" `Quick test_char_and_float_e2e
         ; Alcotest.test_case
-            "Export leaf generators"
+            "derived measured (inline record)"
             `Quick
-            test_export_leaf_generators_e2e
+            test_inline_record_e2e
         ; Alcotest.test_case "module t naming" `Quick test_module_t_naming_e2e
         ; Alcotest.test_case "qualified M.t field" `Quick test_qualified_field_e2e
         ; Alcotest.test_case "field override range" `Quick test_field_override_range_e2e

@@ -101,9 +101,10 @@ and tuple_thunk ~loc components =
   [%expr fun _hegel_tc -> [%e body]]
 ;;
 
-(** [generator_of_record ~loc labels] returns a [test_case -> record]
-    function that draws the fields in declaration order. *)
-let generator_of_record ~loc (labels : label_declaration list) : expression =
+(** [drawn_record ~loc ~wrap labels] returns an expression that draws the
+    fields in declaration order and applies [wrap] to the record literal.
+    [wrap] lets an inline-record constructor enclose the literal directly *)
+let drawn_record ~loc ~wrap (labels : label_declaration list) : expression =
   if labels = []
   then Location.raise_errorf ~loc "ppx_hegel_generator: empty record types not supported";
   let named =
@@ -122,16 +123,19 @@ let generator_of_record ~loc (labels : label_declaration list) : expression =
          named)
       None
   in
-  let body =
-    List.fold_right
-      (fun (_, vname, drawn) acc ->
-         [%expr
-           let [%p Ast_builder.Default.pvar ~loc vname] = [%e drawn] in
-           [%e acc]])
-      named
-      record_expr
-  in
-  [%expr fun _hegel_tc -> [%e body]]
+  List.fold_right
+    (fun (_, vname, drawn) acc ->
+       [%expr
+         let [%p Ast_builder.Default.pvar ~loc vname] = [%e drawn] in
+         [%e acc]])
+    named
+    (wrap record_expr)
+;;
+
+(** [generator_of_record ~loc labels] returns a [test_case -> record]
+    function that draws the fields in declaration order. *)
+let generator_of_record ~loc (labels : label_declaration list) : expression =
+  [%expr fun _hegel_tc -> [%e drawn_record ~loc ~wrap:Fun.id labels]]
 ;;
 
 let generator_of_data_variant ~loc (constrs : constructor_declaration list) : expression =
@@ -178,16 +182,17 @@ let generator_of_data_variant ~loc (constrs : constructor_declaration list) : ex
            in
            case inner_body
          | None ->
-           let record_gen =
+           let labels =
              match cd.pcd_args with
-             | Pcstr_record labels -> generator_of_record ~loc labels
+             | Pcstr_record labels -> labels
              | _ -> assert false
            in
            case
-             (Ast_builder.Default.pexp_construct
+             (drawn_record
                 ~loc
-                constr_lid
-                (Some [%expr [%e record_gen] _hegel_tc])))
+                ~wrap:(fun record ->
+                  Ast_builder.Default.pexp_construct ~loc constr_lid (Some record))
+                labels))
       constrs
   in
   let catch_all =
