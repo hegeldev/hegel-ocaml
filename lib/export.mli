@@ -48,3 +48,17 @@ val hegel_generator_list
 val hegel_generator_option
   :  ('a, Generators.printable) Generators.generator
   -> ('a option, Generators.printable) Generators.generator
+
+(** {2 Sexp converters}
+
+    The deriver also emits [sexp_of_<t>] definitions (via ppx_sexp_conv),
+    whose generated code refers to the built-in converters by these
+    unqualified names. Each is the [Sexplib0.Sexp_conv] converter. *)
+
+val sexp_of_int : int -> Sexplib0.Sexp.t
+val sexp_of_bool : bool -> Sexplib0.Sexp.t
+val sexp_of_float : float -> Sexplib0.Sexp.t
+val sexp_of_string : string -> Sexplib0.Sexp.t
+val sexp_of_char : char -> Sexplib0.Sexp.t
+val sexp_of_list : ('a -> Sexplib0.Sexp.t) -> 'a list -> Sexplib0.Sexp.t
+val sexp_of_option : ('a -> Sexplib0.Sexp.t) -> 'a option -> Sexplib0.Sexp.t

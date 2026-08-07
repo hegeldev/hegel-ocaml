@@ -21,6 +21,13 @@ type constr_args =
     [constructor_argument] records. *)
 val extract_constr_args : constructor_arguments -> constr_args
 
+(** [map_constr_arg_types f args] applies [f] to each argument core type of
+    [args], in both the tuple and the inline-record form. *)
+val map_constr_arg_types
+  :  (core_type -> core_type)
+  -> constructor_arguments
+  -> constructor_arguments
+
 (** [extract_expr_tuple e] returns [Some es] if [e] is a tuple expression,
     [None] otherwise. On OxCaml, strips the optional labels from labeled
     tuples. *)

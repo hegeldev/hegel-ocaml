@@ -91,6 +91,8 @@
    (>= 5.1))
   (ppxlib
    (>= 0.28))
+  (ppx_sexp_conv
+   (>= v0.16))
   (ppx_js_style
    (>= v0.17))
   (ppx_hegel_compat

@@ -15,6 +15,12 @@ let extract_constr_args = function
   | Pcstr_record labels -> Record labels
 ;;
 
+let map_constr_arg_types f = function
+  | Pcstr_tuple cts -> Pcstr_tuple (List.map f cts)
+  | Pcstr_record labels ->
+    Pcstr_record (List.map (fun ld -> { ld with pld_type = f ld.pld_type }) labels)
+;;
+
 let extract_expr_tuple e =
   match e.pexp_desc with
   | Pexp_tuple es -> Some es

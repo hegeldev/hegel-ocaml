@@ -250,13 +250,6 @@ let%expect_test "stateful tests prints drawn data on passing test verbosity is v
     |}]
 ;;
 
-(* indent inner draws in a step *)
-
-(* [@@deriving hegel_generator] emits an unprintable generator value. Adding
-   [@@deriving sexp_of] and drawing through [with_printer] prints the whole value
-   as one sexp; a bare [@@deriving hegel_generator] drawn with [draw_silent] prints
-   nothing. *)
-
 type only = Only [@@deriving sexp_of, hegel_generator]
 type wrap = { tag : only } [@@deriving sexp_of, hegel_generator]
 type bare = Bare [@@deriving hegel_generator]
