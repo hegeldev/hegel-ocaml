@@ -101,3 +101,79 @@ val sexp_diff_renderer
     structural [sexp_diff] diff instead of the default both-values rendering.
     Call it once. It stays installed for the rest of the process. *)
 val set_sexp_diff : unit -> unit
+
+(** Scope-resolved generator names for [@@deriving hegel_generator] for
+    [Core] generators.
+
+    {[
+      open! Core
+      open Hegel_jane.Export
+
+      type event =
+        { id : int
+        ; day : Date.t
+        ; elapsed : Time_ns.Span.t
+        }
+      [@@deriving hegel_generator]
+    ]}
+
+    This module supplies every name that [Hegel.Export] supplies. The wrapper 
+    modules include the [Core] version of standard Hegel generators and [Core]
+    only generators. *)
+module Export : sig
+  (**/**)
+
+  val hegel_generator_int : (int, Hegel.Generators.printable) Hegel.Generators.generator
+  val hegel_generator_bool : (bool, Hegel.Generators.printable) Hegel.Generators.generator
+
+  val hegel_generator_float
+    : (float, Hegel.Generators.printable) Hegel.Generators.generator
+
+  val hegel_generator_string
+    : (string, Hegel.Generators.printable) Hegel.Generators.generator
+
+  val hegel_generator_char : (char, Hegel.Generators.printable) Hegel.Generators.generator
+
+  val hegel_generator_list
+    :  ('a, Hegel.Generators.printable) Hegel.Generators.generator
+    -> ('a list, Hegel.Generators.printable) Hegel.Generators.generator
+
+  val hegel_generator_option
+    :  ('a, Hegel.Generators.printable) Hegel.Generators.generator
+    -> ('a option, Hegel.Generators.printable) Hegel.Generators.generator
+
+  val sexp_of_int : int -> Sexplib0.Sexp.t
+  val sexp_of_bool : bool -> Sexplib0.Sexp.t
+  val sexp_of_float : float -> Sexplib0.Sexp.t
+  val sexp_of_string : string -> Sexplib0.Sexp.t
+  val sexp_of_char : char -> Sexplib0.Sexp.t
+  val sexp_of_list : ('a -> Sexplib0.Sexp.t) -> 'a list -> Sexplib0.Sexp.t
+  val sexp_of_option : ('a -> Sexplib0.Sexp.t) -> 'a option -> Sexplib0.Sexp.t
+
+  module Date : sig
+    include module type of struct
+      include Core.Date
+    end
+
+    val hegel_generator : (t, Hegel.Generators.printable) Hegel.Generators.generator
+  end
+
+  module Time_ns : sig
+    include module type of struct
+        include Core.Time_ns
+      end
+      with module Span := Core.Time_ns.Span
+
+    module Span : sig
+      include module type of struct
+        include Core.Time_ns.Span
+      end
+
+      val hegel_generator : (t, Hegel.Generators.printable) Hegel.Generators.generator
+    end
+
+    val hegel_generator : (t, Hegel.Generators.printable) Hegel.Generators.generator
+  end
+
+  (**/**)
+end

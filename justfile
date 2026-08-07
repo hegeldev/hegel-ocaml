@@ -24,6 +24,8 @@ check-tests:
     dune build --instrument-with bisect_ppx lib/jane/test/test_hegel_jane.exe
     ./_build/default/lib/jane/test/test_hegel_jane.exe
     dune runtest lib/jane/test --instrument-with bisect_ppx --force
+    dune build --instrument-with bisect_ppx ppx/test/test_ppx_derive_jane.exe
+    ./_build/default/ppx/test/test_ppx_derive_jane.exe
     python3 scripts/check-coverage.py
     
 format:
@@ -85,6 +87,8 @@ check-tests-no-coverage:
       dune build lib/jane/test/test_hegel_jane.exe
       ./_build/default/lib/jane/test/test_hegel_jane.exe
       dune runtest lib/jane/test --force
+      dune build ppx/test/test_ppx_derive_jane.exe
+      ./_build/default/ppx/test/test_ppx_derive_jane.exe
     fi
 
 # these aliases are provided as ux improvements for local developers. CI should use the longer
