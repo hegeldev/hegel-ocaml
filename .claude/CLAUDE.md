@@ -44,7 +44,9 @@ lib/                         # Library source
   generators_functions.ml    # functions/functions2/functions3: memoized
                              #   function generators (Claessen's show/shrink,
                              #   but no trie — the engine shrinks results)
-  derive.ml                  # Runtime support for [@@deriving hegel_generator]
+  derive.ml                  # Hegel.Derive: scope-resolved names derived code
+                             #   refers to (hegel_generator_int/…/char/list/
+                             #   option + the Sexplib0 sexp_of_* converters)
   stateful.ml                # Stateful testing: Rule.create + run over action sequences
   antithesis.ml              # Antithesis integration (emits an always-typed assertion)
   jane/                      # Optional hegel.jane sublibrary ((optional) in dune).
@@ -67,6 +69,8 @@ ppx/                         # PPX rewriters and derivers
   ppx_compat_oxcaml.ml       # AST compat shim for the OxCaml compiler
   test/                      # PPX E2E tests, package-attributed so opam-repo-ci runs them
     test_ppx_derive.ml       # PPX deriver E2E tests (package ppx_hegel_generator)
+    test_ppx_derive_jane.ml  # Deriver + Hegel_jane.Derive tests ((optional)
+                             #   executable; run via the justfile jane blocks)
     test_ppx_hegel_test.ml   # ppx_hegel_test expander E2E tests (package ppx_hegel_test)
     expect_tests/            # ppx_expect tests (dev-only, disabled in release profile)
                              # (one of the three is copied to ppx_compat.ml = ppx_hegel_compat lib)
@@ -78,7 +82,6 @@ test/                        # hegel's own test suite (one executable: test_hege
   test_helpers.ml            # Shared test utilities
   test_client.ml             # Internal config + run lifecycle tests (real engine)
   test_generators_*.ml       # Generator core / primitives / collections / combinators
-  test_derive.ml             # Derive module runtime helper tests
   test_stateful.ml           # Stateful testing tests
   test_antithesis.ml         # Antithesis integration tests
   test_single_test_case.ml   # Single-case / failure-blob replay tests
@@ -216,32 +219,62 @@ handwritten property test built on `Hegel.run_hegel_test` directly.
 
 ### Type-Directed Derivation (ppx/ + lib/derive.ml)
 
-The `ppx_hegel_generator` PPX deriver synthesizes a `(<t>, unprintable) generator`
-value named `<t>_generator` from type declarations annotated with
-`[@@deriving hegel_generator]`. The generated code:
+The `ppx_hegel_generator` PPX deriver synthesizes a printable generator from
+type declarations annotated with `[@@deriving hegel_generator]`. It follows
+the base_quickcheck conventions:
 
-1. For **records**: generates each field by calling the appropriate primitive
-   generator, then constructs the record value.
-2. For **variants**: picks a constructor index via `sampled_from` (the
-   engine's bounded-integer draw is non-uniform, over-weighting boundary
-   indices), then generates arguments for the chosen constructor. A
-   data-carrying variant wraps the index-plus-arguments draw in an
-   `enum_variant` span (so the constructor choice and its fields shrink as one
-   unit, matching the engine's own derived-enum generator); an all-nullary enum
-   has no fields to group and is emitted as a bare `sampled_from` over the
-   constructor values (spanless, like the engine).
-3. For **type aliases**: delegates to the generator for the aliased type.
-4. For **nested types**: draws `<type>_generator` via `draw_silent` (user-defined
-   generators must exist in scope).
+1. **Naming**: type `t` derives `hegel_generator`; any other type `foo`
+   derives `hegel_generator_foo`. `Hegel.draw tc My_module.hegel_generator`
+   reads naturally.
+2. **Scope resolution**: generated code refers to every type constructor by
+   name with the same mangling — `int` → `hegel_generator_int`, `M.t` →
+   `M.hegel_generator`, and a parameterized type applies its argument
+   generators (`int list` → `hegel_generator_list hegel_generator_int`). The
+   PPX holds no primitive table. `Hegel.Derive` supplies the built-in names
+   (int, bool, float, string, char, list, option), and `Hegel` includes it,
+   so `open Hegel` is enough in a deriving file. A module opened later can
+   shadow the names — that is how `Hegel_jane.Derive` swaps in Core flavors.
+3. **Always printable**: the deriver also emits `sexp_of_<t>` (it calls
+   `Ppx_sexp_conv_expander.Sexp_of.str_type_decl`; ppx_sexp_conv is a build
+   dependency of the PPX package, not of user projects) and wraps the
+   generator in `with_printer sexp_of_<t>`. Draw with `draw` to print on a
+   failing replay, or `draw_silent` to stay silent. Deriving `sexp`/`sexp_of`
+   alongside stays legal: the identical `sexp_of_<t>` definitions shadow.
+   `[@sexp.opaque]` on a field type is the escape hatch for un-sexpable
+   fields. `Hegel.Derive` re-exports the `Sexplib0.Sexp_conv` primitive
+   converters because ppx_sexp_conv resolves builtins by unqualified name.
+4. **Attributes**: `[@hegel.generator EXPR]` on any type occurrence (record
+   field, constructor argument, tuple component) replaces that occurrence's
+   generator with `EXPR` — the quickcheck idiom for ranges and custom
+   generators. `[@hegel.do_not_generate]` on a variant constructor excludes
+   it from generation: its argument types need no generator, the derived
+   printer renders them opaque (the deriver injects `[@sexp.opaque]` before
+   invoking the sexp expander), and the deriver emits one
+   `let _ = fun … -> C …` item per excluded constructor to suppress
+   warning 37 (nothing else constructs it).
+5. **Type shapes**: records emit a `test_case -> t` thunk wrapped with
+   `Generators.composite` (fields drawn in declaration order via nested
+   lets); variants pick a constructor index via `sampled_from` (all-nullary
+   enums are a bare `sampled_from`; data-carrying variants wrap the index and
+   argument draws in an `enum_variant` span); inline-record constructors
+   (`Pcstr_record`) construct the record literal directly inside the
+   constructor — `C expr` is illegal syntax for an inline record; aliases
+   reuse the aliased type's generator expression directly. The
+   `Ppx_compat.extract_constr_args`/`map_constr_arg_types` helpers abstract
+   the constructor-argument representation across the three toolchains.
+6. **Jane**: `Hegel_jane.Derive` includes `Hegel.Derive`, swaps the char pair
+   to the `Core.Char` flavor, and adds wrapper modules (`Date`, `Time_ns`,
+   `Time_ns.Span`) that include their Core counterparts plus a
+   `hegel_generator`. A field must be typed with the wrapper path (`Date.t`,
+   not `Core.Date.t`) — the deriver mangles the path as written, and
+   `Core.Date.hegel_generator` does not exist. One
+   `open Hegel_jane.Derive` replaces `open Hegel.Derive`.
 
-Records and aliases emit a `test_case -> t` field-drawing thunk wrapped with
-`Hegel.Generators.composite` (a `fixed_dict` span); variants return a complete
-generator directly (see above). Either way the result is an
-`(t, unprintable) generator` value with no printer attached, so a bare
-`[@@deriving hegel_generator]` always compiles. The
-`Hegel.Derive` module provides runtime helpers for option and list types; it is
-re-exported doc-hidden (the standard public-but-invisible PPX-runtime pattern)
-because generated code in user projects calls it.
+See `GAPS.md` for the deriver's remaining gaps versus base_quickcheck
+(recursion, type parameters, polymorphic variants, …). Note `lib/derive.ml`
+previously held qualified runtime helpers (`generate_option`/`generate_list`);
+that module was deleted and the filename now hosts `Hegel.Derive`, the
+scope-resolution module described above.
 
 **Usage example:**
 
@@ -249,39 +282,38 @@ because generated code in user projects calls it.
 (* In your dune file, add:
      (preprocess (pps ppx_hegel_generator ppx_hegel_test)) *)
 
+open Hegel
+
 type point = { x : int; y : int } [@@deriving hegel_generator]
 type color = Red | Green | Blue [@@deriving hegel_generator]
-type entity = { name : string; tag : int option; active : bool }
+
+type entity =
+  { name : string
+  ; initial : char
+  ; level : (int[@hegel.generator Hegel.Generators.integers ~min_value:3 ~max_value:5 ()])
+  ; tag : int option
+  }
 [@@deriving hegel_generator]
 
-(* Use inside a let%hegel_test body. The derived generators are
-   (t, unprintable) generator values, drawn with draw_silent: *)
+(* Derived generators are printable: draw with [draw] to print the value on
+   a failing replay, or [draw_silent] to stay silent. *)
 let%hegel_test derived_types_smoke tc =
-  let p = Hegel.draw_silent tc point_generator in
-  let c = Hegel.draw_silent tc color_generator in
-  let e = Hegel.draw_silent tc entity_generator in
-  (* p.x, p.y are ints; c is Red|Green|Blue; e has typed fields *)
+  let p = Hegel.draw tc hegel_generator_point in
+  let c = Hegel.draw_silent tc hegel_generator_color in
+  let e = Hegel.draw tc hegel_generator_entity in
   ignore (p, c, e)
 ;;
-
-(* let%hegel_test only produces a callable; wire it into your own test
-   framework, e.g. Alcotest.test_case "derived_types_smoke" `Quick
-   derived_types_smoke, or just call it directly. *)
 ```
 
-To print a derived value on a failing replay, add `[@@deriving sexp_of]` and draw
-through `with_printer`:
-`Hegel.draw tc (Hegel.with_printer sexp_of_point point_generator)`.
-
 **Supported field types:**
-- `int` — integers over the full native `int` range (same default as `integers ()`)
-- `bool` — booleans
-- `float` — finite floats (NaN and infinity disabled)
-- `string` — text strings
-- `t list` — lists of derived elements (engine-driven length via the collection protocol, like `lists`)
-- `t option` — `Some v` or `None`
-- Named types `t` — draws `t_generator` via `draw_silent` (must be in scope)
-- Tuples `(t1 * t2 * ...)` — generates each component
+- `int` — the full native `int` range (same default as `integers ()`)
+- `bool`, `float` (finite: no NaN, no infinity), `string`, `char` (Latin-1)
+- `t list` — engine-driven length via the collection protocol, as `lists`
+- `t option` — `Some v` or `None`, as `optional`
+- Named types `t` / `M.t` — resolves `hegel_generator_t` / `M.hegel_generator`
+  (must be in scope)
+- Tuples `(t1 * t2 * ...)` — generates each component in order
+
 
 ### Collection Protocol
 
@@ -338,8 +370,7 @@ in an `Exn.protect ~finally`.
 - `test/` must build under `-p hegel` (opam-repo-ci runs it): plain Alcotest
   functions calling `Hegel.run_hegel_test`, no `let%hegel_test`, no PPX beyond
   the `ppx_js_style` linter. White-box tests use the doc-hidden `(**/**)`
-  re-exports `Hegel.{Internal,Antithesis}`; `Hegel.Derive` is
-  doc-hidden too because PPX-generated code calls it. Only `Generators`,
+  re-exports `Hegel.{Internal,Antithesis}`. Only `Generators`,
   `Stateful`, and the values/types directly under `Hegel` are documented API
 - PPX E2E tests live under `ppx/test/`, attributed via `(package ...)` to
   `ppx_hegel_generator` (`test_ppx_derive.ml`) and `ppx_hegel_test`
@@ -387,15 +418,14 @@ draw, and always freed (`Internal.with_string_generator`).
 
 ### PPX Deriver Implementation
 
-1. **PPX generates `(t, unprintable) generator` values**: The deriver builds a
-   `test_case -> t` field-drawing thunk and wraps it with
-   `Hegel.Generators.composite`, yielding a `(t, unprintable) generator` value
-   named `<t>_generator`. It carries no printer (the output type is the user's),
-   so a bare `[@@deriving hegel_generator]` always compiles; draw it with `draw_silent`, or
-   pair it with `[@@deriving sexp_of]` and `with_printer` to print on a failing
-   replay. (Earlier revisions emitted a `test_case -> t` thunk drawn by calling
-   it directly; the `composite` wrapper replaced that so derived generators
-   compose with the other combinators.)
+1. **PPX generates printable generators**: The deriver emits `sexp_of_<t>`
+   (through ppx_sexp_conv's expander library) and wraps the generator in
+   `with_printer sexp_of_<t>`, yielding a `(t, printable) generator` named by
+   the quickcheck convention (`hegel_generator` for `t`,
+   `hegel_generator_foo` otherwise). A field whose type cannot sexp needs
+   `[@sexp.opaque]`; that is the one way bare deriving can fail to compile.
+   (Earlier revisions emitted unprintable `<t>_generator` values drawn only
+   with `draw_silent`.)
 
 2. **PPX tests need a separate executable**: Because the PPX needs
    `(preprocess (pps ppx_hegel_generator))`, the test file using `[@@deriving hegel_generator]`
@@ -406,10 +436,12 @@ draw, and always freed (`Internal.with_string_generator`).
    metaquot syntax for readable AST construction. This requires
    `(preprocess (pps ppxlib.metaquot))` in the PPX's own dune file.
 
-4. **Runtime helpers in lib/derive.ml**: For option and list types, the PPX delegates
-   to runtime helpers `Hegel.Derive.generate_option` and `Hegel.Derive.generate_list`
-   (`Derive` is re-exported doc-hidden, exclusively for generated code). These live
-   in the main library (not the PPX) so they're covered by bisect_ppx.
+4. **Scope resolution replaced runtime helpers**: Generated code resolves
+   `list`/`option` (and every primitive) by unqualified name from
+   `Hegel.Derive`, so the PPX needs no type table and `Hegel_jane.Derive` can
+   shadow the defaults. (The name `Derive` previously held qualified runtime
+   helpers; those were deleted once generated code stopped calling them, and
+   the name was reused for the scope-resolution module.)
 
 5. **Floats default to finite**: The PPX generates `floats ~allow_nan:false ~allow_infinity:false ()`
    to avoid NaN/infinity in derived types, which would cause issues in most user code.

@@ -85,3 +85,28 @@ let sexp_diff_renderer ~colored ~original ~updated =
 ;;
 
 let set_sexp_diff () = Hegel.Internal.set_diff_renderer (Some sexp_diff_renderer)
+
+module Derive = struct
+  include Hegel.Derive
+
+  let hegel_generator_char = char ()
+  let sexp_of_char = Char.sexp_of_t
+
+  module Date = struct
+    include Date
+
+    let hegel_generator = dates ()
+  end
+
+  module Time_ns = struct
+    include Time_ns
+
+    let hegel_generator = time_ns ()
+
+    module Span = struct
+      include Span
+
+      let hegel_generator = time_ns_spans ()
+    end
+  end
+end

@@ -76,6 +76,8 @@
  (description
   "Abstracts over the differences between standard OCaml's ppxlib AST and OxCaml's ppxlib AST (labeled tuples, constructor modalities) so the Hegel PPX deriver and test rewriter can share a single implementation. Not intended for direct use.")
  (depends
+  (ppx_sexp_conv
+   (>= v0.16))
   (ocaml
    (>= 5.1))
   (ppxlib

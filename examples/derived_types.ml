@@ -3,9 +3,7 @@
     This example shows how to use the PPX deriver to automatically generate test
     data for user-defined types. Instead of manually constructing generators,
     you annotate your types with [@@deriving hegel_generator] and get a
-    [<type>_generator : (<type>, unprintable) generator] value for free, drawn
-    with [draw_silent]. (No [@@deriving sexp_of] is needed; add it and use
-    [with_printer] if you want the value printed on a failing replay.) *)
+    [hegel_generator_<type>] value for free, drawn with [draw_silent]. *)
 
 open Hegel
 
@@ -44,7 +42,7 @@ type entity =
     computed in floating point — [p.x * p.x] would wrap around for large
     coordinates. *)
 let%hegel_test test_point_distance_nonnegative tc =
-  let p = draw_silent tc point_generator in
+  let p = draw_silent tc hegel_generator_point in
   let x = float_of_int p.x
   and y = float_of_int p.y in
   let dist = sqrt ((x *. x) +. (y *. y)) in
@@ -52,11 +50,11 @@ let%hegel_test test_point_distance_nonnegative tc =
 [@@settings settings ~test_cases:100 ()]
 ;;
 
-(** Property: color_generator covers all three constructors. *)
+(** Property: hegel_generator_color covers all three constructors. *)
 let saw_colors = Hashtbl.create 3
 
 let%hegel_test test_color_all_variants tc =
-  let c = draw_silent tc color_generator in
+  let c = draw_silent tc hegel_generator_color in
   (match c with
    | Red -> Hashtbl.replace saw_colors "red" true
    | Green -> Hashtbl.replace saw_colors "green" true
@@ -71,7 +69,7 @@ let saw_labeled = ref false
 let saw_dot = ref false
 
 let%hegel_test test_shape_all_variants tc =
-  let s = draw_silent tc shape_generator in
+  let s = draw_silent tc hegel_generator_shape in
   match s with
   | Circle r ->
     assert (Float.is_finite r);
@@ -90,7 +88,7 @@ let saw_tagged = ref false
 let saw_untagged = ref false
 
 let%hegel_test test_entity_valid tc =
-  let e = draw_silent tc entity_generator in
+  let e = draw_silent tc hegel_generator_entity in
   ignore (String.length e.name);
   ignore e.active;
   match e.tag with

@@ -6,9 +6,31 @@ let extract_tuple_types ct =
   | _ -> None
 ;;
 
-let extract_constr_tuple_types = function
-  | Pcstr_tuple args -> Some (List.map (fun arg -> arg.pca_type) args)
-  | Pcstr_record _ -> None
+type constr_args =
+  | Tuple of core_type list
+  | Record of label_declaration list
+
+let extract_constr_args = function
+  | Pcstr_tuple args -> Tuple (List.map (fun arg -> arg.pca_type) args)
+  | Pcstr_record labels -> Record labels
+;;
+
+let map_constr_arg_types f = function
+  | Pcstr_tuple args ->
+    Pcstr_tuple (List.map (fun arg -> { arg with pca_type = f arg.pca_type }) args)
+  | Pcstr_record labels ->
+    Pcstr_record (List.map (fun ld -> { ld with pld_type = f ld.pld_type }) labels)
+;;
+
+let sexp_of_str_type_decl ~loc ~path decls =
+  Ppx_sexp_conv_expander.Sexp_of.str_type_decl
+    ~loc
+    ~path
+    ~unboxed:false
+    decls
+    ~stackify:false
+    ~portable:false
+    ~localize:false
 ;;
 
 let extract_expr_tuple e =

@@ -101,3 +101,97 @@ val sexp_diff_renderer
     structural [sexp_diff] diff instead of the default both-values rendering.
     Call it once. It stays installed for the rest of the process. *)
 val set_sexp_diff : unit -> unit
+
+(** Auxiliary submodule for [@@deriving hegel_generator] for
+    [Core] generators.
+
+    This module enables the generator deriver to use generators for [Core] types
+    such as [Date.t] and [Time_ns.Span.t]. [open Hegel_jane.Derive] is required
+    for [@@deriving hegel_generator] to use generators for [Core] types.
+
+    {[
+      open! Core
+      open Hegel_jane.Derive
+
+      type event =
+        { id : int
+        ; day : Date.t
+        ; elapsed : Time_ns.Span.t
+        }
+      [@@deriving hegel_generator]
+    ]}
+
+    Use [Core]-typed fields with their short paths (for example, [Date.t] instead 
+    of [Core.Date.t]).
+
+    {[
+      type good = { day : Date.t } [@@deriving hegel_generator]
+
+      (* Does not compile: [Core.Date] has no [hegel_generator]. *)
+      type bad = { day : Core.Date.t } [@@deriving hegel_generator]
+    ]}
+
+    To keep a [Core]-qualified type, set its generator directly:
+
+    {[
+      type pinned =
+        { day : (Core.Date.t[@hegel.generator Hegel_jane.dates ()]) }
+      [@@deriving hegel_generator]
+    ]} *)
+module Derive : sig
+  (**/**)
+
+  val hegel_generator_int : (int, Hegel.Generators.printable) Hegel.Generators.generator
+  val hegel_generator_bool : (bool, Hegel.Generators.printable) Hegel.Generators.generator
+
+  val hegel_generator_float
+    : (float, Hegel.Generators.printable) Hegel.Generators.generator
+
+  val hegel_generator_string
+    : (string, Hegel.Generators.printable) Hegel.Generators.generator
+
+  val hegel_generator_char : (char, Hegel.Generators.printable) Hegel.Generators.generator
+
+  val hegel_generator_list
+    :  ('a, Hegel.Generators.printable) Hegel.Generators.generator
+    -> ('a list, Hegel.Generators.printable) Hegel.Generators.generator
+
+  val hegel_generator_option
+    :  ('a, Hegel.Generators.printable) Hegel.Generators.generator
+    -> ('a option, Hegel.Generators.printable) Hegel.Generators.generator
+
+  val sexp_of_int : int -> Sexplib0.Sexp.t
+  val sexp_of_bool : bool -> Sexplib0.Sexp.t
+  val sexp_of_float : float -> Sexplib0.Sexp.t
+  val sexp_of_string : string -> Sexplib0.Sexp.t
+  val sexp_of_char : char -> Sexplib0.Sexp.t
+  val sexp_of_list : ('a -> Sexplib0.Sexp.t) -> 'a list -> Sexplib0.Sexp.t
+  val sexp_of_option : ('a -> Sexplib0.Sexp.t) -> 'a option -> Sexplib0.Sexp.t
+
+  module Date : sig
+    include module type of struct
+      include Core.Date
+    end
+
+    val hegel_generator : (t, Hegel.Generators.printable) Hegel.Generators.generator
+  end
+
+  module Time_ns : sig
+    include module type of struct
+        include Core.Time_ns
+      end
+      with module Span := Core.Time_ns.Span
+
+    module Span : sig
+      include module type of struct
+        include Core.Time_ns.Span
+      end
+
+      val hegel_generator : (t, Hegel.Generators.printable) Hegel.Generators.generator
+    end
+
+    val hegel_generator : (t, Hegel.Generators.printable) Hegel.Generators.generator
+  end
+
+  (**/**)
+end
