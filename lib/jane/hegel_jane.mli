@@ -118,9 +118,26 @@ val set_sexp_diff : unit -> unit
       [@@deriving hegel_generator]
     ]}
 
-    This module supplies every name that [Hegel.Derive] supplies. The wrapper 
-    modules include the [Core] version of standard Hegel generators and [Core]
-    only generators. *)
+    This module enables the generator deriver to use generators for [Core] types
+    such as [Date.t] and [Time_ns.Span.t].
+
+    Open [Core] and write [Core]-typed fields with their short paths (for example, 
+    [Date.t] instead of [Core.Date.t]).
+
+    {[
+      type good = { day : Date.t } [@@deriving hegel_generator]
+
+      (* Does not compile: [Core.Date] has no [hegel_generator]. *)
+      type bad = { day : Core.Date.t } [@@deriving hegel_generator]
+    ]}
+
+    To keep a [Core]-qualified type, set its generator directly:
+
+    {[
+      type pinned =
+        { day : (Core.Date.t[@hegel.generator Hegel_jane.dates ()]) }
+      [@@deriving hegel_generator]
+    ]} *)
 module Derive : sig
   (**/**)
 

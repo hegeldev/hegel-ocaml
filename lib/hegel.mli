@@ -169,6 +169,90 @@
           { age; name; driving_license })
     ]}
 
+    {3 Derive generators}
+
+    Annotate the type with [\[@@deriving hegel_generator\]] and add [ppx_hegel_generator] 
+    to your [preprocess] stanza:
+
+    {[
+      (test
+       (name my_tests)
+       (libraries hegel alcotest)
+       (preprocess (pps ppx_hegel_test ppx_hegel_generator)))
+    ]}
+
+    [open Hegel] is required before the first [@@deriving hegel_generator], unless
+    you want to derive generators for [Core] types (see {!Hegel_jane.Derive}).
+
+    {[
+      open Hegel
+
+      type point =
+        { x : int
+        ; y : int
+        }
+      [@@deriving hegel_generator]
+
+      let%hegel_test point_roundtrip tc =
+        let p = draw tc hegel_generator_point in
+        assert ({ x = p.x; y = p.y } = p)
+    ]}
+
+    The type [t] derives a value named [hegel_generator]. Any other type
+    [foo] derives [hegel_generator_foo]. Derived generators print drawn values
+    as s-expressions.
+
+    Deriving generators also works on types in modules:
+
+    {[
+      module Temperature = struct
+        type t = { celsius : float } [@@deriving hegel_generator]
+      end
+
+      type reading =
+        { sensor_id : int
+        ; temp : Temperature.t
+        }
+      [@@deriving hegel_generator]
+    ]}
+
+    The [reading] generator draws its [temp] field through [Temperature.hegel_generator].
+
+    [\[@hegel.generator EXPR\]] sets the generator for a type instead of deriving it:
+
+    {[
+      type ranked =
+        { name : string
+        ; level :
+            (int[@hegel.generator Generators.integers ~min_value:1 ~max_value:5 ()])
+        }
+      [@@deriving hegel_generator]
+    ]}
+
+    [\[@hegel.do_not_generate\]] excludes a variant constructor from being generated.
+
+    {[
+      type response =
+        | Ok_response of int
+        | Errored of exn [@hegel.do_not_generate]
+      [@@deriving hegel_generator]
+    ]}
+
+    If a field's type has no [sexp_of_*] representation, mark the field
+    [\[@sexp.opaque\]]:
+
+    {[
+      type connection = { send : bytes -> unit }
+
+      type session =
+        { id : int
+        ; conn : (connection [@sexp.opaque])
+        }
+      [@@deriving hegel_generator]
+    ]}
+
+    The [conn] field prints as [<opaque>].
+
     {3 Changing test settings}
 
     To override the default settings, attach a [\[@@settings ...\]] attribute:
