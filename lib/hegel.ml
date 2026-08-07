@@ -7,7 +7,7 @@ module Generators = Generators
 (** Stateful property-based testing on top of {!Generators}. *)
 module Stateful = Stateful
 
-(** Scope-resolved generator names for [@@deriving hegel_generator]. Included
+(** Auxiliary submodule for [@@deriving hegel_generator]. Included
     below so [open Hegel] alone makes derived code resolve. *)
 module Derive = Derive
 

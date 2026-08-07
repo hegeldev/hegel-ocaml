@@ -102,9 +102,12 @@ val sexp_diff_renderer
     Call it once. It stays installed for the rest of the process. *)
 val set_sexp_diff : unit -> unit
 
-(** Scope-resolved generator names for [@@deriving hegel_generator] for
-    [Core] generators. [open Hegel_jane.Derive] is required for 
-    [@@deriving hegel_generator] to use generators for [Core] types.
+(** Auxiliary submodule for [@@deriving hegel_generator] for
+    [Core] generators.
+
+    This module enables the generator deriver to use generators for [Core] types
+    such as [Date.t] and [Time_ns.Span.t]. [open Hegel_jane.Derive] is required
+    for [@@deriving hegel_generator] to use generators for [Core] types.
 
     {[
       open! Core
@@ -118,11 +121,8 @@ val set_sexp_diff : unit -> unit
       [@@deriving hegel_generator]
     ]}
 
-    This module enables the generator deriver to use generators for [Core] types
-    such as [Date.t] and [Time_ns.Span.t].
-
-    Open [Core] and write [Core]-typed fields with their short paths (for example, 
-    [Date.t] instead of [Core.Date.t]).
+    Use [Core]-typed fields with their short paths (for example, [Date.t] instead 
+    of [Core.Date.t]).
 
     {[
       type good = { day : Date.t } [@@deriving hegel_generator]

@@ -1,4 +1,4 @@
-(** Scope-resolved generator names for [@@deriving hegel_generator]. *)
+(** Auxiliary submodule for [@@deriving hegel_generator]. *)
 
 let hegel_generator_int = Generators.integers ()
 let hegel_generator_bool = Generators.booleans ()

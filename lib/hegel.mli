@@ -218,7 +218,7 @@
 
     The [reading] generator draws its [temp] field through [Temperature.hegel_generator].
 
-    [\[@hegel.generator EXPR\]] sets the generator for a type instead of deriving it:
+    [\[@hegel.generator expr\]] sets the generator for a type instead of deriving it:
 
     {[
       type ranked =
@@ -353,7 +353,7 @@ module Generators = Generators
 (** Stateful property-based testing. *)
 module Stateful = Stateful
 
-(** Scope-resolved generator names for [@@deriving hegel_generator]. *)
+(** Auxiliary submodule for [@@deriving hegel_generator]. *)
 module Derive = Derive
 
 (**/**)
