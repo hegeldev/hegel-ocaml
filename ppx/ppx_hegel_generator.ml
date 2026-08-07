@@ -332,7 +332,7 @@ let generate_impl ~ctxt ((rec_flag, type_decls) : rec_flag * type_declaration li
   let loc = Expansion_context.Deriver.derived_item_loc ctxt in
   let path = Code_path.to_string_path (Expansion_context.Deriver.code_path ctxt) in
   let sexp_items =
-    Ppx_sexp_conv_expander.Sexp_of.str_type_decl
+    Ppx_compat.sexp_of_str_type_decl
       ~loc
       ~path
       (rec_flag, List.map opaque_excluded_args type_decls)

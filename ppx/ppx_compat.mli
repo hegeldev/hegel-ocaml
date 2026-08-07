@@ -28,6 +28,16 @@ val map_constr_arg_types
   -> constructor_arguments
   -> constructor_arguments
 
+(** [sexp_of_str_type_decl ~loc ~path decls] emits [sexp_of_<t>] definitions
+    for [decls] through ppx_sexp_conv's expander. On OxCaml, fills the extra
+    mode arguments ([unboxed]/[stackify]/[portable]/[localize]) with
+    [false]. *)
+val sexp_of_str_type_decl
+  :  loc:Location.t
+  -> path:string
+  -> rec_flag * type_declaration list
+  -> structure
+
 (** [extract_expr_tuple e] returns [Some es] if [e] is a tuple expression,
     [None] otherwise. On OxCaml, strips the optional labels from labeled
     tuples. *)

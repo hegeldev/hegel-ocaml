@@ -21,6 +21,8 @@ let map_constr_arg_types f = function
     Pcstr_record (List.map (fun ld -> { ld with pld_type = f ld.pld_type }) labels)
 ;;
 
+let sexp_of_str_type_decl = Ppx_sexp_conv_expander.Sexp_of.str_type_decl
+
 let extract_expr_tuple e =
   match e.pexp_desc with
   | Pexp_tuple es -> Some es
