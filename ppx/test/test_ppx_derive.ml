@@ -10,21 +10,16 @@
     - quickcheck-convention naming ([hegel_generator] for [t],
       [hegel_generator_foo] otherwise; [M.t] fields resolve to
       [M.hegel_generator])
-    - [char] fields (resolved from [Hegel.Export], like every primitive)
+    - [char] fields (resolved from [Hegel.Derive], like every primitive)
     - [@hegel.generator] overrides on any type occurrence
     - [@hegel.do_not_generate] on variant constructors
     - always-printable derived generators: the deriver also derives
       [sexp_of_<t>] (via ppx_sexp_conv's expander) and bakes it in with
       [with_printer]; [\[@sexp.opaque\]] is the escape hatch for un-sexpable
-      fields
-
-    Derived code resolves primitive generators by scope (the base_quickcheck
-    design): [int] expands to the unqualified name [hegel_generator_int],
-    supplied by [Hegel.Export]. Deriving therefore requires
-    [open Hegel.Export]. *)
+      fields *)
 
 open! Core
-open Hegel.Export
+open Hegel
 
 (** A record with two primitive fields. *)
 type point =

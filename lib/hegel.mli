@@ -270,13 +270,14 @@ module Generators = Generators
 module Stateful = Stateful
 
 (** Scope-resolved generator names for [@@deriving hegel_generator]. *)
-module Export = Export
+module Derive = Derive
 
 (**/**)
 
+include module type of Derive
+
 (* Excluded from the documentation, not for direct use *)
 
-module Derive = Derive
 module Internal = Internal
 module Antithesis = Antithesis
 

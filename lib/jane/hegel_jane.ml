@@ -86,8 +86,8 @@ let sexp_diff_renderer ~colored ~original ~updated =
 
 let set_sexp_diff () = Hegel.Internal.set_diff_renderer (Some sexp_diff_renderer)
 
-module Export = struct
-  include Hegel.Export
+module Derive = struct
+  include Hegel.Derive
 
   let hegel_generator_char = char ()
   let sexp_of_char = Char.sexp_of_t

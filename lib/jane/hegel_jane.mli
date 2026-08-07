@@ -103,11 +103,12 @@ val sexp_diff_renderer
 val set_sexp_diff : unit -> unit
 
 (** Scope-resolved generator names for [@@deriving hegel_generator] for
-    [Core] generators.
+    [Core] generators. [open Hegel_jane.Derive] is required for 
+    [@@deriving hegel_generator] to use generators for [Core] types.
 
     {[
       open! Core
-      open Hegel_jane.Export
+      open Hegel_jane.Derive
 
       type event =
         { id : int
@@ -117,10 +118,10 @@ val set_sexp_diff : unit -> unit
       [@@deriving hegel_generator]
     ]}
 
-    This module supplies every name that [Hegel.Export] supplies. The wrapper 
+    This module supplies every name that [Hegel.Derive] supplies. The wrapper 
     modules include the [Core] version of standard Hegel generators and [Core]
     only generators. *)
-module Export : sig
+module Derive : sig
   (**/**)
 
   val hegel_generator_int : (int, Hegel.Generators.printable) Hegel.Generators.generator

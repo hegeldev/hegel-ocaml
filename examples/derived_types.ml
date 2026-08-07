@@ -3,12 +3,9 @@
     This example shows how to use the PPX deriver to automatically generate test
     data for user-defined types. Instead of manually constructing generators,
     you annotate your types with [@@deriving hegel_generator] and get a
-    [hegel_generator_<type>] value for free, drawn with [draw_silent].
-    Open [Hegel.Export] so generated code can resolve the built-in
-    generator names. *)
+    [hegel_generator_<type>] value for free, drawn with [draw_silent]. *)
 
 open Hegel
-open Hegel.Export
 
 (** A 2D point with integer coordinates. *)
 type point =

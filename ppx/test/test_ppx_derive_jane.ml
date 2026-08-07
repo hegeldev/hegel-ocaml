@@ -1,8 +1,8 @@
 (** Tests for [@@deriving hegel_generator] with the Core generators from
-    [Hegel_jane.Export]. *)
+    [Hegel_jane.Derive]. *)
 
 open! Core
-open Hegel_jane.Export
+open Hegel_jane.Derive
 
 (** A record mixing primitives (resolved to the jane-shadowed leaves) with
     Core-typed fields (resolved through the wrapper modules). *)

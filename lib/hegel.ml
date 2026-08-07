@@ -7,12 +7,11 @@ module Generators = Generators
 (** Stateful property-based testing on top of {!Generators}. *)
 module Stateful = Stateful
 
-(** Scope-resolved generator names for [@@deriving hegel_generator]. *)
-module Export = Export
-
-(** Runtime support called by [@@deriving hegel_generator]-generated code; not
-    intended for direct use. *)
+(** Scope-resolved generator names for [@@deriving hegel_generator]. Included
+    below so [open Hegel] alone makes derived code resolve. *)
 module Derive = Derive
+
+include Derive
 
 (** Test runner and run-loop internals; re-exported (doc-hidden) for white-box
     tests, not for direct use. *)
@@ -22,9 +21,8 @@ module Internal = Internal
 module Antithesis = Antithesis
 
 (* Settings, test-case, and test-location types re-exported so the whole
-   public API lives directly under Hegel. The module re-exports above are all
-   doc-hidden in the mli: Derive is called by generated code, the rest are
-   white-box surfaces for the test suite. *)
+   public API lives directly under Hegel. The module re-exports above are
+   doc-hidden in the mli: white-box surfaces for the test suite. *)
 
 type test_case = Internal.test_case
 
