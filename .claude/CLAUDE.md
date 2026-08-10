@@ -174,7 +174,7 @@ Generators are a discriminated union:
 - **Mapped** — wraps source + transform function (adds a `mapped` span).
 - **FlatMapped** — wraps source + a function returning a generator. Evaluated recursively inside a `flat_map` span.
 - **Filtered** — wraps source + predicate. Up to `max_filter_attempts` retries before `assume false`.
-- **CompositeList** — lists of any element core. Uses the collection protocol (new_collection / collection_more) to generate elements one at a time.
+- **CompositeList** — lists of any element core. Uses the collection protocol (with_collection / collection_more) to generate elements one at a time.
 - **Composite** — a `generate_fn` thunk run inside a labeled span; used by tuples, one_of, `lists ~unique`, and hash tables (all of which now always drive the collection protocol / draw sub-values directly — there is no schema fast path).
 - **Values** — the engine-pool core behind `Stateful.Pool`. Refunctionalized: it stores the table's `find`/`remove`/`is_empty` closures, not a concrete hashtable. `Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int)` (doc-hidden, with the ready-made `Int_table`) closes `make_pool_values`/`resolve_pool_draw` over a stdlib table; the optional `hegel.jane` library closes the same primitives (via `Ppx_internal`) over `Core.Hashtbl`. `hash_tables` follows the same strategy at the API level: `make_hash_tables ~of_pairs ~sexp_of_t` is table-agnostic, `hash_tables` closes it over `Stdlib.Hashtbl`, `Hegel_jane.hash_tables` over `Core.Hashtbl.Poly`.
 - **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (memoized on the argument via structural hash/equality — a polymorphic `Stdlib.Hashtbl` — so `sexp_of_arg` is display-only and an omitted one shows `<opaque>` without collapsing the key) and shows applied pairs as `name arg = result` via `note` on the final replay. Only *top-level* applications print — a pair applied at draw depth > 0 (inside a span) is suppressed, like a nested draw. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); the name threads even when the function is drawn nested. Result draws are wrapped in a `Labels.function_result` span.
@@ -317,11 +317,45 @@ let%hegel_test derived_types_smoke tc =
 
 ### Collection Protocol
 
-Lists, sets, and hashmaps generate elements one at a time via an engine-side
-collection handle (there is no whole-collection schema draw):
-1. `new_collection` → engine assigns a collection name
-2. `collection_more` → engine returns true/false (should we generate another element?)
-3. `collection_reject` → undo the last element (used by filter)
+`lists` (both plain and `~unique`), `assoc_lists`, and `hash_tables` draw their
+elements one at a time through an *engine-managed collection* — libhegel decides
+how many elements to produce (there is no whole-collection schema draw):
+1. `hegel_new_collection` (min/max size bounds) → a `hegel_collection_t *`
+2. `hegel_collection_more` → loop while it returns true, drawing one element per
+   true result
+3. `hegel_collection_reject` → mark the last element invalid (used to reject
+   duplicates under `~unique` and by `assoc_lists`' key check)
+4. `hegel_collection_free` → release the handle, exactly once
+
+### Caller-owned handles (libhegel 0.31.0)
+
+Collections, *variable pools*, and *state machines* are opaque caller-owned
+handles (`hegel_collection_t *`, `hegel_pool_t *`, `hegel_state_machine_t *`),
+not the `int64_t` ids they were before 0.31.0. Each has a matching destructor —
+`hegel_collection_free` / `hegel_pool_free` / `hegel_state_machine_free` — and
+must be freed exactly once; freeing twice is undefined behaviour. Freeing is
+order-independent with respect to the test case and run, and NULL is a safe
+no-op. On `HEGEL_E_STOP_TEST` the constructor leaves the out-parameter NULL, so
+the `Ffi` wrappers `check_rc` before reading it.
+
+Who owns what in hegel-ocaml:
+- collections → `Generators_core.with_collection` (`Fun.protect`, so a
+  `Data_exhausted` mid-draw still frees)
+- state machines → `Stateful.run`, the same way
+- variable pools → the test case. `Stateful.Pool.create` is public and has no
+  lexical scope, so `Internal.new_pool` adds the handle to the test case's
+  `owned_pools` (a `Ffi.pool list` + mutex, which a clone shares with the test
+  case it was cloned from, like `draw_state`), and `run_test_case` calls
+  `free_owned_pools` once the case is complete — matching the order in
+  hegel-rust's own
+  `hegel-c/tests/c_abi_inprocess.rs`, which frees all three before
+  `hegel_mark_complete`.
+
+Note: the published reference at <https://hegel.dev/reference/libhegel> is
+**stale on this point** — it still documents the pre-0.31.0 `int64_t` ids and
+lists no destructors for these three. The authority is
+`hegel-c/include/hegel.h` at the pinned tag (and `nm` on the downloaded
+`libhegel`, which exports all four of the functions above).
 
 ### Entry point
 

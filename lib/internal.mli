@@ -378,17 +378,24 @@ val stop_span : ?discard:bool -> test_case -> unit
     Collections let the engine choose the length of a variable-length sequence
     while the caller draws elements one at a time. *)
 
-(** [new_collection tc ~min_size ~max_size] starts a collection and returns its
-    id ([max_size = None] means unbounded). *)
-val new_collection : test_case -> min_size:int -> max_size:int option -> int
+(** An engine-managed collection. Each one must be released exactly once with
+    {!collection_free}. *)
+type collection = Hegel_ffi.Ffi.collection
 
-(** [collection_more tc ~collection_id] returns whether the engine wants another
+(** [new_collection tc ~min_size ~max_size] starts a collection
+    ([max_size = None] means unbounded). *)
+val new_collection : test_case -> min_size:int -> max_size:int option -> collection
+
+(** [collection_more tc ~collection] returns whether the engine wants another
     element. *)
-val collection_more : test_case -> collection_id:int -> bool
+val collection_more : test_case -> collection:collection -> bool
 
-(** [collection_reject tc ~collection_id] rejects the collection's last element.
-*)
-val collection_reject : test_case -> collection_id:int -> unit
+(** [collection_reject tc ~collection] rejects the collection's last element. *)
+val collection_reject : test_case -> collection:collection -> unit
+
+(** [collection_free tc ~collection] releases [collection]. Safe after the test
+    case has aborted. *)
+val collection_free : test_case -> collection:collection -> unit
 
 (** {2 Variable pools}
 
@@ -396,36 +403,52 @@ val collection_reject : test_case -> collection_id:int -> unit
     (see {!Stateful.Pool}). A pool is a set of integer "variable ids" that
     the engine can sample from. *)
 
-(** [new_pool tc] creates a new engine-managed variable pool and returns its id.
-*)
-val new_pool : test_case -> int
+(** An engine-managed variable pool. Released automatically when the test case
+    that created it completes. *)
+type pool = Hegel_ffi.Ffi.pool
 
-(** [pool_add tc ~pool_id] adds a fresh variable to [pool_id] and returns the
-    new variable id. *)
-val pool_add : test_case -> pool_id:int -> int
+(** [new_pool tc] creates a new engine-managed variable pool. It is released
+    when the test case completes. *)
+val new_pool : test_case -> pool
 
-(** [pool_generate tc ~pool_id ?consume ()] draws a variable id from [pool_id].
-    When [consume] is [true] (default [false]), the variable is also removed
-    from the pool. Drawing from an empty pool raises {!Assume_rejected} (the
-    engine rejects the test case as invalid). *)
-val pool_generate : test_case -> pool_id:int -> ?consume:bool -> unit -> int
+(** [pool_add tc ~pool] adds a fresh variable to [pool] and returns the new
+    variable id. *)
+val pool_add : test_case -> pool:pool -> int
+
+(** [pool_generate tc ~pool ?consume ()] draws a variable id from [pool]. When
+    [consume] is [true] (default [false]), the variable is also removed from the
+    pool. Drawing from an empty pool raises {!Assume_rejected} (the engine
+    rejects the test case as invalid). *)
+val pool_generate : test_case -> pool:pool -> ?consume:bool -> unit -> int
+
+(** An engine-owned state machine. Each one must be released exactly once with
+    {!state_machine_free}. *)
+type state_machine = Hegel_ffi.Ffi.state_machine
 
 (** [new_state_machine tc ~rule_names ~invariant_names] registers an
-    engine-owned state machine with the named rules and invariants and returns
-    its id. The engine owns rule selection, including swarm testing (each test
-    case enables a random subset of rules). *)
+    engine-owned state machine with the named rules and invariants. The engine
+    owns rule selection. *)
 val new_state_machine
   :  test_case
   -> rule_names:string list
   -> invariant_names:string list
-  -> int
+  -> state_machine
 
-(** [state_machine_next_rule tc ~state_machine_id] draws the index (in
+(** [state_machine_next_rule tc ~state_machine] draws the index (in
     [\[0, num_rules)]) of the next rule to run, letting the engine choose and
     shrink the rule sequence, or returns [None] when the engine's step budget
     for the test case is exhausted and the caller should stop running rules.
     Raises {!Data_exhausted} when the engine's choice budget is exhausted. *)
-val state_machine_next_rule : test_case -> state_machine_id:int -> int option
+val state_machine_next_rule : test_case -> state_machine:state_machine -> int option
+
+(** [state_machine_rule_rejected tc ~state_machine] reports that the rule last
+    returned by {!state_machine_next_rule} did not complete. A rejected rule
+    does not count against the step budget. *)
+val state_machine_rule_rejected : test_case -> state_machine:state_machine -> unit
+
+(** [state_machine_free tc ~state_machine] releases [state_machine]. Safe after
+    the test case has aborted, and safe in any order relative to freeing it. *)
+val state_machine_free : test_case -> state_machine:state_machine -> unit
 
 (**/**)
 

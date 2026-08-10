@@ -121,8 +121,8 @@ let stateful_no_rules_test () =
 let empty_pool_draw_rejects_test () =
   let saw_reject = ref false in
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
-    let pool_id = Hegel.Internal.new_pool tc in
-    match Hegel.Internal.pool_generate tc ~pool_id () with
+    let pool = Hegel.Internal.new_pool tc in
+    match Hegel.Internal.pool_generate tc ~pool () with
     | (_ : int) -> Alcotest.fail "expected Assume_rejected"
     | exception Hegel.Internal.Assume_rejected ->
       saw_reject := true;

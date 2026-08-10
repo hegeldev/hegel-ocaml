@@ -476,10 +476,10 @@ let test_run_primitive_defaults () =
     Internal.start_span tc;
     let v = Hegel.draw tc int_gen in
     Internal.stop_span tc;
-    let pool_id = Internal.new_pool tc in
-    let _ = Internal.pool_add tc ~pool_id in
-    let a = Internal.pool_generate tc ~pool_id () in
-    let b = Internal.pool_generate tc ~pool_id ~consume:true () in
+    let pool = Internal.new_pool tc in
+    let _ = Internal.pool_add tc ~pool in
+    let a = Internal.pool_generate tc ~pool () in
+    let b = Internal.pool_generate tc ~pool ~consume:true () in
     assert (v >= 0 && a >= 0 && b >= 0))
 ;;
 

@@ -73,12 +73,12 @@ val hash_tables
     local [values] table, removing it when [consume]. *)
 val resolve_draw : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
 
-(** [pool_values ~pool_id ~values ~consume] builds a generator that picks a
-    value from the engine pool [pool_id], resolving the drawn id against the
+(** [pool_values ~pool ~values ~consume] builds a generator that picks a
+    value from the engine pool [pool], resolving the drawn id against the
     local [values] table. When [consume], the picked value is removed from the
     pool. *)
 val pool_values
-  :  pool_id:int
+  :  pool:Hegel.Internal.pool
   -> values:(int, 'a) Core.Hashtbl.t
   -> consume:bool
   -> ('a, Hegel.Generators.unprintable) Hegel.Generators.generator

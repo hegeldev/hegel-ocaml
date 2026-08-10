@@ -66,7 +66,7 @@ type 'a core =
       }
       -> 'a core
   | Values :
-      { pool_id : int
+      { pool : Internal.pool
       ; find : int -> 'a option
       ; remove : int -> unit
       ; is_empty : unit -> bool
@@ -149,12 +149,12 @@ let composite_with_label ~label generate_fn =
     whole value prints. *)
 let composite generate_fn = composite_with_label ~label:Labels.fixed_dict generate_fn
 
-(** [make_pool_values ~pool_id ~find ~remove ~is_empty ~consume] builds an
-    unprintable generator that picks a value from the engine pool [pool_id],
+(** [make_pool_values ~pool ~find ~remove ~is_empty ~consume] builds an
+    unprintable generator that picks a value from the engine pool [pool],
     resolving the drawn id via [find]. When [consume], [remove] deletes the
     picked value. [is_empty] reports whether the backing table is empty. *)
-let make_pool_values ~pool_id ~find ~remove ~is_empty ~consume =
-  Unprintable { core = Values { pool_id; find; remove; is_empty; consume } }
+let make_pool_values ~pool ~find ~remove ~is_empty ~consume =
+  Unprintable { core = Values { pool; find; remove; is_empty; consume } }
 ;;
 
 (** Maximum number of filter attempts before calling [assume false]. *)
@@ -197,32 +197,38 @@ let discardable_group label data f =
 
     Collections ask the engine when to stop generating elements. The [finished]
     flag short-circuits subsequent {!collection_more} calls once the engine
-    signals completion. The engine-side collection is created on first use. *)
+    signals completion. The engine-side collection is created on first use and
+    released when the {!with_collection} scope that owns it ends. *)
 type collection =
   { mutable finished : bool
-  ; mutable collection_id : int option
+  ; mutable handle : Internal.collection option
   ; min_size : int
   ; max_size : int option
   }
 
-(** [new_collection ~min_size ?max_size data ()] creates a new collection
-    handle. *)
-let new_collection ~min_size ?max_size data () =
-  ignore data;
-  { finished = false; collection_id = None; min_size; max_size }
-;;
-
-(** [get_collection_id coll data] initializes the engine-side collection
-    and returns its id. Raises {!Internal.Data_exhausted} on StopTest. *)
-let get_collection_id coll data =
-  match coll.collection_id with
-  | Some id -> id
+(** [get_collection coll data] initializes the engine-side collection and returns its
+    handle. Raises {!Internal.Data_exhausted} on StopTest. *)
+let get_collection coll data =
+  match coll.handle with
+  | Some h -> h
   | None ->
-    let id =
+    let h =
       Internal.new_collection data ~min_size:coll.min_size ~max_size:coll.max_size
     in
-    coll.collection_id <- Some id;
-    id
+    coll.handle <- Some h;
+    h
+;;
+
+(** [with_collection ~min_size ?max_size data f] runs [f coll] with a new
+    collection and releases the engine-side handle after. *)
+let with_collection ~min_size ?max_size data f =
+  let coll = { finished = false; handle = None; min_size; max_size } in
+  Fun.protect
+    ~finally:(fun () ->
+      Option.iter
+        (fun collection -> Internal.collection_free data ~collection)
+        coll.handle)
+    (fun () -> f coll)
 ;;
 
 (** [collection_more coll data] returns [true] if more elements should be
@@ -233,8 +239,8 @@ let collection_more coll data =
   if coll.finished
   then false
   else (
-    let collection_id = get_collection_id coll data in
-    let more = Internal.collection_more data ~collection_id in
+    let collection = get_collection coll data in
+    let more = Internal.collection_more data ~collection in
     if not more then coll.finished <- true;
     more)
 ;;
@@ -245,8 +251,8 @@ let collection_more coll data =
 let collection_reject coll data =
   if not coll.finished
   then (
-    let collection_id = get_collection_id coll data in
-    Internal.collection_reject data ~collection_id)
+    let collection = get_collection coll data in
+    Internal.collection_reject data ~collection)
 ;;
 
 (* separated out for unit testing *)
@@ -261,9 +267,9 @@ let resolve_pool_draw ~find ~remove ~consume variable_id =
     raise Internal.Flaky_strategy
 ;;
 
-let pick tc ~find ~remove ~is_empty pool_id ~consume =
+let pick tc ~find ~remove ~is_empty pool ~consume =
   Internal.assume tc (not (is_empty ()));
-  let variable_id = Internal.pool_generate tc ~pool_id ~consume () in
+  let variable_id = Internal.pool_generate tc ~pool ~consume () in
   resolve_pool_draw ~find ~remove ~consume variable_id
 ;;
 
@@ -291,13 +297,13 @@ module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) = struct
       variable_id
   ;;
 
-  (** [pool_values ~pool_id ~values ~consume] builds an unprintable generator
-      that picks a value from the engine pool [pool_id], resolving the drawn id
+  (** [pool_values ~pool ~values ~consume] builds an unprintable generator
+      that picks a value from the engine pool [pool], resolving the drawn id
       against the local [values] table. When [consume], the picked value is
       removed from the pool. *)
-  let pool_values ~pool_id ~values ~consume =
+  let pool_values ~pool ~values ~consume =
     make_pool_values
-      ~pool_id
+      ~pool
       ~find:(fun id -> Tbl.find_opt values id)
       ~remove:(fun id -> Tbl.remove values id)
       ~is_empty:(fun () -> Tbl.length values = 0)
@@ -338,16 +344,16 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
     attempt 1
   | CompositeList { elements; min_size; max_size } ->
     group Labels.list data (fun () ->
-      let coll = new_collection ~min_size ?max_size data () in
-      let rec collect acc =
-        if collection_more coll data
-        then collect (do_draw elements data :: acc)
-        else List.rev acc
-      in
-      collect [])
+      with_collection ~min_size ?max_size data (fun coll ->
+        let rec collect acc =
+          if collection_more coll data
+          then collect (do_draw elements data :: acc)
+          else List.rev acc
+        in
+        collect []))
   | Composite { label; generate_fn } -> group label data (fun () -> generate_fn data)
-  | Values { pool_id; find; remove; is_empty; consume } ->
-    pick data ~find ~remove ~is_empty pool_id ~consume
+  | Values { pool; find; remove; is_empty; consume } ->
+    pick data ~find ~remove ~is_empty pool ~consume
   | Function { build } -> build ~name:None data
 ;;
 

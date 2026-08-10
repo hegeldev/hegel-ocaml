@@ -67,9 +67,9 @@ let resolve_draw values ~consume variable_id =
     variable_id
 ;;
 
-let pool_values ~pool_id ~values ~consume =
+let pool_values ~pool ~values ~consume =
   G.Ppx_internal.make_pool_values
-    ~pool_id
+    ~pool
     ~find:(Hashtbl.find values)
     ~remove:(Hashtbl.remove values)
     ~is_empty:(fun () -> Hashtbl.is_empty values)

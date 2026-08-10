@@ -812,7 +812,7 @@ module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) : sig
   val resolve_draw : 'a Tbl.t -> consume:bool -> int -> 'a
 
   val pool_values
-    :  pool_id:int
+    :  pool:Internal.pool
     -> values:'a Tbl.t
     -> consume:bool
     -> ('a, unprintable) generator
@@ -866,19 +866,19 @@ module Ppx_internal : sig
   (** A collection handle for generating variable-length sequences. *)
   type collection =
     { mutable finished : bool
-    ; mutable collection_id : int option
+    ; mutable handle : Internal.collection option
     ; min_size : int
     ; max_size : int option
     }
 
-  (** [new_collection ~min_size ?max_size data ()] creates a new collection
-      handle. *)
-  val new_collection
+  (** [with_collection ~min_size ?max_size data f] runs [f] with a new
+      collection and releases the engine-side handle after calling [f]. *)
+  val with_collection
     :  min_size:int
     -> ?max_size:int
     -> Internal.test_case
-    -> unit
-    -> collection
+    -> (collection -> 'a)
+    -> 'a
 
   (** [collection_more coll data] returns [true] if more elements should be
       generated, [false] when the collection is complete. *)
@@ -888,11 +888,11 @@ module Ppx_internal : sig
       Raises [Internal.Data_exhausted] on StopTest. *)
   val collection_reject : collection -> Internal.test_case -> unit
 
-  (** [make_pool_values ~pool_id ~find ~remove ~is_empty ~consume] is a
-      generator that picks a value from the engine pool [pool_id]. When [consume],
+  (** [make_pool_values ~pool ~find ~remove ~is_empty ~consume] is a
+      generator that picks a value from the engine pool [pool]. When [consume],
       the picked value is removed from the pool. *)
   val make_pool_values
-    :  pool_id:int
+    :  pool:Internal.pool
     -> find:(int -> 'a option)
     -> remove:(int -> unit)
     -> is_empty:(unit -> bool)

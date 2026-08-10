@@ -6,28 +6,25 @@ module Pool_gen = Generators.Make_pool (Int_table)
 module Pool = struct
   type 'a t =
     { tc : Internal.test_case
-    ; pool_id : int
+    ; pool : Internal.pool
     ; values : 'a Int_table.t
     }
 
   let create tc =
-    let pool_id = Internal.new_pool tc in
-    { tc; pool_id; values = Int_table.create 16 }
+    let pool = Internal.new_pool tc in
+    { tc; pool; values = Int_table.create 16 }
   ;;
 
   let add t value =
-    let variable_id = Internal.pool_add t.tc ~pool_id:t.pool_id in
+    let variable_id = Internal.pool_add t.tc ~pool:t.pool in
     Int_table.replace t.values variable_id value
   ;;
 
   let size t = Int_table.length t.values
-
-  let values_consumed t =
-    Pool_gen.pool_values ~pool_id:t.pool_id ~values:t.values ~consume:true
-  ;;
+  let values_consumed t = Pool_gen.pool_values ~pool:t.pool ~values:t.values ~consume:true
 
   let values_reusable t =
-    Pool_gen.pool_values ~pool_id:t.pool_id ~values:t.values ~consume:false
+    Pool_gen.pool_values ~pool:t.pool ~values:t.values ~consume:false
   ;;
 end
 
@@ -49,7 +46,7 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
     let invariant_names =
       List.mapi (fun i _ -> Printf.sprintf "invariant_%d" i) invariants
     in
-    let state_machine_id =
+    let state_machine =
       Internal.new_state_machine
         tc
         ~rule_names:(List.map Rule.name rules)
@@ -77,7 +74,7 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
     check_invariants ~where:"in the initial state" init;
     let rec loop ~state ~steps_attempted =
       Internal.start_span ~label:Generators.Ppx_internal.Labels.stateful_rule tc;
-      match Internal.state_machine_next_rule tc ~state_machine_id with
+      match Internal.state_machine_next_rule tc ~state_machine with
       | None -> ()
       | Some rule_index ->
         let rule = rule_array.(rule_index) in
@@ -91,11 +88,14 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
            loop ~state:new_state ~steps_attempted:step_num
          | exception Internal.Assume_rejected ->
            Internal.stop_span ~discard:true tc;
+           Internal.state_machine_rule_rejected tc ~state_machine;
            Internal.note tc "Rule stopped early due to violated assumption.";
            loop ~state ~steps_attempted:step_num
          | exception e ->
            Internal.stop_span tc;
            raise e)
     in
-    loop ~state:init ~steps_attempted:0
+    Fun.protect
+      ~finally:(fun () -> Internal.state_machine_free tc ~state_machine)
+      (fun () -> loop ~state:init ~steps_attempted:0)
 ;;
