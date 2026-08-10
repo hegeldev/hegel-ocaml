@@ -483,6 +483,17 @@ let test_run_primitive_defaults () =
     assert (v >= 0 && a >= 0 && b >= 0))
 ;;
 
+let test_overrun_case_is_discarded () =
+  run_hegel_test
+    ~settings:
+      (Hegel.settings ~test_cases:1 ()
+       |> with_suppress_health_check
+            [ Test_cases_too_large; Filter_too_much; Large_initial_test_case ])
+    (fun tc ->
+       ignore (Hegel.draw_silent tc int_gen : int);
+       raise Internal.Data_exhausted)
+;;
+
 let tests =
   [ Alcotest.test_case "is_in_ci false" `Quick test_is_in_ci_false
   ; Alcotest.test_case "is_in_ci any-value" `Quick test_is_in_ci_true_any
@@ -508,6 +519,7 @@ let tests =
       `Quick
       test_extract_origin_distinct_lines
   ; Alcotest.test_case "color_enabled" `Quick test_color_enabled
+  ; Alcotest.test_case "overrun case discarded" `Quick test_overrun_case_is_discarded
   ; Alcotest.test_case "stderr_color_enabled" `Quick test_stderr_color_enabled
   ; Alcotest.test_case "stderr_color" `Quick test_stderr_color
   ; Alcotest.test_case "render_diff" `Quick test_render_diff

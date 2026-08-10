@@ -2,7 +2,7 @@
 
 Hegel is a property-based testing library for OCaml based on
 [Hypothesis](https://github.com/hypothesisworks/hypothesis), and runs the native
-[Hegel](https://hegel.dev/) engine in-process via the `libhegel` C library.
+[libhegel](https://hegel.dev/reference/libhegel) backend in-process.
 
 ## Install Hegel
 
@@ -16,20 +16,20 @@ opam pin add hegel "git+https://github.com/hegeldev/hegel-ocaml.git"
 ```
 
 Hegel calls the native `libhegel` shared library and locates it automatically
-at runtime — no separate install step. It looks, in order, for:
+at runtime. It looks for the following in order:
 
-1. `$HEGEL_LIBHEGEL_PATH` — an explicit path to the library (or a directory
-   containing it);
+1. `$HEGEL_LIBHEGEL_PATH`, an explicit path to the library (or a directory
+   containing it)
 2. a sibling [hegel-rust](https://github.com/hegeldev/hegel-rust) checkout at
-   `../hegel-rust/target/release/` (then `.../debug/`) relative to your project;
+   `../hegel-rust/target/release/` (then `.../debug/`) relative to your project
 3. a checksum-verified download of the matching version from hegel-rust's GitHub
    releases, cached under `~/.cache/hegel-ocaml/libhegel/<version>/`.
 
 Set `HEGEL_LIBHEGEL_NO_DOWNLOAD=1` to opt out of the download fallback.
 
 Hegel for OCaml supports **Linux** (amd64/arm64) and **macOS** (Apple Silicon).
-macOS amd64 (Intel) has no published `libhegel` artifact, so on that platform point
-`HEGEL_LIBHEGEL_PATH` at a locally built `libhegel.dylib`.
+macOS amd64 (Intel) has no published `libhegel` artifact, so on that platform set
+`HEGEL_LIBHEGEL_PATH` to a locally built `libhegel.dylib`.
 
 ## Quick start
 
@@ -66,12 +66,8 @@ let () =
 Run `dune runtest`. Hegel generates up to 100 random input pairs and reports the
 minimal counterexample if it finds one. When a test fails, Hegel prints a
 report naming each value you drew from the failing case (`a = …`, `b = …`, named
-after the `let` binding) and a copy-pasteable line to replay it, and Alcotest
-reports the test as failed and exits non-zero. For equality checks, use
-`require_equal` instead of `assert`. It shows the two compared values
-in the report. With the optional `hegel.jane` library, it shows a structural
-`sexp_diff` instead. See [Debugging failures](docs/getting-started.md#debug-your-failing-test-cases)
-for details.
+after the `let` binding) and a copy-pasteable line to replay it. Alcotest
+reports the test as failed and exits non-zero.
 
 To override the default settings, attach a `[@@settings ...]` attribute:
 
@@ -84,7 +80,7 @@ let%hegel_test commutative_addition tc =
 ;;
 ```
 
-For a full walkthrough, see [docs/getting-started.md](docs/getting-started.md).
+For a full walkthrough, see the [docs](https://hegel.dev/ocaml).
 
 ## Development
 
@@ -92,6 +88,3 @@ For a full walkthrough, see [docs/getting-started.md](docs/getting-started.md).
 just check       # Full CI: lint + docs + tests with 100% coverage
 just test        # Run tests only
 ```
-
-`libhegel` is located (and downloaded + cached if needed) automatically at
-runtime — there is no separate setup step.
