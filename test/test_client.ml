@@ -476,11 +476,22 @@ let test_run_primitive_defaults () =
     Internal.start_span tc;
     let v = Hegel.draw tc int_gen in
     Internal.stop_span tc;
-    let pool_id = Internal.new_pool tc in
-    let _ = Internal.pool_add tc ~pool_id in
-    let a = Internal.pool_generate tc ~pool_id () in
-    let b = Internal.pool_generate tc ~pool_id ~consume:true () in
+    let pool = Internal.new_pool tc in
+    let _ = Internal.pool_add tc ~pool in
+    let a = Internal.pool_generate tc ~pool () in
+    let b = Internal.pool_generate tc ~pool ~consume:true () in
     assert (v >= 0 && a >= 0 && b >= 0))
+;;
+
+let test_overrun_case_is_discarded () =
+  run_hegel_test
+    ~settings:
+      (Hegel.settings ~test_cases:1 ()
+       |> with_suppress_health_check
+            [ Test_cases_too_large; Filter_too_much; Large_initial_test_case ])
+    (fun tc ->
+       ignore (Hegel.draw_silent tc int_gen : int);
+       raise Internal.Data_exhausted)
 ;;
 
 let tests =
@@ -508,6 +519,7 @@ let tests =
       `Quick
       test_extract_origin_distinct_lines
   ; Alcotest.test_case "color_enabled" `Quick test_color_enabled
+  ; Alcotest.test_case "overrun case discarded" `Quick test_overrun_case_is_discarded
   ; Alcotest.test_case "stderr_color_enabled" `Quick test_stderr_color_enabled
   ; Alcotest.test_case "stderr_color" `Quick test_stderr_color
   ; Alcotest.test_case "render_diff" `Quick test_render_diff

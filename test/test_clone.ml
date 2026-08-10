@@ -78,8 +78,6 @@ let test_clone_finalized () =
   Alcotest.(check pass) "dropped clones finalised without error" () ()
 ;;
 
-(* The repeatable-draw name counter is shared across the family: a clone
-   continues the parent's numbering rather than restarting from _1. *)
 let test_clone_shares_draw_names () =
   let names = ref [] in
   Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->

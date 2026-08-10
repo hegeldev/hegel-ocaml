@@ -387,36 +387,42 @@ let c_stop_span =
 let c_new_collection =
   foreign
     "hegel_new_collection"
-    (ptr void @-> ptr void @-> uint64_t @-> uint64_t @-> ptr int64_t @-> returning int)
+    (ptr void @-> ptr void @-> uint64_t @-> uint64_t @-> ptr (ptr void) @-> returning int)
 ;;
 
 let c_collection_more =
   foreign
     "hegel_collection_more"
-    (ptr void @-> ptr void @-> int64_t @-> ptr bool @-> returning int)
+    (ptr void @-> ptr void @-> ptr void @-> ptr bool @-> returning int)
 ;;
 
 let c_collection_reject =
   foreign
     "hegel_collection_reject"
-    (ptr void @-> ptr void @-> int64_t @-> string_opt @-> returning int)
+    (ptr void @-> ptr void @-> ptr void @-> string_opt @-> returning int)
+;;
+
+let c_collection_free =
+  foreign "hegel_collection_free" (ptr void @-> ptr void @-> returning int)
 ;;
 
 let c_new_pool =
-  foreign "hegel_new_pool" (ptr void @-> ptr void @-> ptr int64_t @-> returning int)
+  foreign "hegel_new_pool" (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
 ;;
 
 let c_pool_add =
   foreign
     "hegel_pool_add"
-    (ptr void @-> ptr void @-> int64_t @-> ptr int64_t @-> returning int)
+    (ptr void @-> ptr void @-> ptr void @-> ptr int64_t @-> returning int)
 ;;
 
 let c_pool_generate =
   foreign
     "hegel_pool_generate"
-    (ptr void @-> ptr void @-> int64_t @-> bool @-> ptr int64_t @-> returning int)
+    (ptr void @-> ptr void @-> ptr void @-> bool @-> ptr int64_t @-> returning int)
 ;;
+
+let c_pool_free = foreign "hegel_pool_free" (ptr void @-> ptr void @-> returning int)
 
 let c_new_state_machine =
   foreign
@@ -427,14 +433,24 @@ let c_new_state_machine =
      @-> size_t
      @-> ptr (ptr char)
      @-> size_t
-     @-> ptr int64_t
+     @-> ptr (ptr void)
      @-> returning int)
 ;;
 
 let c_state_machine_next_rule =
   foreign
     "hegel_state_machine_next_rule"
-    (ptr void @-> ptr void @-> int64_t @-> ptr int64_t @-> returning int)
+    (ptr void @-> ptr void @-> ptr void @-> ptr int64_t @-> returning int)
+;;
+
+let c_state_machine_rule_rejected =
+  foreign
+    "hegel_state_machine_rule_rejected"
+    (ptr void @-> ptr void @-> ptr void @-> returning int)
+;;
+
+let c_state_machine_free =
+  foreign "hegel_state_machine_free" (ptr void @-> ptr void @-> returning int)
 ;;
 
 let c_target =
@@ -498,6 +514,9 @@ type test_case = unit Ctypes.ptr
 type run_result = unit Ctypes.ptr
 type failure = unit Ctypes.ptr
 type string_generator = unit Ctypes.ptr
+type collection = unit Ctypes.ptr
+type pool = unit Ctypes.ptr
+type state_machine = unit Ctypes.ptr
 
 type mode =
   | Test_run
@@ -609,7 +628,7 @@ let check_rc ctx rc =
       else if rc = e_internal
       then "internal error"
       else if rc = e_concurrent_use
-      then "concurrent use of a test-case handle"
+      then "concurrent use of a test-case or collection handle"
       else Printf.sprintf "unknown error code %d" rc
     in
     let msg = c_last_error_message ctx in
@@ -996,48 +1015,52 @@ let start_span ctx tc label =
 let stop_span ctx tc discard = check_rc ctx (c_stop_span ctx tc discard)
 
 let new_collection ctx tc ~min_size ~max_size =
-  let out = allocate int64_t 0L in
+  let out = allocate (ptr void) null in
   let max_u =
     match max_size with
     | Some m -> Unsigned.UInt64.of_int m
     | None -> Unsigned.UInt64.max_int
   in
   check_rc ctx (c_new_collection ctx tc (Unsigned.UInt64.of_int min_size) max_u out);
-  Int64.to_int !@out
-;;
-
-let collection_more ctx tc id =
-  let out = allocate bool false in
-  check_rc ctx (c_collection_more ctx tc (Int64.of_int id) out);
   !@out
 ;;
 
-let collection_reject ctx tc id why =
-  check_rc ctx (c_collection_reject ctx tc (Int64.of_int id) why)
+let collection_more ctx tc collection =
+  let out = allocate bool false in
+  check_rc ctx (c_collection_more ctx tc collection out);
+  !@out
 ;;
+
+let collection_reject ctx tc collection why =
+  check_rc ctx (c_collection_reject ctx tc collection why)
+;;
+
+let collection_free ctx collection = check_rc ctx (c_collection_free ctx collection)
 
 let new_pool ctx tc =
-  let out = allocate int64_t 0L in
+  let out = allocate (ptr void) null in
   check_rc ctx (c_new_pool ctx tc out);
+  !@out
+;;
+
+let pool_add ctx tc ~pool =
+  let out = allocate int64_t 0L in
+  check_rc ctx (c_pool_add ctx tc pool out);
   Int64.to_int !@out
 ;;
 
-let pool_add ctx tc ~pool_id =
+let pool_generate ctx tc ~pool ~consume =
   let out = allocate int64_t 0L in
-  check_rc ctx (c_pool_add ctx tc (Int64.of_int pool_id) out);
+  check_rc ctx (c_pool_generate ctx tc pool consume out);
   Int64.to_int !@out
 ;;
 
-let pool_generate ctx tc ~pool_id ~consume =
-  let out = allocate int64_t 0L in
-  check_rc ctx (c_pool_generate ctx tc (Int64.of_int pool_id) consume out);
-  Int64.to_int !@out
-;;
+let pool_free ctx pool = check_rc ctx (c_pool_free ctx pool)
 
 let new_state_machine ctx tc ~rule_names ~invariant_names =
   let rules_ptr, rules_root = to_string_array rule_names in
   let invs_ptr, invs_root = to_string_array invariant_names in
-  let out = allocate int64_t 0L in
+  let out = allocate (ptr void) null in
   let rc =
     c_new_state_machine
       ctx
@@ -1051,7 +1074,7 @@ let new_state_machine ctx tc ~rule_names ~invariant_names =
   Root.release rules_root;
   Root.release invs_root;
   check_rc ctx rc;
-  Int64.to_int !@out
+  !@out
 ;;
 
 (* [HEGEL_STATE_MACHINE_DONE]: written to the out parameter by
@@ -1059,11 +1082,19 @@ let new_state_machine ctx tc ~rule_names ~invariant_names =
    case is exhausted and the caller should stop running rules. *)
 let state_machine_done = -1
 
-let state_machine_next_rule ctx tc ~state_machine_id =
+let state_machine_next_rule ctx tc ~state_machine =
   let out = allocate int64_t 0L in
-  check_rc ctx (c_state_machine_next_rule ctx tc (Int64.of_int state_machine_id) out);
+  check_rc ctx (c_state_machine_next_rule ctx tc state_machine out);
   let index = Int64.to_int !@out in
   if index = state_machine_done then None else Some index
+;;
+
+let state_machine_rule_rejected ctx tc ~state_machine =
+  check_rc ctx (c_state_machine_rule_rejected ctx tc state_machine)
+;;
+
+let state_machine_free ctx state_machine =
+  check_rc ctx (c_state_machine_free ctx state_machine)
 ;;
 
 let target ctx tc value label = check_rc ctx (c_target ctx tc value label)

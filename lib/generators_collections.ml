@@ -20,21 +20,21 @@ let validate_size_bounds ~min_size ~max_size =
    collection protocol to produce unique-keyed [(key, value)] pairs in draw
    order. Duplicate keys are rejected client-side, compared structurally. *)
 let draw_association_pairs keys values ~min_size ~max_size data =
-  let coll = new_collection ~min_size ?max_size data () in
-  let rec collect acc =
-    if collection_more coll data
-    then (
-      let k = do_draw (core_of keys) data in
-      if List.exists (fun (k', _) -> k' = k) acc
+  with_collection ~min_size ?max_size data (fun coll ->
+    let rec collect acc =
+      if collection_more coll data
       then (
-        collection_reject coll data;
-        collect acc)
-      else (
-        let v = do_draw (core_of values) data in
-        collect ((k, v) :: acc)))
-    else List.rev acc
-  in
-  collect []
+        let k = do_draw (core_of keys) data in
+        if List.exists (fun (k', _) -> k' = k) acc
+        then (
+          collection_reject coll data;
+          collect acc)
+        else (
+          let v = do_draw (core_of values) data in
+          collect ((k, v) :: acc)))
+      else List.rev acc
+    in
+    collect [])
 ;;
 
 (** [assoc_lists keys values ?min_size ?max_size ()] creates a generator
@@ -147,19 +147,19 @@ let lists
         { label = Labels.list
         ; generate_fn =
             (fun data ->
-              let coll = new_collection ~min_size ?max_size data () in
-              let rec collect acc =
-                if collection_more coll data
-                then (
-                  let elem = do_draw (core_of elements) data in
-                  if List.mem elem acc
+              with_collection ~min_size ?max_size data (fun coll ->
+                let rec collect acc =
+                  if collection_more coll data
                   then (
-                    collection_reject coll data;
-                    collect acc)
-                  else collect (elem :: acc))
-                else List.rev acc
-              in
-              collect [])
+                    let elem = do_draw (core_of elements) data in
+                    if List.mem elem acc
+                    then (
+                      collection_reject coll data;
+                      collect acc)
+                    else collect (elem :: acc))
+                  else List.rev acc
+                in
+                collect []))
         }
   in
   Printable { core; sexp_of }

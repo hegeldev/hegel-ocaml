@@ -36,6 +36,18 @@ type failure
     {!string_generator_free}. *)
 type string_generator
 
+(** Opaque collection handle ([hegel_collection_t]). Using a collection from 
+    multiple threads will throw an error. *)
+type collection
+
+(** Opaque variable-pool handle ([hegel_pool_t]). Unlike a {!type:collection} it 
+    can be used from multiple threads. *)
+type pool
+
+(** Opaque state-machine handle ([hegel_state_machine_t]). It can be shared 
+    across clones. *)
+type state_machine
+
 (** Test execution mode ([hegel_mode_t]). *)
 type mode =
   | Test_run
@@ -74,9 +86,10 @@ type status =
     - [Run_failed]: the property failed; inspect each distinct counterexample
       via {!result_failures}.
     - [Run_error]: the run itself failed: a failed health check, a
-      nondeterministic test, an engine panic. It produced no verdict on the
-      property. There are no failures to inspect; the message is read via
-      {!result_error}. *)
+      nondeterministic test, a run-scoped client mistake, or a violated
+      internal engine invariant (a bug in hegel, reported with a bug-report
+      diagnostic). It produced no verdict on the property. There are no
+      failures to inspect; the message is read via {!result_error}. *)
 type run_status =
   | Run_passed
   | Run_failed
@@ -93,9 +106,10 @@ exception Assume_rejected
 
 (** Raised when a libhegel call fails with any other negative status code
     ([HEGEL_E_BACKEND], [HEGEL_E_INVALID_HANDLE], [HEGEL_E_INVALID_ARG],
-    [HEGEL_E_ALREADY_COMPLETE], [HEGEL_E_NOT_COMPLETE], [HEGEL_E_INTERNAL], or an
-    unrecognised code). The payload is a static label identifying the code,
-    followed by {!last_error_message} when the engine set one. *)
+    [HEGEL_E_ALREADY_COMPLETE], [HEGEL_E_NOT_COMPLETE], [HEGEL_E_INTERNAL],
+    [HEGEL_E_CONCURRENT_USE], or an unrecognised code). The payload is a static
+    label identifying the code, followed by {!last_error_message} when the
+    engine set one. *)
 exception Backend_error of string
 
 (** {2 Phase bitmask values}
@@ -215,16 +229,14 @@ val failure_free : context -> failure -> unit
     (run-owned from {!next_test_case}, cloned, or from a failure blob). *)
 val test_case_free : context -> test_case -> unit
 
-(** [test_case_clone ctx tc] forks a fresh handle onto an {e independent stream}
+(** [test_case_clone ctx tc] forks a handle onto an {e independent stream}
     of the same underlying test case ([hegel_test_case_clone]). The clone shares
-    the family's outcome and choice budget. Completing any handle completes them
-    all. The handle draws from its own choice sequence, so it may be driven from
-    another thread concurrently with [tc]. Cloning occupies one choice position
-    on [tc]'s stream and takes [tc]'s lock, so [ctx] is used only for the error 
-    diagnostic. Drive the returned handle through a {e separate} context. The 
-    handle is caller-owned and must be freed with {!test_case_free}. Raises 
-    {!Backend_error} on concurrent use of [tc] or once the family has already 
-    completed. *)
+    that test case's outcome and choice budget. The handle draws from its own 
+    choice sequence, so it may be driven from another thread concurrently with [tc]. 
+    Cloning occupies one choice position on [tc]'s stream. Drive the returned 
+    handle through a {e separate} context. The handle is caller-owned and must
+    be freed with {!test_case_free}. Raises {!Backend_error} on concurrent use of 
+    [tc]. *)
 val test_case_clone : context -> test_case -> test_case
 
 (** {2 Per-test-case primitives} *)
@@ -331,42 +343,70 @@ val start_span : context -> test_case -> int -> unit
 val stop_span : context -> test_case -> bool -> unit
 
 (** [new_collection ctx tc ~min_size ~max_size] starts an engine-managed
-    collection ([max_size = None] means unbounded) and returns its id. *)
-val new_collection : context -> test_case -> min_size:int -> max_size:int option -> int
+    collection ([max_size = None] means unbounded). *)
+val new_collection
+  :  context
+  -> test_case
+  -> min_size:int
+  -> max_size:int option
+  -> collection
 
-(** [collection_more ctx tc id] returns whether the engine wants another element. *)
-val collection_more : context -> test_case -> int -> bool
+(** [collection_more ctx tc coll] returns whether the engine wants another
+    element. *)
+val collection_more : context -> test_case -> collection -> bool
 
-(** [collection_reject ctx tc id why] rejects the collection's last element. *)
-val collection_reject : context -> test_case -> int -> string option -> unit
+(** [collection_reject ctx tc coll why] rejects the collection's last element. *)
+val collection_reject : context -> test_case -> collection -> string option -> unit
 
-(** [new_pool ctx tc] creates a variable pool and returns its id. *)
-val new_pool : context -> test_case -> int
+(** [collection_free ctx coll] releases [coll]. *)
+val collection_free : context -> collection -> unit
 
-(** [pool_add ctx tc ~pool_id] registers a fresh variable and returns its id. *)
-val pool_add : context -> test_case -> pool_id:int -> int
+(** [new_pool ctx tc] creates a variable pool. *)
+val new_pool : context -> test_case -> pool
 
-(** [pool_generate ctx tc ~pool_id ~consume] draws (and optionally consumes) a
+(** [pool_add ctx tc ~pool] registers a fresh variable and returns its id. *)
+val pool_add : context -> test_case -> pool:pool -> int
+
+(** [pool_generate ctx tc ~pool ~consume] draws (and optionally consumes) a
     variable id from the pool. Raises {!Stop_test} if the pool is empty. *)
-val pool_generate : context -> test_case -> pool_id:int -> consume:bool -> int
+val pool_generate : context -> test_case -> pool:pool -> consume:bool -> int
+
+(** [pool_free ctx pool] releases [pool]. *)
+val pool_free : context -> pool -> unit
 
 (** [new_state_machine ctx tc ~rule_names ~invariant_names] registers an
-    engine-owned state machine with the named rules and invariants and returns
-    its id. The engine owns rule selection (including swarm testing). Raises
-    {!Backend_error} if [rule_names] is empty. *)
+    engine-owned state machine with the named rules and invariants. The engine
+    owns rule selection. Raises {!Backend_error} if [rule_names] is empty. *)
 val new_state_machine
   :  context
   -> test_case
   -> rule_names:string list
   -> invariant_names:string list
-  -> int
+  -> state_machine
 
-(** [state_machine_next_rule ctx tc ~state_machine_id] draws the index of the next
+(** [state_machine_next_rule ctx tc ~state_machine] draws the index of the next
     rule to run, in [\[0, num_rules)], or returns [None] when the engine's step
     budget for the test case is exhausted ([HEGEL_STATE_MACHINE_DONE]) and the
     caller should stop running rules. Raises {!Stop_test} when the engine's
     choice budget is exhausted. *)
-val state_machine_next_rule : context -> test_case -> state_machine_id:int -> int option
+val state_machine_next_rule
+  :  context
+  -> test_case
+  -> state_machine:state_machine
+  -> int option
+
+(** [state_machine_rule_rejected ctx tc ~state_machine] reports that the rule
+    most recently returned by {!state_machine_next_rule} was rejected before it
+    completed, so it should not count against the engine's step budget for the
+    test case. Raises {!Backend_error} if there is no outstanding rule. *)
+val state_machine_rule_rejected
+  :  context
+  -> test_case
+  -> state_machine:state_machine
+  -> unit
+
+(** [state_machine_free ctx sm] releases [sm]. *)
+val state_machine_free : context -> state_machine -> unit
 
 (** [target ctx tc value label] records a targeting observation. *)
 val target : context -> test_case -> float -> string -> unit
@@ -382,8 +422,9 @@ val mark_complete : context -> test_case -> status -> string option -> unit
 val result_status : context -> run_result -> run_status
 
 (** [result_error ctx r] is the run-level error message when the run ended in
-    {!Run_error}. A failed health check, a nondeterministic test, or an
-    engine panic or [None] when it completed normally. *)
+    {!Run_error}: a failed health check, a nondeterministic test, a run-scoped
+    client mistake, or a violated internal engine invariant. [None] when the run
+    completed normally. *)
 val result_error : context -> run_result -> string option
 
 val result_failure_count : context -> run_result -> int

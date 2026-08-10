@@ -9,7 +9,7 @@ module Ppx_internal = struct
 
   type collection = Generators_core.collection =
     { mutable finished : bool
-    ; mutable collection_id : int option
+    ; mutable handle : Internal.collection option
     ; min_size : int
     ; max_size : int option
     }
@@ -18,7 +18,7 @@ module Ppx_internal = struct
   let group = Generators_core.group
   let discardable_group = Generators_core.discardable_group
   let resolve_pool_draw = Generators_core.resolve_pool_draw
-  let new_collection = Generators_core.new_collection
+  let with_collection = Generators_core.with_collection
   let collection_more = Generators_core.collection_more
   let collection_reject = Generators_core.collection_reject
   let make_pool_values = Generators_core.make_pool_values

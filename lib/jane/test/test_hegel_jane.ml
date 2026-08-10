@@ -151,11 +151,11 @@ let test_resolve_draw () =
    pool, exercising [pool_values]' [is_empty] closure. *)
 let test_pool_values_e2e () =
   run_hegel_test ~settings:(settings ~test_cases:5 ()) (fun tc ->
-    let pool_id = Internal.new_pool tc in
+    let pool = Internal.new_pool tc in
     let tbl = Core.Hashtbl.create (module Core.Int) in
-    let variable_id = Internal.pool_add tc ~pool_id in
+    let variable_id = Internal.pool_add tc ~pool in
     Core.Hashtbl.set tbl ~key:variable_id ~data:"a";
-    let gen = Hegel_jane.pool_values ~pool_id ~values:tbl ~consume:false in
+    let gen = Hegel_jane.pool_values ~pool ~values:tbl ~consume:false in
     let v = draw_silent tc gen in
     assert (String.equal v "a"))
 ;;

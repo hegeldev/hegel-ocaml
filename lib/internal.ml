@@ -210,15 +210,21 @@ type draw_state =
   ; lock : Mutex.t
   }
 
-(** [new_draw_state ()] is a fresh, unshared draw-name counter with its own lock,
-    for a test case at the head of a clone family. *)
-let new_draw_state () = { counts = String_table.create 16; lock = Mutex.create () }
+(** The variable pools behind [Stateful.Pool]. Every other engine handle is
+    freed by the scope that created it, but the test body creates a pool and
+    never disposes of it, so the test case owns them and frees them once the
+    case is complete. A clone shares this record with the test case it was
+    cloned from. *)
+type owned_pools =
+  { mutable pools : Ffi.pool list
+  ; lock : Mutex.t
+  }
 
 (** Per-test-case state passed explicitly to the test function. Holds the
     native test-case handle, the final-replay flag, whether verbose output is
     on, abort state, the current generation-span depth (used to print only the
-    outermost drawn value), and the {!draw_state} numbering repeatable draws (the
-    only field shared across a clone family). [note_indent] is the nesting depth
+    outermost drawn value), the {!draw_state} numbering repeatable draws, 
+    and {!type:owned_pools}. [note_indent] is the nesting depth
     every {!note}/draw line is indented to (two spaces per level). It starts at 1
     on the final replay, so the whole body sits inside the framed failure report,
     and at 0 otherwise; a caller bumps it further to group sub-output (e.g. the
@@ -236,6 +242,7 @@ type test_case =
   ; mutable draw_depth : int
   ; mutable note_indent : int
   ; draw_state : draw_state
+  ; owned_pools : owned_pools
   }
 
 (* Accessors so other library modules can read the internal fields they need
@@ -244,6 +251,16 @@ let is_high_verbosity (tc : test_case) =
   match tc.verbosity with
   | Debug | Verbose -> true
   | _ -> false
+;;
+
+let free_owned_pools (tc : test_case) =
+  let pools =
+    Mutex.protect tc.owned_pools.lock (fun () ->
+      let p = tc.owned_pools.pools in
+      tc.owned_pools.pools <- [];
+      p)
+  in
+  List.iter (Ffi.pool_free tc.context) pools
 ;;
 
 let draw_depth (tc : test_case) = tc.draw_depth
@@ -283,6 +300,7 @@ let clone (tc : test_case) =
     ; draw_depth = tc.draw_depth
     ; note_indent = tc.note_indent
     ; draw_state = tc.draw_state
+    ; owned_pools = tc.owned_pools
     }
   in
   Stdlib.Gc.finalise_last
@@ -655,59 +673,77 @@ let stop_span ?(discard = false) tc =
   else with_stop_guard tc (fun () -> Ffi.stop_span tc.context tc.handle discard)
 ;;
 
-(** [new_collection tc ~min_size ~max_size] starts an engine-managed collection
-    and returns its id. Raises {!Data_exhausted} on StopTest. *)
+type collection = Ffi.collection
+type pool = Ffi.pool
+type state_machine = Ffi.state_machine
+
+(** [new_collection tc ~min_size ~max_size] starts an engine-managed collection.
+    Release it with {!collection_free}. Raises {!Data_exhausted} on StopTest. *)
 let new_collection tc ~min_size ~max_size =
   with_stop_guard tc (fun () ->
     Ffi.new_collection tc.context tc.handle ~min_size ~max_size)
 ;;
 
-(** [collection_more tc ~collection_id] returns whether the engine wants another
+(** [collection_more tc ~collection] returns whether the engine wants another
     element. Raises {!Data_exhausted} on StopTest. *)
-let collection_more tc ~collection_id =
-  with_stop_guard tc (fun () -> Ffi.collection_more tc.context tc.handle collection_id)
+let collection_more tc ~collection =
+  with_stop_guard tc (fun () -> Ffi.collection_more tc.context tc.handle collection)
 ;;
 
-(** [collection_reject tc ~collection_id] rejects the collection's last element.
+(** [collection_reject tc ~collection] rejects the collection's last element.
     Raises {!Data_exhausted} on StopTest. *)
-let collection_reject tc ~collection_id =
+let collection_reject tc ~collection =
   with_stop_guard tc (fun () ->
-    Ffi.collection_reject tc.context tc.handle collection_id None)
+    Ffi.collection_reject tc.context tc.handle collection None)
 ;;
 
-(** [new_pool tc] creates a new engine-managed variable pool and returns its id.
-*)
-let new_pool tc = with_stop_guard tc (fun () -> Ffi.new_pool tc.context tc.handle)
+let collection_free tc ~collection = Ffi.collection_free tc.context collection
 
-(** [pool_add tc ~pool_id] adds a fresh variable to [pool_id] and returns the
-    new variable id. *)
-let pool_add tc ~pool_id =
-  with_stop_guard tc (fun () -> Ffi.pool_add tc.context tc.handle ~pool_id)
+let new_pool tc =
+  let pool = with_stop_guard tc (fun () -> Ffi.new_pool tc.context tc.handle) in
+  Mutex.protect tc.owned_pools.lock (fun () ->
+    tc.owned_pools.pools <- pool :: tc.owned_pools.pools);
+  pool
 ;;
 
-(** [pool_generate tc ~pool_id ?consume ()] draws a variable id from [pool_id].
-    When [consume] is [true], the variable is also removed from the pool.
-    Drawing from an empty pool raises {!Assume_rejected}. *)
-let pool_generate tc ~pool_id ?(consume = false) () =
-  with_stop_guard tc (fun () -> Ffi.pool_generate tc.context tc.handle ~pool_id ~consume)
+(** [pool_add tc ~pool] adds a fresh variable to [pool] and returns the new
+    variable id. *)
+let pool_add tc ~pool =
+  with_stop_guard tc (fun () -> Ffi.pool_add tc.context tc.handle ~pool)
+;;
+
+(** [pool_generate tc ~pool ?consume ()] draws a variable id from [pool]. When
+    [consume] is [true], the variable is also removed from the pool. Drawing
+    from an empty pool raises {!Assume_rejected}. *)
+let pool_generate tc ~pool ?(consume = false) () =
+  with_stop_guard tc (fun () -> Ffi.pool_generate tc.context tc.handle ~pool ~consume)
 ;;
 
 (** [new_state_machine tc ~rule_names ~invariant_names] registers an
-    engine-owned state machine and returns its id. The engine owns rule
-    selection (including swarm testing). *)
+    engine-owned state machine. Release it with {!state_machine_free}. *)
 let new_state_machine tc ~rule_names ~invariant_names =
   with_stop_guard tc (fun () ->
     Ffi.new_state_machine tc.context tc.handle ~rule_names ~invariant_names)
 ;;
 
-(** [state_machine_next_rule tc ~state_machine_id] draws the index of the next
+(** [state_machine_next_rule tc ~state_machine] draws the index of the next
     rule to run, or [None] when the engine's step budget for the test case is
     exhausted and the caller should stop running rules. Raises
     {!Data_exhausted} when the engine's choice budget is exhausted. *)
-let state_machine_next_rule tc ~state_machine_id =
+let state_machine_next_rule tc ~state_machine =
   with_stop_guard tc (fun () ->
-    Ffi.state_machine_next_rule tc.context tc.handle ~state_machine_id)
+    Ffi.state_machine_next_rule tc.context tc.handle ~state_machine)
 ;;
+
+(** [state_machine_rule_rejected tc ~state_machine] tells the engine the rule it
+    last handed out did not complete, so it does not count against the step
+    budget for this test case. *)
+let state_machine_rule_rejected tc ~state_machine =
+  with_stop_guard tc (fun () ->
+    Ffi.state_machine_rule_rejected tc.context tc.handle ~state_machine)
+;;
+
+let state_machine_free tc ~state_machine = Ffi.state_machine_free tc.context state_machine
 
 (* ------------------------------------------------------------------ *)
 (* Settings translation                                                *)
@@ -794,7 +830,8 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
     ; printed_output = false
     ; draw_depth = 0
     ; note_indent
-    ; draw_state = new_draw_state ()
+    ; draw_state = { counts = String_table.create 16; lock = Mutex.create () }
+    ; owned_pools = { pools = []; lock = Mutex.create () }
     }
   in
   Stdlib.Domain.DLS.set in_test_context true;
@@ -807,6 +844,7 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
     | exception exn -> Ffi.Interesting, Some (extract_origin exn, exn)
   in
   Stdlib.Domain.DLS.set in_test_context false;
+  free_owned_pools tc;
   Ffi.mark_complete ctx handle status (Option.map fst captured);
   { status; interesting = captured; printed_output = tc.printed_output }
 ;;

@@ -34,32 +34,31 @@ let with_tc f = Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ())
 
 let test_collection_new () =
   with_tc (fun data ->
-    let coll = new_collection ~min_size:0 ~max_size:5 data () in
-    Alcotest.(check bool) "not finished" false coll.finished)
+    with_collection ~min_size:0 ~max_size:5 data (fun coll ->
+      Alcotest.(check bool) "not finished" false coll.finished))
 ;;
 
 let test_collection_new_no_max () =
   with_tc (fun data ->
-    let coll = new_collection ~min_size:0 data () in
-    Alcotest.(check bool) "not finished" false coll.finished;
-    Alcotest.(check bool) "max_size is None" true (coll.max_size = None))
+    with_collection ~min_size:0 data (fun coll ->
+      Alcotest.(check bool) "not finished" false coll.finished;
+      Alcotest.(check bool) "max_size is None" true (coll.max_size = None)))
 ;;
 
 let test_collection_reject_when_finished () =
   with_tc (fun data ->
-    let coll = new_collection ~min_size:0 data () in
-    coll.finished <- true;
-    (* Should be a no-op, not touch the engine. *)
-    collection_reject coll data)
+    with_collection ~min_size:0 data (fun coll ->
+      coll.finished <- true;
+      collection_reject coll data))
 ;;
 
 (** Test: collection_more returns false when already finished. *)
 let test_collection_more_when_finished () =
   with_tc (fun data ->
-    let coll = new_collection ~min_size:0 data () in
-    coll.finished <- true;
-    let result = collection_more coll data in
-    Alcotest.(check bool) "returns false" false result)
+    with_collection ~min_size:0 data (fun coll ->
+      coll.finished <- true;
+      let result = collection_more coll data in
+      Alcotest.(check bool) "returns false" false result))
 ;;
 
 (** Test: discardable_group exception path — stop_span skipped when aborted. *)
