@@ -1,4 +1,4 @@
-let int_gen = Hegel.Generators.integers ~min_value:0 ~max_value:100 ()
+let int_gen = Hegel.integers ~min_value:0 ~max_value:100 ()
 
 let%expect_test "no-draw failure prints a bodyless singular report" =
   (try
@@ -53,10 +53,7 @@ let%expect_test "a multiline drawn value aligns under its name" =
             Hegel.draw
               tc
               ~label:"l"
-              (Hegel.Generators.lists
-                 ~min_size:20
-                 (Hegel.Generators.text ~min_size:5 ~max_size:20 ())
-                 ())
+              (Hegel.lists ~min_size:20 (Hegel.text ~min_size:5 ~max_size:20 ()) ())
           in
           assert (List.length l < 20))
    with

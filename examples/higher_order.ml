@@ -8,7 +8,7 @@
 
 open Hegel
 
-let small_int = Generators.integers ~min_value:(-100) ~max_value:100 ()
+let small_int = integers ~min_value:(-100) ~max_value:100 ()
 
 (** Property (map fusion): mapping [f] then [g] over a list equals mapping their
     composition. Both [f] and [g] are generated [int -> int] functions, drawn
@@ -17,14 +17,11 @@ let%hegel_test map_fusion tc =
   let int_fn () =
     draw_silent
       tc
-      (Generators.functions
-         ~sexp_of_arg:Sexplib0.Sexp_conv.sexp_of_int
-         ~returns:small_int
-         ())
+      (functions ~sexp_of_arg:Sexplib0.Sexp_conv.sexp_of_int ~returns:small_int ())
   in
   let f = int_fn () in
   let g = int_fn () in
-  let xs = draw tc (Generators.lists small_int ~max_size:10 ()) in
+  let xs = draw tc (lists small_int ~max_size:10 ()) in
   assert (List.map g (List.map f xs) = List.map (fun x -> g (f x)) xs)
 [@@settings settings ~test_cases:100 ()]
 ;;
@@ -35,19 +32,9 @@ let%hegel_test filter_keeps_matching tc =
   let p =
     draw_silent
       tc
-      (Generators.functions
-         ~sexp_of_arg:Sexplib0.Sexp_conv.sexp_of_int
-         ~returns:(Generators.booleans ())
-         ())
+      (functions ~sexp_of_arg:Sexplib0.Sexp_conv.sexp_of_int ~returns:(booleans ()) ())
   in
-  let xs =
-    draw
-      tc
-      (Generators.lists
-         (Generators.integers ~min_value:0 ~max_value:20 ())
-         ~max_size:10
-         ())
-  in
+  let xs = draw tc (lists (integers ~min_value:0 ~max_value:20 ()) ~max_size:10 ()) in
   List.iter (fun x -> assert (p x)) (List.filter p xs)
 [@@settings settings ~test_cases:100 ()]
 ;;
@@ -58,7 +45,7 @@ let%hegel_test flip_flip_is_identity tc =
   let f =
     draw_silent
       tc
-      (Generators.functions2
+      (functions2
          ~sexp_of_arg1:Sexplib0.Sexp_conv.sexp_of_int
          ~sexp_of_arg2:Sexplib0.Sexp_conv.sexp_of_int
          ~returns:small_int
@@ -78,7 +65,7 @@ let%hegel_test functions_are_deterministic tc =
   let f =
     draw_silent
       tc
-      (Generators.functions3
+      (functions3
          ~sexp_of_arg1:Sexplib0.Sexp_conv.sexp_of_int
          ~sexp_of_arg2:Sexplib0.Sexp_conv.sexp_of_bool
          ~sexp_of_arg3:Sexplib0.Sexp_conv.sexp_of_int
@@ -86,7 +73,7 @@ let%hegel_test functions_are_deterministic tc =
          ())
   in
   let a = draw tc small_int in
-  let b = draw tc (Generators.booleans ()) in
+  let b = draw tc (booleans ()) in
   let c = draw tc small_int in
   assert (f a b c = f a b c)
 [@@settings settings ~test_cases:100 ()]

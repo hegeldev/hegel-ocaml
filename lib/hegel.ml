@@ -1,5 +1,5 @@
 (** The current version of Hegel for OCaml. *)
-let version = "0.16.0"
+let version = "0.16.1"
 
 (** Generators for composable test data generation. *)
 module Generators = Generators
@@ -19,6 +19,48 @@ module Internal = Internal
 
 (** Antithesis integration; re-exported (doc-hidden) for white-box tests. *)
 module Antithesis = Antithesis
+
+type ('a, 'p) generator = ('a, 'p) Generators.generator
+type printable = Generators.printable
+type unprintable = Generators.unprintable
+
+let booleans = Generators.booleans
+let integers = Generators.integers
+let floats = Generators.floats
+let text = Generators.text
+let characters = Generators.characters
+let make_characters = Generators.make_characters
+let char = Generators.char
+let binary = Generators.binary
+let just = Generators.just
+let lists = Generators.lists
+let assoc_lists = Generators.assoc_lists
+let make_hash_tables = Generators.make_hash_tables
+let hash_tables = Generators.hash_tables
+let sampled_from = Generators.sampled_from
+let one_of = Generators.one_of
+let optional = Generators.optional
+let tuples2 = Generators.tuples2
+let tuples3 = Generators.tuples3
+let tuples4 = Generators.tuples4
+let functions = Generators.functions
+let functions2 = Generators.functions2
+let functions3 = Generators.functions3
+let emails = Generators.emails
+let urls = Generators.urls
+let domains = Generators.domains
+let make_dates = Generators.make_dates
+let make_times = Generators.make_times
+let make_datetimes = Generators.make_datetimes
+let dates = Generators.dates
+let times = Generators.times
+let datetimes = Generators.datetimes
+let ip_addresses = Generators.ip_addresses
+let from_regex = Generators.from_regex
+let composite = Generators.composite
+let map = Generators.map
+let flat_map = Generators.flat_map
+let filter = Generators.filter
 
 (* Settings, test-case, and test-location types re-exported so the whole
    public API lives directly under Hegel. The module re-exports above are

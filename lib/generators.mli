@@ -1,8 +1,7 @@
 (** This module provides a composable generator API for property-based testing.
     Generators produce typed OCaml values.
 
-    All examples in this documentation assume [open Hegel], and refer to
-    generators as [Generators.foo].
+    All examples in this documentation assume [open Hegel].
 
     The usual way to build a compound value is to {!Hegel.draw} its parts in
     sequence:
@@ -11,8 +10,8 @@
       type point = { x : int; y : int }
 
       let%hegel_test points_stay_in_range tc =
-        let x = draw tc (Generators.integers ~min_value:0 ~max_value:100 ()) in
-        let y = draw tc (Generators.integers ~min_value:0 ~max_value:100 ()) in
+        let x = draw tc (integers ~min_value:0 ~max_value:100 ()) in
+        let y = draw tc (integers ~min_value:0 ~max_value:100 ()) in
         let p = { x; y } in
         require tc ~msg:"point coordinates stay in range"
           (p.x <= 100 && p.y <= 100)
@@ -77,7 +76,7 @@ type unprintable
 
     {[
       let%hegel_test draw_example tc =
-        let n = draw tc (Generators.integers ~min_value:0 ~max_value:100 ()) in
+        let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
         assert (n >= 0)
       ;;
     ]} *)
@@ -105,7 +104,7 @@ val draw_named
         let n =
           draw_silent
             tc
-            (Generators.map (fun x -> x * 2) (Generators.integers ~min_value:0 ~max_value:9 ()))
+            (map (fun x -> x * 2) (integers ~min_value:0 ~max_value:9 ()))
         in
         assert (n >= 0)
       ;;
@@ -113,7 +112,7 @@ val draw_named
 val draw_silent : Internal.test_case -> ('a, 'p) generator -> 'a
 
 (** [draw_silent_named ~name tc gen] is {!draw_silent} threading the draw-site
-    [name] into a function generator ({!Generators.functions}). Not intended for 
+    [name] into a function generator ({!functions}). Not intended for 
     direct use (prefer {!draw_silent}). *)
 val draw_silent_named : name:string -> Internal.test_case -> ('a, 'p) generator -> 'a
 
@@ -129,10 +128,10 @@ val draw_silent_named : name:string -> Internal.test_case -> ('a, 'p) generator 
     {[
       let%hegel_test with_printer_example tc =
         let doubled =
-          Generators.map (fun x -> x * 2) (Generators.integers ~min_value:0 ~max_value:9 ())
+          map (fun x -> x * 2) (integers ~min_value:0 ~max_value:9 ())
         in
         (* [%sexp_of: int] is shorthand for the int printer. *)
-        let n = draw tc (Generators.with_printer [%sexp_of: int] doubled) in
+        let n = draw tc (with_printer [%sexp_of: int] doubled) in
         assert (n >= 0)
       ;;
     ]} *)
@@ -160,7 +159,7 @@ val leaf
 
     {[
       let%hegel_test booleans_example tc =
-        let b = draw tc (Generators.booleans ~p:0.9 ()) in
+        let b = draw tc (booleans ~p:0.9 ()) in
         assert (b = true || b = false)
       ;;
     ]} *)
@@ -175,7 +174,7 @@ val booleans : ?p:float -> unit -> (bool, printable) generator
 
     {[
       let%hegel_test integers_example tc =
-        let n = draw tc (Generators.integers ~min_value:1 ~max_value:6 ()) in
+        let n = draw tc (integers ~min_value:1 ~max_value:6 ()) in
         assert (n >= 1 && n <= 6)
       ;;
     ]} *)
@@ -196,7 +195,7 @@ val integers : ?min_value:int -> ?max_value:int -> unit -> (int, printable) gene
 
     {[
       let%hegel_test floats_example tc =
-        let f = draw tc (Generators.floats ~min_value:0.0 ~max_value:1.0 ()) in
+        let f = draw tc (floats ~min_value:0.0 ~max_value:1.0 ()) in
         assert (Float.compare f 0.0 >= 0)
       ;;
     ]} *)
@@ -233,7 +232,7 @@ val floats
 
     {[
       let%hegel_test text_example tc =
-        let s = draw tc (Generators.text ~min_size:1 ~max_size:8 ~codec:"ascii" ()) in
+        let s = draw tc (text ~min_size:1 ~max_size:8 ~codec:"ascii" ()) in
         assert (String.length s >= 1)
       ;;
     ]} *)
@@ -261,7 +260,7 @@ val text
 
     {[
       let%hegel_test characters_example tc =
-        let c = draw tc (Generators.characters ~codec:"ascii" ()) in
+        let c = draw tc (characters ~codec:"ascii" ()) in
         assert (String.length c >= 1)
       ;;
     ]} *)
@@ -290,7 +289,7 @@ val make_characters
 
     {[
       let%hegel_test char_example tc =
-        let c = draw tc (Generators.char ()) in
+        let c = draw tc (char ()) in
         assert (Char.code c >= 0 && Char.code c <= 0xFF)
       ;;
     ]} *)
@@ -300,7 +299,7 @@ val char : unit -> (char, printable) generator
 
     {[
       let%hegel_test binary_example tc =
-        let bytes = draw tc (Generators.binary ~min_size:0 ~max_size:16 ()) in
+        let bytes = draw tc (binary ~min_size:0 ~max_size:16 ()) in
         assert (String.length bytes <= 16)
       ;;
     ]} *)
@@ -311,7 +310,7 @@ val binary : ?min_size:int -> ?max_size:int -> unit -> (string, printable) gener
 
     {[
       let%hegel_test just_example tc =
-        let x = draw_silent tc (Generators.just 42) in
+        let x = draw_silent tc (just 42) in
         assert (x = 42)
       ;;
     ]} *)
@@ -326,7 +325,7 @@ val just : 'a -> ('a, unprintable) generator
     {[
       let%hegel_test lists_example tc =
         let xs =
-          draw tc (Generators.lists (Generators.integers ~min_value:0 ~max_value:9 ()) ~max_size:10 ())
+          draw tc (lists (integers ~min_value:0 ~max_value:9 ()) ~max_size:10 ())
         in
         assert (List.length xs <= 10)
       ;;
@@ -347,9 +346,9 @@ val lists
       let%hegel_test assoc_lists_example tc =
         let m =
           draw tc
-            (Generators.assoc_lists
-               (Generators.text ~max_size:4 ())
-               (Generators.integers ~min_value:0 ~max_value:9 ())
+            (assoc_lists
+               (text ~max_size:4 ())
+               (integers ~min_value:0 ~max_value:9 ())
                ~max_size:5
                ())
         in
@@ -384,9 +383,9 @@ val make_hash_tables
       let%hegel_test hash_tables_example tc =
         let m =
           draw tc
-            (Generators.hash_tables
-               (Generators.text ~max_size:4 ())
-               (Generators.integers ~min_value:0 ~max_value:9 ())
+            (hash_tables
+               (text ~max_size:4 ())
+               (integers ~min_value:0 ~max_value:9 ())
                ~max_size:5
                ())
         in
@@ -410,7 +409,7 @@ val hash_tables
 
     {[
       let%hegel_test sampled_from_example tc =
-        let color = draw_silent tc (Generators.sampled_from [ `Red; `Green; `Blue ]) in
+        let color = draw_silent tc (sampled_from [ `Red; `Green; `Blue ]) in
         ignore color
       ;;
     ]} *)
@@ -428,9 +427,9 @@ val sampled_from : 'a list -> ('a, unprintable) generator
       let%hegel_test one_of_example tc =
         let n =
           draw tc
-            (Generators.one_of
-               [ Generators.integers ~min_value:0 ~max_value:9 ()
-               ; Generators.integers ~min_value:90 ~max_value:99 ()
+            (one_of
+               [ integers ~min_value:0 ~max_value:9 ()
+               ; integers ~min_value:90 ~max_value:99 ()
                ])
         in
         assert (n >= 0)
@@ -443,7 +442,7 @@ val one_of : ('a, printable) generator list -> ('a, printable) generator
 
     {[
       let%hegel_test optional_example tc =
-        let o = draw tc (Generators.optional (Generators.integers ~min_value:0 ~max_value:9 ())) in
+        let o = draw tc (optional (integers ~min_value:0 ~max_value:9 ())) in
         match o with
         | None -> ()
         | Some n -> assert (n >= 0)
@@ -460,7 +459,7 @@ val optional : ('a, printable) generator -> ('a option, printable) generator
       let%hegel_test tuples2_example tc =
         let n, b =
           draw tc
-            (Generators.tuples2 (Generators.integers ~min_value:0 ~max_value:9 ()) (Generators.booleans ()))
+            (tuples2 (integers ~min_value:0 ~max_value:9 ()) (booleans ()))
         in
         assert (n >= 0 && (b || not b))
       ;;
@@ -477,10 +476,10 @@ val tuples2
       let%hegel_test tuples3_example tc =
         let a, b, c =
           draw tc
-            (Generators.tuples3
-               (Generators.integers ~min_value:0 ~max_value:9 ())
-               (Generators.booleans ())
-               (Generators.text ~max_size:4 ()))
+            (tuples3
+               (integers ~min_value:0 ~max_value:9 ())
+               (booleans ())
+               (text ~max_size:4 ()))
         in
         assert (a >= 0 && (b || not b) && String.length c >= 0)
       ;;
@@ -498,11 +497,11 @@ val tuples3
       let%hegel_test tuples4_example tc =
         let a, b, c, d =
           draw tc
-            (Generators.tuples4
-               (Generators.integers ~min_value:0 ~max_value:9 ())
-               (Generators.booleans ())
-               (Generators.text ~max_size:4 ())
-               (Generators.floats ~min_value:0.0 ~max_value:1.0 ()))
+            (tuples4
+               (integers ~min_value:0 ~max_value:9 ())
+               (booleans ())
+               (text ~max_size:4 ())
+               (floats ~min_value:0.0 ~max_value:1.0 ()))
         in
         assert (a >= 0 && (b || not b) && String.length c >= 0 && Float.compare d 0.0 >= 0)
       ;;
@@ -536,10 +535,10 @@ val tuples4
     {[
       let%hegel_test map_length_preserved tc =
         let f_gen =
-          Generators.functions ~sexp_of_arg:[%sexp_of: int] ~returns:(Generators.integers ()) ()
+          functions ~sexp_of_arg:[%sexp_of: int] ~returns:(integers ()) ()
         in
         let f = draw_silent tc f_gen in
-        let xs = draw tc (Generators.lists (Generators.integers ()) ()) in
+        let xs = draw tc (lists (integers ()) ()) in
         assert (List.length (List.map f xs) = List.length xs)
       ;;
     ]} *)
@@ -589,7 +588,7 @@ val functions3
 
     {[
       let%hegel_test emails_example tc =
-        let e = draw tc (Generators.emails ()) in
+        let e = draw tc (emails ()) in
         assert (String.contains e '@')
       ;;
     ]} *)
@@ -606,7 +605,7 @@ val emails : unit -> (string, printable) generator
 
     {[
       let%hegel_test urls_example tc =
-        let u = draw tc (Generators.urls ()) in
+        let u = draw tc (urls ()) in
         assert (String.length u > 0)
       ;;
     ]} *)
@@ -624,7 +623,7 @@ val urls : unit -> (string, printable) generator
 
     {[
       let%hegel_test domains_example tc =
-        let d = draw tc (Generators.domains ~max_length:64 ()) in
+        let d = draw tc (domains ~max_length:64 ()) in
         assert (String.length d <= 64)
       ;;
     ]} *)
@@ -635,7 +634,7 @@ val domains : ?max_length:int -> unit -> (string, printable) generator
 
     {[
       let core_dates =
-        Generators.make_dates
+        make_dates
           ~of_parts:(fun ~year ~month ~day ->
             Core.Date.create_exn ~y:year ~m:(Core.Month.of_int_exn month) ~d:day)
           ~sexp_of:Core.Date.sexp_of_t
@@ -676,7 +675,7 @@ val make_datetimes
 
     {[
       let%hegel_test dates_example tc =
-        let d = draw tc (Generators.dates ()) in
+        let d = draw tc (dates ()) in
         assert (String.length d = 10)
       ;;
     ]} *)
@@ -687,7 +686,7 @@ val dates : unit -> (string, printable) generator
 
     {[
       let%hegel_test times_example tc =
-        let t = draw tc (Generators.times ()) in
+        let t = draw tc (times ()) in
         assert (String.length t = 15)
       ;;
     ]} *)
@@ -698,7 +697,7 @@ val times : unit -> (string, printable) generator
 
     {[
       let%hegel_test datetimes_example tc =
-        let dt = draw tc (Generators.datetimes ()) in
+        let dt = draw tc (datetimes ()) in
         assert (String.contains dt 'T')
       ;;
     ]} *)
@@ -711,7 +710,7 @@ val datetimes : unit -> (string, printable) generator
 
     {[
       let%hegel_test ip_addresses_example tc =
-        match draw tc (Generators.ip_addresses ~version:`V4 ()) with
+        match draw tc (ip_addresses ~version:`V4 ()) with
         | Ipaddr.V4 _ as ip -> assert (String.contains (Ipaddr.to_string ip) '.')
         | Ipaddr.V6 _ -> assert false
       ;;
@@ -725,7 +724,7 @@ val ip_addresses : ?version:[ `V4 | `V6 ] -> unit -> (Ipaddr.t, printable) gener
 
     {[
       let%hegel_test from_regex_example tc =
-        let s = draw tc (Generators.from_regex "[a-z]+" ()) in
+        let s = draw tc (from_regex "[a-z]+" ()) in
         assert (String.length s >= 1)
       ;;
     ]} *)
@@ -739,9 +738,9 @@ val from_regex : string -> ?fullmatch:bool -> unit -> (string, printable) genera
 
     {[
       let point =
-        Generators.composite (fun tc ->
-          let x = draw_silent tc (Generators.integers ~min_value:0 ~max_value:9 ()) in
-          let y = draw_silent tc (Generators.integers ~min_value:0 ~max_value:9 ()) in
+        composite (fun tc ->
+          let x = draw_silent tc (integers ~min_value:0 ~max_value:9 ()) in
+          let y = draw_silent tc (integers ~min_value:0 ~max_value:9 ()) in
           x, y)
       ;;
     ]} *)
@@ -752,7 +751,7 @@ val composite : (Internal.test_case -> 'a) -> ('a, unprintable) generator
     {[
       let%hegel_test map_example tc =
         let even =
-          draw_silent tc (Generators.map (fun x -> x * 2) (Generators.integers ~min_value:0 ~max_value:9 ()))
+          draw_silent tc (map (fun x -> x * 2) (integers ~min_value:0 ~max_value:9 ()))
         in
         assert (even mod 2 = 0)
       ;;
@@ -764,13 +763,13 @@ val map : ('a -> 'b) -> ('a, 'p) generator -> ('b, unprintable) generator
 
     {[
       let%hegel_test flat_map_example tc =
-        let len_gen = Generators.integers ~min_value:0 ~max_value:5 () in
+        let len_gen = integers ~min_value:0 ~max_value:5 () in
         let xs =
           draw_silent tc
-            (Generators.flat_map
+            (flat_map
                (fun n ->
-                  Generators.lists
-                    (Generators.integers ~min_value:0 ~max_value:9 ())
+                  lists
+                    (integers ~min_value:0 ~max_value:9 ())
                     ~min_size:n
                     ~max_size:n
                     ())
@@ -791,7 +790,7 @@ val flat_map
     {[
       let%hegel_test filter_example tc =
         let even =
-          draw tc (Generators.filter (fun x -> x mod 2 = 0) (Generators.integers ~min_value:0 ~max_value:100 ()))
+          draw tc (filter (fun x -> x mod 2 = 0) (integers ~min_value:0 ~max_value:100 ()))
         in
         assert (even mod 2 = 0)
       ;;

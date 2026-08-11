@@ -31,8 +31,8 @@ let multiset_equal a b = List.sort compare a = List.sort compare b
 
 (** Property: merging two sorted lists gives a sorted list. *)
 let%hegel_test test_merge_sorted_is_sorted tc =
-  let int_gen = Generators.integers ~min_value:(-1000) ~max_value:1000 () in
-  let list_gen = Generators.lists int_gen ~min_size:0 ~max_size:20 () in
+  let int_gen = integers ~min_value:(-1000) ~max_value:1000 () in
+  let list_gen = lists int_gen ~min_size:0 ~max_size:20 () in
   let a = sorted (draw tc list_gen) in
   let b = sorted (draw tc list_gen) in
   let merged = merge_sorted a b in
@@ -43,8 +43,8 @@ let%hegel_test test_merge_sorted_is_sorted tc =
 (** Property: merging two sorted lists preserves all elements (multiset equality
     between [a @ b] and the merged result). *)
 let%hegel_test test_merge_preserves_elements tc =
-  let int_gen = Generators.integers ~min_value:(-100) ~max_value:100 () in
-  let list_gen = Generators.lists int_gen ~min_size:0 ~max_size:15 () in
+  let int_gen = integers ~min_value:(-100) ~max_value:100 () in
+  let list_gen = lists int_gen ~min_size:0 ~max_size:15 () in
   let a = sorted (draw tc list_gen) in
   let b = sorted (draw tc list_gen) in
   let merged = merge_sorted a b in
@@ -55,8 +55,8 @@ let%hegel_test test_merge_preserves_elements tc =
 (** Property: merging a list with itself preserves sorted order and doubles
     every element's count. *)
 let%hegel_test test_merge_with_self tc =
-  let int_gen = Generators.integers ~min_value:(-500) ~max_value:500 () in
-  let list_gen = Generators.lists int_gen ~min_size:0 ~max_size:10 () in
+  let int_gen = integers ~min_value:(-500) ~max_value:500 () in
+  let list_gen = lists int_gen ~min_size:0 ~max_size:10 () in
   let a = sorted (draw tc list_gen) in
   let merged = merge_sorted a a in
   assert (is_sorted merged);
@@ -66,8 +66,8 @@ let%hegel_test test_merge_with_self tc =
 
 (** Property: merge is commutative up to element equality (same multiset). *)
 let%hegel_test test_merge_commutative tc =
-  let int_gen = Generators.integers ~min_value:(-200) ~max_value:200 () in
-  let list_gen = Generators.lists int_gen ~min_size:0 ~max_size:10 () in
+  let int_gen = integers ~min_value:(-200) ~max_value:200 () in
+  let list_gen = lists int_gen ~min_size:0 ~max_size:10 () in
   let a = sorted (draw tc list_gen) in
   let b = sorted (draw tc list_gen) in
   let ab = merge_sorted a b in

@@ -1,9 +1,6 @@
 (** Snapshot tests for the [@@failure_blobs ...] recording and replay flows. *)
 
-let prop tc =
-  if Hegel.draw tc (Hegel.Generators.booleans ()) then failwith "deliberate failure"
-;;
-
+let prop tc = if Hegel.draw tc (Hegel.booleans ()) then failwith "deliberate failure"
 let settings () = Hegel.settings ~test_cases:50 ~seed:0 ()
 
 let contains ~needle s =
@@ -125,13 +122,13 @@ exception A
 exception B
 
 let multi_prop tc =
-  let v = Hegel.draw tc (Hegel.Generators.integers ~min_value:0 ~max_value:100 ()) in
+  let v = Hegel.draw tc (Hegel.integers ~min_value:0 ~max_value:100 ()) in
   if v >= 60 then raise A;
   if v <= 30 then raise B
 ;;
 
 let%hegel_test multi_fail_test tc =
-  let v = Hegel.draw tc (Hegel.Generators.integers ~min_value:0 ~max_value:100 ()) in
+  let v = Hegel.draw tc (Hegel.integers ~min_value:0 ~max_value:100 ()) in
   if v >= 60 then raise A;
   if v <= 30 then raise B
 [@@settings

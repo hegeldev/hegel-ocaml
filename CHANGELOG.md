@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.1 - 2026-08-11
+
+This patch re-exports generators from the Generators module to the Hegel module.
+
 ## 0.16.0 - 2026-08-10
 
 This release bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.30.5](https://github.com/hegeldev/hegel-rust/releases/tag/v0.30.5) to [0.32.2](https://github.com/hegeldev/hegel-rust/releases/tag/v0.32.2).
