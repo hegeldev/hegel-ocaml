@@ -273,7 +273,6 @@ jobs:
           cache-restore-keys: |
             opam-${{ runner.os }}-smoke-
           deps-flags: --with-test
-          bare: "true"
 
       - name: Stage libhegel from the matching GitHub release
         id: libhegel
