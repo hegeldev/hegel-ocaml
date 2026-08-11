@@ -28,9 +28,7 @@
         include External_M
 
         let hegel_generator =
-          Generators.map
-            External_M.f
-            (Generators.integers ~min_value:0 ~max_value:1_000_000 ())
+          map External_M.f (integers ~min_value:0 ~max_value:1_000_000 ())
           |> with_printer (fun m ->
             Sexplib0.Sexp.Atom (External_M.to_string m))
 

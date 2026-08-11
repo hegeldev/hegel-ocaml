@@ -53,8 +53,8 @@
       open Hegel
 
       let%hegel_test commutative_addition tc =
-        let a = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
-        let b = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
+        let a = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
+        let b = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
         require_equal tc [%sexp_of: int] (a + b) (b + a)
 
       let () =
@@ -77,14 +77,13 @@
     bound to ([a = …], [b = …]).
 
     The rest of the examples in the documentation assume you have [open Hegel]
-    at the top of the test file like in the example above, and refer to
-    generators as [Generators.foo].
+    at the top of the test file like in the example above.
 
     Next, let's try a test that fails.
 
     {[
       let%hegel_test every_int_is_small tc =
-        let n = draw tc (Generators.integers ()) in
+        let n = draw tc (integers ()) in
         assert (n < 50)
     ]}
 
@@ -107,33 +106,30 @@
 
     {[
       let%hegel_test every_int_is_small tc =
-        let n = draw tc (Generators.integers ~min_value:0 ~max_value:49 ()) in
+        let n = draw tc (integers ~min_value:0 ~max_value:49 ()) in
         assert (n < 50)
     ]}
 
     {3 Use generators}
 
     Hegel provides a rich library of generators that you can use out of the box.
-    There are primitive generators, such as {!Generators.integers},
-    {!Generators.floats}, and {!Generators.text}, and combinators that build
-    generators out of other generators, such as {!Generators.lists} and
-    {!Generators.tuples2}.
+    See {!Generators} for the full reference.
 
-    For instance, you can use {!Generators.lists} to construct a list of
-    integers:
+    For instance, you can use {{!Generators.lists}[lists]} to construct a list
+    of integers:
 
     {[
       let%hegel_test append_increases_length tc =
-        let xs = draw tc (Generators.lists (Generators.integers ()) ()) in
+        let xs = draw tc (lists (integers ()) ()) in
         let initial_length = List.length xs in
-        let xs = draw tc (Generators.integers ()) :: xs in
+        let xs = draw tc (integers ()) :: xs in
         require tc ~msg:"prepending an element must grow the list"
           (List.length xs > initial_length)
     ]}
 
     Custom generators are also supported. Suppose you have a [person] record that
-    requires generation. Build a generator for it with {!Generators.composite},
-    drawing each field in sequence:
+    requires generation. Build a generator for it with
+    {{!Generators.composite}[composite]}, drawing each field in sequence:
 
     {[
       type person =
@@ -142,9 +138,9 @@
         }
 
       let person =
-        Generators.composite (fun tc ->
-          let age = draw_silent tc (Generators.integers ()) in
-          let name = draw_silent tc (Generators.text ()) in
+        composite (fun tc ->
+          let age = draw_silent tc (integers ()) in
+          let name = draw_silent tc (text ()) in
           { age; name })
     ]}
 
@@ -160,11 +156,11 @@
         }
 
       let person =
-        Generators.composite (fun tc ->
-          let age = draw_silent tc (Generators.integers ()) in
-          let name = draw_silent tc (Generators.text ()) in
+        composite (fun tc ->
+          let age = draw_silent tc (integers ()) in
+          let name = draw_silent tc (text ()) in
           let driving_license =
-            if age >= 18 then draw_silent tc (Generators.booleans ()) else false
+            if age >= 18 then draw_silent tc (booleans ()) else false
           in
           { age; name; driving_license })
     ]}
@@ -224,7 +220,7 @@
       type ranked =
         { name : string
         ; level :
-            (int[@hegel.generator Generators.integers ~min_value:1 ~max_value:5 ()])
+            (int[@hegel.generator integers ~min_value:1 ~max_value:5 ()])
         }
       [@@deriving hegel_generator]
     ]}
@@ -259,8 +255,8 @@
 
     {[
       let%hegel_test commutative_addition tc =
-        let a = draw tc (Generators.integers ()) in
-        let b = draw tc (Generators.integers ()) in
+        let a = draw tc (integers ()) in
+        let b = draw tc (integers ()) in
         require_equal tc [%sexp_of: int] (a + b) (b + a)
       [@@settings settings ~test_cases:500 ()]
     ]}
@@ -270,8 +266,8 @@
     You can also update settings using the [with_*] functions:
     {[
       let%hegel_test commutative_addition tc =
-        let a = draw tc (Generators.integers ()) in
-        let b = draw tc (Generators.integers ()) in
+        let a = draw tc (integers ()) in
+        let b = draw tc (integers ()) in
         require_equal tc [%sexp_of: int] (a + b) (b + a)
       [@@settings settings ~test_cases:500 () |> with_seed 5 |> with_verbosity Verbose]
     ]}
@@ -282,7 +278,7 @@
 
     {[
       let%hegel_test every_int_is_small tc =
-        let n = draw tc (Generators.integers ()) in
+        let n = draw tc (integers ()) in
         note tc (Printf.sprintf "n is %d" n);
         assert (n < 50)
     ]}
@@ -300,7 +296,7 @@
 
     {[
       let%hegel_test every_int_is_small tc =
-        let n = draw tc (Generators.integers ()) in
+        let n = draw tc (integers ()) in
         assert (n < 50)
     ]}
 
@@ -318,7 +314,7 @@
 
     {[
       let%hegel_test every_int_is_small tc =
-        let n = draw tc (Generators.integers ()) in
+        let n = draw tc (integers ()) in
         assert (n < 50)
       [@@failure_blobs [ "AAEAAAAACgEAAAAy" ]]
     ]}
@@ -365,6 +361,184 @@ include module type of Derive
 module Internal = Internal
 module Antithesis = Antithesis
 
+type ('a, 'p) generator = ('a, 'p) Generators.generator
+type printable = Generators.printable
+type unprintable = Generators.unprintable
+
+val booleans : ?p:float -> unit -> (bool, printable) generator
+val integers : ?min_value:int -> ?max_value:int -> unit -> (int, printable) generator
+
+val floats
+  :  ?min_value:float
+  -> ?max_value:float
+  -> ?exclude_min:bool
+  -> ?exclude_max:bool
+  -> ?allow_nan:bool
+  -> ?allow_infinity:bool
+  -> unit
+  -> (float, printable) generator
+
+val text
+  :  ?min_size:int
+  -> ?max_size:int
+  -> ?codec:string
+  -> ?min_codepoint:int
+  -> ?max_codepoint:int
+  -> ?categories:string list
+  -> ?exclude_categories:string list
+  -> ?include_characters:string
+  -> ?exclude_characters:string
+  -> ?alphabet:string
+  -> unit
+  -> (string, printable) generator
+
+val characters
+  :  ?codec:string
+  -> ?min_codepoint:int
+  -> ?max_codepoint:int
+  -> ?categories:string list
+  -> ?exclude_categories:string list
+  -> ?include_characters:string
+  -> ?exclude_characters:string
+  -> unit
+  -> (string, printable) generator
+
+val make_characters
+  :  of_char:(char -> 'a)
+  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> unit
+  -> ('a, printable) generator
+
+val char : unit -> (char, printable) generator
+val binary : ?min_size:int -> ?max_size:int -> unit -> (string, printable) generator
+val just : 'a -> ('a, unprintable) generator
+
+val lists
+  :  ('a, printable) generator
+  -> ?min_size:int
+  -> ?max_size:int
+  -> ?unique:bool
+  -> unit
+  -> ('a list, printable) generator
+
+val assoc_lists
+  :  ('a, printable) generator
+  -> ('b, printable) generator
+  -> ?min_size:int
+  -> ?max_size:int
+  -> unit
+  -> (('a * 'b) list, printable) generator
+
+val make_hash_tables
+  :  of_pairs:(('a * 'b) list -> 't)
+  -> sexp_of_t:
+       (('a -> Sexplib0.Sexp.t) -> ('b -> Sexplib0.Sexp.t) -> 't -> Sexplib0.Sexp.t)
+  -> ('a, printable) generator
+  -> ('b, printable) generator
+  -> ?min_size:int
+  -> ?max_size:int
+  -> unit
+  -> ('t, printable) generator
+
+val hash_tables
+  :  ('a, printable) generator
+  -> ('b, printable) generator
+  -> ?min_size:int
+  -> ?max_size:int
+  -> unit
+  -> (('a, 'b) Stdlib.Hashtbl.t, printable) generator
+
+val sampled_from : 'a list -> ('a, unprintable) generator
+val one_of : ('a, printable) generator list -> ('a, printable) generator
+val optional : ('a, printable) generator -> ('a option, printable) generator
+
+val tuples2
+  :  ('a, printable) generator
+  -> ('b, printable) generator
+  -> ('a * 'b, printable) generator
+
+val tuples3
+  :  ('a, printable) generator
+  -> ('b, printable) generator
+  -> ('c, printable) generator
+  -> ('a * 'b * 'c, printable) generator
+
+val tuples4
+  :  ('a, printable) generator
+  -> ('b, printable) generator
+  -> ('c, printable) generator
+  -> ('d, printable) generator
+  -> ('a * 'b * 'c * 'd, printable) generator
+
+val functions
+  :  ?name:string
+  -> ?sexp_of_arg:('a -> Sexplib0.Sexp.t)
+  -> returns:('b, _) generator
+  -> unit
+  -> ('a -> 'b, unprintable) generator
+
+val functions2
+  :  ?name:string
+  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t)
+  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t)
+  -> returns:('c, _) generator
+  -> unit
+  -> ('a -> 'b -> 'c, unprintable) generator
+
+val functions3
+  :  ?name:string
+  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t)
+  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t)
+  -> ?sexp_of_arg3:('c -> Sexplib0.Sexp.t)
+  -> returns:('d, _) generator
+  -> unit
+  -> ('a -> 'b -> 'c -> 'd, unprintable) generator
+
+val emails : unit -> (string, printable) generator
+val urls : unit -> (string, printable) generator
+val domains : ?max_length:int -> unit -> (string, printable) generator
+
+val make_dates
+  :  of_parts:(year:int -> month:int -> day:int -> 'a)
+  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> unit
+  -> ('a, printable) generator
+
+val make_times
+  :  of_parts:(hour:int -> minute:int -> second:int -> microsecond:int -> 'a)
+  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> unit
+  -> ('a, printable) generator
+
+val make_datetimes
+  :  of_parts:
+       (year:int
+        -> month:int
+        -> day:int
+        -> hour:int
+        -> minute:int
+        -> second:int
+        -> microsecond:int
+        -> 'a)
+  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> unit
+  -> ('a, printable) generator
+
+val dates : unit -> (string, printable) generator
+val times : unit -> (string, printable) generator
+val datetimes : unit -> (string, printable) generator
+val ip_addresses : ?version:[ `V4 | `V6 ] -> unit -> (Ipaddr.t, printable) generator
+val from_regex : string -> ?fullmatch:bool -> unit -> (string, printable) generator
+val composite : (test_case -> 'a) -> ('a, unprintable) generator
+val map : ('a -> 'b) -> ('a, 'p) generator -> ('b, unprintable) generator
+
+val flat_map
+  :  ('a -> ('b, 'q) generator)
+  -> ('a, 'p) generator
+  -> ('b, unprintable) generator
+
+val filter : ('a -> bool) -> ('a, 'p) generator -> ('a, 'p) generator
+
 (**/**)
 
 (** {3 Settings}
@@ -375,7 +549,7 @@ module Antithesis = Antithesis
 
     {[
       let%hegel_test many_cases tc =
-        let n = draw tc (Generators.integers ~min_value:0 ~max_value:99 ()) in
+        let n = draw tc (integers ~min_value:0 ~max_value:99 ()) in
         assert (n < 100)
       [@@settings settings ~test_cases:500 () |> with_verbosity Verbose]
     ]} *)
@@ -591,11 +765,7 @@ val run_hegel_test_ppx
         let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
         assert (n >= 0)
     ]} *)
-val draw
-  :  ?label:string
-  -> test_case
-  -> ('a, Generators.printable) Generators.generator
-  -> 'a
+val draw : ?label:string -> test_case -> ('a, printable) generator -> 'a
 
 (**/**)
 
@@ -606,7 +776,7 @@ val draw_named
   :  label:string
   -> repeatable:bool
   -> test_case
-  -> ('a, Generators.printable) Generators.generator
+  -> ('a, printable) generator
   -> 'a
 
 (**/**)
@@ -621,14 +791,14 @@ val draw_named
         let n = draw_silent tc (map (fun x -> x * 2) (integers ~min_value:0 ~max_value:9 ())) in
         assert (n >= 0)
     ]} *)
-val draw_silent : test_case -> ('a, 'p) Generators.generator -> 'a
+val draw_silent : test_case -> ('a, 'p) generator -> 'a
 
 (**/**)
 
 (** [draw_silent_named ~name tc gen] is the naming-aware {!draw_silent} the
     [let%hegel_test] PPX rewrites bindings to; not intended for direct use
     (prefer {!draw_silent}). See {!Generators.draw_silent_named}. *)
-val draw_silent_named : name:string -> test_case -> ('a, 'p) Generators.generator -> 'a
+val draw_silent_named : name:string -> test_case -> ('a, 'p) generator -> 'a
 
 (**/**)
 
@@ -727,8 +897,8 @@ val require_equal
     ]} *)
 val with_printer
   :  ('a -> Sexplib0.Sexp.t)
-  -> ('a, 'p) Generators.generator
-  -> ('a, Generators.printable) Generators.generator
+  -> ('a, 'p) generator
+  -> ('a, printable) generator
 
 (** {3 Concurrency and parallelism}
 

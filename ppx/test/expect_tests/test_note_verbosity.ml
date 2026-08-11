@@ -2,7 +2,7 @@
     final-replay-only under [Normal], every case under [Verbose]/[Debug]. *)
 
 let marker = "NOTE_MARKER"
-let int_gen = Hegel.Generators.integers ~min_value:0 ~max_value:100 ()
+let int_gen = Hegel.integers ~min_value:0 ~max_value:100 ()
 
 (** A passing property (5 cases) that notes the marker on every case. *)
 let run_passing verbosity =

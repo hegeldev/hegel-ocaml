@@ -120,14 +120,13 @@ type weather =
     generator (the quickcheck idiom for range-limiting a field). *)
 type ranked =
   { name : string
-  ; level : (int[@hegel.generator Hegel.Generators.integers ~min_value:3 ~max_value:5 ()])
+  ; level : (int[@hegel.generator integers ~min_value:3 ~max_value:5 ()])
   }
 [@@deriving hegel_generator]
 
 (** A constructor-argument override *)
 type aged =
-  | Age of
-      (int[@hegel.generator Hegel.Generators.integers ~min_value:18 ~max_value:99 ()])
+  | Age of (int[@hegel.generator integers ~min_value:18 ~max_value:99 ()])
   | Unknown
 [@@deriving hegel_generator]
 
@@ -161,9 +160,7 @@ type printed_point =
 
 type with_opaque =
   { id : int
-  ; handle :
-      (ungeneratable
-      [@sexp.opaque] [@hegel.generator Hegel.Generators.just { thunk = Fun.id }])
+  ; handle : (ungeneratable[@sexp.opaque] [@hegel.generator just { thunk = Fun.id }])
   }
 [@@deriving hegel_generator]
 

@@ -6,8 +6,8 @@ open Hegel
 
 (** Property: integer arithmetic identities. *)
 let%hegel_test test_integer_arithmetic tc =
-  let a = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
-  let b = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
+  let a = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
+  let b = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
   (* Addition is commutative *)
   assert (a + b = b + a);
   (* Double negation is identity *)
@@ -19,8 +19,8 @@ let%hegel_test test_integer_arithmetic tc =
 
 (** Property: boolean identities. *)
 let%hegel_test test_boolean_laws tc =
-  let p = draw tc (Generators.booleans ()) in
-  let q = draw tc (Generators.booleans ()) in
+  let p = draw tc (booleans ()) in
+  let q = draw tc (booleans ()) in
   (* De Morgan's law *)
   assert (((not p) || not q) = not (p && q));
   (* Double negation *)
@@ -32,8 +32,8 @@ let%hegel_test test_boolean_laws tc =
 
 (** Property: division identity (with assume to avoid division by zero). *)
 let%hegel_test test_division tc =
-  let n = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
-  let d = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
+  let n = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
+  let d = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
   assume tc (d <> 0);
   note tc (Printf.sprintf "n=%d d=%d" n d);
   (* Integer division: n = (n / d) * d + (n mod d) *)
@@ -43,14 +43,14 @@ let%hegel_test test_division tc =
 
 (** Property: text strings have non-negative length. *)
 let%hegel_test test_text_length tc =
-  let s = draw tc (Generators.text ~min_size:0 ~max_size:50 ()) in
+  let s = draw tc (text ~min_size:0 ~max_size:50 ()) in
   assert (String.length s >= 0)
 [@@settings settings ~test_cases:100 ()]
 ;;
 
 (** Property: binary blobs have non-negative byte length. *)
 let%hegel_test test_binary_length tc =
-  let b = draw tc (Generators.binary ~min_size:0 ~max_size:50 ()) in
+  let b = draw tc (binary ~min_size:0 ~max_size:50 ()) in
   assert (String.length b >= 0)
 [@@settings settings ~test_cases:100 ()]
 ;;
@@ -61,12 +61,7 @@ let%hegel_test test_float_finite tc =
   let x =
     draw
       tc
-      (Generators.floats
-         ~min_value:(-1e6)
-         ~max_value:1e6
-         ~allow_nan:false
-         ~allow_infinity:false
-         ())
+      (floats ~min_value:(-1e6) ~max_value:1e6 ~allow_nan:false ~allow_infinity:false ())
   in
   assert (Float.is_finite x)
 [@@settings settings ~test_cases:100 ()]
