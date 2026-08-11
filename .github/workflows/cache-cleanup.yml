@@ -1,0 +1,24 @@
+name: Cache cleanup
+
+# This job frees a PR's caches the moment it closes
+
+on: # zizmor: ignore[dangerous-triggers] no checkout/execution of PR content, only reads the trusted PR number
+  pull_request_target:
+    types: [closed]
+
+permissions: {}
+
+jobs:
+  cleanup:
+    name: delete PR caches
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete caches for this PR's ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_REF: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          gh cache delete --all --ref "$PR_REF" --repo "$REPO" --succeed-on-no-caches

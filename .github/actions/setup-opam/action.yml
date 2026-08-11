@@ -15,10 +15,6 @@ inputs:
     description: Extra flags passed to `opam install . --deps-only` (e.g. --with-test).
     required: false
     default: ""
-  bare:
-    description: Initialize opam with --bare (skips creating a default switch).
-    required: false
-    default: "false"
 runs:
   using: composite
   steps:
@@ -64,17 +60,12 @@ runs:
       if: steps.cache-opam.outputs.cache-hit != 'true'
       shell: bash
       env:
-        BARE: ${{ inputs.bare }}
         OCAML_VERSION: ${{ inputs.ocaml-version }}
       run: |
         # Cache may be partially restored via restore-keys (a different key
         # prefix matched); guard each step so it's idempotent.
         if [ ! -d "$HOME/.opam" ]; then
-          if [ "$BARE" = "true" ]; then
-            opam init --bare --disable-sandboxing --yes
-          else
-            opam init --disable-sandboxing --yes
-          fi
+          opam init --bare --disable-sandboxing --yes
         fi
         if ! opam switch list --short 2>/dev/null | grep -q "^${OCAML_VERSION}$"; then
           opam switch create "$OCAML_VERSION" --yes
