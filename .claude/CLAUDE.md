@@ -168,6 +168,13 @@ The generator type and combinators (`draw`, `map`, `flat_map`, `composite`, …)
 live in `generators_core.ml`; the primitives, collections, and combinators are
 split across the sibling `generators_*.ml` files. `generators.ml` is a thin shim
 that `include`s all four so they surface as one `Hegel.Generators` module.
+`hegel.ml`/`hegel.mli` additionally re-export every `Generators` constructor
+(and the `generator`/`printable`/`unprintable` types) unqualified directly
+under `Hegel`, so `open Hegel` alone is enough — `integers ()` and
+`Generators.integers ()` name the same value. The re-exported `val`s are
+doc-hidden (`(**/**)`) in `hegel.mli` so they aren't listed twice; `Generators`
+stays the documented reference. Project code prefers the unqualified form
+wherever `open Hegel` is already in scope.
 
 Generators are a discriminated union:
 - **Leaf** — holds a `draw : test_case -> 'a` closure that performs a single typed engine draw (via one of the `Internal.generate_*` primitives). Calling `map` on a Leaf composes the closure in place (no extra span), since the engine already wraps every primitive draw in its own span.
@@ -290,7 +297,7 @@ type color = Red | Green | Blue [@@deriving hegel_generator]
 type entity =
   { name : string
   ; initial : char
-  ; level : (int[@hegel.generator Hegel.Generators.integers ~min_value:3 ~max_value:5 ()])
+  ; level : (int[@hegel.generator integers ~min_value:3 ~max_value:5 ()])
   ; tag : int option
   }
 [@@deriving hegel_generator]

@@ -74,9 +74,7 @@ let%expect_test "require failures get caller-derived origins" =
           |> Hegel.with_report_multiple_failures true
           |> Hegel.with_print_blob false)
        (fun tc ->
-          let v =
-            Hegel.draw tc (Hegel.Generators.integers ~min_value:0 ~max_value:100 ())
-          in
+          let v = Hegel.draw tc (Hegel.integers ~min_value:0 ~max_value:100 ()) in
           Hegel.require tc ~msg:"too big" (v < 60);
           Hegel.require tc ~msg:"too small" (v > 30))
    with

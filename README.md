@@ -51,8 +51,8 @@ Write a property test using `let%hegel_test`:
 open Hegel
 
 let%hegel_test commutative_addition tc =
-  let a = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
-  let b = draw tc (Generators.integers ~min_value:(-1000) ~max_value:1000 ()) in
+  let a = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
+  let b = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
   assert (a + b = b + a)
 ;;
 
@@ -73,8 +73,8 @@ To override the default settings, attach a `[@@settings ...]` attribute:
 
 ```ocaml
 let%hegel_test commutative_addition tc =
-  let a = draw tc (Generators.integers ()) in
-  let b = draw tc (Generators.integers ()) in
+  let a = draw tc (integers ()) in
+  let b = draw tc (integers ()) in
   assert (a + b = b + a)
 [@@settings settings ~test_cases:500 ()]
 ;;

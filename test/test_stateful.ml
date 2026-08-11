@@ -7,7 +7,7 @@ let stateful_failure_test () =
   let last_pop = ref None in
   let push_rule =
     S.Rule.create ~name:"push" ~step:(fun tc stack ->
-      let n = Hegel.draw tc (Hegel.Generators.integers ~min_value:0 ~max_value:100 ()) in
+      let n = Hegel.draw tc (Hegel.integers ~min_value:0 ~max_value:100 ()) in
       n :: stack)
   in
   let pop_rule =

@@ -28,46 +28,38 @@
 
 (** [dates ()] creates a generator for [Core.Date.t] values, with year in
     [\[1, 9999\]] and calendar-valid month/day. *)
-val dates : unit -> (Core.Date.t, Hegel.Generators.printable) Hegel.Generators.generator
+val dates : unit -> (Core.Date.t, Hegel.printable) Hegel.generator
 
 (** [times ()] creates a generator for [Core.Time_ns.Ofday.t] times of day
     with microsecond precision. *)
-val times
-  :  unit
-  -> (Core.Time_ns.Ofday.t, Hegel.Generators.printable) Hegel.Generators.generator
+val times : unit -> (Core.Time_ns.Ofday.t, Hegel.printable) Hegel.generator
 
 (** [datetimes ()] creates a generator for naive datetimes as
     [(Core.Date.t * Core.Time_ns.Ofday.t)] pairs. *)
 val datetimes
   :  unit
-  -> ( Core.Date.t * Core.Time_ns.Ofday.t
-       , Hegel.Generators.printable )
-       Hegel.Generators.generator
+  -> (Core.Date.t * Core.Time_ns.Ofday.t, Hegel.printable) Hegel.generator
 
 (** [char ()] creates a generator for single characters (codepoints 0-255,
     i.e. Latin-1) as [Core.Char.t] values. *)
-val char : unit -> (Core.Char.t, Hegel.Generators.printable) Hegel.Generators.generator
+val char : unit -> (Core.Char.t, Hegel.printable) Hegel.generator
 
 (** [time_ns ()] creates a generator for [Core.Time_ns.t] values. *)
-val time_ns
-  :  unit
-  -> (Core.Time_ns.t, Hegel.Generators.printable) Hegel.Generators.generator
+val time_ns : unit -> (Core.Time_ns.t, Hegel.printable) Hegel.generator
 
 (** [time_ns_spans ()] creates a generator for [Core.Time_ns.Span.t] values. *)
-val time_ns_spans
-  :  unit
-  -> (Core.Time_ns.Span.t, Hegel.Generators.printable) Hegel.Generators.generator
+val time_ns_spans : unit -> (Core.Time_ns.Span.t, Hegel.printable) Hegel.generator
 
 (** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
     polymorphic [Core.Hashtbl.t] tables over printable [keys] and [values].
-    [Hegel.Generators.make_hash_tables] closed over [Core.Hashtbl]. *)
+    [Hegel.make_hash_tables] closed over [Core.Hashtbl]. *)
 val hash_tables
-  :  ('a, Hegel.Generators.printable) Hegel.Generators.generator
-  -> ('b, Hegel.Generators.printable) Hegel.Generators.generator
+  :  ('a, Hegel.printable) Hegel.generator
+  -> ('b, Hegel.printable) Hegel.generator
   -> ?min_size:int
   -> ?max_size:int
   -> unit
-  -> (('a, 'b) Core.Hashtbl.Poly.t, Hegel.Generators.printable) Hegel.Generators.generator
+  -> (('a, 'b) Core.Hashtbl.Poly.t, Hegel.printable) Hegel.generator
 
 (** [resolve_draw values ~consume id] resolves a drawn pool [id] against the
     local [values] table, removing it when [consume]. *)
@@ -81,7 +73,7 @@ val pool_values
   :  pool:Hegel.Internal.pool
   -> values:(int, 'a) Core.Hashtbl.t
   -> consume:bool
-  -> ('a, Hegel.Generators.unprintable) Hegel.Generators.generator
+  -> ('a, Hegel.unprintable) Hegel.generator
 
 (**/**)
 
@@ -141,24 +133,19 @@ val set_sexp_diff : unit -> unit
 module Derive : sig
   (**/**)
 
-  val hegel_generator_int : (int, Hegel.Generators.printable) Hegel.Generators.generator
-  val hegel_generator_bool : (bool, Hegel.Generators.printable) Hegel.Generators.generator
-
-  val hegel_generator_float
-    : (float, Hegel.Generators.printable) Hegel.Generators.generator
-
-  val hegel_generator_string
-    : (string, Hegel.Generators.printable) Hegel.Generators.generator
-
-  val hegel_generator_char : (char, Hegel.Generators.printable) Hegel.Generators.generator
+  val hegel_generator_int : (int, Hegel.printable) Hegel.generator
+  val hegel_generator_bool : (bool, Hegel.printable) Hegel.generator
+  val hegel_generator_float : (float, Hegel.printable) Hegel.generator
+  val hegel_generator_string : (string, Hegel.printable) Hegel.generator
+  val hegel_generator_char : (char, Hegel.printable) Hegel.generator
 
   val hegel_generator_list
-    :  ('a, Hegel.Generators.printable) Hegel.Generators.generator
-    -> ('a list, Hegel.Generators.printable) Hegel.Generators.generator
+    :  ('a, Hegel.printable) Hegel.generator
+    -> ('a list, Hegel.printable) Hegel.generator
 
   val hegel_generator_option
-    :  ('a, Hegel.Generators.printable) Hegel.Generators.generator
-    -> ('a option, Hegel.Generators.printable) Hegel.Generators.generator
+    :  ('a, Hegel.printable) Hegel.generator
+    -> ('a option, Hegel.printable) Hegel.generator
 
   val sexp_of_int : int -> Sexplib0.Sexp.t
   val sexp_of_bool : bool -> Sexplib0.Sexp.t
@@ -173,7 +160,7 @@ module Derive : sig
       include Core.Date
     end
 
-    val hegel_generator : (t, Hegel.Generators.printable) Hegel.Generators.generator
+    val hegel_generator : (t, Hegel.printable) Hegel.generator
   end
 
   module Time_ns : sig
@@ -187,10 +174,10 @@ module Derive : sig
         include Core.Time_ns.Span
       end
 
-      val hegel_generator : (t, Hegel.Generators.printable) Hegel.Generators.generator
+      val hegel_generator : (t, Hegel.printable) Hegel.generator
     end
 
-    val hegel_generator : (t, Hegel.Generators.printable) Hegel.Generators.generator
+    val hegel_generator : (t, Hegel.printable) Hegel.generator
   end
 
   (**/**)

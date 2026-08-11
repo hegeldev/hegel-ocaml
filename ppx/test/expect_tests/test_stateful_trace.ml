@@ -61,7 +61,7 @@ let%expect_test "invariant violated in the initial state" =
 let%expect_test "state trace across multiple rules" =
   let push =
     Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
-      let n = Hegel.draw tc (Generators.integers ~min_value:0 ~max_value:100 ()) in
+      let n = Hegel.draw tc (integers ~min_value:0 ~max_value:100 ()) in
       n :: stack)
   in
   let pop =

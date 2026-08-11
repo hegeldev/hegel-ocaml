@@ -8,12 +8,8 @@ open Hegel
 (** Property: every element in a list of non-negative integers is non-negative.
     Uses [filter] to restrict the element generator. *)
 let%hegel_test test_filtered_list tc =
-  let non_neg =
-    Generators.filter
-      (fun v -> v >= 0)
-      (Generators.integers ~min_value:(-100) ~max_value:100 ())
-  in
-  let lst = draw tc (Generators.lists non_neg ~min_size:0 ~max_size:10 ()) in
+  let non_neg = filter (fun v -> v >= 0) (integers ~min_value:(-100) ~max_value:100 ()) in
+  let lst = draw tc (lists non_neg ~min_size:0 ~max_size:10 ()) in
   List.iter (fun x -> assert (x >= 0)) lst
 [@@settings settings ~test_cases:100 ()]
 ;;
@@ -24,11 +20,7 @@ let%hegel_test test_list_min_size tc =
   let lst =
     draw
       tc
-      (Generators.lists
-         (Generators.integers ~min_value:(-1000) ~max_value:1000 ())
-         ~min_size:3
-         ~max_size:10
-         ())
+      (lists (integers ~min_value:(-1000) ~max_value:1000 ()) ~min_size:3 ~max_size:10 ())
   in
   assert (List.length lst >= 3)
 [@@settings settings ~test_cases:100 ()]
@@ -38,13 +30,11 @@ let%hegel_test test_list_min_size tc =
     absolute values and check all are >= 0. *)
 let%hegel_test test_map_combinator tc =
   let abs_gen =
-    Generators.with_printer
+    with_printer
       (fun i -> Sexplib0.Sexp.Atom (string_of_int i))
-      (Generators.map
-         (fun v -> abs v)
-         (Generators.integers ~min_value:(-100) ~max_value:100 ()))
+      (map (fun v -> abs v) (integers ~min_value:(-100) ~max_value:100 ()))
   in
-  let lst = draw tc (Generators.lists abs_gen ~min_size:1 ~max_size:10 ()) in
+  let lst = draw tc (lists abs_gen ~min_size:1 ~max_size:10 ()) in
   List.iter (fun x -> assert (x >= 0)) lst
 [@@settings settings ~test_cases:100 ()]
 ;;
@@ -54,16 +44,12 @@ let%hegel_test test_map_combinator tc =
     [flat_map]. *)
 let%hegel_test test_flat_map_combinator tc =
   let pair_gen =
-    Generators.flat_map
+    flat_map
       (fun n ->
-         Generators.map
+         map
            (fun lst -> n, lst)
-           (Generators.lists
-              (Generators.integers ~min_value:0 ~max_value:99 ())
-              ~min_size:n
-              ~max_size:n
-              ()))
-      (Generators.integers ~min_value:1 ~max_value:5 ())
+           (lists (integers ~min_value:0 ~max_value:99 ()) ~min_size:n ~max_size:n ()))
+      (integers ~min_value:1 ~max_value:5 ())
   in
   let n, lst = draw_silent tc pair_gen in
   assert (List.length lst = n)
@@ -78,9 +64,9 @@ let%hegel_test test_sampled_from tc =
   let v =
     draw
       tc
-      (Generators.with_printer
+      (with_printer
          (fun i -> Sexplib0.Sexp.Atom (string_of_int i))
-         (Generators.sampled_from options))
+         (sampled_from options))
   in
   assert (v = 10 || v = 20 || v = 30 || v = 40)
 [@@settings settings ~test_cases:100 ()]
@@ -92,9 +78,9 @@ let%hegel_test test_assoc_list_size tc =
   let pairs =
     draw
       tc
-      (Generators.assoc_lists
-         (Generators.text ~min_size:1 ~max_size:8 ())
-         (Generators.integers ~min_value:0 ~max_value:100 ())
+      (assoc_lists
+         (text ~min_size:1 ~max_size:8 ())
+         (integers ~min_value:0 ~max_value:100 ())
          ~min_size:2
          ~max_size:6
          ())
@@ -109,9 +95,9 @@ let%hegel_test test_hash_table_size tc =
   let table =
     draw
       tc
-      (Generators.hash_tables
-         (Generators.text ~min_size:1 ~max_size:8 ())
-         (Generators.integers ~min_value:0 ~max_value:100 ())
+      (hash_tables
+         (text ~min_size:1 ~max_size:8 ())
+         (integers ~min_value:0 ~max_value:100 ())
          ~min_size:2
          ~max_size:6
          ())

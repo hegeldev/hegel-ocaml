@@ -14,9 +14,7 @@
     {[
     let push =
       Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
-          let n =
-            draw tc (Generators.integers ~min_value:0 ~max_value:100 ())
-          in
+          let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
           n :: stack)
 
     let pop =
@@ -85,7 +83,7 @@ module Pool : sig
   (** Records [value] in [variables] for later draws.
 
       {[
-      let n = draw tc (Generators.integers ~min_value:0 ~max_value:100 ()) in
+      let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
       Stateful.Pool.add pool n
       ]} *)
   val add : 'a t -> 'a -> unit
@@ -130,7 +128,7 @@ module Rule : sig
       {[
       let push =
         Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
-            let n = draw tc (Generators.integers ~min_value:0 ~max_value:100 ()) in
+            let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
             n :: stack)
       ]} *)
   val create : name:string -> step:(Internal.test_case -> 'state -> 'state) -> 'state t

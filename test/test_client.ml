@@ -194,7 +194,7 @@ let test_extract_origin_distinct_lines () =
 
 (* ==== Real-engine run tests ==== *)
 
-let int_gen = Generators.integers ~min_value:0 ~max_value:100 ()
+let int_gen = integers ~min_value:0 ~max_value:100 ()
 
 (** A passing property: drawn ints are always within bounds. *)
 let test_run_passing () =

@@ -91,8 +91,8 @@ let test_hash_tables_e2e () =
   run_hegel_test ~settings:(settings ~test_cases:50 ()) (fun tc ->
     let gen =
       Hegel_jane.hash_tables
-        (Generators.integers ~min_value:0 ~max_value:100 ())
-        (Generators.booleans ())
+        (integers ~min_value:0 ~max_value:100 ())
+        (booleans ())
         ~min_size:1
         ~max_size:5
         ()
@@ -105,14 +105,7 @@ let test_hash_tables_e2e () =
 
 (** Test: hash_tables rejects crossed size bounds like assoc_lists. *)
 let test_hash_tables_min_greater_than_max () =
-  match
-    Hegel_jane.hash_tables
-      (Generators.integers ())
-      (Generators.booleans ())
-      ~min_size:5
-      ~max_size:3
-      ()
-  with
+  match Hegel_jane.hash_tables (integers ()) (booleans ()) ~min_size:5 ~max_size:3 () with
   | exception Invalid_argument _ -> ()
   | _ -> Alcotest.fail "expected Invalid_argument"
 ;;
@@ -122,7 +115,7 @@ let test_hash_tables_min_greater_than_max () =
 let test_printer_hash_table () =
   check_printer
     "hash table"
-    (Hegel_jane.hash_tables (Generators.integers ()) (Generators.integers ()) ())
+    (Hegel_jane.hash_tables (integers ()) (integers ()) ())
     (Core.Hashtbl.Poly.of_alist_exn [ 1, 2 ])
     "((1 2))"
 ;;
