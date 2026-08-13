@@ -21,7 +21,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 RUST_REPO = "hegeldev/hegel-rust"
-BRANCH = "ci/bump-hegel-rust"
+# One branch per pinned version. A fixed, reused branch meant every release
+# force-recreated it from main, clobbering any manual or agent work pushed to
+# the open PR; a per-version branch keeps re-runs of the *same* version
+# idempotent (the workflow's force-push) while never touching another
+# version's work. The workflow closes superseded bot-only bump PRs after
+# pushing.
+BRANCH_PREFIX = "ci/bump-hegel-rust-"
 LOADER = ROOT / "lib" / "ffi" / "loader.ml"
 UPDATE_CHECKSUMS = ROOT / "scripts" / "update-checksums.py"
 RELEASE_MD = ROOT / "RELEASE.md"
@@ -95,15 +101,16 @@ def bump(requested: str) -> None:
     git("config", "user.name", "hegel-release[bot]")
     git("config", "user.email", f"{app_id}+hegel-release[bot]@users.noreply.github.com")
 
-    # Commit locally only; the workflow pushes the branch after folding in the
-    # FFI alignment.
-    git("checkout", "-B", BRANCH)
+    # The per-version branch for this release. Commit locally only; the
+    # workflow pushes the branch after folding in the FFI alignment.
+    branch = BRANCH_PREFIX + target
+    git("checkout", "-B", branch)
     git("add", str(LOADER), str(RELEASE_MD))
     git("commit", "-m", f"Bump pinned libhegel to {target}")
 
     set_output("bumped", "true")
     set_output("version", target)
-    set_output("branch", BRANCH)
+    set_output("branch", branch)
 
 
 if __name__ == "__main__":
