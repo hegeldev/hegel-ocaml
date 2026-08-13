@@ -12,6 +12,7 @@ __pycache__/
 !.claude/CLAUDE.md
 !.claude/skills/
 .claude/skills/*
+!.claude/skills/align-libhegel/
 !.claude/skills/changelog/
 !.claude/skills/self-review/
 !.claude/skills/coverage/
