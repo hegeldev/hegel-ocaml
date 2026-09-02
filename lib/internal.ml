@@ -57,16 +57,6 @@ type database =
   | Disabled
   | Path of string
 
-(** Controls the test execution mode. *)
-type mode =
-  | Test_run
-  (** Run a full property test: many test cases, shrinking, database
-        replay, all other phases. This is the default. *)
-  | Single_test_case
-  (** Run the test body exactly once, with no shrinking, replay, or
-        database. Useful when you want pure data generation without
-        property-testing overhead. *)
-
 (** Phases of the test lifecycle. *)
 type phase =
   | Explicit
@@ -86,8 +76,7 @@ let phase_to_string = function
 
 (** Configuration for a Hegel test run. *)
 type settings =
-  { mode : mode
-  ; test_cases : int
+  { test_cases : int
   ; stateful_step_count : int
   ; verbosity : verbosity
   ; seed : int option
@@ -137,8 +126,7 @@ let is_in_ci () =
     environments automatically. *)
 let default_settings () =
   let in_ci = is_in_ci () in
-  { mode = Test_run
-  ; test_cases = 100
+  { test_cases = 100
   ; stateful_step_count = 50
   ; verbosity = Normal
   ; seed = None
@@ -188,9 +176,6 @@ let with_suppress_health_check checks s = { s with suppress_health_check = check
 
 (** [with_phases phases s] returns settings [s] with [phases] set. *)
 let with_phases phases s = { s with phases = Some phases }
-
-(** [with_mode mode s] returns settings [s] with test [mode] set to [mode]. *)
-let with_mode mode s = { s with mode }
 
 (** [with_print_blob b s] returns settings [s] with [print_blob] set to [b]. When
     [true] (the default), a failing run's report ends with a copy-pasteable
@@ -493,19 +478,25 @@ let generate_domain tc ~max_length =
   with_string_generator tc (fun ctx -> Ffi.string_generator_domain ctx ~max_length)
 ;;
 
-(** [generate_date tc] draws a Gregorian date as [(year, month, day)]. *)
-let generate_date tc =
-  with_stop_guard tc (fun () -> Ffi.generate_date tc.context tc.handle)
+(** [generate_date tc ~min_value ~max_value] draws a Gregorian date in the
+    inclusive range as [(year, month, day)]. *)
+let generate_date tc ~min_value ~max_value =
+  with_stop_guard tc (fun () ->
+    Ffi.generate_date tc.context tc.handle ~min_value ~max_value)
 ;;
 
-(** [generate_time tc] draws a time as [(hour, minute, second, microsecond)]. *)
-let generate_time tc =
-  with_stop_guard tc (fun () -> Ffi.generate_time tc.context tc.handle)
+(** [generate_time tc ~min_value ~max_value] draws a time in the inclusive range
+    as [(hour, minute, second, nanosecond)]. *)
+let generate_time tc ~min_value ~max_value =
+  with_stop_guard tc (fun () ->
+    Ffi.generate_time tc.context tc.handle ~min_value ~max_value)
 ;;
 
-(** [generate_datetime tc] draws a naive datetime as [(date, time)]. *)
-let generate_datetime tc =
-  with_stop_guard tc (fun () -> Ffi.generate_datetime tc.context tc.handle)
+(** [generate_datetime tc ~min_value ~max_value] draws a naive datetime in the
+    inclusive range as [(date, time)]. *)
+let generate_datetime tc ~min_value ~max_value =
+  with_stop_guard tc (fun () ->
+    Ffi.generate_datetime tc.context tc.handle ~min_value ~max_value)
 ;;
 
 (** [generate_ipv4 tc] draws an IPv4 address as its 4 network-order bytes. *)
@@ -719,20 +710,38 @@ let pool_generate tc ~pool ?(consume = false) () =
   with_stop_guard tc (fun () -> Ffi.pool_generate tc.context tc.handle ~pool ~consume)
 ;;
 
-(** [new_state_machine tc ~rule_names ~invariant_names] registers an
-    engine-owned state machine. Release it with {!state_machine_free}. *)
+(** [new_state_machine tc ~rule_names ~invariant_names] registers a sequential
+    engine-owned state machine: one concurrency group, concurrency fixed at 1,
+    every rule pulled by worker 0. Release it with {!state_machine_free}. *)
 let new_state_machine tc ~rule_names ~invariant_names =
   with_stop_guard tc (fun () ->
-    Ffi.new_state_machine tc.context tc.handle ~rule_names ~invariant_names)
+    fst
+      (Ffi.new_state_machine
+         tc.context
+         tc.handle
+         ~rule_names
+         ~rule_groups:(List.map (fun _ -> 0) rule_names)
+         ~invariant_names
+         ~min_concurrency:1
+         ~max_concurrency:1))
+;;
+
+(** [state_machine_next_round tc ~state_machine] asks the engine whether the
+    machine should run another round: [false] once the step budget for the test
+    case is exhausted. Call it before the first rule and after every round.
+    Raises {!Data_exhausted} when the engine's choice budget is exhausted. *)
+let state_machine_next_round tc ~state_machine =
+  with_stop_guard tc (fun () ->
+    Option.is_some (Ffi.state_machine_next_group tc.context tc.handle ~state_machine))
 ;;
 
 (** [state_machine_next_rule tc ~state_machine] draws the index of the next
-    rule to run, or [None] when the engine's step budget for the test case is
-    exhausted and the caller should stop running rules. Raises
-    {!Data_exhausted} when the engine's choice budget is exhausted. *)
+    rule to run this round, or [None] when the round is over and the caller
+    should ask {!state_machine_next_round} again. Raises {!Data_exhausted} when
+    the engine's choice budget is exhausted. *)
 let state_machine_next_rule tc ~state_machine =
   with_stop_guard tc (fun () ->
-    Ffi.state_machine_next_rule tc.context tc.handle ~state_machine)
+    Ffi.state_machine_next_rule tc.context tc.handle ~state_machine ~worker_index:0)
 ;;
 
 (** [state_machine_rule_rejected tc ~state_machine] tells the engine the rule it
@@ -740,7 +749,20 @@ let state_machine_next_rule tc ~state_machine =
     budget for this test case. *)
 let state_machine_rule_rejected tc ~state_machine =
   with_stop_guard tc (fun () ->
-    Ffi.state_machine_rule_rejected tc.context tc.handle ~state_machine)
+    Ffi.state_machine_rule_rejected tc.context tc.handle ~state_machine ~worker_index:0)
+;;
+
+(** [state_machine_should_check_invariant tc ~state_machine ~invariant_index]
+    is the engine's sampling decision for running invariant [invariant_index]
+    after the current round.
+    Raises {!Data_exhausted} when the engine's choice budget is exhausted. *)
+let state_machine_should_check_invariant tc ~state_machine ~invariant_index =
+  with_stop_guard tc (fun () ->
+    Ffi.state_machine_should_check_invariant
+      tc.context
+      tc.handle
+      ~state_machine
+      ~invariant_index)
 ;;
 
 let state_machine_free tc ~state_machine = Ffi.state_machine_free tc.context state_machine
@@ -748,11 +770,6 @@ let state_machine_free tc ~state_machine = Ffi.state_machine_free tc.context sta
 (* ------------------------------------------------------------------ *)
 (* Settings translation                                                *)
 (* ------------------------------------------------------------------ *)
-
-let ffi_mode = function
-  | Test_run -> Ffi.Test_run
-  | Single_test_case -> Ffi.Single_test_case
-;;
 
 let ffi_verbosity = function
   | Quiet -> Ffi.Quiet
@@ -783,7 +800,6 @@ let bitmask bit_of items = List.fold_left (fun acc x -> acc lor bit_of x) 0 item
 let build_ffi_settings ctx (settings : settings) ~database_key =
   let s = Ffi.settings_new ctx in
   try
-    Ffi.settings_mode ctx s (ffi_mode settings.mode);
     Ffi.settings_test_cases ctx s settings.test_cases;
     Ffi.settings_stateful_step_count ctx s settings.stateful_step_count;
     Ffi.settings_verbosity ctx s (ffi_verbosity settings.verbosity);
@@ -817,9 +833,11 @@ type case_outcome =
 
 (** [run_test_case ~settings ~test_fn ?note_indent ctx handle is_final] runs
     [test_fn] over a single native test-case [handle], maps the outcome to a
-    {!Ffi.status}, and marks the case complete. [note_indent] is the starting
-    nesting depth of note/draw lines. Shared by the engine-run and failure-blob
-    replay paths. *)
+    {!Ffi.status}, and marks the case complete. A [Ffi.Usage_error] (an invalid
+    generator argument the engine rejected) is not an outcome: it propagates
+    unchanged, aborting the run instead of being shrunk as a counterexample.
+    [note_indent] is the starting nesting depth of note/draw lines. Shared by
+    the engine-run and failure-blob replay paths. *)
 let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle is_final =
   let (tc : test_case) =
     { handle
@@ -836,15 +854,19 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
   in
   Stdlib.Domain.DLS.set in_test_context true;
   let status, captured =
-    match test_fn tc with
-    | () -> Ffi.Valid, None
-    | exception Assume_rejected -> Ffi.Invalid, None
-    | exception Data_exhausted -> Ffi.Overrun, None
-    | exception Flaky_strategy -> Ffi.Invalid, None
-    | exception exn -> Ffi.Interesting, Some (extract_origin exn, exn)
+    Fun.protect
+      ~finally:(fun () ->
+        Stdlib.Domain.DLS.set in_test_context false;
+        free_owned_pools tc)
+      (fun () ->
+         match test_fn tc with
+         | () -> Ffi.Valid, None
+         | exception Assume_rejected -> Ffi.Invalid, None
+         | exception Data_exhausted -> Ffi.Overrun, None
+         | exception Flaky_strategy -> Ffi.Invalid, None
+         | exception (Ffi.Usage_error _ as usage) -> raise usage
+         | exception exn -> Ffi.Interesting, Some (extract_origin exn, exn))
   in
-  Stdlib.Domain.DLS.set in_test_context false;
-  free_owned_pools tc;
   Ffi.mark_complete ctx handle status (Option.map fst captured);
   { status; interesting = captured; printed_output = tc.printed_output }
 ;;
@@ -918,8 +940,6 @@ let handle_result
       ~test_fn
       ~test_location
       ~from_ppx
-      ~single
-      ~single_outcome
       ~cases_run
       ~cases_discarded
       ctx
@@ -937,12 +957,6 @@ let handle_result
          (Option.value
             (Ffi.result_error ctx result)
             ~default:"hegel: run error (no message)"))
-  | Run_failed when single ->
-    emit ~passed:false;
-    (* The single emitted case already ran as its own final case; re-raise the
-       test's own exception. An interesting result always carries one. *)
-    let _origin, exn = Option.get single_outcome in
-    raise exn
   | Run_failed ->
     emit ~passed:false;
     (* Failures are caller-owned snapshots, independent of the run result. *)
@@ -979,9 +993,7 @@ let handle_result
 (** [run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location] drives a
     full property run: it starts the engine worker and pulls every scheduled test
     case. The engine only explores (generation, shrinking), so every pumped case
-    is non-final — except in {!Single_test_case} mode, where the one emitted case
-    is the whole run and is run as final, its outcome kept for the report.
-    Discovered counterexamples are replayed from their blobs by {!handle_result}.
+    is non-final. Discovered counterexamples are replayed from their blobs by {!handle_result}.
     The engine [run] handle is always freed. *)
 let run_from_engine
       ctx
@@ -991,12 +1003,6 @@ let run_from_engine
       ~test_location
       ~from_ppx
   =
-  let single =
-    match settings.mode with
-    | Single_test_case -> true
-    | Test_run -> false
-  in
-  let single_outcome = ref None in
   let seen_interesting = ref false in
   let cases_run = ref 0 in
   let cases_discarded = ref 0 in
@@ -1009,12 +1015,11 @@ let run_from_engine
          | None -> ()
          | Some handle ->
            (* Handles from [next_test_case] are caller-owned; free each once its
-             case has been marked complete by [run_test_case]. In single mode
-             the one emitted case is the whole run, so it runs as final. *)
+             case has been marked complete by [run_test_case]. *)
            Fun.protect
              ~finally:(fun () -> Ffi.test_case_free ctx handle)
              (fun () ->
-                let outcome = run_test_case ~settings ~test_fn ctx handle single in
+                let outcome = run_test_case ~settings ~test_fn ctx handle false in
                 if not !seen_interesting
                 then (
                   match outcome.status with
@@ -1022,8 +1027,7 @@ let run_from_engine
                     incr cases_run;
                     seen_interesting := true
                   | Ffi.Valid -> incr cases_run
-                  | Ffi.Invalid | Ffi.Overrun -> incr cases_discarded);
-                if single then single_outcome := outcome.interesting);
+                  | Ffi.Invalid | Ffi.Overrun -> incr cases_discarded));
            loop ()
        in
        loop ();
@@ -1038,8 +1042,6 @@ let run_from_engine
               ~test_fn
               ~test_location
               ~from_ppx
-              ~single
-              ~single_outcome:!single_outcome
               ~cases_run:!cases_run
               ~cases_discarded:!cases_discarded
               ctx
@@ -1052,7 +1054,7 @@ let run_from_engine
     {!Undecodable}. The standalone case is always freed. *)
 let replay_from_blob ~(settings : settings) ~ffi_settings ~test_fn blob ctx =
   match Ffi.test_case_from_blob ctx ffi_settings (Some blob) with
-  | exception Ffi.Backend_error msg -> Undecodable msg
+  | exception Ffi.Usage_error msg -> Undecodable msg
   | tc ->
     Fun.protect
       ~finally:(fun () -> Ffi.test_case_free ctx tc)

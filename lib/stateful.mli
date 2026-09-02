@@ -144,16 +144,17 @@ end
 (** {2 Running stateful tests} *)
 
 (** Executes a stateful test by repeatedly applying randomly chosen [rules] to a
-    state threaded from [init], checking each of the [invariants] before the
-    first step and after every successful step. Raises [Invalid_argument] if
-    [rules] is empty.
+    state threaded from [init]. Every invariant is checked on the initial and the
+    final state. After a step, invariants are randomly sampled. Raises 
+    [Invalid_argument] if [rules] is empty.
 
     On a failing replay, each applied rule prints as [Step N: <name>], with the
     values the rule draws nested under it. When [sexp_of_state] is supplied, the
     model state also prints as [state = <value>] after the initial state and
     after every step. An invariant that is violated prints 
-    [Invariant N violated after step M] or [Invariant N violated in the initial state],
-    where [N] is the invariant's index in [invariants].
+    [Invariant N violated after step M], [... in the initial state], or
+    [... in the final state], where [N] is the invariant's index in
+    [invariants].
 
     {v
       state = 0

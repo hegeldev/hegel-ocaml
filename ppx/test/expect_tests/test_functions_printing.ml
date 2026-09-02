@@ -261,7 +261,7 @@ let%expect_test "function call only prints the first time in normal verbosity" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      function 10 = 0
+      function 10 = 315
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -275,16 +275,17 @@ let%expect_test "function call prints every time in verbose/debug verbosity" =
   [%expect
     {|
     Starting phase: Generate
-    function 10 = 0
-    function 10 = 0
-    function 10 = 0
+    Running test case
+    function 10 = 315
+    function 10 = 315
+    function 10 = 315
     Ending phase: Generate
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      function 10 = 0
-      function 10 = 0
-      function 10 = 0
+      function 10 = 315
+      function 10 = 315
+      function 10 = 315
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -295,18 +296,19 @@ let%expect_test "function call prints every time in verbose/debug verbosity" =
   [%expect
     {|
     Starting phase: Generate
-    function 10 = 0
-    function 10 = 0
-    function 10 = 0
+    function 10 = 315
+    function 10 = 315
+    function 10 = 315
+    test case #1: status = Interesting, choices = 1
     Ending phase: Generate
     Test done. interesting_test_cases=1
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
     replaying failure blob: choices = 1
 
-      function 10 = 0
-      function 10 = 0
-      function 10 = 0
+      function 10 = 315
+      function 10 = 315
+      function 10 = 315
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]

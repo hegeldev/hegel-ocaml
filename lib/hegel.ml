@@ -24,13 +24,26 @@ type ('a, 'p) generator = ('a, 'p) Generators.generator
 type printable = Generators.printable
 type unprintable = Generators.unprintable
 
+type date = Generators.date =
+  { year : int
+  ; month : int
+  ; day : int
+  }
+
+type time = Generators.time =
+  { hour : int
+  ; minute : int
+  ; second : int
+  ; nanosecond : int
+  }
+
 let booleans = Generators.booleans
 let integers = Generators.integers
 let floats = Generators.floats
 let text = Generators.text
 let characters = Generators.characters
 let make_characters = Generators.make_characters
-let char = Generators.char
+let chars = Generators.chars
 let binary = Generators.binary
 let just = Generators.just
 let lists = Generators.lists
@@ -85,10 +98,6 @@ type database = Internal.database =
   | Disabled
   | Path of string
 
-type mode = Internal.mode =
-  | Test_run
-  | Single_test_case
-
 type phase = Internal.phase =
   | Explicit
   | Reuse
@@ -103,8 +112,7 @@ type health_check = Internal.health_check =
   | Large_initial_test_case
 
 type settings = Internal.settings =
-  { mode : mode
-  ; test_cases : int
+  { test_cases : int
   ; stateful_step_count : int
   ; verbosity : verbosity
   ; seed : int option
@@ -117,6 +125,7 @@ type settings = Internal.settings =
   }
 
 exception Assume_rejected = Internal.Assume_rejected
+exception Usage_error = Hegel_ffi.Ffi.Usage_error
 
 (** {2 Convenience re-exports} *)
 
@@ -216,6 +225,5 @@ let with_derandomize = Internal.with_derandomize
 let with_database = Internal.with_database
 let with_suppress_health_check = Internal.with_suppress_health_check
 let with_phases = Internal.with_phases
-let with_mode = Internal.with_mode
 let with_print_blob = Internal.with_print_blob
 let with_report_multiple_failures = Internal.with_report_multiple_failures

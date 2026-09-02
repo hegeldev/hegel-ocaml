@@ -284,16 +284,16 @@ val make_characters
   -> unit
   -> ('a, printable) generator
 
-(** [char ()] creates a generator for single characters (codepoints 0-255,
+(** [chars ()] creates a generator for single characters (codepoints 0-255,
     i.e. Latin-1) as native [char] values.
 
     {[
-      let%hegel_test char_example tc =
-        let c = draw tc (char ()) in
+      let%hegel_test chars_example tc =
+        let c = draw tc (chars ()) in
         assert (Char.code c >= 0 && Char.code c <= 0xFF)
       ;;
     ]} *)
-val char : unit -> (char, printable) generator
+val chars : unit -> (char, printable) generator
 
 (** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.
 
@@ -629,44 +629,65 @@ val urls : unit -> (string, printable) generator
     ]} *)
 val domains : ?max_length:int -> unit -> (string, printable) generator
 
-(** [make_dates ~of_parts ~sexp_of ()] builds a date generator over any date
-    representation.
+(** A proleptic Gregorian calendar date. [year] is in [\[-999999, 999999\]], 
+    [month] in [\[1, 12\]], and [day] in [\[1, days-in-month\]]. *)
+type date =
+  { year : int
+  ; month : int
+  ; day : int
+  }
+
+(** A time of day at nanosecond resolution. [hour] is in [\[0, 23\]], 
+    [minute] and [second] in [\[0, 59\]], and [nanosecond] in [\[0, 999999999\]]. *)
+type time =
+  { hour : int
+  ; minute : int
+  ; second : int
+  ; nanosecond : int
+  }
+
+(** [make_dates ~of_parts ~sexp_of ?min_date ?max_date ()] builds a date
+    generator over any date representation. [of_parts] converts a drawn
+    {!date} to that representation. Bounds are inclusive and default to
+    [0001-01-01] and [9999-12-31].
 
     {[
       let core_dates =
         make_dates
-          ~of_parts:(fun ~year ~month ~day ->
+          ~of_parts:(fun { year; month; day } ->
             Core.Date.create_exn ~y:year ~m:(Core.Month.of_int_exn month) ~d:day)
           ~sexp_of:Core.Date.sexp_of_t
           ()
     ]} *)
 val make_dates
-  :  of_parts:(year:int -> month:int -> day:int -> 'a)
+  :  of_parts:(date -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> ?min_date:date
+  -> ?max_date:date
   -> unit
   -> ('a, printable) generator
 
-(** [make_times ~of_parts ~sexp_of ()] builds a time-of-day generator over any
-    time representation. *)
+(** [make_times ~of_parts ~sexp_of ?min_time ?max_time ()] builds a
+    time-of-day generator over any time representation. [of_parts] converts a
+    drawn {!time} to that representation. Bounds are inclusive and default to
+    the whole day. *)
 val make_times
-  :  of_parts:(hour:int -> minute:int -> second:int -> microsecond:int -> 'a)
+  :  of_parts:(time -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> ?min_time:time
+  -> ?max_time:time
   -> unit
   -> ('a, printable) generator
 
-(** [make_datetimes ~of_parts ~sexp_of ()] builds a naive-datetime generator
-    over any representation. *)
+(** [make_datetimes ~of_parts ~sexp_of ?min_datetime ?max_datetime ()] builds a
+    naive-datetime generator over any representation. [of_parts] converts a
+    drawn [(date, time)] pair to that representation. Bounds are inclusive
+    and default to the full {!make_dates} and {!make_times} ranges. *)
 val make_datetimes
-  :  of_parts:
-       (year:int
-        -> month:int
-        -> day:int
-        -> hour:int
-        -> minute:int
-        -> second:int
-        -> microsecond:int
-        -> 'a)
+  :  of_parts:(date * time -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> ?min_datetime:date * time
+  -> ?max_datetime:date * time
   -> unit
   -> ('a, printable) generator
 

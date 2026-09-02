@@ -239,6 +239,7 @@ let%expect_test "stateful tests prints drawn data on passing test verbosity is v
   [%expect
     {|
     Starting phase: Generate
+    Running test case
     _x = 42
     Step 1: push
       _n_1 = 7
@@ -476,6 +477,7 @@ let%expect_test "verbose prints draws on a passing run" =
   [%expect
     {|
     Starting phase: Generate
+    Running test case
     draw_1 = 5
     Ending phase: Generate
     |}]

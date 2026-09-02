@@ -357,10 +357,18 @@ let domains ?max_length () =
   leaf ~draw:(fun tc -> Internal.generate_domain tc ~max_length) ~sexp_of:sexp_of_string
 ;;
 
-(** [make_dates ~of_parts ~sexp_of ()] builds a date generator over any date
-    representation. [of_parts] converts the generated date data to the desired
-    date representation. *)
-let make_dates ~of_parts ~sexp_of () =
+type date =
+  { year : int
+  ; month : int
+  ; day : int
+  }
+
+type time =
+  { hour : int
+  ; minute : int
+  ; second : int
+  ; nanosecond : int
+  }
   leaf
     ~draw:(fun tc ->
       let year, month, day = Internal.generate_date tc in
