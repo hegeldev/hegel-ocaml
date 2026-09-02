@@ -283,9 +283,9 @@ let make_characters ~of_char ~sexp_of () =
     ~sexp_of
 ;;
 
-(** [char ()] creates a generator for single characters (codepoints 0-255,
+(** [chars ()] creates a generator for single characters (codepoints 0-255,
     i.e. Latin-1) as native [char] values. *)
-let char () = make_characters ~of_char:Fun.id ~sexp_of:sexp_of_char ()
+let chars () = make_characters ~of_char:Fun.id ~sexp_of:sexp_of_char ()
 
 (** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.
 *)

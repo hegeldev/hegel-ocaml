@@ -48,11 +48,6 @@ type pool
     across clones. *)
 type state_machine
 
-(** Test execution mode ([hegel_mode_t]). *)
-type mode =
-  | Test_run
-  | Single_test_case
-
 (** Randomness backend ([hegel_backend_t]), selected via {!settings_backend}.
 
     - [Auto]: choose automatically (the default). urandom under Antithesis,
@@ -105,12 +100,16 @@ exception Stop_test
 exception Assume_rejected
 
 (** Raised when a libhegel call fails with any other negative status code
-    ([HEGEL_E_BACKEND], [HEGEL_E_INVALID_HANDLE], [HEGEL_E_INVALID_ARG],
-    [HEGEL_E_ALREADY_COMPLETE], [HEGEL_E_NOT_COMPLETE], [HEGEL_E_INTERNAL],
-    [HEGEL_E_CONCURRENT_USE], or an unrecognised code). The payload is a static
-    label identifying the code, followed by {!last_error_message} when the
-    engine set one. *)
+    ([HEGEL_E_BACKEND], [HEGEL_E_INVALID_HANDLE], [HEGEL_E_ALREADY_COMPLETE],
+    [HEGEL_E_NOT_COMPLETE], [HEGEL_E_INTERNAL], [HEGEL_E_CONCURRENT_USE], or an
+    unrecognised code). The payload is a static label identifying the code,
+    followed by {!last_error_message} when the engine set one. *)
 exception Backend_error of string
+
+(** Raised when a libhegel call returns [HEGEL_E_INVALID_ARG]: a caller-supplied
+    argument (typically a generator bound or a setting) is semantically invalid.
+    The payload is the engine's diagnostic. *)
+exception Usage_error of string
 
 (** {2 Phase bitmask values}
 
@@ -158,8 +157,6 @@ val settings_new : context -> settings
 (** [settings_free ctx s] frees a settings handle. *)
 val settings_free : context -> settings -> unit
 
-val settings_mode : context -> settings -> mode -> unit
-
 (** [settings_backend ctx s b] pins the engine's randomness backend. Pinning is
     one-way: there is no way to return a handle to [Auto] once set. *)
 val settings_backend : context -> settings -> backend -> unit
@@ -203,7 +200,7 @@ val next_test_case : context -> run -> test_case option
 
 (** [test_case_from_blob ctx settings blob] builds a standalone test case that
     replays the example encoded in a base64 failure [blob]. Raises
-    {!Backend_error} (with the engine's diagnostic) when the blob is missing,
+    {!Usage_error} (with the engine's diagnostic) when the blob is missing,
     not UTF-8, or cannot be decoded. The engine never returns a null handle
     without setting an error. The handle must be freed with
     {!test_case_free}. *)
@@ -317,20 +314,34 @@ val string_generator_free : context -> string_generator -> unit
     rejects itself (e.g. an over-length email). *)
 val generate_string : context -> test_case -> string_generator -> string
 
-(** [generate_date ctx tc] draws a Gregorian date as [(year, month, day)].
-    Raises {!Stop_test} on budget exhaustion. *)
-val generate_date : context -> test_case -> int * int * int
-
-(** [generate_time ctx tc] draws a time of day as
-    [(hour, minute, second, microsecond)]. Raises {!Stop_test} on budget
+(** [generate_date ctx tc ~min_value ~max_value] draws a Gregorian date in the
+    inclusive range as [(year, month, day)]. Raises {!Stop_test} on budget
     exhaustion. *)
-val generate_time : context -> test_case -> int * int * int * int
+val generate_date
+  :  context
+  -> test_case
+  -> min_value:int * int * int
+  -> max_value:int * int * int
+  -> int * int * int
 
-(** [generate_datetime ctx tc] draws a naive datetime as [(date, time)]. Raises
+(** [generate_time ctx tc ~min_value ~max_value] draws a time of day in the
+    inclusive range as [(hour, minute, second, nanosecond)]. Raises
     {!Stop_test} on budget exhaustion. *)
+val generate_time
+  :  context
+  -> test_case
+  -> min_value:int * int * int * int
+  -> max_value:int * int * int * int
+  -> int * int * int * int
+
+(** [generate_datetime ctx tc ~min_value ~max_value] draws a naive datetime in
+    the inclusive range as [(date, time)]. Raises {!Stop_test} on budget
+    exhaustion. *)
 val generate_datetime
   :  context
   -> test_case
+  -> min_value:(int * int * int) * (int * int * int * int)
+  -> max_value:(int * int * int) * (int * int * int * int)
   -> (int * int * int) * (int * int * int * int)
 
 (** [generate_ipv4 ctx tc] draws an IPv4 address as its 4 network-order bytes. *)
@@ -374,36 +385,69 @@ val pool_generate : context -> test_case -> pool:pool -> consume:bool -> int
 (** [pool_free ctx pool] releases [pool]. *)
 val pool_free : context -> pool -> unit
 
-(** [new_state_machine ctx tc ~rule_names ~invariant_names] registers an
-    engine-owned state machine with the named rules and invariants. The engine
-    owns rule selection. Raises {!Backend_error} if [rule_names] is empty. *)
+(** [new_state_machine ctx tc ~rule_names ~rule_groups ~invariant_names
+    ~min_concurrency ~max_concurrency] registers an engine-owned state machine
+    with the named rules (each in the concurrency group given by the parallel
+    [rule_groups]) and invariants, and returns it with the concurrency level
+    the engine drew in [\[min_concurrency, max_concurrency\]]. The engine owns
+    rule selection. Raises {!Usage_error} if [rule_names] is empty, a group id
+    is [HEGEL_STATE_MACHINE_DONE], or the concurrency bounds are invalid, and
+    {!Stop_test} when the engine's choice budget is exhausted. *)
 val new_state_machine
   :  context
   -> test_case
   -> rule_names:string list
+  -> rule_groups:int list
   -> invariant_names:string list
-  -> state_machine
+  -> min_concurrency:int
+  -> max_concurrency:int
+  -> state_machine * int
 
-(** [state_machine_next_rule ctx tc ~state_machine] draws the index of the next
-    rule to run, in [\[0, num_rules)], or returns [None] when the engine's step
-    budget for the test case is exhausted ([HEGEL_STATE_MACHINE_DONE]) and the
-    caller should stop running rules. Raises {!Stop_test} when the engine's
-    choice budget is exhausted. *)
-val state_machine_next_rule
+(** [state_machine_next_group ctx tc ~state_machine] starts the machine's next
+    round on the root handle, returning the round's concurrency group id, or
+    [None] ([HEGEL_STATE_MACHINE_DONE]) when the machine has terminated.
+    Call it before the first rule and after every round. Raises {!Stop_test}
+    when the engine's choice budget is exhausted. *)
+val state_machine_next_group
   :  context
   -> test_case
   -> state_machine:state_machine
   -> int option
 
-(** [state_machine_rule_rejected ctx tc ~state_machine] reports that the rule
-    most recently returned by {!state_machine_next_rule} was rejected before it
-    completed, so it should not count against the engine's step budget for the
-    test case. Raises {!Backend_error} if there is no outstanding rule. *)
+(** [state_machine_next_rule ctx tc ~state_machine ~worker_index] draws the
+    index of the next rule for [worker_index] to run this round, in
+    [\[0, num_rules)], or returns [None] ([HEGEL_STATE_MACHINE_DONE]) when the
+    worker's round is over. Raises {!Stop_test} when the engine's choice budget
+    is exhausted. *)
+val state_machine_next_rule
+  :  context
+  -> test_case
+  -> state_machine:state_machine
+  -> worker_index:int
+  -> int option
+
+(** [state_machine_rule_rejected ctx tc ~state_machine ~worker_index] reports
+    that the rule most recently returned to [worker_index] by
+    {!state_machine_next_rule} was rejected before it completed, so it should
+    not count against the engine's step budget for the test case. Raises
+    {!Usage_error} if the worker has no outstanding rule. *)
 val state_machine_rule_rejected
   :  context
   -> test_case
   -> state_machine:state_machine
+  -> worker_index:int
   -> unit
+
+(** [state_machine_should_check_invariant ctx tc ~state_machine
+    ~invariant_index] is the engine's sampling decision for running invariant
+    [invariant_index] at the current join point. Raises {!Stop_test} when the
+    engine's choice budget is exhausted. *)
+val state_machine_should_check_invariant
+  :  context
+  -> test_case
+  -> state_machine:state_machine
+  -> invariant_index:int
+  -> bool
 
 (** [state_machine_free ctx sm] releases [sm]. *)
 val state_machine_free : context -> state_machine -> unit

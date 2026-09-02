@@ -84,7 +84,6 @@ test/                        # hegel's own test suite (one executable: test_hege
   test_generators_*.ml       # Generator core / primitives / collections / combinators
   test_stateful.ml           # Stateful testing tests
   test_antithesis.ml         # Antithesis integration tests
-  test_single_test_case.ml   # Single-case / failure-blob replay tests
 
 docs/                        # Tutorial and guide documents
   getting-started.md         # Getting Started tutorial (OCaml translation)
@@ -146,8 +145,8 @@ refunctionalized — the code takes the operations as closures/parameters, and
 each side instantiates them:
 - pools: `make_pool_values`/`resolve_pool_draw` (find/remove/is_empty closures) ← `Make_pool`+`Int_table` (stdlib) / `Hegel_jane` (Core.Hashtbl)
 - hash tables: `make_hash_tables ~of_pairs ~sexp_of_t` ← `hash_tables` (Stdlib.Hashtbl) / `Hegel_jane.hash_tables` (Hashtbl.Poly)
-- dates/times: `make_dates`/`make_times`/`make_datetimes ~of_parts ~sexp_of` ← `dates`/`times`/`datetimes` (ISO 8601 strings)
-- chars: `make_characters ~of_char ~sexp_of` ← `char` / `Hegel_jane.char`. `Core.Char.t = char`, so both sides draw the same value and only the printer differs (`sexp_of_char` vs `Core.Char.sexp_of_t`) — unlike the other refunctionalized pairs, `of_char` is `Fun.id` on both sides, kept only for symmetry with `~of_parts`
+- dates/times: `make_dates`/`make_times`/`make_datetimes ~of_parts ~sexp_of` (+ `?min_date`/`?min_time`/`?min_datetime` and `max_*` bounds) ← `dates`/`times`/`datetimes` (ISO 8601 strings) / `Hegel_jane.dates`/`ofdays`/`datetimes` (Core values)
+- chars: `make_characters ~of_char ~sexp_of` ← `chars` / `Hegel_jane.chars`. `Core.Char.t = char`, so both sides draw the same value and only the printer differs (`sexp_of_char` vs `Core.Char.sexp_of_t`) — unlike the other refunctionalized pairs, `of_char` is `Fun.id` on both sides, kept only for symmetry with `~of_parts`
 - require_equal diff: `Internal.set_diff_renderer` hook ← default prints both values (`-`/`+`, red/green); `Hegel_jane.set_sexp_diff ()` installs the `sexp_diff` two-column renderer
 
 The test suite still links `core`/`core_unix` (test-only dependencies; users
@@ -425,6 +424,7 @@ in an `Exn.protect ~finally`.
 
 - `Internal.Assume_rejected` — raised by `assume false`; mapped to `mark_complete INVALID`
 - `Internal.Data_exhausted` — raised when StopTest is received; skips `mark_complete`
+- `Hegel_ffi.Ffi.Usage_error` (re-exported as `Hegel.Usage_error`) — raised by `check_rc` on `HEGEL_E_INVALID_ARG`; `run_test_case` re-raises it untouched (no `mark_complete`, no shrinking), mirroring hegel-rust's `InvalidArgument` unwind. Generators therefore don't duplicate engine-side argument validation
 - `Connection.Request_error` — raised on protocol-level errors from the engine
 
 ### Typed Draws (no schema)
@@ -436,9 +436,9 @@ typed FFI call (`Hegel_ffi.Ffi` / `Internal.generate_*`):
 - `floats` → `generate_float ~min_value ~max_value ~allow_nan ~allow_infinity ~exclude_min ~exclude_max ~smallest_nonzero_magnitude` (width 64; unbounded ends are ±infinity)
 - `binary` → `generate_bytes ~min_size ~max_size`
 - `text` / `characters` → build a text `string_generator` handle (codec / codepoint bounds / categories / include-exclude chars) then `generate_string`; surrogates auto-excluded
-- `char` → `generate_text` fixed to `min_size:max_size:1`, codepoints 0-0xFF (Latin-1), decoded via `String.get_utf_8_uchar` (a codepoint above 127 encodes to 2 UTF-8 bytes, so this can't just index byte 0) into a native `char` via `make_characters ~of_char ~sexp_of`
+- `chars` → `generate_text` fixed to `min_size:max_size:1`, codepoints 0-0xFF (Latin-1), decoded via `String.get_utf_8_uchar` (a codepoint above 127 encodes to 2 UTF-8 bytes, so this can't just index byte 0) into a native `char` via `make_characters ~of_char ~sexp_of`
 - `from_regex` / `emails` / `urls` / `domains` → the matching `string_generator_*` handle + `generate_string`
-- `dates` / `times` / `datetimes` → `generate_date`/`time`/`datetime` structs. The parts feed the refunctionalized builders `make_dates`/`make_times`/`make_datetimes` (`~of_parts` constructor + `~sexp_of` printer, labeled args); the public `dates`/`times`/`datetimes` close them over ISO 8601 strings (`YYYY-MM-DD`, `HH:MM:SS.ffffff` with the fraction always printed, joined by `T`). A typed date library plugs in its own `~of_parts` (no string parsing round-trip)
+- `dates` / `times` / `datetimes` → `generate_date`/`time`/`datetime` structs, bounded by the caller's `?min_date`/`?max_date`, `?min_time`/`?max_time`, `?min_datetime`/`?max_datetime` (validated by the engine: a bad bound is `HEGEL_E_INVALID_ARG`, which `check_rc` raises as `Usage_error` and the runner propagates unshrunk). The parts are the `date`/`time` records (`hegel_time_t` carries nanoseconds since libhegel 0.36.0) and feed the refunctionalized builders `make_dates`/`make_times`/`make_datetimes` (`~of_parts` constructor + `~sexp_of` printer); the public `dates`/`times`/`datetimes` close them over ISO 8601 strings (`YYYY-MM-DD`, `HH:MM:SS.fffffffff` with the fraction always printed, joined by `T`). A typed date library plugs in its own `~of_parts` (no string parsing round-trip)
 - `ip_addresses` → `generate_ipv4`/`generate_ipv6` raw bytes, rendered to strings by the `ipaddr` library (`Ipaddr.V4/V6.{of_octets_exn, to_string}`; RFC 5952 for v6)
 - `sampled_from` → `generate_integer 0 (n-1)` then index into the values array
 - `just` → a Leaf whose `draw` ignores the engine and returns the constant

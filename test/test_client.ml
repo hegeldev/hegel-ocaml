@@ -86,12 +86,10 @@ let test_with_builders () =
     |> with_database (Path "/tmp/hegel-test-db")
     |> with_suppress_health_check [ Filter_too_much; Too_slow ]
     |> with_phases [ Generate; Shrink ]
-    |> with_mode Single_test_case
   in
   Alcotest.(check int) "test_cases" 5 s.test_cases;
   Alcotest.(check (option int)) "seed" (Some 3) s.seed;
-  Alcotest.(check bool) "derandomize" true s.derandomize;
-  Alcotest.(check bool) "mode" true (Poly.equal s.mode Single_test_case)
+  Alcotest.(check bool) "derandomize" true s.derandomize
 ;;
 
 (* Regression test: [with_suppress_health_check] sets the suppressed list like
@@ -240,22 +238,6 @@ let test_run_nested_guard () =
    | Failure msg when Test_helpers.contains_substring msg "nest" -> got_failure := true
    | _ -> ());
   Alcotest.(check bool) "nested run rejected" true !got_failure
-;;
-
-(** Single-test-case mode runs the body and surfaces a failure. *)
-let test_single_mode_failure () =
-  let settings = default_settings () |> with_mode Single_test_case in
-  let raised =
-    try
-      run_hegel_test ~settings (fun tc ->
-        let _ = Hegel.draw tc int_gen in
-        raise Boom);
-      false
-    with
-    | Boom -> true
-    | _ -> false
-  in
-  Alcotest.(check bool) "single-mode failure re-raised" true raised
 ;;
 
 (** [note] only prints on the final replay; here it just must not raise. *)
@@ -528,7 +510,6 @@ let tests =
   ; Alcotest.test_case "run failing re-raises" `Quick test_run_failing_reraises
   ; Alcotest.test_case "run assume rejects" `Quick test_run_assume_rejects
   ; Alcotest.test_case "run nested guard" `Quick test_run_nested_guard
-  ; Alcotest.test_case "single mode failure" `Quick test_single_mode_failure
   ; Alcotest.test_case "note and target" `Quick test_note_and_target
   ; Alcotest.test_case "run database unset" `Quick test_run_database_unset
   ; Alcotest.test_case "run with full settings" `Quick test_run_with_full_settings

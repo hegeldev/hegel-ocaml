@@ -409,7 +409,7 @@ val make_characters
   -> unit
   -> ('a, printable) generator
 
-val char : unit -> (char, printable) generator
+val chars : unit -> (char, printable) generator
 val binary : ?min_size:int -> ?max_size:int -> unit -> (string, printable) generator
 val just : 'a -> ('a, unprintable) generator
 

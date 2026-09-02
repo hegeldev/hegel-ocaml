@@ -156,8 +156,8 @@ let stateful_step_count_below_one_test () =
       ~settings:(Hegel.settings () |> Hegel.with_stateful_step_count 0)
       (fun _tc -> ())
   with
-  | () -> Alcotest.fail "expected Backend_error"
-  | exception Hegel_ffi.Ffi.Backend_error msg ->
+  | () -> Alcotest.fail "expected Usage_error"
+  | exception Hegel.Usage_error msg ->
     Alcotest.(check bool)
       "diagnostic names the constraint"
       true

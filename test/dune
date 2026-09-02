@@ -12,7 +12,6 @@
   test_generators_combinators
   test_generators_functions
   test_stateful
-  test_single_test_case
   test_antithesis
   test_loader)
  (libraries
