@@ -336,57 +336,110 @@ type time =
   ; second : int
   ; nanosecond : int
   }
+
+let format_date { year; month; day } = Printf.sprintf "%04d-%02d-%02d" year month day
+
+let format_time { hour; minute; second; nanosecond } =
+  Printf.sprintf "%02d:%02d:%02d.%09d" hour minute second nanosecond
+;;
+
+let format_datetime (date, time) = format_date date ^ "T" ^ format_time time
+let date_to_tuple { year; month; day } = year, month, day
+let time_to_tuple { hour; minute; second; nanosecond } = hour, minute, second, nanosecond
+
+(** [make_dates ~of_parts ~sexp_of ?min_date ?max_date ()] builds a generator
+    for dates in [\[min_date, max_date\]] over any representation. [of_parts]
+    converts each drawn {!date} to the desired representation. The default 
+    range is [\[0001-01-01, 9999-12-31\]]. *)
+let make_dates
+      ~of_parts
+      ~sexp_of
+      ?(min_date = { year = 1; month = 1; day = 1 })
+      ?(max_date = { year = 9999; month = 12; day = 31 })
+      ()
+  =
+  let min_value = date_to_tuple min_date in
+  let max_value = date_to_tuple max_date in
   leaf
     ~draw:(fun tc ->
-      let year, month, day = Internal.generate_date tc in
-      of_parts ~year ~month ~day)
+      let year, month, day = Internal.generate_date tc ~min_value ~max_value in
+      of_parts { year; month; day })
     ~sexp_of
 ;;
 
-(** [make_times ~of_parts ~sexp_of ()] builds a time-of-day generator over any
-    time representation. [of_parts] converts the generated time data to the 
-    desired time representation. *)
-let make_times ~of_parts ~sexp_of () =
+(** [make_times ~of_parts ~sexp_of ?min_time ?max_time ()] builds a generator
+    for times of day in [\[min_time, max_time\]] over any representation.
+    [of_parts] converts each drawn {!time} to the desired representation. The 
+    default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
+let make_times
+      ~of_parts
+      ~sexp_of
+      ?(min_time = { hour = 0; minute = 0; second = 0; nanosecond = 0 })
+      ?(max_time = { hour = 23; minute = 59; second = 59; nanosecond = 999_999_999 })
+      ()
+  =
+  let min_value = time_to_tuple min_time in
+  let max_value = time_to_tuple max_time in
   leaf
     ~draw:(fun tc ->
-      let hour, minute, second, microsecond = Internal.generate_time tc in
-      of_parts ~hour ~minute ~second ~microsecond)
-    ~sexp_of
-;;
-
-(** [make_datetimes ~of_parts ~sexp_of ()] builds a naive-datetime generator
-    over any representation. [of_parts] converts the generated datetime data
-    to the desired representation. *)
-let make_datetimes ~of_parts ~sexp_of () =
-  leaf
-    ~draw:(fun tc ->
-      let (year, month, day), (hour, minute, second, microsecond) =
-        Internal.generate_datetime tc
+      let hour, minute, second, nanosecond =
+        Internal.generate_time tc ~min_value ~max_value
       in
-      of_parts ~year ~month ~day ~hour ~minute ~second ~microsecond)
+      of_parts { hour; minute; second; nanosecond })
     ~sexp_of
 ;;
 
-(* [format_date]/[format_time] render engine-drawn parts as ISO 8601 strings. *)
-let format_date ~year ~month ~day = Printf.sprintf "%04d-%02d-%02d" year month day
-
-let format_time ~hour ~minute ~second ~microsecond =
-  Printf.sprintf "%02d:%02d:%02d.%06d" hour minute second microsecond
+(** [make_datetimes ~of_parts ~sexp_of ?min_datetime ?max_datetime ()] builds a
+    generator for naive datetimes in [\[min_datetime, max_datetime\]] over any 
+    representation. [of_parts] converts each drawn [(date, time)] pair to the 
+    desired representation. The default range is [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
+let make_datetimes
+      ~of_parts
+      ~sexp_of
+      ?(min_datetime =
+        ( { year = 1; month = 1; day = 1 }
+        , { hour = 0; minute = 0; second = 0; nanosecond = 0 } ))
+      ?(max_datetime =
+        ( { year = 9999; month = 12; day = 31 }
+        , { hour = 23; minute = 59; second = 59; nanosecond = 999_999_999 } ))
+      ()
+  =
+  let min_date, min_time = min_datetime in
+  let max_date, max_time = max_datetime in
+  let min_value = date_to_tuple min_date, time_to_tuple min_time in
+  let max_value = date_to_tuple max_date, time_to_tuple max_time in
+  leaf
+    ~draw:(fun tc ->
+      let (year, month, day), (hour, minute, second, nanosecond) =
+        Internal.generate_datetime tc ~min_value ~max_value
+      in
+      of_parts ({ year; month; day }, { hour; minute; second; nanosecond }))
+    ~sexp_of
 ;;
 
-(** [dates ()] is a generator for ISO 8601 [YYYY-MM-DD] date strings. *)
-let dates () = make_dates ~of_parts:format_date ~sexp_of:sexp_of_string ()
+(** [dates ?min_date ?max_date ()] creates a generator for ISO 8601
+    [YYYY-MM-DD] date strings in [\[min_date, max_date\]]. The default range is
+    [\[0001-01-01, 9999-12-31\]]. *)
+let dates ?min_date ?max_date () =
+  make_dates ~of_parts:format_date ~sexp_of:sexp_of_string ?min_date ?max_date ()
+;;
 
-(** [times ()] is a generator for ISO 8601 [HH:MM:SS.ffffff] time-of-day
-    strings. *)
-let times () = make_times ~of_parts:format_time ~sexp_of:sexp_of_string ()
+(** [times ?min_time ?max_time ()] creates a generator for ISO 8601
+    [HH:MM:SS.fffffffff] time-of-day strings in [\[min_time, max_time\]]. The
+    default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
+let times ?min_time ?max_time () =
+  make_times ~of_parts:format_time ~sexp_of:sexp_of_string ?min_time ?max_time ()
+;;
 
-(** [datetimes ()] is a generator for naive ISO 8601 [YYYY-MM-DDTHH:MM:SS.ffffff] 
-    datetime strings. *)
-let datetimes () =
+(** [datetimes ?min_datetime ?max_datetime ()] creates a generator for naive
+    ISO 8601 [YYYY-MM-DDTHH:MM:SS.fffffffff] datetime strings in
+    [\[min_datetime, max_datetime\]]. The default range is
+    [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
+let datetimes ?min_datetime ?max_datetime () =
   make_datetimes
-    ~of_parts:(fun ~year ~month ~day ~hour ~minute ~second ~microsecond ->
-      format_date ~year ~month ~day ^ "T" ^ format_time ~hour ~minute ~second ~microsecond)
+    ~of_parts:format_datetime
     ~sexp_of:sexp_of_string
+    ?min_datetime
+    ?max_datetime
     ()
 ;;
