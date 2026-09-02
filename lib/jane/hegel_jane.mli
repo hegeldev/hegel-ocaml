@@ -45,7 +45,7 @@ val ofdays
 
 (** [datetimes ?min_datetime ?max_datetime ()] creates a generator for naive
     datetimes as [(Core.Date.t * Core.Time_ns.Ofday.t)] pairs in
-    [\[min_datetime, max_datetime\]] The default range is [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
+    [\[min_datetime, max_datetime\]]. The default range is [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
 val datetimes
   :  ?min_datetime:Core.Date.t * Core.Time_ns.Ofday.t
   -> ?max_datetime:Core.Date.t * Core.Time_ns.Ofday.t

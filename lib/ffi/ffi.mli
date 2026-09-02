@@ -102,7 +102,7 @@ exception Assume_rejected
 (** Raised when a libhegel call fails with any other negative status code
     ([HEGEL_E_BACKEND], [HEGEL_E_INVALID_HANDLE], [HEGEL_E_ALREADY_COMPLETE],
     [HEGEL_E_NOT_COMPLETE], [HEGEL_E_INTERNAL], [HEGEL_E_CONCURRENT_USE], or an
-    unrecognised code). The payload is a static label identifying the code,
+    unrecognized code). The payload is a static label identifying the code,
     followed by {!last_error_message} when the engine set one. *)
 exception Backend_error of string
 

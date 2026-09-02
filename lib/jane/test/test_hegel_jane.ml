@@ -87,7 +87,7 @@ let test_time_nanoseconds_invalid_bounds () =
        ())
 ;;
 
-(** Test: dates default to years 1 through 9999. *)
+(** Test: dates defaults to years 1 through 9999. *)
 let test_dates_default_bounds () =
   run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
     let d = draw tc (Hegel_jane.dates ()) in
@@ -99,7 +99,7 @@ let test_dates_invalid_bounds () =
   expect_usage_error (Hegel_jane.dates ~min_date:(Core.Date.add_days d 1) ~max_date:d ())
 ;;
 
-(** Test: ofdays default to the whole day *)
+(** Test: ofdays defaults to the whole day. *)
 let test_ofdays_default_bounds () =
   let module Ofday = Core.Time_ns.Ofday in
   run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
@@ -122,7 +122,7 @@ let compare_datetime (d1, t1) (d2, t2) =
   | c -> c
 ;;
 
-(** Test: datetimes default to years 1 through 9999 and the whole day. *)
+(** Test: datetimes defaults to years 1 through 9999 and the whole day. *)
 let test_datetimes_default_bounds () =
   let module Ofday = Core.Time_ns.Ofday in
   run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->

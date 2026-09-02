@@ -279,7 +279,7 @@ let datetime_of_string s =
   date_of_string (String.sub s 0 10), time_of_string (String.sub s 11 18)
 ;;
 
-(** Test: times honors inclusive bounds *)
+(** Test: times honors inclusive bounds. *)
 let test_times_bounds_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
     let lo = Hegel.draw tc (times ()) in
@@ -291,7 +291,7 @@ let test_times_bounds_e2e () =
     Alcotest.(check string) "point range" lo point)
 ;;
 
-(** Test: dates honors inclusive bounds *)
+(** Test: dates honors inclusive bounds. *)
 let test_dates_bounds_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
     let lo = Hegel.draw tc (dates ()) in
@@ -312,7 +312,7 @@ let test_datetimes_e2e () =
     assert (within ~lo:first_time ~hi:last_time time))
 ;;
 
-(** Test: datetimes honors inclusive bounds *)
+(** Test: datetimes honors inclusive bounds. *)
 let test_datetimes_bounds_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
     let lo = Hegel.draw tc (datetimes ()) in
@@ -337,7 +337,7 @@ let expect_usage_error name gen expected =
 ;;
 
 (** Test: date bounds the engine rejects (a calendar-invalid day, an
-    out-of-range month, crossed bounds) abort the run with [Usage_error] *)
+    out-of-range month, crossed bounds) abort the run with [Usage_error]. *)
 let test_dates_invalid_bounds () =
   List.iter
     (fun (name, min_date, max_date, expected) ->
