@@ -646,10 +646,10 @@ type time =
   ; nanosecond : int
   }
 
-(** [make_dates ~of_parts ~sexp_of ?min_date ?max_date ()] builds a date
-    generator over any date representation. [of_parts] converts a drawn
-    {!date} to that representation. Bounds are inclusive and default to
-    [0001-01-01] and [9999-12-31].
+(** [make_dates ~of_parts ~sexp_of ?min_date ?max_date ()] builds a generator
+    for dates in [\[min_date, max_date\]] over any representation. [of_parts]
+    converts each drawn {!date} to the desired representation. The default 
+    range is [\[0001-01-01, 9999-12-31\]].
 
     {[
       let core_dates =
@@ -667,10 +667,10 @@ val make_dates
   -> unit
   -> ('a, printable) generator
 
-(** [make_times ~of_parts ~sexp_of ?min_time ?max_time ()] builds a
-    time-of-day generator over any time representation. [of_parts] converts a
-    drawn {!time} to that representation. Bounds are inclusive and default to
-    the whole day. *)
+(** [make_times ~of_parts ~sexp_of ?min_time ?max_time ()] builds a generator
+    for times of day in [\[min_time, max_time\]] over any representation.
+    [of_parts] converts each drawn {!time} to the desired representation. The 
+    default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
 val make_times
   :  of_parts:(time -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
@@ -680,9 +680,9 @@ val make_times
   -> ('a, printable) generator
 
 (** [make_datetimes ~of_parts ~sexp_of ?min_datetime ?max_datetime ()] builds a
-    naive-datetime generator over any representation. [of_parts] converts a
-    drawn [(date, time)] pair to that representation. Bounds are inclusive
-    and default to the full {!make_dates} and {!make_times} ranges. *)
+    generator for naive datetimes in [\[min_datetime, max_datetime\]] over any 
+    representation. [of_parts] converts each drawn [(date, time)] pair to the 
+    desired representation. The default range is [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
 val make_datetimes
   :  of_parts:(date * time -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
@@ -691,8 +691,9 @@ val make_datetimes
   -> unit
   -> ('a, printable) generator
 
-(** [dates ()] creates a generator for calendar dates as ISO 8601 [YYYY-MM-DD]
-    strings, with year in [\[1, 9999\]] and calendar-valid month/day.
+(** [dates ?min_date ?max_date ()] creates a generator for ISO 8601
+    [YYYY-MM-DD] date strings in [\[min_date, max_date\]]. The default range is
+    [\[0001-01-01, 9999-12-31\]].
 
     {[
       let%hegel_test dates_example tc =
@@ -700,21 +701,26 @@ val make_datetimes
         assert (String.length d = 10)
       ;;
     ]} *)
-val dates : unit -> (string, printable) generator
+val dates : ?min_date:date -> ?max_date:date -> unit -> (string, printable) generator
 
-(** [times ()] creates a generator for times of day as ISO 8601 [HH:MM:SS.ffffff] 
-    strings.
+(** [times ?min_time ?max_time ()] creates a generator for ISO 8601
+    [HH:MM:SS.fffffffff] time-of-day strings in [\[min_time, max_time\]]. The
+    default range is [\[00:00:00.000000000, 23:59:59.999999999\]].
 
     {[
       let%hegel_test times_example tc =
-        let t = draw tc (times ()) in
-        assert (String.length t = 15)
+        let t =
+          draw tc (times ~min_time:{ hour = 9; minute = 0; second = 0; nanosecond = 0 } ())
+        in
+        assert (String.length t = 18 && String.compare t "09:00:00.000000000" >= 0)
       ;;
     ]} *)
-val times : unit -> (string, printable) generator
+val times : ?min_time:time -> ?max_time:time -> unit -> (string, printable) generator
 
-(** [datetimes ()] creates a generator for naive datetimes as ISO 8601
-    [YYYY-MM-DDTHH:MM:SS.ffffff] strings.
+(** [datetimes ?min_datetime ?max_datetime ()] creates a generator for naive
+    ISO 8601 [YYYY-MM-DDTHH:MM:SS.fffffffff] datetime strings in
+    [\[min_datetime, max_datetime\]]. The default range is
+    [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]].
 
     {[
       let%hegel_test datetimes_example tc =
@@ -722,7 +728,11 @@ val times : unit -> (string, printable) generator
         assert (String.contains dt 'T')
       ;;
     ]} *)
-val datetimes : unit -> (string, printable) generator
+val datetimes
+  :  ?min_datetime:date * time
+  -> ?max_datetime:date * time
+  -> unit
+  -> (string, printable) generator
 
 (** [ip_addresses ?version ()] creates a generator for typed [Ipaddr.t] IP
     addresses. [version] selects IPv4 ([`V4], RFC 791) or IPv6 ([`V6],
