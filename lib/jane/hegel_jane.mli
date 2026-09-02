@@ -85,6 +85,8 @@ val hash_tables
   -> unit
   -> (('a, 'b) Core.Hashtbl.Poly.t, Hegel.printable) Hegel.generator
 
+(**/**)
+
 (** [resolve_draw values ~consume id] resolves a drawn pool [id] against the
     local [values] table, removing it when [consume]. *)
 val resolve_draw : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
@@ -98,8 +100,6 @@ val pool_values
   -> values:(int, 'a) Core.Hashtbl.t
   -> consume:bool
   -> ('a, Hegel.unprintable) Hegel.generator
-
-(**/**)
 
 (** [sexp_diff_renderer ~colored ~original ~updated] renders a structural
     [sexp_diff] two-column diff of the two values: red/green markings when
