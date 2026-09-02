@@ -23,23 +23,23 @@ let test_integers_unbounded_e2e () =
 
 (** Test: integers raises when min_value > max_value. *)
 let test_integers_min_greater_than_max () =
-  match integers ~min_value:10 ~max_value:5 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error
+    (integers ~min_value:10 ~max_value:5 ())
+    "generate_integer requires min_value <= max_value"
 ;;
 
 (** Test: booleans raises when p is below 0. *)
 let test_booleans_probability_too_low () =
-  match booleans ~p:(-0.1) () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error
+    (booleans ~p:(-0.1) ())
+    "requires a probability in [0.0, 1.0]"
 ;;
 
 (** Test: booleans raises when p is above 1. *)
 let test_booleans_probability_too_high () =
-  match booleans ~p:1.1 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error
+    (booleans ~p:1.1 ())
+    "requires a probability in [0.0, 1.0]"
 ;;
 
 (** Test: booleans ~p:1.0 always draws true. *)
@@ -58,86 +58,84 @@ let test_booleans_probability_zero_e2e () =
 
 (** Test: floats raises when allow_nan=true with min_value set. *)
 let test_floats_nan_with_min () =
-  match floats ~allow_nan:true ~min_value:0.0 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error
+    (floats ~allow_nan:true ~min_value:0.0 ())
+    "Cannot have allow_nan=true with min_value or max_value"
 ;;
 
 (** Test: floats raises when allow_nan=true with max_value set. *)
 let test_floats_nan_with_max () =
-  match floats ~allow_nan:true ~max_value:1.0 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error
+    (floats ~allow_nan:true ~max_value:1.0 ())
+    "Cannot have allow_nan=true with min_value or max_value"
 ;;
 
 (** Test: floats raises when min_value > max_value. *)
 let test_floats_min_greater_than_max () =
-  match floats ~min_value:10.0 ~max_value:5.0 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error
+    (floats ~min_value:10.0 ~max_value:5.0 ())
+    "must be <= max_value"
 ;;
 
 (** Test: floats raises when allow_infinity=true with both bounds set. *)
 let test_floats_infinity_with_both_bounds () =
-  match floats ~allow_infinity:true ~min_value:0.0 ~max_value:1.0 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error
+    (floats ~allow_infinity:true ~min_value:0.0 ~max_value:1.0 ())
+    "Cannot have allow_infinity=true with both min_value and max_value"
 ;;
 
 (** Test: text raises when min_size is negative. *)
 let test_text_negative_min_size () =
   match text ~min_size:(-1) () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (** Test: text raises when max_size is negative. *)
 let test_text_negative_max_size () =
   match text ~max_size:(-1) () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (** Test: text raises when min_size > max_size. *)
 let test_text_min_greater_than_max () =
-  match text ~min_size:5 ~max_size:3 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error
+    (text ~min_size:5 ~max_size:3 ())
+    "text requires min_size <= max_size"
 ;;
 
 (** Test: binary raises when min_size is negative. *)
 let test_binary_negative_min_size () =
   match binary ~min_size:(-1) () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (** Test: binary raises when max_size is negative. *)
 let test_binary_negative_max_size () =
   match binary ~max_size:(-1) () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (** Test: binary raises when min_size > max_size. *)
 let test_binary_min_greater_than_max () =
-  match binary ~min_size:5 ~max_size:3 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error
+    (binary ~min_size:5 ~max_size:3 ())
+    "generate_bytes requires min_size <= max_size"
 ;;
 
 (** Test: domains raises when max_length is below 4. *)
 let test_domains_max_length_too_small () =
-  match domains ~max_length:2 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error (domains ~max_length:2 ()) "leaves no eligible TLDs"
 ;;
 
 (** Test: domains raises when max_length is above 255. *)
 let test_domains_max_length_too_large () =
-  match domains ~max_length:256 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error
+    (domains ~max_length:256 ())
+    "exceeds the RFC 1035 limit of 255"
 ;;
 
 (* ==== Character filtering validation tests ==== *)
@@ -145,36 +143,36 @@ let test_domains_max_length_too_large () =
 (** Test: text raises when both categories and exclude_categories are set. *)
 let test_text_categories_and_exclude_categories () =
   match text ~categories:[ "L" ] ~exclude_categories:[ "Zs" ] () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (** Test: text raises when categories include surrogate category Cs. *)
 let test_text_categories_surrogate_cs () =
   match text ~categories:[ "Cs" ] () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (** Test: text raises when categories include surrogate category C. *)
 let test_text_categories_surrogate_c () =
   match text ~categories:[ "C" ] () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (** Test: text raises when alphabet is combined with codec. *)
 let test_text_alphabet_with_codec () =
   match text ~alphabet:"abc" ~codec:"ascii" () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (** Test: text raises when alphabet is combined with max_codepoint. *)
 let test_text_alphabet_with_max_codepoint () =
   match text ~alphabet:"abc" ~max_codepoint:90 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (* ==== E2E tests ==== *)

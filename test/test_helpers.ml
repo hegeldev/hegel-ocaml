@@ -31,6 +31,19 @@ let with_tempdir ~prefix ~f =
     ~f:(fun () -> f dir)
 ;;
 
+let expect_usage_error gen substring =
+  match
+    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+      ignore (Hegel.draw tc gen))
+  with
+  | exception Hegel.Usage_error msg ->
+    Alcotest.(check bool)
+      (Printf.sprintf "diagnostic %S contains %S" msg substring)
+      true
+      (String.is_substring msg ~substring)
+  | () -> Alcotest.fail "expected Usage_error"
+;;
+
 (** [contains_substring s sub] returns [true] if [sub] appears anywhere in [s].
 *)
 let contains_substring s sub =

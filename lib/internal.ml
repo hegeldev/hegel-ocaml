@@ -362,6 +362,8 @@ let extract_origin exn =
     Printf.sprintf "%s at %s:%d" (Stdlib.Printexc.exn_slot_name exn) file line
 ;;
 
+exception Usage_error = Ffi.Usage_error
+
 (** [with_stop_guard tc f] runs [f ()], translating the engine's per-case abort
     signals into the corresponding OCaml exceptions and marking the test case
     aborted: {!Ffi.Stop_test} becomes {!Data_exhausted} (choice budget exhausted)

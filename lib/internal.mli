@@ -203,6 +203,8 @@ val join : 'a worker -> 'a
     the shrinker can group probes for the same bug. *)
 val extract_origin : exn -> string
 
+exception Usage_error of string
+
 (** [generate_boolean tc p forced] draws a boolean with probability [p] of
     [true]. If [forced] is [Some b] the value is forced to [b]. Raises
     {!Data_exhausted} on StopTest. *)

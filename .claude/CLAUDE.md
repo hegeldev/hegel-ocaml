@@ -526,6 +526,14 @@ draw, and always freed (`Internal.with_string_generator`).
     justfile, and use `eval $(opam env)` inside recipes that need the full opam environment.
     The `export PATH` line in justfile is evaluated by `just` itself, not the shell.
 
+### Coverage and bisect_ppx
+
+- **Raise usage errors with a literal `raise`, not a helper.** bisect_ppx marks
+  a call in tail position only after it returns (to preserve tail calls), so a
+  helper like `let usage_error msg = raise (Ffi.Usage_error msg)` leaves every
+  call site uncovered even when tests hit it. `raise` itself is special-cased,
+  so generators write `raise (Internal.Usage_error msg)`.
+
 ### Good-Taste Audit
 
 13. **OCamlFormat is the authority on doc comment placement**: OCaml has two valid placements for

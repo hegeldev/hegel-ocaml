@@ -206,9 +206,8 @@ let test_hash_tables_e2e () =
 
 (** Test: hash_tables rejects crossed size bounds like assoc_lists. *)
 let test_hash_tables_min_greater_than_max () =
-  match Hegel_jane.hash_tables (integers ()) (booleans ()) ~min_size:5 ~max_size:3 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  expect_usage_error
+    (Hegel_jane.hash_tables (integers ()) (booleans ()) ~min_size:5 ~max_size:3 ())
 ;;
 
 (* Hash tables render through [Hashtbl.Poly.sexp_of_t]; a single entry keeps

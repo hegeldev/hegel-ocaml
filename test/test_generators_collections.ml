@@ -6,43 +6,43 @@ open Generators
 (** Test: lists raises when min_size is negative. *)
 let test_lists_negative_min_size () =
   match lists (integers ()) ~min_size:(-1) () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (** Test: lists raises when max_size is negative. *)
 let test_lists_negative_max_size () =
   match lists (integers ()) ~max_size:(-1) () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (** Test: lists raises when min_size > max_size. *)
 let test_lists_min_greater_than_max () =
-  match lists (integers ()) ~min_size:5 ~max_size:3 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error
+    (lists (integers ()) ~min_size:5 ~max_size:3 ())
+    "hegel_new_collection requires min_size <= max_size"
 ;;
 
 (** Test: assoc_lists raises when min_size is negative. *)
 let test_assoc_lists_negative_min_size () =
   match assoc_lists (integers ()) (booleans ()) ~min_size:(-1) () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (** Test: assoc_lists raises when max_size is negative. *)
 let test_assoc_lists_negative_max_size () =
   match assoc_lists (integers ()) (booleans ()) ~max_size:(-1) () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (** Test: assoc_lists raises when min_size > max_size. *)
 let test_assoc_lists_min_greater_than_max () =
-  match assoc_lists (integers ()) (booleans ()) ~min_size:5 ~max_size:3 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error
+    (assoc_lists (integers ()) (booleans ()) ~min_size:5 ~max_size:3 ())
+    "hegel_new_collection requires min_size <= max_size"
 ;;
 
 (* ==== E2E tests ==== *)
@@ -209,9 +209,9 @@ let test_hash_tables_e2e () =
 
 (** Test: hash_tables rejects crossed size bounds like assoc_lists. *)
 let test_hash_tables_min_greater_than_max () =
-  match hash_tables (integers ()) (booleans ()) ~min_size:5 ~max_size:3 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  Test_helpers.expect_usage_error
+    (hash_tables (integers ()) (booleans ()) ~min_size:5 ~max_size:3 ())
+    "hegel_new_collection requires min_size <= max_size"
 ;;
 
 (** Regression: [assoc_lists] with a non-basic key generator must still enforce

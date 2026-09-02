@@ -5,11 +5,6 @@ open Generators_core
     the given bounds. When a bound is omitted it defaults to the corresponding
     OCaml native [int] limit. *)
 let integers ?(min_value = Int.min_int) ?(max_value = Int.max_int) () =
-  if min_value > max_value
-  then
-    raise
-      (Invalid_argument
-         (Printf.sprintf "Cannot have max_value=%d < min_value=%d" max_value min_value));
   leaf
     ~draw:(fun tc -> Internal.generate_integer tc ~min_value ~max_value)
     ~sexp_of:sexp_of_int
@@ -18,8 +13,6 @@ let integers ?(min_value = Int.min_int) ?(max_value = Int.max_int) () =
 (** [booleans ?p ()] creates a generator for boolean values,
     [true] with probability [p] (default [0.5]). *)
 let booleans ?(p = 0.5) () =
-  if p < 0.0 || p > 1.0
-  then raise (Invalid_argument (Printf.sprintf "p=%g must be between 0 and 1" p));
   leaf ~draw:(fun tc -> Internal.generate_boolean tc p None) ~sexp_of:sexp_of_bool
 ;;
 
@@ -59,22 +52,6 @@ let floats
     | Some v -> v
     | None -> (not has_min) || not has_max
   in
-  if eff_allow_nan && (has_min || has_max)
-  then raise (Invalid_argument "Cannot have allow_nan=true with min_value or max_value");
-  (match min_value, max_value with
-   | Some min, Some max when min > max ->
-     raise
-       (Invalid_argument
-          (Printf.sprintf
-             "There are no floats between min_value=%g and max_value=%g"
-             min
-             max))
-   | _ -> ());
-  if eff_allow_infinity && has_min && has_max
-  then
-    raise
-      (Invalid_argument
-         "Cannot have allow_infinity=true with both min_value and max_value");
   let min_value = Option.value min_value ~default:neg_infinity in
   let max_value = Option.value max_value ~default:infinity in
   leaf
@@ -102,7 +79,8 @@ let surrogate_categories = [ "Cs"; "C" ]
 let effective_categories ?categories ?exclude_categories () =
   (match categories, exclude_categories with
    | Some _, Some _ ->
-     raise (Invalid_argument "categories and exclude_categories are mutually exclusive")
+     raise
+       (Internal.Usage_error "categories and exclude_categories are mutually exclusive")
    | _ -> ());
   (* Surrogate auto-exclusion *)
   (match categories with
@@ -112,7 +90,7 @@ let effective_categories ?categories ?exclude_categories () =
           if List.mem cat surrogate_categories
           then
             raise
-              (Invalid_argument
+              (Internal.Usage_error
                  (Printf.sprintf
                     "Category %S includes surrogate codepoints (Cs), which OCaml UTF-8 \
                      strings cannot represent"
@@ -186,14 +164,11 @@ let text
   =
   if min_size < 0
   then
-    raise (Invalid_argument (Printf.sprintf "min_size=%d must be non-negative" min_size));
+    raise
+      (Internal.Usage_error (Printf.sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
    | Some ms when ms < 0 ->
-     raise (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
-   | Some ms when min_size > ms ->
-     raise
-       (Invalid_argument
-          (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
+     raise (Internal.Usage_error (Printf.sprintf "max_size=%d must be non-negative" ms))
    | _ -> ());
   let has_char_param =
     Option.is_some codec
@@ -207,7 +182,7 @@ let text
   (match alphabet with
    | Some _ when has_char_param ->
      raise
-       (Invalid_argument
+       (Internal.Usage_error
           "alphabet is mutually exclusive with individual character filtering parameters")
    | _ -> ());
   match alphabet with
@@ -292,14 +267,11 @@ let chars () = make_characters ~of_char:Fun.id ~sexp_of:sexp_of_char ()
 let binary ?(min_size = 0) ?max_size () =
   if min_size < 0
   then
-    raise (Invalid_argument (Printf.sprintf "min_size=%d must be non-negative" min_size));
+    raise
+      (Internal.Usage_error (Printf.sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
    | Some ms when ms < 0 ->
-     raise (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
-   | Some ms when min_size > ms ->
-     raise
-       (Invalid_argument
-          (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
+     raise (Internal.Usage_error (Printf.sprintf "max_size=%d must be non-negative" ms))
    | _ -> ());
   leaf
     ~draw:(fun tc -> Internal.generate_bytes tc ~min_size ~max_size)
@@ -348,11 +320,6 @@ let urls () = leaf ~draw:Internal.generate_url ~sexp_of:sexp_of_string
     [max_length] (default 255, per RFC 1035 §2.3.4); when provided, [max_length]
     must be in [4, 255]. *)
 let domains ?max_length () =
-  (match max_length with
-   | Some ml when ml < 4 || ml > 255 ->
-     raise
-       (Invalid_argument (Printf.sprintf "max_length=%d must be between 4 and 255" ml))
-   | _ -> ());
   let max_length = Option.value max_length ~default:255 in
   leaf ~draw:(fun tc -> Internal.generate_domain tc ~max_length) ~sexp_of:sexp_of_string
 ;;
