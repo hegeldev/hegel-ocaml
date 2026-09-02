@@ -98,6 +98,34 @@ let stateful_variables_draw_test () =
       tc)
 ;;
 
+let stateful_usage_error_test () =
+  let module S = Hegel.Stateful in
+  let attempts = ref 0 in
+  let bad_rule =
+    S.Rule.create ~name:"bad" ~step:(fun tc () ->
+      incr attempts;
+      ignore
+        (Hegel.draw
+           tc
+           (Hegel.dates
+              ~min_date:{ year = 2024; month = 1; day = 2 }
+              ~max_date:{ year = 2024; month = 1; day = 1 }
+              ())
+         : string))
+  in
+  match
+    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+      S.run ~init:() ~rules:[ bad_rule ] tc)
+  with
+  | () -> Alcotest.fail "expected Usage_error"
+  | exception Hegel.Usage_error msg ->
+    Alcotest.(check bool)
+      "engine diagnostic"
+      true
+      (String.is_substring msg ~substring:"generate_date requires min_value <= max_value");
+    Alcotest.(check int) "rule attempted once" 1 !attempts
+;;
+
 let stateful_rule_name_test () =
   let module S = Hegel.Stateful in
   let rule = S.Rule.create ~name:"my_rule" ~step:(fun _tc s -> s) in
@@ -105,14 +133,16 @@ let stateful_rule_name_test () =
 ;;
 
 let stateful_no_rules_test () =
-  let raised_msg = ref "" in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
-    try Hegel.Stateful.run ~init:() ~rules:[] tc with
-    | Invalid_argument msg -> raised_msg := msg);
-  Alcotest.(check bool)
-    "has 'no rules' message"
-    true
-    (String.equal !raised_msg "Cannot run a state machine with no rules.")
+  match
+    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
+      Hegel.Stateful.run ~init:() ~rules:[] tc)
+  with
+  | () -> Alcotest.fail "expected Usage_error"
+  | exception Hegel.Usage_error msg ->
+    Alcotest.(check string)
+      "engine diagnostic"
+      "cannot run a state machine with no rules"
+      msg
 ;;
 
 (* Pins the engine-side contract documented on [Internal.pool_generate]:
@@ -237,6 +267,10 @@ let tests =
       "stateful: variables draw (non-consuming)"
       `Quick
       stateful_variables_draw_test
+  ; Alcotest.test_case
+      "stateful: usage error aborts the run"
+      `Quick
+      stateful_usage_error_test
   ; Alcotest.test_case "stateful: rule name accessor" `Quick stateful_rule_name_test
   ; Alcotest.test_case "stateful: empty rules raises" `Quick stateful_no_rules_test
   ; Alcotest.test_case

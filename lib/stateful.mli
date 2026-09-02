@@ -146,7 +146,7 @@ end
 (** Executes a stateful test by repeatedly applying randomly chosen [rules] to a
     state threaded from [init]. Every invariant is checked on the initial and the
     final state. After a step, invariants are randomly sampled. Raises 
-    [Invalid_argument] if [rules] is empty.
+    [Hegel.Usage_error] if [rules] is empty.
 
     On a failing replay, each applied rule prints as [Step N: <name>], with the
     values the rule draws nested under it. When [sexp_of_state] is supplied, the
