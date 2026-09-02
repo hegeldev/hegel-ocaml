@@ -324,13 +324,13 @@ let domains ?max_length () =
   leaf ~draw:(fun tc -> Internal.generate_domain tc ~max_length) ~sexp_of:sexp_of_string
 ;;
 
-type date =
+type date = Internal.date =
   { year : int
   ; month : int
   ; day : int
   }
 
-type time =
+type time = Internal.time =
   { hour : int
   ; minute : int
   ; second : int
@@ -344,26 +344,19 @@ let format_time { hour; minute; second; nanosecond } =
 ;;
 
 let format_datetime (date, time) = format_date date ^ "T" ^ format_time time
-let date_to_tuple { year; month; day } = year, month, day
-let time_to_tuple { hour; minute; second; nanosecond } = hour, minute, second, nanosecond
+let first_date = { year = 1; month = 1; day = 1 }
+let last_date = { year = 9999; month = 12; day = 31 }
+let first_time = { hour = 0; minute = 0; second = 0; nanosecond = 0 }
+let last_time = { hour = 23; minute = 59; second = 59; nanosecond = 999_999_999 }
 
 (** [make_dates ~of_parts ~sexp_of ?min_date ?max_date ()] builds a generator
     for dates in [\[min_date, max_date\]] over any representation. [of_parts]
     converts each drawn {!date} to the desired representation. The default 
     range is [\[0001-01-01, 9999-12-31\]]. *)
-let make_dates
-      ~of_parts
-      ~sexp_of
-      ?(min_date = { year = 1; month = 1; day = 1 })
-      ?(max_date = { year = 9999; month = 12; day = 31 })
-      ()
-  =
-  let min_value = date_to_tuple min_date in
-  let max_value = date_to_tuple max_date in
+let make_dates ~of_parts ~sexp_of ?(min_date = first_date) ?(max_date = last_date) () =
   leaf
     ~draw:(fun tc ->
-      let year, month, day = Internal.generate_date tc ~min_value ~max_value in
-      of_parts { year; month; day })
+      of_parts (Internal.generate_date tc ~min_value:min_date ~max_value:max_date))
     ~sexp_of
 ;;
 
@@ -371,21 +364,10 @@ let make_dates
     for times of day in [\[min_time, max_time\]] over any representation.
     [of_parts] converts each drawn {!time} to the desired representation. The 
     default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
-let make_times
-      ~of_parts
-      ~sexp_of
-      ?(min_time = { hour = 0; minute = 0; second = 0; nanosecond = 0 })
-      ?(max_time = { hour = 23; minute = 59; second = 59; nanosecond = 999_999_999 })
-      ()
-  =
-  let min_value = time_to_tuple min_time in
-  let max_value = time_to_tuple max_time in
+let make_times ~of_parts ~sexp_of ?(min_time = first_time) ?(max_time = last_time) () =
   leaf
     ~draw:(fun tc ->
-      let hour, minute, second, nanosecond =
-        Internal.generate_time tc ~min_value ~max_value
-      in
-      of_parts { hour; minute; second; nanosecond })
+      of_parts (Internal.generate_time tc ~min_value:min_time ~max_value:max_time))
     ~sexp_of
 ;;
 
@@ -396,24 +378,14 @@ let make_times
 let make_datetimes
       ~of_parts
       ~sexp_of
-      ?(min_datetime =
-        ( { year = 1; month = 1; day = 1 }
-        , { hour = 0; minute = 0; second = 0; nanosecond = 0 } ))
-      ?(max_datetime =
-        ( { year = 9999; month = 12; day = 31 }
-        , { hour = 23; minute = 59; second = 59; nanosecond = 999_999_999 } ))
+      ?(min_datetime = first_date, first_time)
+      ?(max_datetime = last_date, last_time)
       ()
   =
-  let min_date, min_time = min_datetime in
-  let max_date, max_time = max_datetime in
-  let min_value = date_to_tuple min_date, time_to_tuple min_time in
-  let max_value = date_to_tuple max_date, time_to_tuple max_time in
   leaf
     ~draw:(fun tc ->
-      let (year, month, day), (hour, minute, second, nanosecond) =
-        Internal.generate_datetime tc ~min_value ~max_value
-      in
-      of_parts ({ year; month; day }, { hour; minute; second; nanosecond }))
+      of_parts
+        (Internal.generate_datetime tc ~min_value:min_datetime ~max_value:max_datetime))
     ~sexp_of
 ;;
 

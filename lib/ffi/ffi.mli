@@ -48,6 +48,21 @@ type pool
     across clones. *)
 type state_machine
 
+(** A proleptic Gregorian calendar date ([hegel_date_t]). *)
+type date =
+  { year : int
+  ; month : int
+  ; day : int
+  }
+
+(** A time of day at nanosecond resolution ([hegel_time_t]). *)
+type time =
+  { hour : int
+  ; minute : int
+  ; second : int
+  ; nanosecond : int
+  }
+
 (** Randomness backend ([hegel_backend_t]), selected via {!settings_backend}.
 
     - [Auto]: choose automatically (the default). urandom under Antithesis,
@@ -315,34 +330,22 @@ val string_generator_free : context -> string_generator -> unit
 val generate_string : context -> test_case -> string_generator -> string
 
 (** [generate_date ctx tc ~min_value ~max_value] draws a Gregorian date in the
-    inclusive range as [(year, month, day)]. Raises {!Stop_test} on budget
-    exhaustion. *)
-val generate_date
-  :  context
-  -> test_case
-  -> min_value:int * int * int
-  -> max_value:int * int * int
-  -> int * int * int
+    inclusive range. Raises {!Stop_test} on budget exhaustion. *)
+val generate_date : context -> test_case -> min_value:date -> max_value:date -> date
 
 (** [generate_time ctx tc ~min_value ~max_value] draws a time of day in the
-    inclusive range as [(hour, minute, second, nanosecond)]. Raises
-    {!Stop_test} on budget exhaustion. *)
-val generate_time
-  :  context
-  -> test_case
-  -> min_value:int * int * int * int
-  -> max_value:int * int * int * int
-  -> int * int * int * int
+    inclusive range. Raises {!Stop_test} on budget exhaustion. *)
+val generate_time : context -> test_case -> min_value:time -> max_value:time -> time
 
 (** [generate_datetime ctx tc ~min_value ~max_value] draws a naive datetime in
-    the inclusive range as [(date, time)]. Raises {!Stop_test} on budget
+    the inclusive range as a [(date, time)] pair. Raises {!Stop_test} on budget
     exhaustion. *)
 val generate_datetime
   :  context
   -> test_case
-  -> min_value:(int * int * int) * (int * int * int * int)
-  -> max_value:(int * int * int) * (int * int * int * int)
-  -> (int * int * int) * (int * int * int * int)
+  -> min_value:date * time
+  -> max_value:date * time
+  -> date * time
 
 (** [generate_ipv4 ctx tc] draws an IPv4 address as its 4 network-order bytes. *)
 val generate_ipv4 : context -> test_case -> string

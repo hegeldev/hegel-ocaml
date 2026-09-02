@@ -260,29 +260,36 @@ val generate_url : test_case -> string
 (** [generate_domain tc ~max_length] draws an RFC 1035 domain name. *)
 val generate_domain : test_case -> max_length:int -> string
 
-(** [generate_date tc ~min_value ~max_value] draws a Gregorian date in the
-    inclusive range as [(year, month, day)]. *)
-val generate_date
-  :  test_case
-  -> min_value:int * int * int
-  -> max_value:int * int * int
-  -> int * int * int
+(** A proleptic Gregorian calendar date, as drawn by {!generate_date}. *)
+type date = Hegel_ffi.Ffi.date =
+  { year : int
+  ; month : int
+  ; day : int
+  }
 
-(** [generate_time tc ~min_value ~max_value] draws a time in the inclusive range
-    as [(hour, minute, second, nanosecond)]. *)
-val generate_time
-  :  test_case
-  -> min_value:int * int * int * int
-  -> max_value:int * int * int * int
-  -> int * int * int * int
+(** A time of day at nanosecond resolution, as drawn by {!generate_time}. *)
+type time = Hegel_ffi.Ffi.time =
+  { hour : int
+  ; minute : int
+  ; second : int
+  ; nanosecond : int
+  }
+
+(** [generate_date tc ~min_value ~max_value] draws a Gregorian date in the
+    inclusive range. *)
+val generate_date : test_case -> min_value:date -> max_value:date -> date
+
+(** [generate_time tc ~min_value ~max_value] draws a time in the inclusive
+    range. *)
+val generate_time : test_case -> min_value:time -> max_value:time -> time
 
 (** [generate_datetime tc ~min_value ~max_value] draws a naive datetime in the
-    inclusive range as [(date, time)]. *)
+    inclusive range as a [(date, time)] pair. *)
 val generate_datetime
   :  test_case
-  -> min_value:(int * int * int) * (int * int * int * int)
-  -> max_value:(int * int * int) * (int * int * int * int)
-  -> (int * int * int) * (int * int * int * int)
+  -> min_value:date * time
+  -> max_value:date * time
+  -> date * time
 
 (** [generate_ipv4 tc] draws an IPv4 address as its 4 network-order bytes. *)
 val generate_ipv4 : test_case -> string

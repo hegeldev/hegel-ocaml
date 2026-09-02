@@ -480,22 +480,37 @@ let generate_domain tc ~max_length =
   with_string_generator tc (fun ctx -> Ffi.string_generator_domain ctx ~max_length)
 ;;
 
+(** A proleptic Gregorian calendar date, as drawn by {!generate_date}. *)
+type date = Ffi.date =
+  { year : int
+  ; month : int
+  ; day : int
+  }
+
+(** A time of day at nanosecond resolution, as drawn by {!generate_time}. *)
+type time = Ffi.time =
+  { hour : int
+  ; minute : int
+  ; second : int
+  ; nanosecond : int
+  }
+
 (** [generate_date tc ~min_value ~max_value] draws a Gregorian date in the
-    inclusive range as [(year, month, day)]. *)
+    inclusive range. *)
 let generate_date tc ~min_value ~max_value =
   with_stop_guard tc (fun () ->
     Ffi.generate_date tc.context tc.handle ~min_value ~max_value)
 ;;
 
-(** [generate_time tc ~min_value ~max_value] draws a time in the inclusive range
-    as [(hour, minute, second, nanosecond)]. *)
+(** [generate_time tc ~min_value ~max_value] draws a time in the inclusive
+    range. *)
 let generate_time tc ~min_value ~max_value =
   with_stop_guard tc (fun () ->
     Ffi.generate_time tc.context tc.handle ~min_value ~max_value)
 ;;
 
 (** [generate_datetime tc ~min_value ~max_value] draws a naive datetime in the
-    inclusive range as [(date, time)]. *)
+    inclusive range as a [(date, time)] pair. *)
 let generate_datetime tc ~min_value ~max_value =
   with_stop_guard tc (fun () ->
     Ffi.generate_datetime tc.context tc.handle ~min_value ~max_value)

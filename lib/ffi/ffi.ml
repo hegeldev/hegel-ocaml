@@ -937,9 +937,21 @@ let generate_string ctx tc sg =
   s
 ;;
 
-(* Build the by-value bound structs from [(year, month, day)] and
-   [(hour, minute, second, nanosecond)] tuples. *)
-let make_date (year, month, day) =
+type date =
+  { year : int
+  ; month : int
+  ; day : int
+  }
+
+type time =
+  { hour : int
+  ; minute : int
+  ; second : int
+  ; nanosecond : int
+  }
+
+(* Build the by-value bound structs from [date]/[time] records. *)
+let make_date { year; month; day } =
   let d = make Date_struct.t in
   setf d Date_struct.year (Int32.of_int year);
   setf d Date_struct.month (Unsigned.UInt8.of_int month);
@@ -947,7 +959,7 @@ let make_date (year, month, day) =
   d
 ;;
 
-let make_time (hour, minute, second, nanosecond) =
+let make_time { hour; minute; second; nanosecond } =
   let t = make Time_struct.t in
   setf t Time_struct.hour (Unsigned.UInt8.of_int hour);
   setf t Time_struct.minute (Unsigned.UInt8.of_int minute);
@@ -964,16 +976,18 @@ let make_datetime (date, time) =
 ;;
 
 let read_date d =
-  ( Int32.to_int (getf d Date_struct.year)
-  , Unsigned.UInt8.to_int (getf d Date_struct.month)
-  , Unsigned.UInt8.to_int (getf d Date_struct.day) )
+  { year = Int32.to_int (getf d Date_struct.year)
+  ; month = Unsigned.UInt8.to_int (getf d Date_struct.month)
+  ; day = Unsigned.UInt8.to_int (getf d Date_struct.day)
+  }
 ;;
 
 let read_time t =
-  ( Unsigned.UInt8.to_int (getf t Time_struct.hour)
-  , Unsigned.UInt8.to_int (getf t Time_struct.minute)
-  , Unsigned.UInt8.to_int (getf t Time_struct.second)
-  , Unsigned.UInt32.to_int (getf t Time_struct.nanosecond) )
+  { hour = Unsigned.UInt8.to_int (getf t Time_struct.hour)
+  ; minute = Unsigned.UInt8.to_int (getf t Time_struct.minute)
+  ; second = Unsigned.UInt8.to_int (getf t Time_struct.second)
+  ; nanosecond = Unsigned.UInt32.to_int (getf t Time_struct.nanosecond)
+  }
 ;;
 
 let generate_date ctx tc ~min_value ~max_value =
