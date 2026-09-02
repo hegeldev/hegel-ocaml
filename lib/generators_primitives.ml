@@ -349,34 +349,34 @@ let last_date = { year = 9999; month = 12; day = 31 }
 let first_time = { hour = 0; minute = 0; second = 0; nanosecond = 0 }
 let last_time = { hour = 23; minute = 59; second = 59; nanosecond = 999_999_999 }
 
-(** [make_dates ~of_parts ~sexp_of ?min_date ?max_date ()] builds a generator
-    for dates in [\[min_date, max_date\]] over any representation. [of_parts]
+(** [make_dates ~of_date ~sexp_of ?min_date ?max_date ()] builds a generator
+    for dates in [\[min_date, max_date\]] over any representation. [of_date]
     converts each drawn {!date} to the desired representation. The default 
     range is [\[0001-01-01, 9999-12-31\]]. *)
-let make_dates ~of_parts ~sexp_of ?(min_date = first_date) ?(max_date = last_date) () =
+let make_dates ~of_date ~sexp_of ?(min_date = first_date) ?(max_date = last_date) () =
   leaf
     ~draw:(fun tc ->
-      of_parts (Internal.generate_date tc ~min_value:min_date ~max_value:max_date))
+      of_date (Internal.generate_date tc ~min_value:min_date ~max_value:max_date))
     ~sexp_of
 ;;
 
-(** [make_times ~of_parts ~sexp_of ?min_time ?max_time ()] builds a generator
+(** [make_times ~of_time ~sexp_of ?min_time ?max_time ()] builds a generator
     for times of day in [\[min_time, max_time\]] over any representation.
-    [of_parts] converts each drawn {!time} to the desired representation. The 
+    [of_time] converts each drawn {!time} to the desired representation. The 
     default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
-let make_times ~of_parts ~sexp_of ?(min_time = first_time) ?(max_time = last_time) () =
+let make_times ~of_time ~sexp_of ?(min_time = first_time) ?(max_time = last_time) () =
   leaf
     ~draw:(fun tc ->
-      of_parts (Internal.generate_time tc ~min_value:min_time ~max_value:max_time))
+      of_time (Internal.generate_time tc ~min_value:min_time ~max_value:max_time))
     ~sexp_of
 ;;
 
-(** [make_datetimes ~of_parts ~sexp_of ?min_datetime ?max_datetime ()] builds a
+(** [make_datetimes ~of_datetime ~sexp_of ?min_datetime ?max_datetime ()] builds a
     generator for naive datetimes in [\[min_datetime, max_datetime\]] over any 
-    representation. [of_parts] converts each drawn [(date, time)] pair to the 
+    representation. [of_datetime] converts each drawn [(date, time)] pair to the 
     desired representation. The default range is [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
 let make_datetimes
-      ~of_parts
+      ~of_datetime
       ~sexp_of
       ?(min_datetime = first_date, first_time)
       ?(max_datetime = last_date, last_time)
@@ -384,7 +384,7 @@ let make_datetimes
   =
   leaf
     ~draw:(fun tc ->
-      of_parts
+      of_datetime
         (Internal.generate_datetime tc ~min_value:min_datetime ~max_value:max_datetime))
     ~sexp_of
 ;;
@@ -393,14 +393,14 @@ let make_datetimes
     [YYYY-MM-DD] date strings in [\[min_date, max_date\]]. The default range is
     [\[0001-01-01, 9999-12-31\]]. *)
 let dates ?min_date ?max_date () =
-  make_dates ~of_parts:format_date ~sexp_of:sexp_of_string ?min_date ?max_date ()
+  make_dates ~of_date:format_date ~sexp_of:sexp_of_string ?min_date ?max_date ()
 ;;
 
 (** [times ?min_time ?max_time ()] creates a generator for ISO 8601
     [HH:MM:SS.fffffffff] time-of-day strings in [\[min_time, max_time\]]. The
     default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
 let times ?min_time ?max_time () =
-  make_times ~of_parts:format_time ~sexp_of:sexp_of_string ?min_time ?max_time ()
+  make_times ~of_time:format_time ~sexp_of:sexp_of_string ?min_time ?max_time ()
 ;;
 
 (** [datetimes ?min_datetime ?max_datetime ()] creates a generator for naive
@@ -409,7 +409,7 @@ let times ?min_time ?max_time () =
     [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
 let datetimes ?min_datetime ?max_datetime () =
   make_datetimes
-    ~of_parts:format_datetime
+    ~of_datetime:format_datetime
     ~sexp_of:sexp_of_string
     ?min_datetime
     ?max_datetime

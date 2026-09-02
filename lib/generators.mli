@@ -646,45 +646,45 @@ type time =
   ; nanosecond : int
   }
 
-(** [make_dates ~of_parts ~sexp_of ?min_date ?max_date ()] builds a generator
-    for dates in [\[min_date, max_date\]] over any representation. [of_parts]
+(** [make_dates ~of_date ~sexp_of ?min_date ?max_date ()] builds a generator
+    for dates in [\[min_date, max_date\]] over any representation. [of_date]
     converts each drawn {!date} to the desired representation. The default 
     range is [\[0001-01-01, 9999-12-31\]].
 
     {[
       let core_dates =
         make_dates
-          ~of_parts:(fun { year; month; day } ->
+          ~of_date:(fun { year; month; day } ->
             Core.Date.create_exn ~y:year ~m:(Core.Month.of_int_exn month) ~d:day)
           ~sexp_of:Core.Date.sexp_of_t
           ()
     ]} *)
 val make_dates
-  :  of_parts:(date -> 'a)
+  :  of_date:(date -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
   -> ?min_date:date
   -> ?max_date:date
   -> unit
   -> ('a, printable) generator
 
-(** [make_times ~of_parts ~sexp_of ?min_time ?max_time ()] builds a generator
+(** [make_times ~of_time ~sexp_of ?min_time ?max_time ()] builds a generator
     for times of day in [\[min_time, max_time\]] over any representation.
-    [of_parts] converts each drawn {!time} to the desired representation. The 
+    [of_time] converts each drawn {!time} to the desired representation. The 
     default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
 val make_times
-  :  of_parts:(time -> 'a)
+  :  of_time:(time -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
   -> ?min_time:time
   -> ?max_time:time
   -> unit
   -> ('a, printable) generator
 
-(** [make_datetimes ~of_parts ~sexp_of ?min_datetime ?max_datetime ()] builds a
+(** [make_datetimes ~of_datetime ~sexp_of ?min_datetime ?max_datetime ()] builds a
     generator for naive datetimes in [\[min_datetime, max_datetime\]] over any 
-    representation. [of_parts] converts each drawn [(date, time)] pair to the 
+    representation. [of_datetime] converts each drawn [(date, time)] pair to the 
     desired representation. The default range is [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
 val make_datetimes
-  :  of_parts:(date * time -> 'a)
+  :  of_datetime:(date * time -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
   -> ?min_datetime:date * time
   -> ?max_datetime:date * time

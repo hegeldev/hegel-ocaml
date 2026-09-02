@@ -33,7 +33,7 @@ let to_ofday ({ hour; minute; second; nanosecond } : G.time) =
 
 let dates ?(min_date = first_date) ?(max_date = last_date) () =
   G.make_dates
-    ~of_parts:to_core_date
+    ~of_date:to_core_date
     ~sexp_of:Date.sexp_of_t
     ~min_date:(to_hegel_date min_date)
     ~max_date:(to_hegel_date max_date)
@@ -42,7 +42,7 @@ let dates ?(min_date = first_date) ?(max_date = last_date) () =
 
 let ofdays ?(min_ofday = first_ofday) ?(max_ofday = last_ofday) () =
   G.make_times
-    ~of_parts:to_ofday
+    ~of_time:to_ofday
     ~sexp_of:Time_ns.Ofday.sexp_of_t
     ~min_time:(to_hegel_time min_ofday)
     ~max_time:(to_hegel_time max_ofday)
@@ -56,7 +56,7 @@ let datetimes
   =
   let parts (date, time) = to_hegel_date date, to_hegel_time time in
   G.make_datetimes
-    ~of_parts:(fun (date, time) -> to_core_date date, to_ofday time)
+    ~of_datetime:(fun (date, time) -> to_core_date date, to_ofday time)
     ~sexp_of:(fun (date, time) ->
       Sexp.List [ Date.sexp_of_t date; Time_ns.Ofday.sexp_of_t time ])
     ~min_datetime:(parts min_datetime)

@@ -11,7 +11,7 @@ Times of day are now drawn at nanosecond resolution. `times ()` and `datetimes (
 
 Every date and time generator now accepts optional inclusive bounds. The default generators take them as `date`/`time` records (a `(date * time)` pair for `datetimes`). The `Hegel_jane` generators take them as the `Core` values they produce.
 
-`of_parts` in `make_dates`, `make_times`, and `make_datetimes` now takes `Hegel.date`/`Hegel.time` records instead of labeled integers.
+The `of_parts` parameter of `make_dates`, `make_times`, and `make_datetimes` is now `of_date`, `of_time`, and `of_datetime` respectively, and takes `Hegel.date`/`Hegel.time` records.
 
 `Hegel_jane.time_nanoseconds ()` and `Hegel_jane.time_nanosecond_spans ()` now default to the representable `Core.Time_ns` ranges rather than the full 63-bit integer range.
 

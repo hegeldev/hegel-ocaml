@@ -512,7 +512,7 @@ val urls : unit -> (string, printable) generator
 val domains : ?max_length:int -> unit -> (string, printable) generator
 
 val make_dates
-  :  of_parts:(date -> 'a)
+  :  of_date:(date -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
   -> ?min_date:date
   -> ?max_date:date
@@ -520,7 +520,7 @@ val make_dates
   -> ('a, printable) generator
 
 val make_times
-  :  of_parts:(time -> 'a)
+  :  of_time:(time -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
   -> ?min_time:time
   -> ?max_time:time
@@ -528,7 +528,7 @@ val make_times
   -> ('a, printable) generator
 
 val make_datetimes
-  :  of_parts:(date * time -> 'a)
+  :  of_datetime:(date * time -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
   -> ?min_datetime:date * time
   -> ?max_datetime:date * time
