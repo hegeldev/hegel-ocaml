@@ -35,8 +35,8 @@ val dates
   -> (Core.Date.t, Hegel.printable) Hegel.generator
 
 (** [ofdays ?min_ofday ?max_ofday ()] creates a generator for
-    [Core.Time_ns.Ofday.t] values in [\[min_ofday, max_ofday\]].
-     The default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
+    [Core.Time_ns.Ofday.t] values in [\[min_ofday, max_ofday\]]. The default
+    range is [\[00:00:00.000000000, 24:00:00.000000000\]]. *)
 val ofdays
   :  ?min_ofday:Core.Time_ns.Ofday.t
   -> ?max_ofday:Core.Time_ns.Ofday.t

@@ -6,7 +6,7 @@ module G = Hegel.Generators
 let first_date = Date.create_exn ~y:1 ~m:Jan ~d:1
 let last_date = Date.create_exn ~y:9999 ~m:Dec ~d:31
 let first_ofday = Time_ns.Ofday.start_of_day
-let last_ofday = Time_ns.Ofday.approximate_end_of_day
+let last_ofday = Time_ns.Ofday.start_of_next_day
 
 let to_hegel_date d : G.date =
   { year = Date.year d; month = Month.to_int (Date.month d); day = Date.day d }
@@ -41,12 +41,28 @@ let dates ?(min_date = first_date) ?(max_date = last_date) () =
 ;;
 
 let ofdays ?(min_ofday = first_ofday) ?(max_ofday = last_ofday) () =
-  G.make_times
-    ~of_time:to_ofday
-    ~sexp_of:Time_ns.Ofday.sexp_of_t
-    ~min_time:(to_hegel_time min_ofday)
-    ~max_time:(to_hegel_time max_ofday)
-    ()
+  let ofdays_gen ~max_ofday =
+    G.make_times
+      ~of_time:to_ofday
+      ~sexp_of:Time_ns.Ofday.sexp_of_t
+      ~min_time:(to_hegel_time min_ofday)
+      ~max_time:(to_hegel_time max_ofday)
+      ()
+  in
+  if Time_ns.Ofday.( < ) max_ofday Time_ns.Ofday.start_of_next_day
+  then ofdays_gen ~max_ofday
+  else if Time_ns.Ofday.equal min_ofday Time_ns.Ofday.start_of_next_day
+  then G.with_printer Time_ns.Ofday.sexp_of_t (G.just Time_ns.Ofday.start_of_next_day)
+  else
+    G.with_printer
+      Time_ns.Ofday.sexp_of_t
+      (G.composite (fun tc ->
+         if Hegel.draw_silent tc (G.booleans ~p:0.01 ())
+         then Time_ns.Ofday.start_of_next_day
+         else
+           Hegel.draw_silent
+             tc
+             (ofdays_gen ~max_ofday:Time_ns.Ofday.approximate_end_of_day)))
 ;;
 
 let chars () = G.make_characters ~of_char:Fun.id ~sexp_of:Char.sexp_of_t ()
@@ -72,15 +88,18 @@ let times
       ?(max_time = Time_ns.max_value_representable)
       ()
   =
-  let ns_gen =
-    G.integers
-      ~min_value:(Time_ns.to_int_ns_since_epoch min_time)
-      ~max_value:(Time_ns.to_int_ns_since_epoch max_time)
-      ()
+  let utc = Time_float.Zone.utc in
+  let to_hegel_datetime t =
+    let date, ofday = Time_ns.to_date_ofday ~zone:utc t in
+    to_hegel_date date, to_hegel_time ofday
   in
-  G.with_printer
-    Time_ns.Alternate_sexp.sexp_of_t
-    (G.composite (fun tc -> Time_ns.of_int_ns_since_epoch (Hegel.draw_silent tc ns_gen)))
+  G.make_datetimes
+    ~of_datetime:(fun (date, time) ->
+      Time_ns.of_date_ofday ~zone:utc (to_core_date date) (to_ofday time))
+    ~sexp_of:Time_ns.Alternate_sexp.sexp_of_t
+    ~min_datetime:(to_hegel_datetime min_time)
+    ~max_datetime:(to_hegel_datetime max_time)
+    ()
 ;;
 
 let hash_tables keys values ?min_size ?max_size () =

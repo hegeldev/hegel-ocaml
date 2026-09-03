@@ -101,22 +101,32 @@ let test_dates_invalid_bounds () =
 (** Test: ofdays defaults to the whole day. *)
 let test_ofdays_default_bounds () =
   let module Ofday = Core.Time_ns.Ofday in
-  run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+  let saw_end_of_day = ref false in
+  let saw_within_day = ref false in
+  run_hegel_test ~settings:(settings ~test_cases:100 ~seed:1 ()) (fun tc ->
     let t = draw tc (Hegel_jane.ofdays ()) in
-    assert (Ofday.( >= ) t Ofday.start_of_day && Ofday.( < ) t Ofday.start_of_next_day))
+    assert (Ofday.( >= ) t Ofday.start_of_day && Ofday.( <= ) t Ofday.start_of_next_day);
+    if Ofday.equal t Ofday.start_of_next_day
+    then saw_end_of_day := true
+    else saw_within_day := true);
+  assert (!saw_end_of_day && !saw_within_day)
 ;;
 
-(* Crossed bounds are rejected, and so is [Ofday.start_of_next_day] (24:00:00):
-   a time of day lies strictly within one day, so Core's end-of-day sentinel is
-   the one [Ofday.t] the generator never produces. *)
+(** Test: lower bound to end of day always generates it *)
+let test_ofdays_end_of_day_point () =
+  let module Ofday = Core.Time_ns.Ofday in
+  run_hegel_test ~settings:(settings ~test_cases:10 ()) (fun tc ->
+    let t = draw tc (Hegel_jane.ofdays ~min_ofday:Ofday.start_of_next_day ()) in
+    assert (Ofday.equal t Ofday.start_of_next_day))
+;;
+
 let test_ofdays_invalid_bounds () =
   let module Ofday = Core.Time_ns.Ofday in
   expect_usage_error
     (Hegel_jane.ofdays
        ~min_ofday:(Ofday.create ~hr:1 ())
        ~max_ofday:Ofday.start_of_day
-       ());
-  expect_usage_error (Hegel_jane.ofdays ~max_ofday:Ofday.start_of_next_day ())
+       ())
 ;;
 
 let time_bounds_tests =
@@ -248,6 +258,7 @@ let () =
         ; Alcotest.test_case "dates default bounds" `Quick test_dates_default_bounds
         ; Alcotest.test_case "dates invalid bounds" `Quick test_dates_invalid_bounds
         ; Alcotest.test_case "ofdays default bounds" `Quick test_ofdays_default_bounds
+        ; Alcotest.test_case "ofdays end-of-day point" `Quick test_ofdays_end_of_day_point
         ; Alcotest.test_case "ofdays invalid bounds" `Quick test_ofdays_invalid_bounds
         ; Alcotest.test_case "printer times" `Quick test_printer_times
         ; Alcotest.test_case "hash_tables e2e" `Quick test_hash_tables_e2e
