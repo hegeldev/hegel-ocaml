@@ -376,8 +376,39 @@ let generate_impl ~ctxt ((rec_flag, type_decls) : rec_flag * type_declaration li
   @ generator_items
 ;;
 
+let generate_intf ~ctxt:_ ((_rec_flag, type_decls) : rec_flag * type_declaration list)
+  : signature_item list
+  =
+  List.map
+    (fun (td : type_declaration) ->
+       let loc = td.ptype_loc in
+       (match td.ptype_params with
+        | [] -> ()
+        | _ :: _ ->
+          Location.raise_errorf
+            ~loc
+            "ppx_hegel_generator: parameterized types not supported");
+       let gen_name = generator_name td.ptype_name.txt in
+       let type_constr =
+         Ast_builder.Default.ptyp_constr ~loc { txt = Lident td.ptype_name.txt; loc } []
+       in
+       let gen_type =
+         [%type:
+           ([%t type_constr], Hegel.Generators.printable) Hegel.Generators.generator]
+       in
+       Ast_builder.Default.psig_value
+         ~loc
+         (Ast_builder.Default.value_description
+            ~loc
+            ~name:{ txt = gen_name; loc }
+            ~type_:gen_type
+            ~prim:[]))
+    type_decls
+;;
+
 let _deriver =
   Deriving.add
     "hegel_generator"
     ~str_type_decl:(Deriving.Generator.V2.make_noarg generate_impl)
+    ~sig_type_decl:(Deriving.Generator.V2.make_noarg generate_intf)
 ;;

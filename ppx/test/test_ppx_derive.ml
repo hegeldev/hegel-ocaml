@@ -102,6 +102,23 @@ type char_and_float =
   }
 [@@deriving hegel_generator]
 
+(** Deriving in a module signature. *)
+module Signature_deriving : sig
+  type t [@@deriving hegel_generator]
+  type named [@@deriving hegel_generator]
+end = struct
+  type t = { value : int } [@@deriving hegel_generator]
+  type named = Named of string [@@deriving hegel_generator]
+end
+
+let (_ : (Signature_deriving.t, Hegel.printable) Hegel.generator) =
+  Signature_deriving.hegel_generator
+;;
+
+let (_ : (Signature_deriving.named, Hegel.printable) Hegel.generator) =
+  Signature_deriving.hegel_generator_named
+;;
+
 (** A module whose main type is [t]: derives a value named plain
     [hegel_generator] (no [_t] suffix), following the quickcheck convention. *)
 module Temperature_reading = struct
