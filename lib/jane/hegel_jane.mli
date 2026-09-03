@@ -43,32 +43,23 @@ val ofdays
   -> unit
   -> (Core.Time_ns.Ofday.t, Hegel.printable) Hegel.generator
 
-(** [datetimes ?min_datetime ?max_datetime ()] creates a generator for naive
-    datetimes as [(Core.Date.t * Core.Time_ns.Ofday.t)] pairs in
-    [\[min_datetime, max_datetime\]]. The default range is [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
-val datetimes
-  :  ?min_datetime:Core.Date.t * Core.Time_ns.Ofday.t
-  -> ?max_datetime:Core.Date.t * Core.Time_ns.Ofday.t
-  -> unit
-  -> (Core.Date.t * Core.Time_ns.Ofday.t, Hegel.printable) Hegel.generator
-
 (** [chars ()] creates a generator for single characters (codepoints 0-255,
     i.e. Latin-1) as [Core.Char.t] values. *)
 val chars : unit -> (Core.Char.t, Hegel.printable) Hegel.generator
 
-(** [time_nanoseconds ?min_time ?max_time ()] creates a generator for
+(** [times ?min_time ?max_time ()] creates a generator for
     [Core.Time_ns.t] values in [\[min_time, max_time\]]. The default range is
     the full representable range: [\[1823-11-12T00:06:21.572612096Z, 2116-02-20T23:53:38.427387903Z\]]. *)
-val time_nanoseconds
+val times
   :  ?min_time:Core.Time_ns.t
   -> ?max_time:Core.Time_ns.t
   -> unit
   -> (Core.Time_ns.t, Hegel.printable) Hegel.generator
 
-(** [time_nanosecond_spans ?min_span ?max_span ()] creates a generator for
+(** [time_spans ?min_span ?max_span ()] creates a generator for
     [Core.Time_ns.Span.t] values in [\[min_span, max_span\]]. The default range
     is the full representable range: [\[-53375d23h53m38.427387904s, 53375d23h53m38.427387903s\]]. *)
-val time_nanosecond_spans
+val time_spans
   :  ?min_span:Core.Time_ns.Span.t
   -> ?max_span:Core.Time_ns.Span.t
   -> unit

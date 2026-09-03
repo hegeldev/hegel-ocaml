@@ -49,24 +49,9 @@ let ofdays ?(min_ofday = first_ofday) ?(max_ofday = last_ofday) () =
     ()
 ;;
 
-let datetimes
-      ?(min_datetime = first_date, first_ofday)
-      ?(max_datetime = last_date, last_ofday)
-      ()
-  =
-  let parts (date, time) = to_hegel_date date, to_hegel_time time in
-  G.make_datetimes
-    ~of_datetime:(fun (date, time) -> to_core_date date, to_ofday time)
-    ~sexp_of:(fun (date, time) ->
-      Sexp.List [ Date.sexp_of_t date; Time_ns.Ofday.sexp_of_t time ])
-    ~min_datetime:(parts min_datetime)
-    ~max_datetime:(parts max_datetime)
-    ()
-;;
-
 let chars () = G.make_characters ~of_char:Fun.id ~sexp_of:Char.sexp_of_t ()
 
-let time_nanosecond_spans
+let time_spans
       ?(min_span = Time_ns.Span.min_value_representable)
       ?(max_span = Time_ns.Span.max_value_representable)
       ()
@@ -82,7 +67,7 @@ let time_nanosecond_spans
     (G.composite (fun tc -> Time_ns.Span.of_int_ns (Hegel.draw_silent tc ns_span_gen)))
 ;;
 
-let time_nanoseconds
+let times
       ?(min_time = Time_ns.min_value_representable)
       ?(max_time = Time_ns.max_value_representable)
       ()
@@ -151,12 +136,12 @@ module Derive = struct
   module Time_ns = struct
     include Time_ns
 
-    let hegel_generator = time_nanoseconds ()
+    let hegel_generator = times ()
 
     module Span = struct
       include Span
 
-      let hegel_generator = time_nanosecond_spans ()
+      let hegel_generator = time_spans ()
     end
   end
 end

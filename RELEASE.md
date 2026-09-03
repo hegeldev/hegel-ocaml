@@ -4,8 +4,9 @@ This release makes the following changes:
 
 - `char` is now `chars` (also `Hegel_jane.char` to `Hegel_jane.chars`).
 - `Hegel_jane.times` is now `Hegel_jane.ofdays`.
-- `Hegel_jane.time_ns` is now `Hegel_jane.time_nanoseconds`, and `Hegel_jane.time_ns_spans` is now `Hegel_jane.time_nanosecond_spans`.
+- `Hegel_jane.time_ns` is now `Hegel_jane.times`, and `Hegel_jane.time_ns_spans` is now `Hegel_jane.time_spans`.
 - Single-test-case mode has been removed. Set `test_cases` to 1 in the settings instead.
+- `Hegel_jane.datetimes` has been removed.
 
 Times of day are now drawn at nanosecond resolution. `times ()` and `datetimes ()` print the subsecond component as nine digits (`HH:MM:SS.fffffffff`) instead of six, and `Hegel_jane.ofdays ()` now produces every `Core.Time_ns.Ofday.t`.
 
@@ -13,7 +14,7 @@ Every date and time generator now accepts optional inclusive bounds. The default
 
 The `of_parts` parameter of `make_dates`, `make_times`, and `make_datetimes` is now `of_date`, `of_time`, and `of_datetime` respectively, and takes `Hegel.date`/`Hegel.time` records.
 
-`Hegel_jane.time_nanoseconds ()` and `Hegel_jane.time_nanosecond_spans ()` now default to the representable `Core.Time_ns` ranges rather than the full 63-bit integer range.
+`Hegel_jane.times ()` and `Hegel_jane.time_spans ()` now default to the representable `Core.Time_ns` ranges rather than the full 63-bit integer range.
 
 In stateful testing, a subset of invariants is now randomly chosen after running a rule rather than running all of them. All invariants still run on the initial and final state.
 
