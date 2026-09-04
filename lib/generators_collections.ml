@@ -1,18 +1,15 @@
 open Generators_core
 
-(* [validate_size_bounds ~min_size ~max_size] rejects negative or crossed
-   collection size bounds. *)
+(* [validate_size_bounds ~min_size ~max_size] rejects negative collection size
+   bounds. *)
 let validate_size_bounds ~min_size ~max_size =
   if min_size < 0
   then
-    raise (Invalid_argument (Printf.sprintf "min_size=%d must be non-negative" min_size));
+    raise
+      (Internal.Usage_error (Printf.sprintf "min_size=%d must be non-negative" min_size));
   match max_size with
   | Some ms when ms < 0 ->
-    raise (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
-  | Some ms when min_size > ms ->
-    raise
-      (Invalid_argument
-         (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
+    raise (Internal.Usage_error (Printf.sprintf "max_size=%d must be non-negative" ms))
   | _ -> ()
 ;;
 
@@ -122,17 +119,7 @@ let lists
       ()
   : ('a list, printable) generator
   =
-  if min_size < 0
-  then
-    raise (Invalid_argument (Printf.sprintf "min_size=%d must be non-negative" min_size));
-  (match max_size with
-   | Some ms when ms < 0 ->
-     raise (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
-   | Some ms when min_size > ms ->
-     raise
-       (Invalid_argument
-          (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
-   | _ -> ());
+  validate_size_bounds ~min_size ~max_size;
   let elt = printer elements in
   let sexp_of xs = Sexp.List (List.map elt xs) in
   let core =

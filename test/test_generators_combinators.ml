@@ -16,8 +16,8 @@ let test_one_of_single_accepted () =
 (** Test: sampled_from raises when given an empty list. *)
 let test_sampled_from_empty () =
   match sampled_from [] with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  | exception Hegel.Usage_error _ -> ()
+  | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
 (* ==== E2E tests ==== *)

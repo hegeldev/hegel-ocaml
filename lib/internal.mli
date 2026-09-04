@@ -47,18 +47,6 @@ type database =
   | Disabled
   | Path of string
 
-(** Controls the test execution mode.
-
-    @canonical Hegel.mode *)
-type mode =
-  | Test_run
-  (** Run a full property test: many test cases, shrinking, database
-        replay, all other phases. This is the default. *)
-  | Single_test_case
-  (** Run the test body exactly once, with no shrinking, replay, or
-        database. Useful when you want pure data generation without
-        property-testing overhead. *)
-
 (** Phases of the test that can be enabled or disabled.
 
     @canonical Hegel.phase *)
@@ -94,8 +82,7 @@ val phase_to_string : phase -> string
 
     @canonical Hegel.settings *)
 type settings =
-  { mode : mode
-  ; test_cases : int
+  { test_cases : int
   ; stateful_step_count : int
   ; verbosity : verbosity
   ; seed : int option
@@ -166,9 +153,6 @@ val with_suppress_health_check : health_check list -> settings -> settings
     ]} *)
 val with_phases : phase list -> settings -> settings
 
-(** [with_mode mode s] returns settings [s] with test [mode] set to [mode]. *)
-val with_mode : mode -> settings -> settings
-
 (** [with_print_blob b s] returns settings [s] with [print_blob] set to [b]. When
     [true] (the default), a failing run's report ends with a copy-pasteable
     [rerun with:] line encoding the failure. *)
@@ -218,6 +202,8 @@ val join : 'a worker -> 'a
     Uses the backtrace if available; derived from the assertion's location so
     the shrinker can group probes for the same bug. *)
 val extract_origin : exn -> string
+
+exception Usage_error of string
 
 (** [generate_boolean tc p forced] draws a boolean with probability [p] of
     [true]. If [forced] is [Some b] the value is forced to [b]. Raises
@@ -274,14 +260,36 @@ val generate_url : test_case -> string
 (** [generate_domain tc ~max_length] draws an RFC 1035 domain name. *)
 val generate_domain : test_case -> max_length:int -> string
 
-(** [generate_date tc] draws a Gregorian date as [(year, month, day)]. *)
-val generate_date : test_case -> int * int * int
+(** A proleptic Gregorian calendar date, as drawn by {!generate_date}. *)
+type date = Hegel_ffi.Ffi.date =
+  { year : int
+  ; month : int
+  ; day : int
+  }
 
-(** [generate_time tc] draws a time as [(hour, minute, second, microsecond)]. *)
-val generate_time : test_case -> int * int * int * int
+(** A time of day at nanosecond resolution, as drawn by {!generate_time}. *)
+type time = Hegel_ffi.Ffi.time =
+  { hour : int
+  ; minute : int
+  ; second : int
+  ; nanosecond : int
+  }
 
-(** [generate_datetime tc] draws a naive datetime as [(date, time)]. *)
-val generate_datetime : test_case -> (int * int * int) * (int * int * int * int)
+(** [generate_date tc ~min_value ~max_value] draws a Gregorian date in the
+    inclusive range. *)
+val generate_date : test_case -> min_value:date -> max_value:date -> date
+
+(** [generate_time tc ~min_value ~max_value] draws a time in the inclusive
+    range. *)
+val generate_time : test_case -> min_value:time -> max_value:time -> time
+
+(** [generate_datetime tc ~min_value ~max_value] draws a naive datetime in the
+    inclusive range as a [(date, time)] pair. *)
+val generate_datetime
+  :  test_case
+  -> min_value:date * time
+  -> max_value:date * time
+  -> date * time
 
 (** [generate_ipv4 tc] draws an IPv4 address as its 4 network-order bytes. *)
 val generate_ipv4 : test_case -> string
@@ -425,7 +433,7 @@ val pool_generate : test_case -> pool:pool -> ?consume:bool -> unit -> int
     {!state_machine_free}. *)
 type state_machine = Hegel_ffi.Ffi.state_machine
 
-(** [new_state_machine tc ~rule_names ~invariant_names] registers an
+(** [new_state_machine tc ~rule_names ~invariant_names] registers a sequential
     engine-owned state machine with the named rules and invariants. The engine
     owns rule selection. *)
 val new_state_machine
@@ -434,17 +442,33 @@ val new_state_machine
   -> invariant_names:string list
   -> state_machine
 
+(** [state_machine_next_round tc ~state_machine] asks the engine whether the
+    machine should run another round of rules: [false] once the step budget
+    for the test case is exhausted. Call it before the first rule and after
+    every round. Raises {!Data_exhausted} when the engine's choice budget is
+    exhausted. *)
+val state_machine_next_round : test_case -> state_machine:state_machine -> bool
+
 (** [state_machine_next_rule tc ~state_machine] draws the index (in
-    [\[0, num_rules)]) of the next rule to run, letting the engine choose and
-    shrink the rule sequence, or returns [None] when the engine's step budget
-    for the test case is exhausted and the caller should stop running rules.
-    Raises {!Data_exhausted} when the engine's choice budget is exhausted. *)
+    [\[0, num_rules)]) of the next rule to run this round, letting the engine
+    choose and shrink the rule sequence, or returns [None] when the round is
+    over. Raises {!Data_exhausted} when the engine's choice budget is
+    exhausted. *)
 val state_machine_next_rule : test_case -> state_machine:state_machine -> int option
 
 (** [state_machine_rule_rejected tc ~state_machine] reports that the rule last
     returned by {!state_machine_next_rule} did not complete. A rejected rule
     does not count against the step budget. *)
 val state_machine_rule_rejected : test_case -> state_machine:state_machine -> unit
+
+(** [state_machine_should_check_invariant tc ~state_machine ~invariant_index]
+    is the engine's sampling decision for running invariant [invariant_index]
+    after the current round. *)
+val state_machine_should_check_invariant
+  :  test_case
+  -> state_machine:state_machine
+  -> invariant_index:int
+  -> bool
 
 (** [state_machine_free tc ~state_machine] releases [state_machine]. Safe after
     the test case has aborted, and safe in any order relative to freeing it. *)

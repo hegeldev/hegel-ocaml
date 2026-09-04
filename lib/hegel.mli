@@ -365,6 +365,19 @@ type ('a, 'p) generator = ('a, 'p) Generators.generator
 type printable = Generators.printable
 type unprintable = Generators.unprintable
 
+type date = Generators.date =
+  { year : int
+  ; month : int
+  ; day : int
+  }
+
+type time = Generators.time =
+  { hour : int
+  ; minute : int
+  ; second : int
+  ; nanosecond : int
+  }
+
 val booleans : ?p:float -> unit -> (bool, printable) generator
 val integers : ?min_value:int -> ?max_value:int -> unit -> (int, printable) generator
 
@@ -409,7 +422,7 @@ val make_characters
   -> unit
   -> ('a, printable) generator
 
-val char : unit -> (char, printable) generator
+val chars : unit -> (char, printable) generator
 val binary : ?min_size:int -> ?max_size:int -> unit -> (string, printable) generator
 val just : 'a -> ('a, unprintable) generator
 
@@ -499,34 +512,38 @@ val urls : unit -> (string, printable) generator
 val domains : ?max_length:int -> unit -> (string, printable) generator
 
 val make_dates
-  :  of_parts:(year:int -> month:int -> day:int -> 'a)
+  :  of_date:(date -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> ?min_date:date
+  -> ?max_date:date
   -> unit
   -> ('a, printable) generator
 
 val make_times
-  :  of_parts:(hour:int -> minute:int -> second:int -> microsecond:int -> 'a)
+  :  of_time:(time -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> ?min_time:time
+  -> ?max_time:time
   -> unit
   -> ('a, printable) generator
 
 val make_datetimes
-  :  of_parts:
-       (year:int
-        -> month:int
-        -> day:int
-        -> hour:int
-        -> minute:int
-        -> second:int
-        -> microsecond:int
-        -> 'a)
+  :  of_datetime:(date * time -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> ?min_datetime:date * time
+  -> ?max_datetime:date * time
   -> unit
   -> ('a, printable) generator
 
-val dates : unit -> (string, printable) generator
-val times : unit -> (string, printable) generator
-val datetimes : unit -> (string, printable) generator
+val dates : ?min_date:date -> ?max_date:date -> unit -> (string, printable) generator
+val times : ?min_time:time -> ?max_time:time -> unit -> (string, printable) generator
+
+val datetimes
+  :  ?min_datetime:date * time
+  -> ?max_datetime:date * time
+  -> unit
+  -> (string, printable) generator
+
 val ip_addresses : ?version:[ `V4 | `V6 ] -> unit -> (Ipaddr.t, printable) generator
 val from_regex : string -> ?fullmatch:bool -> unit -> (string, printable) generator
 val composite : (test_case -> 'a) -> ('a, unprintable) generator
@@ -567,11 +584,6 @@ type database = Internal.database =
   | Disabled
   | Path of string
 
-(** How a test run is executed. *)
-type mode = Internal.mode =
-  | Test_run (** the default: many cases, shrinking, database replay *)
-  | Single_test_case (** run the body once, with no shrinking or replay *)
-
 (** Phases of a test run that can be enabled or disabled with {!with_phases}. *)
 type phase = Internal.phase =
   | Explicit
@@ -592,8 +604,7 @@ type health_check = Internal.health_check =
 (** Configuration for a test run. Build one with {!default_settings} or
     {!val:settings} and refine it with the [with_*] functions below. *)
 type settings = Internal.settings =
-  { mode : mode
-  ; test_cases : int
+  { test_cases : int
   ; stateful_step_count : int
   ; verbosity : verbosity
   ; seed : int option
@@ -667,9 +678,6 @@ val with_suppress_health_check : health_check list -> settings -> settings
       let s = default_settings () |> with_phases [ Generate; Shrink ]
     ]} *)
 val with_phases : phase list -> settings -> settings
-
-(** [with_mode mode s] sets the execution mode. *)
-val with_mode : mode -> settings -> settings
 
 (** [with_print_blob b s] controls whether a failing run's report ends with a
     copy-pasteable [rerun with:] line encoding the
@@ -799,6 +807,10 @@ val draw_silent : test_case -> ('a, 'p) generator -> 'a
     [let%hegel_test] PPX rewrites bindings to; not intended for direct use
     (prefer {!draw_silent}). See {!Generators.draw_silent_named}. *)
 val draw_silent_named : name:string -> test_case -> ('a, 'p) generator -> 'a
+
+(** Raised by {!run_hegel_test} when the engine rejects an argument as
+    invalid. *)
+exception Usage_error of string
 
 (**/**)
 

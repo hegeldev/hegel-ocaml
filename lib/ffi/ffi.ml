@@ -58,8 +58,8 @@ module String_result = struct
 end
 
 (* [hegel_date_t]: proleptic Gregorian date. [year] in [-999999, 999999]
-   (bounded by the range passed to [hegel_generate_date]; this binding requests
-   [1, 9999]), [month] in [1, 12], [day] in [1, 31]. *)
+   (bounded by the range passed to [hegel_generate_date]), [month] in [1, 12],
+   [day] in [1, 31]. *)
 module Date_struct = struct
   type s
 
@@ -70,8 +70,8 @@ module Date_struct = struct
   let () = seal t
 end
 
-(* [hegel_time_t]: hour in [0, 23], minute/second in [0, 59], microsecond in
-   [0, 999999]. *)
+(* [hegel_time_t]: hour in [0, 23], minute/second in [0, 59], nanosecond in
+   [0, 999999999]. *)
 module Time_struct = struct
   type s
 
@@ -79,7 +79,7 @@ module Time_struct = struct
   let hour = field t "hour" uint8_t
   let minute = field t "minute" uint8_t
   let second = field t "second" uint8_t
-  let microsecond = field t "microsecond" uint32_t
+  let nanosecond = field t "nanosecond" uint32_t
   let () = seal t
 end
 
@@ -110,10 +110,6 @@ let c_settings_new =
 
 let c_settings_free =
   foreign "hegel_settings_free" (ptr void @-> ptr void @-> returning int)
-;;
-
-let c_settings_mode =
-  foreign "hegel_settings_set_mode" (ptr void @-> ptr void @-> int @-> returning int)
 ;;
 
 let c_settings_backend =
@@ -430,23 +426,39 @@ let c_new_state_machine =
     (ptr void
      @-> ptr void
      @-> ptr (ptr char)
+     @-> ptr int64_t
      @-> size_t
      @-> ptr (ptr char)
      @-> size_t
+     @-> int64_t
+     @-> int64_t
      @-> ptr (ptr void)
+     @-> ptr int64_t
      @-> returning int)
+;;
+
+let c_state_machine_next_group =
+  foreign
+    "hegel_state_machine_next_group"
+    (ptr void @-> ptr void @-> ptr void @-> ptr int64_t @-> returning int)
 ;;
 
 let c_state_machine_next_rule =
   foreign
     "hegel_state_machine_next_rule"
-    (ptr void @-> ptr void @-> ptr void @-> ptr int64_t @-> returning int)
+    (ptr void @-> ptr void @-> ptr void @-> int64_t @-> ptr int64_t @-> returning int)
 ;;
 
 let c_state_machine_rule_rejected =
   foreign
     "hegel_state_machine_rule_rejected"
-    (ptr void @-> ptr void @-> ptr void @-> returning int)
+    (ptr void @-> ptr void @-> ptr void @-> int64_t @-> returning int)
+;;
+
+let c_state_machine_should_check_invariant =
+  foreign
+    "hegel_state_machine_should_check_invariant"
+    (ptr void @-> ptr void @-> ptr void @-> int64_t @-> ptr bool @-> returning int)
 ;;
 
 let c_state_machine_free =
@@ -518,10 +530,6 @@ type collection = unit Ctypes.ptr
 type pool = unit Ctypes.ptr
 type state_machine = unit Ctypes.ptr
 
-type mode =
-  | Test_run
-  | Single_test_case
-
 type backend =
   | Auto
   | Default
@@ -547,6 +555,7 @@ type run_status =
 exception Stop_test
 exception Assume_rejected
 exception Backend_error of string
+exception Usage_error of string
 
 (* Status codes returned by the C primitives [HEGEL_OK] / [HEGEL_E_*]. *)
 let ok = 0
@@ -580,11 +589,6 @@ let hc_large_initial_test_case = 1 lsl 3
 (* Helpers                                                             *)
 (* ------------------------------------------------------------------ *)
 
-let mode_to_int = function
-  | Test_run -> 0
-  | Single_test_case -> 1
-;;
-
 let backend_to_int = function
   | Auto -> 0
   | Default -> 1
@@ -613,14 +617,14 @@ let check_rc ctx rc =
   then raise Stop_test
   else if rc = e_assume
   then raise Assume_rejected
+  else if rc = e_invalid_arg
+  then raise (Usage_error (c_last_error_message ctx))
   else (
     let label =
       if rc = e_backend
       then "backend error"
       else if rc = e_invalid_handle
       then "invalid handle"
-      else if rc = e_invalid_arg
-      then "invalid argument"
       else if rc = e_already_complete
       then "test case already complete"
       else if rc = e_not_complete
@@ -666,7 +670,6 @@ let settings_new ctx =
 ;;
 
 let settings_free ctx s = check_rc ctx (c_settings_free ctx s)
-let settings_mode ctx s m = check_rc ctx (c_settings_mode ctx s (mode_to_int m))
 let settings_backend ctx s b = check_rc ctx (c_settings_backend ctx s (backend_to_int b))
 
 let settings_test_cases ctx s n =
@@ -934,10 +937,21 @@ let generate_string ctx tc sg =
   s
 ;;
 
-(* Build the by-value bound structs. The OCaml [dates]/[times]/[datetimes]
-   generators expose no bounds, so the wrappers always pass the conventional
-   full range: dates {1,1,1}..{9999,12,31}, times {0,0,0,0}..{23,59,59,999999}. *)
-let make_date ~year ~month ~day =
+type date =
+  { year : int
+  ; month : int
+  ; day : int
+  }
+
+type time =
+  { hour : int
+  ; minute : int
+  ; second : int
+  ; nanosecond : int
+  }
+
+(* Build the by-value bound structs from [date]/[time] records. *)
+let make_date { year; month; day } =
   let d = make Date_struct.t in
   setf d Date_struct.year (Int32.of_int year);
   setf d Date_struct.month (Unsigned.UInt8.of_int month);
@@ -945,58 +959,65 @@ let make_date ~year ~month ~day =
   d
 ;;
 
-let make_time ~hour ~minute ~second ~microsecond =
+let make_time { hour; minute; second; nanosecond } =
   let t = make Time_struct.t in
   setf t Time_struct.hour (Unsigned.UInt8.of_int hour);
   setf t Time_struct.minute (Unsigned.UInt8.of_int minute);
   setf t Time_struct.second (Unsigned.UInt8.of_int second);
-  setf t Time_struct.microsecond (Unsigned.UInt32.of_int microsecond);
+  setf t Time_struct.nanosecond (Unsigned.UInt32.of_int nanosecond);
   t
 ;;
 
-let make_datetime date time =
+let make_datetime (date, time) =
   let dt = make Datetime_struct.t in
-  setf dt Datetime_struct.date date;
-  setf dt Datetime_struct.time time;
+  setf dt Datetime_struct.date (make_date date);
+  setf dt Datetime_struct.time (make_time time);
   dt
 ;;
 
-let date_min = make_date ~year:1 ~month:1 ~day:1
-let date_max = make_date ~year:9999 ~month:12 ~day:31
-let time_min = make_time ~hour:0 ~minute:0 ~second:0 ~microsecond:0
-let time_max = make_time ~hour:23 ~minute:59 ~second:59 ~microsecond:999999
-let datetime_min = make_datetime date_min time_min
-let datetime_max = make_datetime date_max time_max
+let read_date d =
+  { year = Int32.to_int (getf d Date_struct.year)
+  ; month = Unsigned.UInt8.to_int (getf d Date_struct.month)
+  ; day = Unsigned.UInt8.to_int (getf d Date_struct.day)
+  }
+;;
 
-let generate_date ctx tc =
+let read_time t =
+  { hour = Unsigned.UInt8.to_int (getf t Time_struct.hour)
+  ; minute = Unsigned.UInt8.to_int (getf t Time_struct.minute)
+  ; second = Unsigned.UInt8.to_int (getf t Time_struct.second)
+  ; nanosecond = Unsigned.UInt32.to_int (getf t Time_struct.nanosecond)
+  }
+;;
+
+let generate_date ctx tc ~min_value ~max_value =
   let result = make Date_struct.t in
-  check_rc ctx (c_generate_date ctx tc date_min date_max (addr result));
-  ( Int32.to_int (getf result Date_struct.year)
-  , Unsigned.UInt8.to_int (getf result Date_struct.month)
-  , Unsigned.UInt8.to_int (getf result Date_struct.day) )
+  check_rc
+    ctx
+    (c_generate_date ctx tc (make_date min_value) (make_date max_value) (addr result));
+  read_date result
 ;;
 
-let generate_time ctx tc =
+let generate_time ctx tc ~min_value ~max_value =
   let result = make Time_struct.t in
-  check_rc ctx (c_generate_time ctx tc time_min time_max (addr result));
-  ( Unsigned.UInt8.to_int (getf result Time_struct.hour)
-  , Unsigned.UInt8.to_int (getf result Time_struct.minute)
-  , Unsigned.UInt8.to_int (getf result Time_struct.second)
-  , Unsigned.UInt32.to_int (getf result Time_struct.microsecond) )
+  check_rc
+    ctx
+    (c_generate_time ctx tc (make_time min_value) (make_time max_value) (addr result));
+  read_time result
 ;;
 
-let generate_datetime ctx tc =
+let generate_datetime ctx tc ~min_value ~max_value =
   let result = make Datetime_struct.t in
-  check_rc ctx (c_generate_datetime ctx tc datetime_min datetime_max (addr result));
-  let d = getf result Datetime_struct.date in
-  let t = getf result Datetime_struct.time in
-  ( ( Int32.to_int (getf d Date_struct.year)
-    , Unsigned.UInt8.to_int (getf d Date_struct.month)
-    , Unsigned.UInt8.to_int (getf d Date_struct.day) )
-  , ( Unsigned.UInt8.to_int (getf t Time_struct.hour)
-    , Unsigned.UInt8.to_int (getf t Time_struct.minute)
-    , Unsigned.UInt8.to_int (getf t Time_struct.second)
-    , Unsigned.UInt32.to_int (getf t Time_struct.microsecond) ) )
+  check_rc
+    ctx
+    (c_generate_datetime
+       ctx
+       tc
+       (make_datetime min_value)
+       (make_datetime max_value)
+       (addr result));
+  ( read_date (getf result Datetime_struct.date)
+  , read_time (getf result Datetime_struct.time) )
 ;;
 
 let generate_ip_bytes ctx tc c_fn n =
@@ -1057,40 +1078,81 @@ let pool_generate ctx tc ~pool ~consume =
 
 let pool_free ctx pool = check_rc ctx (c_pool_free ctx pool)
 
-let new_state_machine ctx tc ~rule_names ~invariant_names =
+let new_state_machine
+      ctx
+      tc
+      ~rule_names
+      ~rule_groups
+      ~invariant_names
+      ~min_concurrency
+      ~max_concurrency
+  =
   let rules_ptr, rules_root = to_string_array rule_names in
+  let groups = CArray.of_list int64_t (List.map Int64.of_int rule_groups) in
   let invs_ptr, invs_root = to_string_array invariant_names in
   let out = allocate (ptr void) null in
+  let out_concurrency = allocate int64_t 0L in
   let rc =
     c_new_state_machine
       ctx
       tc
       rules_ptr
+      (CArray.start groups)
       (Unsigned.Size_t.of_int (List.length rule_names))
       invs_ptr
       (Unsigned.Size_t.of_int (List.length invariant_names))
+      (Int64.of_int min_concurrency)
+      (Int64.of_int max_concurrency)
       out
+      out_concurrency
   in
   Root.release rules_root;
   Root.release invs_root;
   check_rc ctx rc;
-  !@out
+  !@out, Int64.to_int !@out_concurrency
 ;;
 
 (* [HEGEL_STATE_MACHINE_DONE]: written to the out parameter by
-   [hegel_state_machine_next_rule] when the engine's step budget for the test
-   case is exhausted and the caller should stop running rules. *)
-let state_machine_done = -1
+   [hegel_state_machine_next_group] when the state machine has terminated and
+   by [hegel_state_machine_next_rule] when the worker's round is over. *)
+let state_machine_done = Int64.min_int
 
-let state_machine_next_rule ctx tc ~state_machine =
-  let out = allocate int64_t 0L in
-  check_rc ctx (c_state_machine_next_rule ctx tc state_machine out);
-  let index = Int64.to_int !@out in
-  if index = state_machine_done then None else Some index
+let read_index out =
+  let v = !@out in
+  if Int64.equal v state_machine_done then None else Some (Int64.to_int v)
 ;;
 
-let state_machine_rule_rejected ctx tc ~state_machine =
-  check_rc ctx (c_state_machine_rule_rejected ctx tc state_machine)
+let state_machine_next_group ctx tc ~state_machine =
+  let out = allocate int64_t 0L in
+  check_rc ctx (c_state_machine_next_group ctx tc state_machine out);
+  read_index out
+;;
+
+let state_machine_next_rule ctx tc ~state_machine ~worker_index =
+  let out = allocate int64_t 0L in
+  check_rc
+    ctx
+    (c_state_machine_next_rule ctx tc state_machine (Int64.of_int worker_index) out);
+  read_index out
+;;
+
+let state_machine_rule_rejected ctx tc ~state_machine ~worker_index =
+  check_rc
+    ctx
+    (c_state_machine_rule_rejected ctx tc state_machine (Int64.of_int worker_index))
+;;
+
+let state_machine_should_check_invariant ctx tc ~state_machine ~invariant_index =
+  let out = allocate bool false in
+  check_rc
+    ctx
+    (c_state_machine_should_check_invariant
+       ctx
+       tc
+       state_machine
+       (Int64.of_int invariant_index)
+       out);
+  !@out
 ;;
 
 let state_machine_free ctx state_machine =

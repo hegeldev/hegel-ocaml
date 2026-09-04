@@ -5,11 +5,6 @@ open Generators_core
     the given bounds. When a bound is omitted it defaults to the corresponding
     OCaml native [int] limit. *)
 let integers ?(min_value = Int.min_int) ?(max_value = Int.max_int) () =
-  if min_value > max_value
-  then
-    raise
-      (Invalid_argument
-         (Printf.sprintf "Cannot have max_value=%d < min_value=%d" max_value min_value));
   leaf
     ~draw:(fun tc -> Internal.generate_integer tc ~min_value ~max_value)
     ~sexp_of:sexp_of_int
@@ -18,8 +13,6 @@ let integers ?(min_value = Int.min_int) ?(max_value = Int.max_int) () =
 (** [booleans ?p ()] creates a generator for boolean values,
     [true] with probability [p] (default [0.5]). *)
 let booleans ?(p = 0.5) () =
-  if p < 0.0 || p > 1.0
-  then raise (Invalid_argument (Printf.sprintf "p=%g must be between 0 and 1" p));
   leaf ~draw:(fun tc -> Internal.generate_boolean tc p None) ~sexp_of:sexp_of_bool
 ;;
 
@@ -59,22 +52,6 @@ let floats
     | Some v -> v
     | None -> (not has_min) || not has_max
   in
-  if eff_allow_nan && (has_min || has_max)
-  then raise (Invalid_argument "Cannot have allow_nan=true with min_value or max_value");
-  (match min_value, max_value with
-   | Some min, Some max when min > max ->
-     raise
-       (Invalid_argument
-          (Printf.sprintf
-             "There are no floats between min_value=%g and max_value=%g"
-             min
-             max))
-   | _ -> ());
-  if eff_allow_infinity && has_min && has_max
-  then
-    raise
-      (Invalid_argument
-         "Cannot have allow_infinity=true with both min_value and max_value");
   let min_value = Option.value min_value ~default:neg_infinity in
   let max_value = Option.value max_value ~default:infinity in
   leaf
@@ -102,7 +79,8 @@ let surrogate_categories = [ "Cs"; "C" ]
 let effective_categories ?categories ?exclude_categories () =
   (match categories, exclude_categories with
    | Some _, Some _ ->
-     raise (Invalid_argument "categories and exclude_categories are mutually exclusive")
+     raise
+       (Internal.Usage_error "categories and exclude_categories are mutually exclusive")
    | _ -> ());
   (* Surrogate auto-exclusion *)
   (match categories with
@@ -112,7 +90,7 @@ let effective_categories ?categories ?exclude_categories () =
           if List.mem cat surrogate_categories
           then
             raise
-              (Invalid_argument
+              (Internal.Usage_error
                  (Printf.sprintf
                     "Category %S includes surrogate codepoints (Cs), which OCaml UTF-8 \
                      strings cannot represent"
@@ -186,14 +164,11 @@ let text
   =
   if min_size < 0
   then
-    raise (Invalid_argument (Printf.sprintf "min_size=%d must be non-negative" min_size));
+    raise
+      (Internal.Usage_error (Printf.sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
    | Some ms when ms < 0 ->
-     raise (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
-   | Some ms when min_size > ms ->
-     raise
-       (Invalid_argument
-          (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
+     raise (Internal.Usage_error (Printf.sprintf "max_size=%d must be non-negative" ms))
    | _ -> ());
   let has_char_param =
     Option.is_some codec
@@ -207,7 +182,7 @@ let text
   (match alphabet with
    | Some _ when has_char_param ->
      raise
-       (Invalid_argument
+       (Internal.Usage_error
           "alphabet is mutually exclusive with individual character filtering parameters")
    | _ -> ());
   match alphabet with
@@ -283,23 +258,20 @@ let make_characters ~of_char ~sexp_of () =
     ~sexp_of
 ;;
 
-(** [char ()] creates a generator for single characters (codepoints 0-255,
+(** [chars ()] creates a generator for single characters (codepoints 0-255,
     i.e. Latin-1) as native [char] values. *)
-let char () = make_characters ~of_char:Fun.id ~sexp_of:sexp_of_char ()
+let chars () = make_characters ~of_char:Fun.id ~sexp_of:sexp_of_char ()
 
 (** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.
 *)
 let binary ?(min_size = 0) ?max_size () =
   if min_size < 0
   then
-    raise (Invalid_argument (Printf.sprintf "min_size=%d must be non-negative" min_size));
+    raise
+      (Internal.Usage_error (Printf.sprintf "min_size=%d must be non-negative" min_size));
   (match max_size with
    | Some ms when ms < 0 ->
-     raise (Invalid_argument (Printf.sprintf "max_size=%d must be non-negative" ms))
-   | Some ms when min_size > ms ->
-     raise
-       (Invalid_argument
-          (Printf.sprintf "Cannot have max_size=%d < min_size=%d" ms min_size))
+     raise (Internal.Usage_error (Printf.sprintf "max_size=%d must be non-negative" ms))
    | _ -> ());
   leaf
     ~draw:(fun tc -> Internal.generate_bytes tc ~min_size ~max_size)
@@ -348,70 +320,98 @@ let urls () = leaf ~draw:Internal.generate_url ~sexp_of:sexp_of_string
     [max_length] (default 255, per RFC 1035 §2.3.4); when provided, [max_length]
     must be in [4, 255]. *)
 let domains ?max_length () =
-  (match max_length with
-   | Some ml when ml < 4 || ml > 255 ->
-     raise
-       (Invalid_argument (Printf.sprintf "max_length=%d must be between 4 and 255" ml))
-   | _ -> ());
   let max_length = Option.value max_length ~default:255 in
   leaf ~draw:(fun tc -> Internal.generate_domain tc ~max_length) ~sexp_of:sexp_of_string
 ;;
 
-(** [make_dates ~of_parts ~sexp_of ()] builds a date generator over any date
-    representation. [of_parts] converts the generated date data to the desired
-    date representation. *)
-let make_dates ~of_parts ~sexp_of () =
+type date = Internal.date =
+  { year : int
+  ; month : int
+  ; day : int
+  }
+
+type time = Internal.time =
+  { hour : int
+  ; minute : int
+  ; second : int
+  ; nanosecond : int
+  }
+
+let format_date { year; month; day } = Printf.sprintf "%04d-%02d-%02d" year month day
+
+let format_time { hour; minute; second; nanosecond } =
+  Printf.sprintf "%02d:%02d:%02d.%09d" hour minute second nanosecond
+;;
+
+let format_datetime (date, time) = format_date date ^ "T" ^ format_time time
+let first_date = { year = 1; month = 1; day = 1 }
+let last_date = { year = 9999; month = 12; day = 31 }
+let first_time = { hour = 0; minute = 0; second = 0; nanosecond = 0 }
+let last_time = { hour = 23; minute = 59; second = 59; nanosecond = 999_999_999 }
+
+(** [make_dates ~of_date ~sexp_of ?min_date ?max_date ()] builds a generator
+    for dates in [\[min_date, max_date\]] over any representation. [of_date]
+    converts each drawn {!date} to the desired representation. The default 
+    range is [\[0001-01-01, 9999-12-31\]]. *)
+let make_dates ~of_date ~sexp_of ?(min_date = first_date) ?(max_date = last_date) () =
   leaf
     ~draw:(fun tc ->
-      let year, month, day = Internal.generate_date tc in
-      of_parts ~year ~month ~day)
+      of_date (Internal.generate_date tc ~min_value:min_date ~max_value:max_date))
     ~sexp_of
 ;;
 
-(** [make_times ~of_parts ~sexp_of ()] builds a time-of-day generator over any
-    time representation. [of_parts] converts the generated time data to the 
-    desired time representation. *)
-let make_times ~of_parts ~sexp_of () =
+(** [make_times ~of_time ~sexp_of ?min_time ?max_time ()] builds a generator
+    for times of day in [\[min_time, max_time\]] over any representation.
+    [of_time] converts each drawn {!time} to the desired representation. The 
+    default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
+let make_times ~of_time ~sexp_of ?(min_time = first_time) ?(max_time = last_time) () =
   leaf
     ~draw:(fun tc ->
-      let hour, minute, second, microsecond = Internal.generate_time tc in
-      of_parts ~hour ~minute ~second ~microsecond)
+      of_time (Internal.generate_time tc ~min_value:min_time ~max_value:max_time))
     ~sexp_of
 ;;
 
-(** [make_datetimes ~of_parts ~sexp_of ()] builds a naive-datetime generator
-    over any representation. [of_parts] converts the generated datetime data
-    to the desired representation. *)
-let make_datetimes ~of_parts ~sexp_of () =
+(** [make_datetimes ~of_datetime ~sexp_of ?min_datetime ?max_datetime ()] builds a
+    generator for naive datetimes in [\[min_datetime, max_datetime\]] over any 
+    representation. [of_datetime] converts each drawn [(date, time)] pair to the 
+    desired representation. The default range is [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
+let make_datetimes
+      ~of_datetime
+      ~sexp_of
+      ?(min_datetime = first_date, first_time)
+      ?(max_datetime = last_date, last_time)
+      ()
+  =
   leaf
     ~draw:(fun tc ->
-      let (year, month, day), (hour, minute, second, microsecond) =
-        Internal.generate_datetime tc
-      in
-      of_parts ~year ~month ~day ~hour ~minute ~second ~microsecond)
+      of_datetime
+        (Internal.generate_datetime tc ~min_value:min_datetime ~max_value:max_datetime))
     ~sexp_of
 ;;
 
-(* [format_date]/[format_time] render engine-drawn parts as ISO 8601 strings. *)
-let format_date ~year ~month ~day = Printf.sprintf "%04d-%02d-%02d" year month day
-
-let format_time ~hour ~minute ~second ~microsecond =
-  Printf.sprintf "%02d:%02d:%02d.%06d" hour minute second microsecond
+(** [dates ?min_date ?max_date ()] creates a generator for ISO 8601
+    [YYYY-MM-DD] date strings in [\[min_date, max_date\]]. The default range is
+    [\[0001-01-01, 9999-12-31\]]. *)
+let dates ?min_date ?max_date () =
+  make_dates ~of_date:format_date ~sexp_of:sexp_of_string ?min_date ?max_date ()
 ;;
 
-(** [dates ()] is a generator for ISO 8601 [YYYY-MM-DD] date strings. *)
-let dates () = make_dates ~of_parts:format_date ~sexp_of:sexp_of_string ()
+(** [times ?min_time ?max_time ()] creates a generator for ISO 8601
+    [HH:MM:SS.fffffffff] time-of-day strings in [\[min_time, max_time\]]. The
+    default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
+let times ?min_time ?max_time () =
+  make_times ~of_time:format_time ~sexp_of:sexp_of_string ?min_time ?max_time ()
+;;
 
-(** [times ()] is a generator for ISO 8601 [HH:MM:SS.ffffff] time-of-day
-    strings. *)
-let times () = make_times ~of_parts:format_time ~sexp_of:sexp_of_string ()
-
-(** [datetimes ()] is a generator for naive ISO 8601 [YYYY-MM-DDTHH:MM:SS.ffffff] 
-    datetime strings. *)
-let datetimes () =
+(** [datetimes ?min_datetime ?max_datetime ()] creates a generator for naive
+    ISO 8601 [YYYY-MM-DDTHH:MM:SS.fffffffff] datetime strings in
+    [\[min_datetime, max_datetime\]]. The default range is
+    [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
+let datetimes ?min_datetime ?max_datetime () =
   make_datetimes
-    ~of_parts:(fun ~year ~month ~day ~hour ~minute ~second ~microsecond ->
-      format_date ~year ~month ~day ^ "T" ^ format_time ~hour ~minute ~second ~microsecond)
+    ~of_datetime:format_datetime
     ~sexp_of:sexp_of_string
+    ?min_datetime
+    ?max_datetime
     ()
 ;;

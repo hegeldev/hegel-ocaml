@@ -7,82 +7,163 @@ let check_printer name gen value expected =
     (Core.Sexp.to_string (Generators.printer gen value))
 ;;
 
-(** Test: char draws [Core.Char.t] values across the full Latin-1 range
+(** Test: chars draws [Core.Char.t] values across the full Latin-1 range
     (codepoints 0-255) — not just the ASCII subset — printed via
     [Core.Char.sexp_of_t]. *)
-let test_char_e2e () =
+let test_chars_e2e () =
   let saw_above_ascii = ref false in
   run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
-    let c = draw tc (Hegel_jane.char ()) in
+    let c = draw tc (Hegel_jane.chars ()) in
     if Core.Char.to_int c > 127 then saw_above_ascii := true);
   assert !saw_above_ascii;
-  check_printer "char" (Hegel_jane.char ()) 'a' "a"
+  check_printer "chars" (Hegel_jane.chars ()) 'a' "a"
 ;;
 
-(** Test: time_ns_spans draws [Core.Time_ns.Span.t] values across its full
-    representable range, round-tripping through [Int63]. *)
-let test_time_ns_spans_e2e () =
+let expect_usage_error gen =
+  match
+    run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+      ignore (draw tc gen))
+  with
+  | exception Usage_error _ -> ()
+  | () -> Alcotest.fail "expected Usage_error"
+;;
+
+let bounds_tests
+      name
+      ~gen
+      ~(bounded : ?lo:'a -> ?hi:'a -> unit -> ('a, printable) generator)
+      ~compare
+  =
+  let leq a b = compare a b <= 0 in
+  [ Alcotest.test_case (name ^ " explicit bounds") `Quick (fun () ->
+      run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+        let lo = draw tc gen in
+        let hi = draw tc (bounded ~lo ()) in
+        let v = draw tc (bounded ~lo ~hi ()) in
+        assert (leq lo v && leq v hi)))
+  ; Alcotest.test_case (name ^ " point bounds") `Quick (fun () ->
+      run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+        let lo = draw tc gen in
+        assert (compare (draw tc (bounded ~lo ~hi:lo ())) lo = 0)))
+  ]
+;;
+
+(** Test: time_spans covers the representable range by default,
+    including negative spans. *)
+let test_time_spans_default_bounds () =
+  let module Span = Core.Time_ns.Span in
   let saw_negative = ref false in
-  run_hegel_test ~settings:(settings ~test_cases:50 ()) (fun tc ->
-    let span = draw tc (Hegel_jane.time_ns_spans ()) in
-    if Core.Time_ns.Span.( < ) span Core.Time_ns.Span.zero then saw_negative := true;
-    let (_ : int) = Core.Int63.to_int_exn (Core.Time_ns.Span.to_int63_ns span) in
-    ());
-  assert !saw_negative;
-  check_printer
-    "time_ns_spans"
-    (Hegel_jane.time_ns_spans ())
-    (Core.Time_ns.Span.of_int63_ns (Core.Int63.of_int 12345))
-    "12.345us"
+  run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+    let span = draw tc (Hegel_jane.time_spans ()) in
+    if Span.( < ) span Span.zero then saw_negative := true;
+    assert (
+      Span.( >= ) span Span.min_value_representable
+      && Span.( <= ) span Span.max_value_representable));
+  assert !saw_negative
 ;;
 
-(** Test: time_ns draws [Core.Time_ns.t] values across its full representable
-    range, round-tripping through [Int63]. *)
-let test_time_ns_e2e () =
-  run_hegel_test ~settings:(settings ~test_cases:50 ()) (fun tc ->
-    let t = draw tc (Hegel_jane.time_ns ()) in
-    let (_ : int) = Core.Int63.to_int_exn (Core.Time_ns.to_int63_ns_since_epoch t) in
-    ());
+let test_time_spans_invalid_bounds () =
+  let module Span = Core.Time_ns.Span in
+  expect_usage_error (Hegel_jane.time_spans ~min_span:Span.second ~max_span:Span.zero ())
+;;
+
+(** Test: times covers the representable range by default. *)
+let test_times_default_bounds () =
+  let module Time_ns = Core.Time_ns in
+  run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+    let t = draw tc (Hegel_jane.times ()) in
+    assert (
+      Time_ns.( >= ) t Time_ns.min_value_representable
+      && Time_ns.( <= ) t Time_ns.max_value_representable))
+;;
+
+let test_times_invalid_bounds () =
+  let module Time_ns = Core.Time_ns in
+  expect_usage_error
+    (Hegel_jane.times
+       ~min_time:Time_ns.max_value_representable
+       ~max_time:Time_ns.epoch
+       ())
+;;
+
+(** Test: dates defaults to years 1 through 9999. *)
+let test_dates_default_bounds () =
+  run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+    let d = draw tc (Hegel_jane.dates ()) in
+    assert (Core.Date.year d >= 1 && Core.Date.year d <= 9999))
+;;
+
+let test_dates_invalid_bounds () =
+  let d = Core.Date.of_string "2024-01-01" in
+  expect_usage_error (Hegel_jane.dates ~min_date:(Core.Date.add_days d 1) ~max_date:d ())
+;;
+
+(** Test: ofdays defaults to the whole day. *)
+let test_ofdays_default_bounds () =
+  let module Ofday = Core.Time_ns.Ofday in
+  let saw_end_of_day = ref false in
+  let saw_within_day = ref false in
+  run_hegel_test ~settings:(settings ~test_cases:100 ~seed:1 ()) (fun tc ->
+    let t = draw tc (Hegel_jane.ofdays ()) in
+    assert (Ofday.( >= ) t Ofday.start_of_day && Ofday.( <= ) t Ofday.start_of_next_day);
+    if Ofday.equal t Ofday.start_of_next_day
+    then saw_end_of_day := true
+    else saw_within_day := true);
+  assert (!saw_end_of_day && !saw_within_day)
+;;
+
+(** Test: lower bound to end of day always generates it *)
+let test_ofdays_end_of_day_point () =
+  let module Ofday = Core.Time_ns.Ofday in
+  run_hegel_test ~settings:(settings ~test_cases:10 ()) (fun tc ->
+    let t = draw tc (Hegel_jane.ofdays ~min_ofday:Ofday.start_of_next_day ()) in
+    assert (Ofday.equal t Ofday.start_of_next_day))
+;;
+
+let test_ofdays_invalid_bounds () =
+  let module Ofday = Core.Time_ns.Ofday in
+  expect_usage_error
+    (Hegel_jane.ofdays
+       ~min_ofday:(Ofday.create ~hr:1 ())
+       ~max_ofday:Ofday.start_of_day
+       ())
+;;
+
+let time_bounds_tests =
+  bounds_tests
+    "time_spans"
+    ~gen:(Hegel_jane.time_spans ())
+    ~bounded:(fun ?lo ?hi () -> Hegel_jane.time_spans ?min_span:lo ?max_span:hi ())
+    ~compare:Core.Time_ns.Span.compare
+  @ bounds_tests
+      "times"
+      ~gen:(Hegel_jane.times ())
+      ~bounded:(fun ?lo ?hi () -> Hegel_jane.times ?min_time:lo ?max_time:hi ())
+      ~compare:Core.Time_ns.compare
+  @ bounds_tests
+      "dates"
+      ~gen:(Hegel_jane.dates ())
+      ~bounded:(fun ?lo ?hi () -> Hegel_jane.dates ?min_date:lo ?max_date:hi ())
+      ~compare:Core.Date.compare
+  @ bounds_tests
+      "ofdays"
+      ~gen:(Hegel_jane.ofdays ())
+      ~bounded:(fun ?lo ?hi () -> Hegel_jane.ofdays ?min_ofday:lo ?max_ofday:hi ())
+      ~compare:Core.Time_ns.Ofday.compare
+;;
+
+(** Time values render through their Core sexp converters. *)
+let test_printer_times () =
   check_printer
-    "time_ns"
-    (Hegel_jane.time_ns ())
+    "time_spans"
+    (Hegel_jane.time_spans ())
+    (Core.Time_ns.Span.of_int63_ns (Core.Int63.of_int 12345))
+    "12.345us";
+  check_printer
+    "times"
+    (Hegel_jane.times ())
     (Core.Time_ns.of_int63_ns_since_epoch (Core.Int63.of_int 12345))
     {|"1970-01-01 00:00:00.000012345Z"|}
-;;
-
-(** Test: dates generates typed [Core.Date.t] values with year in [1, 9999],
-    rendered by [Core.Date.to_string]. *)
-let test_dates_e2e () =
-  run_hegel_test ~settings:(settings ~test_cases:10 ()) (fun tc ->
-    let d = draw tc (Hegel_jane.dates ()) in
-    let y = Core.Date.year d in
-    assert (y >= 1 && y <= 9999);
-    let s = Core.Date.to_string d in
-    assert (String.length s = 10 && String.contains s '-'))
-;;
-
-(** Test: times generates typed [Core.Time_ns.Ofday.t] values within the day,
-    rendered by [Core.Time_ns.Ofday.to_string]. *)
-let test_times_e2e () =
-  run_hegel_test ~settings:(settings ~test_cases:10 ()) (fun tc ->
-    let t = draw tc (Hegel_jane.times ()) in
-    let ns =
-      Core.Time_ns.Span.to_int_ns (Core.Time_ns.Ofday.to_span_since_start_of_day t)
-    in
-    assert (ns >= 0 && ns < 86_400_000_000_000);
-    assert (String.contains (Core.Time_ns.Ofday.to_string t) ':'))
-;;
-
-(** Test: datetimes generates typed (date, time-of-day) pairs. *)
-let test_datetimes_e2e () =
-  run_hegel_test ~settings:(settings ~test_cases:10 ()) (fun tc ->
-    let d, t = draw tc (Hegel_jane.datetimes ()) in
-    let y = Core.Date.year d in
-    assert (y >= 1 && y <= 9999);
-    let ns =
-      Core.Time_ns.Span.to_int_ns (Core.Time_ns.Ofday.to_span_since_start_of_day t)
-    in
-    assert (ns >= 0 && ns < 86_400_000_000_000))
 ;;
 
 (** Test: hash_tables produces a [Core.Hashtbl.t] within the size bounds,
@@ -105,9 +186,8 @@ let test_hash_tables_e2e () =
 
 (** Test: hash_tables rejects crossed size bounds like assoc_lists. *)
 let test_hash_tables_min_greater_than_max () =
-  match Hegel_jane.hash_tables (integers ()) (booleans ()) ~min_size:5 ~max_size:3 () with
-  | exception Invalid_argument _ -> ()
-  | _ -> Alcotest.fail "expected Invalid_argument"
+  expect_usage_error
+    (Hegel_jane.hash_tables (integers ()) (booleans ()) ~min_size:5 ~max_size:3 ())
 ;;
 
 (* Hash tables render through [Hashtbl.Poly.sexp_of_t]; a single entry keeps
@@ -164,12 +244,23 @@ let () =
   Alcotest.run
     "hegel_jane"
     [ ( "hegel_jane"
-      , [ Alcotest.test_case "char e2e" `Quick test_char_e2e
-        ; Alcotest.test_case "time_ns_spans e2e" `Quick test_time_ns_spans_e2e
-        ; Alcotest.test_case "time_ns e2e" `Quick test_time_ns_e2e
-        ; Alcotest.test_case "dates e2e" `Quick test_dates_e2e
-        ; Alcotest.test_case "times e2e" `Quick test_times_e2e
-        ; Alcotest.test_case "datetimes e2e" `Quick test_datetimes_e2e
+      , [ Alcotest.test_case "chars e2e" `Quick test_chars_e2e
+        ; Alcotest.test_case
+            "time_spans default bounds"
+            `Quick
+            test_time_spans_default_bounds
+        ; Alcotest.test_case
+            "time_spans invalid bounds"
+            `Quick
+            test_time_spans_invalid_bounds
+        ; Alcotest.test_case "times default bounds" `Quick test_times_default_bounds
+        ; Alcotest.test_case "times invalid bounds" `Quick test_times_invalid_bounds
+        ; Alcotest.test_case "dates default bounds" `Quick test_dates_default_bounds
+        ; Alcotest.test_case "dates invalid bounds" `Quick test_dates_invalid_bounds
+        ; Alcotest.test_case "ofdays default bounds" `Quick test_ofdays_default_bounds
+        ; Alcotest.test_case "ofdays end-of-day point" `Quick test_ofdays_end_of_day_point
+        ; Alcotest.test_case "ofdays invalid bounds" `Quick test_ofdays_invalid_bounds
+        ; Alcotest.test_case "printer times" `Quick test_printer_times
         ; Alcotest.test_case "hash_tables e2e" `Quick test_hash_tables_e2e
         ; Alcotest.test_case
             "hash_tables min > max"
@@ -182,6 +273,7 @@ let () =
             "sexp_diff_renderer colored"
             `Quick
             test_sexp_diff_renderer_colored
-        ] )
+        ]
+        @ time_bounds_tests )
     ]
 ;;

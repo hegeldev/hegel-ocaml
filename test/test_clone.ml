@@ -2,7 +2,7 @@ open! Core
 open Hegel
 module G = Hegel.Generators
 
-let single_settings () = default_settings () |> with_mode Single_test_case
+let one_case_settings () = Hegel.settings ~test_cases:1 ()
 let small_int = G.integers ~min_value:0 ~max_value:9 ()
 
 (* A clone can be drawn from within the test body, and the parent stays usable
@@ -10,7 +10,7 @@ let small_int = G.integers ~min_value:0 ~max_value:9 ()
 let test_clone_draws () =
   let parent = ref (-1) in
   let cloned = ref (-1) in
-  Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(one_case_settings ()) (fun tc ->
     let worker = Hegel.clone tc in
     cloned := Hegel.draw_silent worker small_int;
     parent := Hegel.draw_silent tc small_int);
@@ -22,7 +22,7 @@ let test_clone_draws () =
    once without tripping the engine's concurrent-use guard. *)
 let test_clone_concurrent () =
   let worker_value = ref (-1) in
-  Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(one_case_settings ()) (fun tc ->
     let worker = Hegel.clone tc in
     let t =
       Caml_threads.Thread.create
@@ -44,7 +44,7 @@ let test_clone_reproducible () =
   let run () =
     let pair = ref (0, 0) in
     Hegel.run_hegel_test
-      ~settings:(single_settings () |> with_seed (Some 42))
+      ~settings:(one_case_settings () |> with_seed (Some 42))
       (fun tc ->
          let p = Hegel.draw_silent tc small_int in
          let c = Hegel.draw_silent (Hegel.clone tc) small_int in
@@ -59,7 +59,7 @@ let test_clone_reproducible () =
 (* Cloning a clone yields a further independent stream that also draws cleanly. *)
 let test_clone_of_clone () =
   let value = ref (-1) in
-  Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(one_case_settings ()) (fun tc ->
     let c1 = Hegel.clone tc in
     let c2 = Hegel.clone c1 in
     value := Hegel.draw_silent c2 small_int);
@@ -69,7 +69,7 @@ let test_clone_of_clone () =
 (* Dropping a clone and forcing a collection runs its finaliser, which releases
    the native handle and context. *)
 let test_clone_finalized () =
-  Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(one_case_settings ()) (fun tc ->
     for _ = 1 to 3 do
       let (_ : int) = Hegel.draw_silent (Hegel.clone tc) small_int in
       ()
@@ -80,7 +80,7 @@ let test_clone_finalized () =
 
 let test_clone_shares_draw_names () =
   let names = ref [] in
-  Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(one_case_settings ()) (fun tc ->
     let n0 = Hegel.Internal.draw_display_name tc ~label:"x" ~repeatable:true in
     let n1 =
       Hegel.Internal.draw_display_name (Hegel.clone tc) ~label:"x" ~repeatable:true
@@ -96,7 +96,7 @@ let test_clone_shares_draw_names () =
 (* A clone copies the parent's current span depth (rather than resetting to 0),
    so a clone forked inside a span treats its own draws as nested too. *)
 let test_clone_copies_draw_depth () =
-  Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(one_case_settings ()) (fun tc ->
     Hegel.Internal.incr_draw_depth tc;
     Hegel.Internal.incr_draw_depth tc;
     let worker = Hegel.clone tc in
@@ -110,7 +110,7 @@ let test_clone_copies_draw_depth () =
 
 let test_spawn_join_returns_value () =
   let both = ref (0, 0) in
-  Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(one_case_settings ()) (fun tc ->
     let w = spawn tc (fun worker -> Hegel.draw_silent worker small_int) in
     let main = Hegel.draw_silent tc small_int in
     let from_worker = join w in
@@ -122,7 +122,7 @@ let test_spawn_join_returns_value () =
 
 let test_spawn_join_reraises () =
   let raised = ref false in
-  Hegel.run_hegel_test ~settings:(single_settings ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(one_case_settings ()) (fun tc ->
     let w = spawn tc (fun _worker -> failwith "worker boom") in
     (try
        let (_ : int) = join w in

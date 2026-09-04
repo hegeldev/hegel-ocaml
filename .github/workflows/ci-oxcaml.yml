@@ -83,8 +83,8 @@ jobs:
           OPAMSOLVERTIMEOUT: "600"
         run: |
           eval $(opam env)
-          opam install . --deps-only --yes
-          opam install alcotest ppx_expect core_unix --yes
+          opam install . --deps-only --yes --solver=builtin-0install
+          opam install alcotest ppx_expect core_unix --yes --solver=builtin-0install
 
       - name: Stage libhegel from the matching GitHub release
         id: libhegel

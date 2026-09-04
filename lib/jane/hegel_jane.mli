@@ -26,29 +26,44 @@
       ;;
     ]} *)
 
-(** [dates ()] creates a generator for [Core.Date.t] values, with year in
-    [\[1, 9999\]] and calendar-valid month/day. *)
-val dates : unit -> (Core.Date.t, Hegel.printable) Hegel.generator
+(** [dates ?min_date ?max_date ()] creates a generator for [Core.Date.t]
+    values in [\[min_date, max_date\]]. The default range is [\[0001-01-01, 9999-12-31\]]. *)
+val dates
+  :  ?min_date:Core.Date.t
+  -> ?max_date:Core.Date.t
+  -> unit
+  -> (Core.Date.t, Hegel.printable) Hegel.generator
 
-(** [times ()] creates a generator for [Core.Time_ns.Ofday.t] times of day
-    with microsecond precision. *)
-val times : unit -> (Core.Time_ns.Ofday.t, Hegel.printable) Hegel.generator
+(** [ofdays ?min_ofday ?max_ofday ()] creates a generator for
+    [Core.Time_ns.Ofday.t] values in [\[min_ofday, max_ofday\]]. The default
+    range is [\[00:00:00.000000000, 24:00:00.000000000\]]. *)
+val ofdays
+  :  ?min_ofday:Core.Time_ns.Ofday.t
+  -> ?max_ofday:Core.Time_ns.Ofday.t
+  -> unit
+  -> (Core.Time_ns.Ofday.t, Hegel.printable) Hegel.generator
 
-(** [datetimes ()] creates a generator for naive datetimes as
-    [(Core.Date.t * Core.Time_ns.Ofday.t)] pairs. *)
-val datetimes
-  :  unit
-  -> (Core.Date.t * Core.Time_ns.Ofday.t, Hegel.printable) Hegel.generator
-
-(** [char ()] creates a generator for single characters (codepoints 0-255,
+(** [chars ()] creates a generator for single characters (codepoints 0-255,
     i.e. Latin-1) as [Core.Char.t] values. *)
-val char : unit -> (Core.Char.t, Hegel.printable) Hegel.generator
+val chars : unit -> (Core.Char.t, Hegel.printable) Hegel.generator
 
-(** [time_ns ()] creates a generator for [Core.Time_ns.t] values. *)
-val time_ns : unit -> (Core.Time_ns.t, Hegel.printable) Hegel.generator
+(** [times ?min_time ?max_time ()] creates a generator for
+    [Core.Time_ns.t] values in [\[min_time, max_time\]]. The default range is
+    the full representable range: [\[1823-11-12T00:06:21.572612096Z, 2116-02-20T23:53:38.427387903Z\]]. *)
+val times
+  :  ?min_time:Core.Time_ns.t
+  -> ?max_time:Core.Time_ns.t
+  -> unit
+  -> (Core.Time_ns.t, Hegel.printable) Hegel.generator
 
-(** [time_ns_spans ()] creates a generator for [Core.Time_ns.Span.t] values. *)
-val time_ns_spans : unit -> (Core.Time_ns.Span.t, Hegel.printable) Hegel.generator
+(** [time_spans ?min_span ?max_span ()] creates a generator for
+    [Core.Time_ns.Span.t] values in [\[min_span, max_span\]]. The default range
+    is the full representable range: [\[-53375d23h53m38.427387904s, 53375d23h53m38.427387903s\]]. *)
+val time_spans
+  :  ?min_span:Core.Time_ns.Span.t
+  -> ?max_span:Core.Time_ns.Span.t
+  -> unit
+  -> (Core.Time_ns.Span.t, Hegel.printable) Hegel.generator
 
 (** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
     polymorphic [Core.Hashtbl.t] tables over printable [keys] and [values].
@@ -60,6 +75,8 @@ val hash_tables
   -> ?max_size:int
   -> unit
   -> (('a, 'b) Core.Hashtbl.Poly.t, Hegel.printable) Hegel.generator
+
+(**/**)
 
 (** [resolve_draw values ~consume id] resolves a drawn pool [id] against the
     local [values] table, removing it when [consume]. *)
@@ -74,8 +91,6 @@ val pool_values
   -> values:(int, 'a) Core.Hashtbl.t
   -> consume:bool
   -> ('a, Hegel.unprintable) Hegel.generator
-
-(**/**)
 
 (** [sexp_diff_renderer ~colored ~original ~updated] renders a structural
     [sexp_diff] two-column diff of the two values: red/green markings when
