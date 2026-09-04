@@ -1,3 +1,3 @@
 RELEASE_TYPE: patch
 
-Add support for deriving `hegel_generator` declarations in module signatures.
+This patch adds support for deriving `hegel_generator` declarations in module signatures.
