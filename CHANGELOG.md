@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.17.0 - 2026-09-04
+
+This release makes the following changes:
+
+- `char` is now `chars` (also `Hegel_jane.char` to `Hegel_jane.chars`).
+- `Hegel_jane.times` is now `Hegel_jane.ofdays`.
+- `Hegel_jane.time_ns` is now `Hegel_jane.times`, and `Hegel_jane.time_ns_spans` is now `Hegel_jane.time_spans`.
+- Single-test-case mode has been removed. Set `test_cases` to 1 in the settings instead.
+- `Hegel_jane.datetimes` has been removed.
+
+Times of day are now drawn at nanosecond resolution. `times ()` and `datetimes ()` print the subsecond component as nine digits (`HH:MM:SS.fffffffff`) instead of six, and `Hegel_jane.ofdays ()` now produces every `Core.Time_ns.Ofday.t`.
+
+Every date and time generator now accepts optional inclusive bounds. The default generators take them as `date`/`time` records (a `(date * time)` pair for `datetimes`). The `Hegel_jane` generators take them as the `Core` values they produce.
+
+The `of_parts` parameter of `make_dates`, `make_times`, and `make_datetimes` is now `of_date`, `of_time`, and `of_datetime` respectively, and takes `Hegel.date`/`Hegel.time` records.
+
+`Hegel_jane.times ()` and `Hegel_jane.time_spans ()` now default to the representable `Core.Time_ns` ranges rather than the full 63-bit integer range.
+
+In stateful testing, a subset of invariants is now randomly chosen after running a rule rather than running all of them. All invariants still run on the initial and final state.
+
+Invalid generator arguments and settings now raise the new `Hegel.Usage_error` and report the `libhegel` diagnostic.
+
 ## 0.16.2 - 2026-08-11
 
 This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.32.2](https://github.com/hegeldev/hegel-rust/releases/tag/v0.32.2) to [0.32.3](https://github.com/hegeldev/hegel-rust/releases/tag/v0.32.3).
