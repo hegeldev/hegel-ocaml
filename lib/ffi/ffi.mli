@@ -92,6 +92,8 @@ type status =
     - [Run_passed]: the property held across every generated test case.
     - [Run_failed]: the property failed; inspect each distinct counterexample
       via {!result_failures}.
+    - [Run_failed_nondeterministic]: the property failed during a run declared
+      nondeterministic. There is no replay blob.
     - [Run_error]: the run itself failed: a failed health check, a
       nondeterministic test, a run-scoped client mistake, or a violated internal
       engine invariant (a bug in hegel, reported with a bug-report diagnostic).
@@ -101,6 +103,7 @@ type run_status =
   | Run_passed
   | Run_failed
   | Run_error
+  | Run_failed_nondeterministic
 
 (** Raised when a primitive returns [HEGEL_E_STOP_TEST]. The engine has
     exhausted its choice budget for the current test case. *)
@@ -322,6 +325,10 @@ val test_case_clone : context -> test_case -> test_case
     two must not be driven concurrently. The handle is caller-owned and must be
     freed with {!test_case_free}. *)
 val test_case_block : context -> test_case -> indent:int -> test_case
+
+(** [test_case_is_nondeterministic ctx tc] reports whether [tc] belongs to a
+    run already declared nondeterministic. *)
+val test_case_is_nondeterministic : context -> test_case -> bool
 
 (** {2 Per-test-case primitives} *)
 

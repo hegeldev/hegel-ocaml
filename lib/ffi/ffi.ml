@@ -805,6 +805,7 @@ type run_status =
   | Run_passed
   | Run_failed
   | Run_error
+  | Run_failed_nondeterministic
 
 exception Stop_test
 exception Assume_rejected
@@ -1104,9 +1105,9 @@ let test_case_clone ctx tc =
   !@out
 ;;
 
-let test_case_block ctx tc ~indent =
-  let out = allocate (ptr void) null in
-  check_rc ctx (c_test_case_block ctx tc (Unsigned.UInt64.of_int indent) out);
+let test_case_is_nondeterministic ctx tc =
+  let out = allocate bool false in
+  check_rc ctx (c_test_case_is_nondeterministic ctx tc out);
   !@out
 ;;
 
@@ -1659,6 +1660,7 @@ let result_status ctx r =
   match !@out with
   | 0 -> Run_passed
   | 1 -> Run_failed
+  | 3 -> Run_failed_nondeterministic
   | _ -> Run_error
 ;;
 
