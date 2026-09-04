@@ -25,7 +25,7 @@ let%expect_test "state trace; invariant marks the failing step" =
   [%expect
     {|
     --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    Falsified after 2 test cases (0 discarded):
 
       state = 0
       Step 1: inc
