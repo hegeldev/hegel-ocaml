@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.1 - 2026-09-04
+
+This patch adds support for deriving `hegel_generator` declarations in module signatures.
+
 ## 0.17.0 - 2026-09-04
 
 This release makes the following changes:
