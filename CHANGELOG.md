@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.2 - 2026-09-04
+
+This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.36.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.36.0) to [0.36.3](https://github.com/hegeldev/hegel-rust/releases/tag/v0.36.3).
+
 ## 0.17.1 - 2026-09-04
 
 This patch adds support for deriving `hegel_generator` declarations in module signatures.
