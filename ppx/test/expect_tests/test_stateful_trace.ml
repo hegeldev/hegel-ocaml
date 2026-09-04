@@ -117,3 +117,114 @@ let%expect_test "state trace across multiple rules" =
     rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
+
+let concurrent_boom_rule () =
+  Stateful.Concurrent_rule.create
+    ~name:"boom"
+    ~step:(fun tc () ->
+      ignore (Hegel.draw tc (integers ()) : int);
+      failwith "concurrent boom")
+    ()
+;;
+
+let%expect_test "nondeterministic failure reports the discovering execution" =
+  (try
+     Hegel.run_hegel_test
+       ~settings:
+         (settings ~test_cases:20 ~seed:0 ()
+          |> with_stateful_step_count 5
+          |> with_database Disabled
+          |> with_verbosity Normal
+          |> with_print_blob true)
+       (fun tc ->
+          Hegel.note tc "preamble";
+          Stateful.run_concurrent
+            ~init:()
+            ~rules:[ concurrent_boom_rule () ]
+            ~min_concurrency:2
+            ~max_concurrency:2
+            tc)
+   with
+   | Failure message as exn ->
+     if String.equal message "concurrent boom" then () else raise exn
+   | exn -> raise exn);
+  print_string (Expect_scrub.scrub_concurrent_report [%expect.output]);
+  [%expect
+    {|
+    Concurrent state machine detected: this run is nondeterministic, so failures are reported from the execution that discovered them, without shrinking, replay, database persistence, or a reproduce blob.
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (1 discarded):
+
+    preamble
+    Concurrency level: 2
+    Initial invariant check.
+    ---------------- Round 1: group "<anonymous>" ----------------
+    [worker 0 +time] Rule: boom
+    [worker 0 +time]   draw_1 = 3881432
+
+    Exception: Failure("concurrent boom")
+    |}]
+;;
+
+let%expect_test "one concurrent worker remains deterministic" =
+  (try
+     Hegel.run_hegel_test
+       ~settings:
+         (settings ~test_cases:20 ~seed:0 ()
+          |> with_stateful_step_count 5
+          |> with_database Disabled
+          |> with_verbosity Normal
+          |> with_print_blob true)
+       (fun tc ->
+          Stateful.run_concurrent
+            ~init:()
+            ~rules:[ concurrent_boom_rule () ]
+            ~min_concurrency:1
+            ~max_concurrency:1
+            tc)
+   with
+   | Failure message as exn ->
+     if String.equal message "concurrent boom" then () else raise exn
+   | exn -> raise exn);
+  print_string (Expect_scrub.scrub_concurrent_report [%expect.output]);
+  [%expect
+    {|
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      Concurrency level: 1
+      Initial invariant check.
+      ---------------- Round 1: group "<anonymous>" ----------------
+    [worker 0 +time]   Rule: boom
+    [worker 0 +time]     draw_1 = 0
+
+    Exception: Failure("concurrent boom")
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
+    |}]
+;;
+
+let%expect_test "quiet nondeterministic failure stays quiet" =
+  let raised = ref false in
+  (try
+     Hegel.run_hegel_test
+       ~settings:
+         (settings ~test_cases:20 ~seed:0 ()
+          |> with_stateful_step_count 5
+          |> with_database Disabled
+          |> with_verbosity Quiet)
+       (fun tc ->
+          Stateful.run_concurrent
+            ~init:()
+            ~rules:[ concurrent_boom_rule () ]
+            ~min_concurrency:2
+            ~max_concurrency:2
+            tc)
+   with
+   | Failure message as exn ->
+     if String.equal message "concurrent boom" then raised := true else raise exn
+   | exn -> raise exn);
+  let output = [%expect.output] in
+  if not !raised then failwith "expected concurrent failure";
+  print_string (Expect_scrub.scrub_concurrent_report output);
+  [%expect {||}]
+;;
