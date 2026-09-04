@@ -50,6 +50,10 @@
    (and
     :with-test
     (>= v0.17)))
+  (re
+   (and
+    :with-test
+    (>= 1.12)))
   (ocplib-endian
    (>= 1.2))
   (ppx_js_style

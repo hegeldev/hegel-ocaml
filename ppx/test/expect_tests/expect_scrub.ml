@@ -84,3 +84,11 @@ let scrub_report ?(hide_draw_positions = true) s =
   |> scrub_numeric_after ~marker:".ml:" ~placeholder:"<LINE>"
   |> scrub_blobs
 ;;
+
+let scrub_worker_times s =
+  let worker_time = Re.Perl.compile_pat {|\[worker ([0-9]+) \+[0-9]+\.[0-9]{3}ms\]|} in
+  Re.replace worker_time s ~f:(fun group ->
+    Printf.sprintf "[worker %s +time]" (Re.Group.get group 1))
+;;
+
+let scrub_concurrent_report s = scrub_report s |> scrub_worker_times

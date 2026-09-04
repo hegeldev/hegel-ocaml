@@ -369,6 +369,28 @@ let test_run_failing_reraises () =
   | None -> Alcotest.fail "expected a failure"
 ;;
 
+let test_run_usage_error_propagates () =
+  match
+    run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun _tc ->
+      raise (Usage_error "usage sentinel"))
+  with
+  | () -> Alcotest.fail "expected Usage_error"
+  | exception Usage_error message ->
+    Alcotest.(check string) "usage error message" "usage sentinel" message
+  | exception exn -> raise exn
+;;
+
+let test_run_backend_error_propagates () =
+  match
+    run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun _tc ->
+      raise (Internal.Backend_error "backend sentinel"))
+  with
+  | () -> Alcotest.fail "expected Backend_error"
+  | exception Internal.Backend_error message ->
+    Alcotest.(check string) "backend error message" "backend sentinel" message
+  | exception exn -> raise exn
+;;
+
 (** [assume false] rejects cases without failing the run. *)
 let test_run_assume_rejects () =
   run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ()) (fun tc ->
@@ -800,6 +822,11 @@ let tests =
   ; Alcotest.test_case "test_location invalid utf8" `Quick test_test_location_invalid_utf8
   ; Alcotest.test_case "run passing" `Quick test_run_passing
   ; Alcotest.test_case "run failing re-raises" `Quick test_run_failing_reraises
+  ; Alcotest.test_case "run Usage_error propagates" `Quick test_run_usage_error_propagates
+  ; Alcotest.test_case
+      "run Backend_error propagates"
+      `Quick
+      test_run_backend_error_propagates
   ; Alcotest.test_case "run assume rejects" `Quick test_run_assume_rejects
   ; Alcotest.test_case "run nested guard" `Quick test_run_nested_guard
   ; Alcotest.test_case "render_sexp atoms" `Quick test_render_sexp_atoms
