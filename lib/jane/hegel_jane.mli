@@ -1,6 +1,6 @@
 (** Jane Street [Core] companion library for Hegel ([hegel.jane]).
 
-    It requires the [core] and [sexp_diff] opam packages. Each typed generator 
+    It requires the [core] and [sexp_diff] opam packages. Each typed generator
     draws through the corresponding [hegel] generator and converts the result.
 
     To use [hegel.jane], add [hegel.jane] and [core] to your dune [libraries]:
@@ -113,8 +113,9 @@ val set_sexp_diff : unit -> unit
     [Core] generators.
 
     This module enables the generator deriver to use generators for [Core] types
-    such as [Date.t] and [Time_ns.Span.t]. [open Hegel_jane.Derive] is required
-    for [@@deriving hegel_generator] to use generators for [Core] types.
+    such as [Date.t], [Time_ns.t], [Time_ns.Span.t] and [Time_ns.Ofday.t].
+    [open Hegel_jane.Derive] is required for [@@deriving hegel_generator] to use
+    generators for [Core] types.
 
     {[
       open! Core
@@ -128,7 +129,7 @@ val set_sexp_diff : unit -> unit
       [@@deriving hegel_generator]
     ]}
 
-    Use [Core]-typed fields with their short paths (for example, [Date.t] instead 
+    Use [Core]-typed fields with their short paths (for example, [Date.t] instead
     of [Core.Date.t]).
 
     {[
@@ -183,10 +184,19 @@ module Derive : sig
         include Core.Time_ns
       end
       with module Span := Core.Time_ns.Span
+       and module Ofday := Core.Time_ns.Ofday
 
     module Span : sig
       include module type of struct
         include Core.Time_ns.Span
+      end
+
+      val hegel_generator : (t, Hegel.printable) Hegel.generator
+    end
+
+    module Ofday : sig
+      include module type of struct
+        include Core.Time_ns.Ofday
       end
 
       val hegel_generator : (t, Hegel.printable) Hegel.generator
