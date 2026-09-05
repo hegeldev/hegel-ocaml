@@ -36,7 +36,8 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }} # zizmor: ignore[artipacked]
 
-      - name: Bump pinned libhegel and open/update PR
+      - name: Bump pinned libhegel
+        id: bump
         env:
           # hegel-rust releases are public, so the app token (scoped to
           # hegel-ocaml) reads them fine; gh uses GH_TOKEN for the PR commands.
@@ -44,3 +45,140 @@ jobs:
           HEGEL_RELEASE_APP_ID: ${{ vars.HEGEL_RELEASE_APP_ID }}
           VERSION: ${{ github.event.client_payload.version || inputs.version }}
         run: python .github/scripts/bump_hegel_rust.py "$VERSION"
+
+      # The alignment agent below needs the full `just check` toolchain
+      # (mirroring the CI test/lint/docs jobs). Set it up only when something
+      # was actually bumped, so no-op re-runs stay cheap.
+      - uses: ./.github/actions/install-tools
+        if: steps.bump.outputs.bumped == 'true'
+        with:
+          tools: just
+
+      - uses: ./.github/actions/setup-opam
+        if: steps.bump.outputs.bumped == 'true'
+        with:
+          cache-key: opam-${{ runner.os }}-bump-${{ hashFiles('*.opam', '.ocamlformat') }}
+          cache-restore-keys: |
+            opam-${{ runner.os }}-bump-
+          deps-flags: --with-test --with-doc
+
+      - name: Install check dependencies
+        if: steps.bump.outputs.bumped == 'true'
+        run: |
+          eval $(opam env)
+          # bisect_ppx/ocamlformat are dev-setup deps (not pulled by
+          # --deps-only); core/sexp_diff are the opam depopts hegel.jane
+          # needs. `just check` uses all four.
+          opam install bisect_ppx.2.8.3 ocamlformat.0.29.0 core sexp_diff --yes
+
+      # The version bump only changes the pinned constant and checksums. The C
+      # ABI may have shifted with the new release, so realign the ctypes FFI
+      # binding (lib/ffi/) using the align-libhegel skill before the PR is
+      # reviewed. Skipped when nothing was bumped.
+      - name: Align the FFI binding to the new libhegel
+        if: steps.bump.outputs.bumped == 'true'
+        timeout-minutes: 30
+        uses: anthropics/claude-code-action@4d7e1f0cd85743fdc93b1c8040ab54395da024e2 # v1.0.149
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app-token.outputs.token }}
+          # hegel-rust fires this workflow via repository_dispatch using the
+          # hegel-release[bot] app token, so the actor is a bot. The action
+          # blocks bot-initiated runs by default; allow this specific bot.
+          allowed_bots: hegel-release
+          prompt: |
+            The pinned libhegel version was just bumped to v${{ steps.bump.outputs.version }}
+            (lib/ffi/loader.ml: `let version`, plus the regenerated checksums) on this
+            checkout. Use the align-libhegel skill to align the OCaml ctypes FFI binding
+            in lib/ffi/ (and, only if the ABI demands it, lib/internal.ml /
+            lib/generators_core.ml / lib/stateful.ml) to the new release, so that
+            `just check` passes. Do NOT change the public `Hegel` API — only the
+            internal binding layer. Do NOT commit or push; leave all changes in the
+            working tree for the next step to commit.
+          claude_args: >-
+            --allowed-tools "Bash,Edit,Write,Read,Glob,Grep,WebFetch,Skill"
+            --max-turns 60
+
+      # Fold the FFI alignment into the bump commit so the branch carries a
+      # single bump+fix commit. No-op when alignment changed nothing.
+      - name: Amend the FFI alignment into the bump commit
+        if: steps.bump.outputs.bumped == 'true'
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No FFI alignment changes to amend."
+            exit 0
+          fi
+          git add -A
+          git commit --amend --no-edit
+
+      # The single push: force-push the per-version branch and open/update the
+      # PR. The branch name embeds the pinned version, so the force-push only
+      # ever overwrites a re-run of this same version — never another
+      # version's (or a human's) work.
+      - name: Push and open/update the PR
+        if: steps.bump.outputs.bumped == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.bump.outputs.version }}
+          BRANCH: ${{ steps.bump.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git push --force origin "$BRANCH"
+
+          workflow_url="https://github.com/hegeldev/hegel-ocaml/blob/main/.github/workflows/bump-hegel-rust.yml"
+          title="Bump pinned \`libhegel\` to \`${VERSION}\`"
+          body=$(printf '%s\n' \
+            "This PR bumps our pinned \`libhegel\` version to \`v${VERSION}\`." \
+            "" \
+            "---" \
+            "" \
+            "*This PR was automatically generated by [bump-hegel-rust.yml](${workflow_url}).*")
+
+          # Reuse the open PR for this branch if there is one; otherwise create it.
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr edit "$BRANCH" --title "$title" --body "$body"
+          else
+            gh pr create --title "$title" --body "$body"
+          fi
+
+      # Older bump PRs are now superseded by this one. Close the ones that
+      # carry only bot commits; a PR someone (or an alignment agent) pushed
+      # work to is left open with a note instead — closing must never bury
+      # manual work. Runs after the new PR exists, and best-effort: a hiccup
+      # here must not fail the bump itself.
+      - name: Supersede older bump PRs
+        if: steps.bump.outputs.bumped == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.bump.outputs.version }}
+          BRANCH: ${{ steps.bump.outputs.branch }}
+        run: |
+          set -euo pipefail
+          new_pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')
+
+          gh pr list --state open --json number,headRefName \
+            --jq '.[] | [.number, .headRefName] | @tsv' |
+          while IFS=$'\t' read -r pr head; do
+            [ "$head" = "$BRANCH" ] && continue
+            # Match the legacy fixed branch name and the per-version branches.
+            case "$head" in
+              ci/bump-hegel-rust | ci/bump-hegel-rust-*) ;;
+              *) continue ;;
+            esac
+            # Authors other than the bot on the PR's commits? (GraphQL reports
+            # the bot's login without the [bot] suffix; check both spellings.
+            # An unlinked-email author has an *empty* login, so fall through
+            # to the commit name, and count a fully unknown author as human —
+            # never close on unknown.)
+            others=$(gh pr view "$pr" --json commits \
+              --jq '[.commits[].authors[] | (if (.login // "") != "" then .login elif (.name // "") != "" then .name else "unknown author" end)] | unique
+                    | map(select(. != "hegel-release" and . != "hegel-release[bot]"))
+                    | join(", ")')
+            if [ -z "$others" ]; then
+              gh pr close "$pr" --comment "Superseded by #${new_pr}, which pins libhegel ${VERSION}."
+            else
+              gh pr comment "$pr" --body "Superseded by #${new_pr}, which pins libhegel ${VERSION}. Leaving this PR open because it carries commits by: ${others}."
+            fi
+          done
