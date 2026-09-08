@@ -81,9 +81,12 @@ let stateful_variables_test () =
       ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc }
       ~rules:[ var_alloc_rule; var_free_rule ]
       ~invariants:
-        [ (fun state ->
-            assert (
-              S.Pool.size state.Var_state.variables = Set.length state.Var_state.live))
+        [ S.Invariant.create
+            ~name:"pool_sz"
+            ~inv:(fun state ->
+              assert (
+                S.Pool.size state.Var_state.variables = Set.length state.Var_state.live))
+            ()
         ]
       tc)
 ;;
@@ -149,15 +152,17 @@ let stateful_no_rules_test () =
    drawing from an empty pool rejects the test case with [Assume_rejected],
    not [Data_exhausted]. *)
 let empty_pool_draw_rejects_test () =
-  let saw_reject = ref false in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
-    let pool = Hegel.Internal.new_pool tc in
-    match Hegel.Internal.pool_generate tc ~pool () with
-    | (_ : int) -> Alcotest.fail "expected Assume_rejected"
-    | exception Hegel.Internal.Assume_rejected ->
-      saw_reject := true;
-      raise Hegel.Internal.Assume_rejected);
-  Alcotest.(check bool) "empty pool draw raised Assume_rejected" true !saw_reject
+  match
+    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
+      let pool = Hegel.Internal.new_pool tc in
+      ignore (Hegel.Internal.pool_generate tc ~pool () : int))
+  with
+  | () -> Alcotest.fail "expected Unsatisfiable"
+  | exception Failure msg ->
+    Alcotest.(check bool)
+      "failure msg"
+      (String.is_substring_at msg ~pos:0 ~substring:"Unsatisfiable")
+      true
 ;;
 
 let stateful_step_count_forwarded_test () =
@@ -221,12 +226,46 @@ let test_stateful_bounded_steps () =
   Alcotest.(check int) "ran exactly 10 steps" 10 !step_count
 ;;
 
-(* Swarm testing: with many rules, the engine enables a random subset (at least
-   one) per test case, so some test cases leave a single rule enabled and every
-   step picks that survivor — a chain as long as the whole step budget. With 11
-   rules under uniform selection a run of 20 identical choices is astronomically
-   unlikely ((1/11)^19); under swarm it shows up across test cases.
- *)
+let test_always_check_invariant () =
+  let module S = Hegel.Stateful in
+  let stateful_step_count = 10 in
+  let always_inv_exec_count = ref 0 in
+  let sampled_inv_exec_count = ref 0 in
+  let noop = S.Rule.create ~name:"noop" ~step:(fun _tc _state -> ()) in
+  let always_check_invariant =
+    S.Invariant.create
+      ~name:"always_check"
+      ~inv:(fun _ -> incr always_inv_exec_count)
+      ~always_check:true
+      ()
+  in
+  let sampled_invariant =
+    S.Invariant.create
+      ~name:"sampled_check"
+      ~inv:(fun _ -> incr sampled_inv_exec_count)
+      ()
+  in
+  Hegel.run_hegel_test
+    ~settings:
+      (Hegel.settings ~test_cases:1 ~seed:1 ()
+       |> Hegel.with_stateful_step_count stateful_step_count)
+    (fun tc ->
+       S.run
+         ~init:()
+         ~rules:[ noop ]
+         ~invariants:[ always_check_invariant; sampled_invariant ]
+         tc);
+  Alcotest.(check int)
+    "always exec count = executed steps plus endpoint checks"
+    (stateful_step_count + 2)
+    !always_inv_exec_count;
+  Alcotest.(check bool)
+    "sampled exec count < always exec count"
+    (* not generally true but is true for the seed *)
+    (!sampled_inv_exec_count < !always_inv_exec_count)
+    true
+;;
+
 let test_swarm_long_single_rule_run () =
   let module S = Hegel.Stateful in
   (* Per-test-case state: the longest run of one identical rule choice in the
@@ -289,6 +328,10 @@ let tests =
       "stateful: with_stateful_step_count bounds steps"
       `Quick
       test_stateful_bounded_steps
+  ; Alcotest.test_case
+      "stateful: always-check invariant runs after every step"
+      `Quick
+      test_always_check_invariant
   ; Alcotest.test_case
       "stateful: swarm yields a long single-rule chain"
       `Quick

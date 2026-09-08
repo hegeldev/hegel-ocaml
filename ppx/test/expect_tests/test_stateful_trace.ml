@@ -18,7 +18,8 @@ let%expect_test "state trace; invariant marks the failing step" =
     Stateful.run
       ~init:0
       ~rules:[ inc ]
-      ~invariants:[ (fun n -> assert (n <= 1)) ]
+      ~invariants:
+        [ Stateful.Invariant.create ~name:"my_inv" ~inv:(fun n -> assert (n <= 1)) () ]
       ~sexp_of_state:Int.sexp_of_t
       tc);
   print_string (Expect_scrub.scrub_report [%expect.output]);
@@ -32,7 +33,7 @@ let%expect_test "state trace; invariant marks the failing step" =
       state = 1
       Step 2: inc
       state = 2
-      Invariant 0 violated after step 2.
+      Invariant my_inv violated after step 2.
 
     Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -42,14 +43,19 @@ let%expect_test "state trace; invariant marks the failing step" =
 let%expect_test "invariant violated in the initial state" =
   let noop = Stateful.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) in
   run_failing (fun tc ->
-    Stateful.run ~init:() ~rules:[ noop ] ~invariants:[ (fun () -> assert false) ] tc);
+    Stateful.run
+      ~init:()
+      ~rules:[ noop ]
+      ~invariants:
+        [ Stateful.Invariant.create ~name:"silly_inv" ~inv:(fun () -> assert false) () ]
+      tc);
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      Invariant 0 violated in the initial state.
+      Invariant silly_inv violated in the initial state.
 
     Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]

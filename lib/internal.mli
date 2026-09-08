@@ -433,13 +433,14 @@ val pool_generate : test_case -> pool:pool -> ?consume:bool -> unit -> int
     {!state_machine_free}. *)
 type state_machine = Hegel_ffi.Ffi.state_machine
 
-(** [new_state_machine tc ~rule_names ~invariant_names] registers a sequential
-    engine-owned state machine with the named rules and invariants. The engine
-    owns rule selection. *)
+(** [new_state_machine tc ~rule_names ~invariant_names
+    ~invariants_always_check] registers a sequential engine-owned state machine
+    with the named rules and invariants. *)
 val new_state_machine
   :  test_case
   -> rule_names:string list
   -> invariant_names:string list
+  -> invariants_always_check:bool list
   -> state_machine
 
 (** [state_machine_next_round tc ~state_machine] asks the engine whether the
@@ -462,8 +463,10 @@ val state_machine_next_rule : test_case -> state_machine:state_machine -> int op
 val state_machine_rule_rejected : test_case -> state_machine:state_machine -> unit
 
 (** [state_machine_should_check_invariant tc ~state_machine ~invariant_index]
-    is the engine's sampling decision for running invariant [invariant_index]
-    after the current round. *)
+    decides whether to run invariant [invariant_index] after the current round.
+    It always returns [true] for an invariant set in
+    [invariants_always_check]. Otherwise, it returns the engine's sampling
+    decision. *)
 val state_machine_should_check_invariant
   :  test_case
   -> state_machine:state_machine

@@ -429,6 +429,7 @@ let c_new_state_machine =
      @-> ptr int64_t
      @-> size_t
      @-> ptr (ptr char)
+     @-> ptr bool
      @-> size_t
      @-> int64_t
      @-> int64_t
@@ -1084,11 +1085,13 @@ let new_state_machine
       ~rule_names
       ~rule_groups
       ~invariant_names
+      ~invariants_always_check
       ~min_concurrency
       ~max_concurrency
   =
   let rules_ptr, rules_root = to_string_array rule_names in
   let groups = CArray.of_list int64_t (List.map Int64.of_int rule_groups) in
+  let invariants_always_check = CArray.of_list bool invariants_always_check in
   let invs_ptr, invs_root = to_string_array invariant_names in
   let out = allocate (ptr void) null in
   let out_concurrency = allocate int64_t 0L in
@@ -1100,6 +1103,7 @@ let new_state_machine
       (CArray.start groups)
       (Unsigned.Size_t.of_int (List.length rule_names))
       invs_ptr
+      (CArray.start invariants_always_check)
       (Unsigned.Size_t.of_int (List.length invariant_names))
       (Int64.of_int min_concurrency)
       (Int64.of_int max_concurrency)

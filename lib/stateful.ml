@@ -38,13 +38,29 @@ module Rule = struct
   let name t = t.name
 end
 
+module Invariant = struct
+  type 'state t =
+    { name : string
+    ; inv : 'state -> unit
+    ; always_check : bool
+    }
+
+  let create ~name ~inv ?(always_check = false) () = { name; inv; always_check }
+  let name invariant = invariant.name
+end
+
 let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
   let rule_array = Array.of_list rules in
-  let invariant_names =
-    List.mapi (fun i _ -> Printf.sprintf "invariant_%d" i) invariants
+  let invariant_names = List.map (fun inv -> Invariant.name inv) invariants in
+  let invariants_always_check =
+    List.map (fun inv -> inv.Invariant.always_check) invariants
   in
   let state_machine =
-    Internal.new_state_machine tc ~rule_names:(List.map Rule.name rules) ~invariant_names
+    Internal.new_state_machine
+      tc
+      ~rule_names:(List.map Rule.name rules)
+      ~invariant_names
+      ~invariants_always_check
   in
   let print_state state =
     Option.iter
@@ -56,7 +72,7 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
   in
   let check_invariants ~where ~sample state =
     List.iteri
-      (fun i inv ->
+      (fun i invariant ->
          if
            (not sample)
            || Internal.state_machine_should_check_invariant
@@ -64,10 +80,15 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
                 ~state_machine
                 ~invariant_index:i
          then (
-           match inv state with
+           match invariant.Invariant.inv state with
            | () -> ()
            | exception e ->
-             Internal.note tc (Printf.sprintf "Invariant %d violated %s." i where);
+             Internal.note
+               tc
+               (Printf.sprintf
+                  "Invariant %s violated %s."
+                  (Invariant.name invariant)
+                  where);
              raise e))
       invariants
   in

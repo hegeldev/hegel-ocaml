@@ -727,10 +727,11 @@ let pool_generate tc ~pool ?(consume = false) () =
   with_stop_guard tc (fun () -> Ffi.pool_generate tc.context tc.handle ~pool ~consume)
 ;;
 
-(** [new_state_machine tc ~rule_names ~invariant_names] registers a sequential
-    engine-owned state machine: one concurrency group, concurrency fixed at 1,
-    every rule pulled by worker 0. Release it with {!state_machine_free}. *)
-let new_state_machine tc ~rule_names ~invariant_names =
+(** [new_state_machine tc ~rule_names ~invariant_names
+    ~invariants_always_check] registers a sequential engine-owned state machine:
+    one concurrency group, concurrency fixed at 1, every rule pulled by worker
+    0. Release it with {!state_machine_free}. *)
+let new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check =
   with_stop_guard tc (fun () ->
     fst
       (Ffi.new_state_machine
@@ -739,6 +740,7 @@ let new_state_machine tc ~rule_names ~invariant_names =
          ~rule_names
          ~rule_groups:(List.map (fun _ -> 0) rule_names)
          ~invariant_names
+         ~invariants_always_check
          ~min_concurrency:1
          ~max_concurrency:1))
 ;;
@@ -770,8 +772,7 @@ let state_machine_rule_rejected tc ~state_machine =
 ;;
 
 (** [state_machine_should_check_invariant tc ~state_machine ~invariant_index]
-    is the engine's sampling decision for running invariant [invariant_index]
-    after the current round.
+    decides whether to run invariant [invariant_index] after the current round.
     Raises {!Data_exhausted} when the engine's choice budget is exhausted. *)
 let state_machine_should_check_invariant tc ~state_machine ~invariant_index =
   with_stop_guard tc (fun () ->
