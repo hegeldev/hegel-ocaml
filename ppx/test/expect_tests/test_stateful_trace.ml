@@ -18,7 +18,8 @@ let%expect_test "state trace; invariant marks the failing step" =
     Stateful.run
       ~init:0
       ~rules:[ inc ]
-      ~invariants:[ (fun n -> assert (n <= 1)) ]
+      ~invariants:
+        [ Stateful.Invariant.create ~name:"my_inv" ~inv:(fun n -> assert (n <= 1)) () ]
       ~sexp_of_state:Int.sexp_of_t
       tc);
   print_string (Expect_scrub.scrub_report [%expect.output]);
@@ -42,7 +43,12 @@ let%expect_test "state trace; invariant marks the failing step" =
 let%expect_test "invariant violated in the initial state" =
   let noop = Stateful.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) in
   run_failing (fun tc ->
-    Stateful.run ~init:() ~rules:[ noop ] ~invariants:[ (fun () -> assert false) ] tc);
+    Stateful.run
+      ~init:()
+      ~rules:[ noop ]
+      ~invariants:
+        [ Stateful.Invariant.create ~name:"silly_inv" ~inv:(fun () -> assert false) () ]
+      tc);
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|

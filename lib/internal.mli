@@ -440,6 +440,7 @@ val new_state_machine
   :  test_case
   -> rule_names:string list
   -> invariant_names:string list
+  -> invariants_always_check:bool list
   -> state_machine
 
 (** [state_machine_next_round tc ~state_machine] asks the engine whether the

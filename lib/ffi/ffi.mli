@@ -402,6 +402,7 @@ val new_state_machine
   -> rule_names:string list
   -> rule_groups:int list
   -> invariant_names:string list
+  -> invariants_always_check:bool list
   -> min_concurrency:int
   -> max_concurrency:int
   -> state_machine * int

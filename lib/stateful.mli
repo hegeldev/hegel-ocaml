@@ -141,6 +141,19 @@ module Rule : sig
   val name : _ t -> string
 end
 
+module Invariant : sig
+  type 'state t
+
+  val create
+    :  name:string
+    -> inv:('state -> unit)
+    -> ?always_check:bool
+    -> unit
+    -> 'state t
+
+  val name : _ t -> string
+end
+
 (** {2 Running stateful tests} *)
 
 (** Executes a stateful test by repeatedly applying randomly chosen [rules] to a
@@ -169,7 +182,7 @@ end
 val run
   :  init:'state
   -> rules:'state Rule.t list
-  -> ?invariants:('state -> unit) list
+  -> ?invariants:'state Invariant.t list
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
   -> Internal.test_case
   -> unit

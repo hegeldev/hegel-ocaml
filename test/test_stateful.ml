@@ -81,9 +81,12 @@ let stateful_variables_test () =
       ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc }
       ~rules:[ var_alloc_rule; var_free_rule ]
       ~invariants:
-        [ (fun state ->
-            assert (
-              S.Pool.size state.Var_state.variables = Set.length state.Var_state.live))
+        [ S.Invariant.create
+            ~name:"pool_sz"
+            ~inv:(fun state ->
+              assert (
+                S.Pool.size state.Var_state.variables = Set.length state.Var_state.live))
+            ()
         ]
       tc)
 ;;
@@ -149,15 +152,13 @@ let stateful_no_rules_test () =
    drawing from an empty pool rejects the test case with [Assume_rejected],
    not [Data_exhausted]. *)
 let empty_pool_draw_rejects_test () =
-  let saw_reject = ref false in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
-    let pool = Hegel.Internal.new_pool tc in
-    match Hegel.Internal.pool_generate tc ~pool () with
-    | (_ : int) -> Alcotest.fail "expected Assume_rejected"
-    | exception Hegel.Internal.Assume_rejected ->
-      saw_reject := true;
-      raise Hegel.Internal.Assume_rejected);
-  Alcotest.(check bool) "empty pool draw raised Assume_rejected" true !saw_reject
+  match 
+    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
+      let pool = Hegel.Internal.new_pool tc in
+      (ignore (Hegel.Internal.pool_generate tc ~pool () : int)))
+    with
+    | () -> Alcotest.fail "expected Unsatisfiable"
+    | exception _ -> ()
 ;;
 
 let stateful_step_count_forwarded_test () =

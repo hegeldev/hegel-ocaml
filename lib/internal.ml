@@ -730,7 +730,7 @@ let pool_generate tc ~pool ?(consume = false) () =
 (** [new_state_machine tc ~rule_names ~invariant_names] registers a sequential
     engine-owned state machine: one concurrency group, concurrency fixed at 1,
     every rule pulled by worker 0. Release it with {!state_machine_free}. *)
-let new_state_machine tc ~rule_names ~invariant_names =
+let new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check =
   with_stop_guard tc (fun () ->
     fst
       (Ffi.new_state_machine
@@ -739,6 +739,7 @@ let new_state_machine tc ~rule_names ~invariant_names =
          ~rule_names
          ~rule_groups:(List.map (fun _ -> 0) rule_names)
          ~invariant_names
+         ~invariants_always_check
          ~min_concurrency:1
          ~max_concurrency:1))
 ;;
