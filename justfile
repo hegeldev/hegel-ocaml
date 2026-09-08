@@ -18,6 +18,9 @@ check-tests:
     ./_build/default/ppx/test/test_ppx_derive.exe
     ./_build/default/ppx/test/test_ppx_hegel_test.exe
     ./_build/default/test/test_hegel.exe
+    dune build --instrument-with bisect_ppx ppx/test/test_ppx_without_libhegel.exe
+    HEGEL_LIBHEGEL_PATH=/hegel-test-missing/libhegel HEGEL_LIBHEGEL_NO_DOWNLOAD=1 \
+      ./_build/default/ppx/test/test_ppx_without_libhegel.exe
     # The ppx_expect tests are an inline-tests library (no standalone exe), so
     # run them through dune; coverage merges via BISECT_FILE.
     dune runtest ppx/test/expect_tests --instrument-with bisect_ppx --force
@@ -71,6 +74,9 @@ check-tests-no-coverage:
     ./_build/default/ppx/test/test_ppx_derive.exe
     ./_build/default/ppx/test/test_ppx_hegel_test.exe
     ./_build/default/test/test_hegel.exe
+    dune build ppx/test/test_ppx_without_libhegel.exe
+    HEGEL_LIBHEGEL_PATH=/hegel-test-missing/libhegel HEGEL_LIBHEGEL_NO_DOWNLOAD=1 \
+      ./_build/default/ppx/test/test_ppx_without_libhegel.exe
     # ppx_expect tests are an inline-tests library (no standalone exe), so run
     # them through dune. --force ensures they execute even if dune considers
     # them cached.

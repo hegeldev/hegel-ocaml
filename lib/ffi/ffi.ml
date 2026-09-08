@@ -12,23 +12,28 @@ open Ctypes
 (* Locating and opening the shared library                            *)
 (* ------------------------------------------------------------------ *)
 
-(* {!Loader.locate} resolves (and, if necessary, downloads) the library path;
-   we open it here. The library is loaded on module init — i.e. the first time
-   anything in the process touches the Hegel engine. *)
+(* Resolve (and, if necessary, download) and open the library on the first
+   libhegel call. *)
 let lib =
-  let path = Loader.locate () in
-  try Dl.dlopen ~filename:path ~flags:[ Dl.RTLD_NOW; Dl.RTLD_GLOBAL ] with
-  | Dl.DL_error msg ->
-    failwith (Printf.sprintf "hegel: failed to load libhegel from %s: %s" path msg)
+  lazy
+    (let path = Loader.locate () in
+     try Dl.dlopen ~filename:path ~flags:[ Dl.RTLD_NOW; Dl.RTLD_GLOBAL ] with
+     | Dl.DL_error msg ->
+       failwith (Printf.sprintf "hegel: failed to load libhegel from %s: %s" path msg))
 ;;
 
-let foreign name typ = Foreign.foreign ~from:lib name typ
+let lib_lock = Mutex.create ()
 
-(* [hegel_next_test_case] runs the engine on the calling thread. An engine call
-   can take a while, so release the OCaml runtime lock for its duration to let 
-   other OCaml threads run. *)
-let foreign_blocking name typ =
-  Foreign.foreign ~from:lib ~release_runtime_lock:true name typ
+let foreign ?(release_runtime_lock = false) name typ =
+  let binding =
+    lazy
+      (let lib = Mutex.protect lib_lock (fun () -> Lazy.force lib) in
+       Foreign.foreign ~from:lib ~release_runtime_lock name typ)
+  in
+  let binding_lock = Mutex.create () in
+  fun arg ->
+    let fn = Mutex.protect binding_lock (fun () -> Lazy.force binding) in
+    fn arg
 ;;
 
 (* ------------------------------------------------------------------ *)
@@ -184,7 +189,8 @@ let c_run_start =
 ;;
 
 let c_next_test_case =
-  foreign_blocking
+  foreign
+    ~release_runtime_lock:true
     "hegel_next_test_case"
     (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
 ;;

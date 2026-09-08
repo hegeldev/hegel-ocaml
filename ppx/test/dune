@@ -5,6 +5,22 @@
 ; resolves locally as usual.
 
 (test
+ (name test_ppx_without_libhegel)
+ (package ppx_hegel_generator)
+ (modules test_ppx_without_libhegel)
+ (libraries hegel)
+ (preprocess
+  (pps ppx_hegel_generator))
+ (action
+  (setenv
+   HEGEL_LIBHEGEL_PATH
+   /hegel-test-missing/libhegel
+   (setenv
+    HEGEL_LIBHEGEL_NO_DOWNLOAD
+    1
+    (run %{test})))))
+
+(test
  (name test_ppx_derive)
  (package ppx_hegel_generator)
  (modules test_ppx_derive)
