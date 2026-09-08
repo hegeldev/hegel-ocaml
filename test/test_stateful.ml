@@ -161,7 +161,8 @@ let empty_pool_draw_rejects_test () =
   | exception Failure msg ->
     Alcotest.(check bool)
       "failure msg"
-      (String.is_substring_at msg ~pos:0 ~substring:"Unsatisfiable") true
+      (String.is_substring_at msg ~pos:0 ~substring:"Unsatisfiable")
+      true
 ;;
 
 let stateful_step_count_forwarded_test () =
@@ -225,12 +226,46 @@ let test_stateful_bounded_steps () =
   Alcotest.(check int) "ran exactly 10 steps" 10 !step_count
 ;;
 
-(* Swarm testing: with many rules, the engine enables a random subset (at least
-   one) per test case, so some test cases leave a single rule enabled and every
-   step picks that survivor — a chain as long as the whole step budget. With 11
-   rules under uniform selection a run of 20 identical choices is astronomically
-   unlikely ((1/11)^19); under swarm it shows up across test cases.
- *)
+let test_always_check_invariant () =
+  let module S = Hegel.Stateful in
+  let stateful_step_count = 10 in
+  let always_inv_exec_count = ref 0 in
+  let sampled_inv_exec_count = ref 0 in
+  let noop = S.Rule.create ~name:"noop" ~step:(fun _tc _state -> ()) in
+  let always_check_invariant =
+    S.Invariant.create
+      ~name:"always_check"
+      ~inv:(fun _ -> incr always_inv_exec_count)
+      ~always_check:true
+      ()
+  in
+  let sampled_invariant =
+    S.Invariant.create
+      ~name:"sampled_check"
+      ~inv:(fun _ -> incr sampled_inv_exec_count)
+      ()
+  in
+  Hegel.run_hegel_test
+    ~settings:
+      (Hegel.settings ~test_cases:1 ~seed:1 ()
+       |> Hegel.with_stateful_step_count stateful_step_count)
+    (fun tc ->
+       S.run
+         ~init:()
+         ~rules:[ noop ]
+         ~invariants:[ always_check_invariant; sampled_invariant ]
+         tc);
+  Alcotest.(check int)
+    "always exec count = step count"
+    stateful_step_count
+    !always_inv_exec_count;
+  Alcotest.(check bool)
+    "sampled exec count < always exec count"
+    (* not generally true but is true for the seed *)
+    (!sampled_inv_exec_count < !always_inv_exec_count)
+    true
+;;
+
 let test_swarm_long_single_rule_run () =
   let module S = Hegel.Stateful in
   (* Per-test-case state: the longest run of one identical rule choice in the
