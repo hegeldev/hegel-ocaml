@@ -68,6 +68,11 @@ type unprintable
     the outermost value shows. To draw a generator with no printer, use
     {!draw_silent} or attach a printer with {!with_printer}.
 
+    A supplied [~loc] adds the source filename and line to the printed draw.
+    On regular OCaml it is optional; callers can pass [~loc:[%here]] with
+    ppx_here. On OxCaml its type is [loc:[%call_pos]], so the compiler supplies
+    the caller's position when omitted. Explicit [~loc] overrides that position.
+
     Inside a [let%hegel_test], the PPX supplies the binding name as the label, so
     [let x = draw tc gen] prints its value as [x = value]. You rarely pass
     [?label] by hand. When the same name is shadowed or drawn in a loop, its
@@ -80,7 +85,12 @@ type unprintable
         assert (n >= 0)
       ;;
     ]} *)
-val draw : ?label:string -> Internal.test_case -> ('a, printable) generator -> 'a
+val draw
+  :  ?label:string
+  -> ?loc:Lexing.position
+  -> Internal.test_case
+  -> ('a, printable) generator
+  -> 'a
 
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
     [let%hegel_test] PPX rewrites bindings to; not intended for direct use
@@ -89,6 +99,7 @@ val draw : ?label:string -> Internal.test_case -> ('a, printable) generator -> '
     for a binding name that is reused or drawn in a loop. *)
 val draw_named
   :  label:string
+  -> ?loc:Lexing.position
   -> repeatable:bool
   -> Internal.test_case
   -> ('a, printable) generator
