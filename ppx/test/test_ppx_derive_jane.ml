@@ -11,6 +11,7 @@ type event =
   ; initial : char
   ; day : Date.t
   ; elapsed : Time_ns.Span.t
+  ; boundary : Time_ns.Ofday.t
   }
 [@@deriving hegel_generator]
 
@@ -21,7 +22,12 @@ let%hegel_test test_event_e2e tc =
   ignore (e.id : int);
   assert (Char.to_int e.initial >= 0 && Char.to_int e.initial <= 255);
   assert (Date.year e.day >= 1 && Date.year e.day <= 9999);
-  ignore (Time_ns.Span.to_string e.elapsed : string)
+  ignore (Time_ns.Span.to_string e.elapsed : string);
+  assert (
+    Time_ns.Ofday.between
+      e.boundary
+      ~low:Time_ns.Ofday.start_of_day
+      ~high:Time_ns.Ofday.start_of_next_day)
 [@@settings Hegel.settings ~test_cases:20 ()]
 ;;
 
@@ -30,8 +36,10 @@ let%hegel_test test_event_e2e tc =
 let%hegel_test test_wrapper_module_generators_e2e tc =
   let d = Hegel.draw_silent tc Date.hegel_generator in
   let span = Hegel.draw_silent tc Time_ns.Span.hegel_generator in
+  let ofday = Hegel.draw_silent tc Time_ns.Ofday.hegel_generator in
   assert (Date.year d >= 1 && Date.year d <= 9999);
-  ignore (Time_ns.Span.to_int63_ns span : Int63.t)
+  ignore (Time_ns.Span.to_int63_ns span : Int63.t);
+  ignore (Time_ns.Ofday.to_string ofday : string)
 [@@settings Hegel.settings ~test_cases:20 ()]
 ;;
 
