@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.17.3 - 2026-09-08
+
+This patch adds `Hegel_jane.Derive.Time_ns.Ofday`, so `[@@deriving hegel_generator]` works
+on `Time_ns.Ofday.t` fields.
+
 ## 0.17.2 - 2026-09-04
 
 This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.36.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.36.0) to [0.36.3](https://github.com/hegeldev/hegel-rust/releases/tag/v0.36.3).
