@@ -4,6 +4,9 @@ include Generators_collections
 include Generators_combinators
 include Generators_functions
 
+let draw = Draw_compat.draw
+let draw_named = Draw_compat.draw_named
+
 module Ppx_internal = struct
   module Labels = Generators_core.Labels
 

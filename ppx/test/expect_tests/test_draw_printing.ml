@@ -32,9 +32,30 @@ let%expect_test "draw_silent returns the value and prints nothing" =
   [%expect {| got=3 |}]
 ;;
 
-let%expect_test "labeled draw prints name = value on final replay" =
+let%expect_test "explicit draw locations print on final replay" =
   run_failing (fun tc ->
-    let _ = Hegel.draw ~label:"x" tc (integers ~min_value:7 ~max_value:7 ()) in
+    let gen = integers ~min_value:7 ~max_value:7 () in
+    let _ = Hegel.draw ~label:"x" ~loc:[%here] tc gen in
+    let _ = Hegel.draw ~loc:[%here] tc gen in
+    assert false);
+  print_string (Expect_scrub.scrub_report ~hide_draw_positions:false [%expect.output]);
+  [%expect
+    {|
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      x @ ppx/test/expect_tests/test_draw_printing.ml:<LINE> = 7
+      draw_1 @ ppx/test/expect_tests/test_draw_printing.ml:<LINE> = 7
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line LINE, characters C1-C2: Assertion failed
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
+    |}]
+;;
+
+let%expect_test "labeled draw without explicit location prints on final replay" =
+  run_failing (fun tc ->
+    let gen = integers ~min_value:7 ~max_value:7 () in
+    let _ = Hegel.draw ~label:"x" tc gen in
     assert false);
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
@@ -64,6 +85,37 @@ let%expect_test "unlabeled draw is auto-named draw_N on final replay" =
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
+;;
+
+(* Inspect raw output here: the general snapshots scrub positions so that
+   explicit-only OCaml and implicit-position OxCaml share the same expectations. *)
+let%expect_test "draw positions preserve explicit overrides and OxCaml call sites" =
+  let module Alias = Hegel in
+  let sites = ref [] in
+  let explicit = { ([%here]) with pos_fname = "helper.ml"; pos_lnum = 123 } in
+  run_failing (fun tc ->
+    let gen = integers ~min_value:7 ~max_value:7 () in
+    let line1 = __LINE__ + 1 in
+    let _ = Hegel.draw ~label:"direct" tc gen in
+    let line2 = __LINE__ + 1 in
+    let _ = Alias.draw ~label:"alias" tc gen in
+    let line3 = __LINE__ + 1 in
+    let _ = Hegel.Generators.draw ~label:"generators" tc gen in
+    let line4 = __LINE__ + 1 in
+    let _ = Hegel.draw_named ~label:"named" ~repeatable:false tc gen in
+    sites := [ "direct", line1; "alias", line2; "generators", line3; "named", line4 ];
+    let _ = Hegel.draw ~label:"explicit" ~loc:explicit tc gen in
+    assert false);
+  let output = [%expect.output] in
+  assert (String.is_substring output ~substring:"explicit @ helper.ml:123 = 7");
+  List.iter !sites ~f:(fun (label, line) ->
+    let expected =
+      if String.is_substring Sys.ocaml_version ~substring:"+ox"
+      then Printf.sprintf "%s @ %s:%d = 7" label [%here].pos_fname line
+      else Printf.sprintf "%s = 7" label
+    in
+    assert (String.is_substring output ~substring:expected));
+  [%expect {| |}]
 ;;
 
 let%expect_test "successive unlabeled draws number draw_1, draw_2" =

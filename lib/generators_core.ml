@@ -368,46 +368,63 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
     the outermost value shows. *)
 let draw_named
   : type a.
-    label:string -> repeatable:bool -> Internal.test_case -> (a, printable) generator -> a
+    label:string
+    -> ?loc:Lexing.position
+    -> repeatable:bool
+    -> Internal.test_case
+    -> (a, printable) generator
+    -> a
   =
-  fun ~label ~repeatable tc gen ->
-  match gen with
-  | Printable { core = Function { build }; sexp_of } ->
-    let name = Internal.draw_display_name tc ~label ~repeatable in
-    let value = build ~name:(Some name) tc in
-    if Internal.draw_depth tc = 0
-    then
-      Internal.note
-        tc
-        (Printf.sprintf "%s = %s" name (Sexp.to_string_hum (sexp_of value)));
-    value
-  | Printable { core; sexp_of } ->
-    let value = do_draw core tc in
-    if Internal.draw_depth tc = 0
-    then (
+  let open Lexing in
+  fun ~label ?loc ~repeatable tc gen ->
+    let location =
+      Option.fold
+        ~none:""
+        ~some:(fun loc ->
+          Printf.sprintf " @ %s:%s" loc.pos_fname (string_of_int loc.pos_lnum))
+        loc
+    in
+    match gen with
+    | Printable { core = Function { build }; sexp_of } ->
       let name = Internal.draw_display_name tc ~label ~repeatable in
-      (* Render through Format so the pretty-printer breaks the sexp knowing
+      let value = build ~name:(Some name) tc in
+      if Internal.draw_depth tc = 0
+      then
+        Internal.note
+          tc
+          (Printf.sprintf "%s%s = %s" name location (Sexp.to_string_hum (sexp_of value)));
+      value
+    | Printable { core; sexp_of } ->
+      let value = do_draw core tc in
+      if Internal.draw_depth tc = 0
+      then (
+        let name = Internal.draw_display_name tc ~label ~repeatable in
+        (* Render through Format so the pretty-printer breaks the sexp knowing
          it starts after "name = ": continuation lines align under the value
          instead of landing at column 0. *)
-      let rendered = Stdlib.Format.asprintf "%s = %a" name Sexp.pp_hum (sexp_of value) in
-      Internal.note tc rendered);
-    value
-  | _ -> .
+        let rendered =
+          Stdlib.Format.asprintf "%s%s = %a" name location Sexp.pp_hum (sexp_of value)
+        in
+        Internal.note tc rendered);
+      value
+    | _ -> .
 ;;
 
-(** [draw ?label tc gen] produces a typed value from the printable generator
+(** [draw ?label ?loc tc gen] produces a typed value from the printable generator
     [gen] using test case [tc].
 
     On the final replay of a failing test (or on every case under verbose
     output), an outermost draw prints its value through {!Internal.note} as
     [name = value]. The [name] is [label] when given, else ["draw"]; an
     unlabeled draw is numbered ([draw_1], [draw_2], …) while a [label] is printed
-    bare. Draws nested inside a span (e.g. composite elements) are suppressed so
-    only the outermost value shows. To draw a generator that carries no printer,
-    use {!draw_silent}, or attach a printer with {!with_printer}. *)
-let draw ?label tc gen =
+    bare. When [loc] is provided, the draw is printed as [draw @ loc]. Draws 
+    nested inside a span (e.g. composite elements) are suppressed so only the 
+    outermost value shows. To draw a generator that carries no printer, use 
+    {!draw_silent}, or attach a printer with {!with_printer}. *)
+let draw ?label ?loc tc gen =
   draw_named
     ~label:(Option.value label ~default:"draw")
+    ?loc
     ~repeatable:(Option.is_none label)
     tc
     gen

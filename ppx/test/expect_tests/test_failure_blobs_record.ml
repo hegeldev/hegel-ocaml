@@ -16,7 +16,8 @@ let contains ~needle s =
    between the first quote after [failure_blobs] and the next quote. Works for
    both the [[@@failure_blobs [ "..." ]]] and [~failure_blobs:[ "..." ]] forms. *)
 let extract_blob out =
-  let marker = "failure_blobs" in
+  (* A draw's source filename may itself contain "failure_blobs". *)
+  let marker = "rerun with:" in
   let ml = String.length marker in
   let rec find i =
     if String.equal (String.sub out i ml) marker then i + ml else find (i + 1)
