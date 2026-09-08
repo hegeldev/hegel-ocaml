@@ -162,5 +162,11 @@ module Derive = struct
 
       let hegel_generator = time_spans ()
     end
+
+    module Ofday = struct
+      include Ofday
+
+      let hegel_generator = ofdays ()
+    end
   end
 end
