@@ -389,12 +389,13 @@ val pool_generate : context -> test_case -> pool:pool -> consume:bool -> int
 val pool_free : context -> pool -> unit
 
 (** [new_state_machine ctx tc ~rule_names ~rule_groups ~invariant_names
-    ~min_concurrency ~max_concurrency] registers an engine-owned state machine
-    with the named rules (each in the concurrency group given by the parallel
-    [rule_groups]) and invariants, and returns it with the concurrency level
-    the engine drew in [\[min_concurrency, max_concurrency\]]. The engine owns
-    rule selection. Raises {!Usage_error} if [rule_names] is empty, a group id
-    is [HEGEL_STATE_MACHINE_DONE], or the concurrency bounds are invalid, and
+    ~invariants_always_check ~min_concurrency ~max_concurrency] registers an
+    engine-owned state machine with the named rules (each in the concurrency
+    group given by the parallel [rule_groups]) and invariants.
+    Returns the machine with the concurrency level the engine drew in
+    [\[min_concurrency, max_concurrency\]]. The engine owns rule selection.
+    Raises {!Usage_error} if [rule_names] is empty, a group id is
+    [HEGEL_STATE_MACHINE_DONE], or the concurrency bounds are invalid, and
     {!Stop_test} when the engine's choice budget is exhausted. *)
 val new_state_machine
   :  context
@@ -443,9 +444,10 @@ val state_machine_rule_rejected
   -> unit
 
 (** [state_machine_should_check_invariant ctx tc ~state_machine
-    ~invariant_index] is the engine's sampling decision for running invariant
-    [invariant_index] at the current join point. Raises {!Stop_test} when the
-    engine's choice budget is exhausted. *)
+    ~invariant_index] decides whether to run invariant [invariant_index] at the
+    current join point. It always returns [true] for an invariant flagged at
+    creation. Otherwise, it returns the engine's sampling decision. Raises
+    {!Stop_test} when the engine's choice budget is exhausted. *)
 val state_machine_should_check_invariant
   :  context
   -> test_case

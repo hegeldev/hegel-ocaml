@@ -256,8 +256,8 @@ let test_always_check_invariant () =
          ~invariants:[ always_check_invariant; sampled_invariant ]
          tc);
   Alcotest.(check int)
-    "always exec count = step count"
-    stateful_step_count
+    "always exec count = executed steps plus endpoint checks"
+    (stateful_step_count + 2)
     !always_inv_exec_count;
   Alcotest.(check bool)
     "sampled exec count < always exec count"
@@ -328,6 +328,10 @@ let tests =
       "stateful: with_stateful_step_count bounds steps"
       `Quick
       test_stateful_bounded_steps
+  ; Alcotest.test_case
+      "stateful: always-check invariant runs after every step"
+      `Quick
+      test_always_check_invariant
   ; Alcotest.test_case
       "stateful: swarm yields a long single-rule chain"
       `Quick

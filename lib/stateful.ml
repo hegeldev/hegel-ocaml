@@ -83,7 +83,12 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
            match invariant.Invariant.inv state with
            | () -> ()
            | exception e ->
-             Internal.note tc (Printf.sprintf "Invariant %d violated %s." i where);
+             Internal.note
+               tc
+               (Printf.sprintf
+                  "Invariant %s violated %s."
+                  (Invariant.name invariant)
+                  where);
              raise e))
       invariants
   in

@@ -33,7 +33,7 @@ let%expect_test "state trace; invariant marks the failing step" =
       state = 1
       Step 2: inc
       state = 2
-      Invariant 0 violated after step 2.
+      Invariant my_inv violated after step 2.
 
     Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -55,7 +55,7 @@ let%expect_test "invariant violated in the initial state" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      Invariant 0 violated in the initial state.
+      Invariant silly_inv violated in the initial state.
 
     Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]

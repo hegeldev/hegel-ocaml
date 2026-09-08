@@ -3,8 +3,10 @@
     actions ("rules") applied to a state. Rules are constructed with
     {!Rule.create} from a [name] and a [step] function that performs one
     application of the rule, drawing any arguments it needs from the test case
-    and returning the new state. Invariants are ['state -> unit] functions
-    evaluated before any step is run and after every successful step.
+    and returning the new state. Invariants are constructed with
+    {!Invariant.create}. Every invariant is checked on the initial state and on the
+    final state. Between steps, invariants are sampled unless created with 
+    [always_check:true].
 
     To run a state machine, call {!run} inside a Hegel test. Examples in this
     documentation assume [open Hegel].
@@ -142,8 +144,17 @@ module Rule : sig
 end
 
 module Invariant : sig
+  (** An invariant is a property that must always be true in a stateful test. *)
   type 'state t
 
+  (** Declares an invariant.
+
+      - [name] is printed in the final output if the test fails on an invariant
+      - [inv state] checks the invariant on [state]
+      - [always_check] defaults to [false]. When [true], the invariant is
+        checked after every step. Otherwise, it is sampled.
+
+      Every invariant is checked on the initial and final states. *)
   val create
     :  name:string
     -> inv:('state -> unit)
@@ -151,6 +162,7 @@ module Invariant : sig
     -> unit
     -> 'state t
 
+  (** Returns the name of the invariant. *)
   val name : _ t -> string
 end
 
@@ -158,16 +170,16 @@ end
 
 (** Executes a stateful test by repeatedly applying randomly chosen [rules] to a
     state threaded from [init]. Every invariant is checked on the initial and the
-    final state. After a step, invariants are randomly sampled. Raises 
-    [Hegel.Usage_error] if [rules] is empty.
+    final state. After a step, invariants are randomly sampled unless they were
+    created with [always_check:true]. Raises [Hegel.Usage_error] if [rules] is
+    empty.
 
     On a failing replay, each applied rule prints as [Step N: <name>], with the
     values the rule draws nested under it. When [sexp_of_state] is supplied, the
     model state also prints as [state = <value>] after the initial state and
-    after every step. An invariant that is violated prints 
-    [Invariant N violated after step M], [... in the initial state], or
-    [... in the final state], where [N] is the invariant's index in
-    [invariants].
+    after every step. An invariant that is violated prints
+    [Invariant name violated after step M], [... in the initial state], or
+    [... in the final state].
 
     {v
       state = 0
@@ -177,7 +189,7 @@ end
       Step 2: add
         draw_2 = 7
       state = 10
-      Invariant 0 violated after step 2.
+      Invariant my_invariant violated after step 2.
     v} *)
 val run
   :  init:'state

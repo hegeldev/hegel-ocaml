@@ -288,9 +288,11 @@ require tc ~msg:"list must stay sorted" (is_sorted xs)
 
 ## Stateful testing
 
-`Stateful` applies a random sequence of *rules* to a model and checks 
-invariants after every step. Pass `?sexp_of_state` to `Stateful.run` to
-trace the model state through a failing sequence:
+`Stateful` applies a random sequence of *rules* to a model. Every invariant is
+checked on the initial and final states and sampled after intermediate steps.
+Set `always_check:true` when creating an invariant that must be checked after
+every step. Pass `?sexp_of_state` to `Stateful.run` to trace the model state
+through a failing sequence:
 
 ```ocaml
 let push =
@@ -301,13 +303,19 @@ let%hegel_test stack_stays_small tc =
   Stateful.run
     ~init:[]
     ~rules:[ push ]
-    ~invariants:[ (fun stack -> assert (List.length stack <= 2)) ]
+    ~invariants:
+      [ Stateful.Invariant.create
+          ~name:"stack stays small"
+          ~inv:(fun stack -> assert (List.length stack <= 2))
+          ~always_check:true
+          ()
+      ]
     ~sexp_of_state:[%sexp_of: int list]
     tc
 ;;
 ```
 
-When a sequence fails, the report shows each step, the draws it made, the state 
+When a sequence fails, the report shows each step, the draws it made, the state
 after it, and which step broke the invariant:
 
 ```
@@ -321,7 +329,7 @@ after it, and which step broke the invariant:
   Step 3: push
     draw_3 = 0
   state = (0 0 0)
-  Invariant 0 violated after step 3.
+  Invariant stack stays small violated after step 3.
 ```
 
 See the `Hegel.Stateful` API docs for invariants across multiple
