@@ -225,17 +225,15 @@ type owned_pools =
     every {!note}/draw line is indented to (two spaces per level). It starts at 1
     on the final replay, so the whole body sits inside the framed failure report,
     and at 0 otherwise; a caller bumps it further to group sub-output (e.g. the
-    draws made within a stateful step nest under its [Step N] header).
-    [printed_output] records whether any note/draw line printed (the report needs
-    to know whether to separate the body from the exception, and to print that
-    separator only once). *)
+    draws made within a stateful step nest under its [Step N] header). Note/draw
+    lines are appended to the engine's per-test-case document and printed when
+    the case completes (see [flush_document]). *)
 type test_case =
   { handle : Ffi.test_case
   ; context : Ffi.context
   ; is_final : bool
   ; verbosity : verbosity
   ; mutable test_aborted : bool
-  ; mutable printed_output : bool
   ; mutable draw_depth : int
   ; mutable note_indent : int
   ; draw_state : draw_state
@@ -279,8 +277,8 @@ let with_note_indent (tc : test_case) f =
     [tc]. The clone shares [tc]'s outcome and budget but generates from its own
     stream. The {!draw_state} (repeatable-draw numbering) is {e shared} with [tc]
     behind its lock, and the span depth and note indent are copied so draws forked
-    mid-span stay nested. Only the per-stream abort and print flags start fresh,
-    and the immutable configuration is copied.
+    mid-span stay nested. Only the per-stream abort flag starts fresh, and the
+    immutable configuration is copied.
 
     The native handle and context are freed by a GC finaliser once the clone is
     unreachable, so a clone may be captured and used freely. *)
@@ -293,7 +291,6 @@ let clone (tc : test_case) =
     ; is_final = tc.is_final
     ; verbosity = tc.verbosity
     ; test_aborted = false
-    ; printed_output = false
     ; draw_depth = tc.draw_depth
     ; note_indent = tc.note_indent
     ; draw_state = tc.draw_state
@@ -586,17 +583,59 @@ let should_print tc =
   | Verbose | Debug -> true
 ;;
 
-(** [note tc message] prints [message] to stderr subject to {!should_print}.
-    Inside the framed failure report (the final replay), every line of a
-    (possibly multi-line) message prints indented. *)
+(** [note tc message] appends [message] to the test case's print region of the
+    engine's family document, subject to {!should_print}; the document is
+    printed once the case completes (see [flush_document]). Every line of a
+    (possibly multi-line) message is indented to the current [note_indent]. *)
 let note tc message =
   if should_print tc
   then (
-    if tc.note_indent > 0 && not tc.printed_output then Printf.eprintf "\n%!";
-    tc.printed_output <- true;
     let indent = String.make (2 * tc.note_indent) ' ' in
     let body = String.concat ("\n" ^ indent) (String.split_on_char '\n' message) in
-    Printf.eprintf "%s%s\n%!" indent body)
+    Ffi.note tc.context tc.handle (indent ^ body))
+;;
+
+(** [render_sexp ctx printer sexp] writes [sexp] to [printer] in s-expression
+    syntax. Lists are printed with breaks between elemnts when the line overflows. *)
+let rec render_sexp ctx printer (sexp : Sexp.t) =
+  match sexp with
+  | Sexp.Atom _ -> Ffi.printer_text ctx printer (Sexp.to_string sexp)
+  | Sexp.List children ->
+    Ffi.printer_begin_group ctx printer ~indent:1 "(";
+    List.iteri
+      (fun i child ->
+         if i > 0 then Ffi.printer_breakable ctx printer " ";
+         render_sexp ctx printer child)
+      children;
+    Ffi.printer_end_group ctx printer ")"
+;;
+
+(** One piece of a printed draw line: literal text, or a sexp laid out by the
+    engine (see {!render_sexp}). *)
+type draw_segment =
+  | Text of string
+  | Value of Sexp.t
+
+(** [print_line tc segments] appends one line assembled from [segments] to the
+    test case's print region. *)
+let print_line tc segments =
+  if should_print tc
+  then (
+    let ctx = tc.context in
+    let printer = Ffi.test_case_printer ctx tc.handle None in
+    Fun.protect
+      ~finally:(fun () -> Ffi.printer_free ctx printer)
+      (fun () ->
+         let indent = 2 * tc.note_indent in
+         Ffi.printer_text ctx printer (String.make indent ' ');
+         Ffi.printer_shift_indent ctx printer indent;
+         List.iter
+           (function
+             | Text s -> Ffi.printer_text ctx printer s
+             | Value sexp -> render_sexp ctx printer sexp)
+           segments;
+         Ffi.printer_shift_indent ctx printer (-indent);
+         Ffi.printer_hard_break ctx printer))
 ;;
 
 (** [require tc ?msg condition] fails the current test case when [condition] is
@@ -870,6 +909,30 @@ type case_outcome =
   ; printed_output : bool
   }
 
+(** [flush_document tc] prints the document corresponding to a test case and its clones
+    to stderr and returns whether anything printed.  *)
+let flush_document (tc : test_case) =
+  if not (should_print tc)
+  then false
+  else (
+    let printer = Ffi.test_case_printer tc.context tc.handle None in
+    let text =
+      Fun.protect
+        ~finally:(fun () -> Ffi.printer_free tc.context printer)
+        (fun () ->
+           (* resolve splices in from clone documents *)
+           match Ffi.printer_resolve tc.context printer with
+           | () -> Ffi.printer_value tc.context printer
+           | exception Ffi.Usage_error _ -> Ffi.printer_value tc.context printer)
+    in
+    if String.equal text ""
+    then false
+    else (
+      if tc.note_indent > 0 then Printf.eprintf "\n%!";
+      Printf.eprintf "%s%!" text;
+      true))
+;;
+
 (** [run_test_case ~settings ~test_fn ?note_indent ctx handle is_final] runs
     [test_fn] over a single native test-case [handle], maps the outcome to a
     {!Ffi.status}, and marks the case complete. A [Ffi.Usage_error] (an invalid
@@ -884,7 +947,6 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
     ; is_final
     ; verbosity = settings.verbosity
     ; test_aborted = false
-    ; printed_output = false
     ; draw_depth = 0
     ; note_indent
     ; draw_state = { counts = String_table.create 16; lock = Mutex.create () }
@@ -907,7 +969,7 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
          | exception exn -> Ffi.Interesting, Some (extract_origin exn, exn))
   in
   Ffi.mark_complete ctx handle status (Option.map fst captured);
-  { status; interesting = captured; printed_output = tc.printed_output }
+  { status; interesting = captured; printed_output = flush_document tc }
 ;;
 
 (** Diagnostic raised when the engine's shrunk counterexample no longer fails on

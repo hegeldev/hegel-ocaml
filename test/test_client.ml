@@ -190,6 +190,72 @@ let test_extract_origin_distinct_lines () =
     (String.equal a b)
 ;;
 
+(* ==== Sexp renderer tests ==== *)
+
+let render_to_string ~max_width sexp =
+  let module Ffi = Hegel_ffi.Ffi in
+  let ctx = Ffi.context_new () in
+  Exn.protect
+    ~finally:(fun () -> Ffi.context_free ctx)
+    ~f:(fun () ->
+      let options = Ffi.printer_options_new ctx in
+      Ffi.printer_options_set_max_width ctx options max_width;
+      let p = Ffi.printer_new ctx (Some options) in
+      Ffi.printer_options_free ctx options;
+      Exn.protect
+        ~finally:(fun () -> Ffi.printer_free ctx p)
+        ~f:(fun () ->
+          Internal.render_sexp ctx p sexp;
+          Ffi.printer_value ctx p))
+;;
+
+let test_render_sexp_atoms () =
+  Alcotest.(check string) "bare" "foo" (render_to_string ~max_width:79 (Sexp.Atom "foo"));
+  Alcotest.(check string)
+    "escaped"
+    "\"needs quoting\""
+    (render_to_string ~max_width:79 (Sexp.Atom "needs quoting"));
+  Alcotest.(check string)
+    "newline never literal"
+    "\"a\\nb\""
+    (render_to_string ~max_width:79 (Sexp.Atom "a\nb"))
+;;
+
+let test_render_sexp_fits_matches_to_string_hum () =
+  let sexps =
+    [ Sexp.List []
+    ; Sexp.List [ Sexp.Atom "a" ]
+    ; Sexp.List
+        [ Sexp.Atom "a"; Sexp.List []; Sexp.List [ Sexp.Atom "b"; Sexp.Atom "c" ] ]
+    ]
+  in
+  List.iter sexps ~f:(fun sexp ->
+    Alcotest.(check string)
+      "one-line rendering agrees with to_string_hum"
+      (Sexp.to_string_hum sexp)
+      (render_to_string ~max_width:79 sexp))
+;;
+
+let test_render_sexp_breaks_when_narrow () =
+  let sexp =
+    Sexp.List [ Sexp.Atom "a"; Sexp.List []; Sexp.List [ Sexp.Atom "b"; Sexp.Atom "c" ] ]
+  in
+  Alcotest.(check string)
+    "outer breaks, inner stays inline"
+    "(a\n ()\n (b c))"
+    (render_to_string ~max_width:7 sexp);
+  Alcotest.(check string)
+    "trailing paren glues, forcing the inner group to break too"
+    "(a\n ()\n (b\n  c))"
+    (render_to_string ~max_width:6 sexp);
+  Alcotest.(check string)
+    "nested break indents past both parens"
+    "(a\n (bbbbb\n  ccccc))"
+    (render_to_string
+       ~max_width:8
+       (Sexp.List [ Sexp.Atom "a"; Sexp.List [ Sexp.Atom "bbbbb"; Sexp.Atom "ccccc" ] ]))
+;;
+
 (* ==== Real-engine run tests ==== *)
 
 let int_gen = integers ~min_value:0 ~max_value:100 ()
@@ -530,6 +596,12 @@ let tests =
   ; Alcotest.test_case "run failing re-raises" `Quick test_run_failing_reraises
   ; Alcotest.test_case "run assume rejects" `Quick test_run_assume_rejects
   ; Alcotest.test_case "run nested guard" `Quick test_run_nested_guard
+  ; Alcotest.test_case "render_sexp atoms" `Quick test_render_sexp_atoms
+  ; Alcotest.test_case
+      "render_sexp fits"
+      `Quick
+      test_render_sexp_fits_matches_to_string_hum
+  ; Alcotest.test_case "render_sexp breaks" `Quick test_render_sexp_breaks_when_narrow
   ; Alcotest.test_case "note and target" `Quick test_note_and_target
   ; Alcotest.test_case "event_value non-finite" `Quick test_event_value_non_finite
   ; Alcotest.test_case "event bad label" `Quick test_event_bad_label

@@ -98,3 +98,31 @@ let%expect_test "Debug notes on every case (not just the final replay)" =
     Test done. interesting_test_cases=0
     |}]
 ;;
+
+let%expect_test "prints from clone interleave deterministically" =
+  let settings =
+    Hegel.settings ~test_cases:1 ~seed:0 () |> Hegel.with_database Hegel.Disabled
+  in
+  (try
+     Hegel.run_hegel_test ~settings (fun tc ->
+       Hegel.note tc "before clone";
+       let w = Hegel.spawn tc (fun c -> Hegel.note c "from clone") in
+       Hegel.join w;
+       Hegel.note tc "after clone";
+       failwith "boom")
+   with
+   | _ -> ());
+  print_string (Expect_scrub.scrub_report [%expect.output]);
+  [%expect
+    {|
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      before clone
+      from clone
+      after clone
+
+    Exception: Failure("boom")
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
+    |}]
+;;

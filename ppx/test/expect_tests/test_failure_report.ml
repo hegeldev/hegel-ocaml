@@ -54,9 +54,9 @@ let%expect_test "a multiline drawn value aligns under its name" =
               ~label:"l"
               ~loc:
                 { Lexing.pos_fname = "draw.ml"; pos_lnum = 1; pos_bol = 0; pos_cnum = 0 }
-              (Hegel.lists ~min_size:20 (Hegel.text ~min_size:5 ~max_size:20 ()) ())
+              (Hegel.lists ~min_size:15 (Hegel.text ~min_size:5 ~max_size:10 ()) ())
           in
-          assert (List.length l < 20))
+          assert (List.length l < 15))
    with
    | _ -> ());
   print_string (Expect_scrub.scrub_report ~hide_draw_positions:false [%expect.output]);
@@ -65,8 +65,21 @@ let%expect_test "a multiline drawn value aligns under its name" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      l @ draw.ml:<LINE> = (00000 00000 00000 00000 00000 00000 00000 00000 00000 00000
-                       00000 00000 00000 00000 00000 00000 00000 00000 00000 00000)
+      l @ draw.ml:<LINE> = (00000
+       00000
+       00000
+       00000
+       00000
+       00000
+       00000
+       00000
+       00000
+       00000
+       00000
+       00000
+       00000
+       00000
+       00000)
 
     Exception: File "ppx/test/expect_tests/test_failure_report.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]

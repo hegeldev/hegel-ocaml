@@ -64,10 +64,7 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
   in
   let print_state state =
     Option.iter
-      (fun sexp_of ->
-         Internal.note
-           tc
-           (Stdlib.Format.asprintf "state = %a" Sexplib0.Sexp.pp_hum (sexp_of state)))
+      (fun sexp_of -> Internal.print_line tc [ Text "state = "; Value (sexp_of state) ])
       sexp_of_state
   in
   let check_invariants ~where ~sample state =
