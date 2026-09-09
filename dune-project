@@ -2,7 +2,7 @@
 
 (name hegel)
 
-(version 0.18.2)
+(version 0.19.0)
 
 (generate_opam_files true)
 
