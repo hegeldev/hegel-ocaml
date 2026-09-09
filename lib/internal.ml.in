@@ -599,6 +599,21 @@ let note tc message =
     Printf.eprintf "%s%s\n%!" indent body)
 ;;
 
+(** [render_sexp ctx printer sexp] writes [sexp] to [printer] in s-expression
+    syntax. Lists are printed with breaks between elemnts when the line overflows. *)
+let rec render_sexp ctx printer (sexp : Sexp.t) =
+  match sexp with
+  | Sexp.Atom _ -> Ffi.printer_text ctx printer (Sexp.to_string sexp)
+  | Sexp.List children ->
+    Ffi.printer_begin_group ctx printer ~indent:1 "(";
+    List.iteri
+      (fun i child ->
+         if i > 0 then Ffi.printer_breakable ctx printer " ";
+         render_sexp ctx printer child)
+      children;
+    Ffi.printer_end_group ctx printer ")"
+;;
+
 (** [require tc ?msg condition] fails the current test case when [condition] is
     [false] by raising [Failure msg]. *)
 let require _tc ?(msg = "require: condition was false") condition =

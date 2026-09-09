@@ -380,6 +380,14 @@ val draw_display_name : test_case -> label:string -> repeatable:bool -> string
     engine toward higher values. *)
 val target : test_case -> label:string -> value:float -> unit
 
+(** [render_sexp ctx printer sexp] writes [sexp] to [printer] in s-expression
+    syntax. Lists are printed with breaks between elements when the line overflows. *)
+val render_sexp
+  :  Hegel_ffi.Ffi.context
+  -> Hegel_ffi.Ffi.printer
+  -> Sexplib0.Sexp.t
+  -> unit
+
 (** [event tc ~label] records [label] as observed on this test case for the
     end-of-run statistics report. *)
 val event : test_case -> label:string -> unit
