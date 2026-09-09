@@ -3,7 +3,6 @@
  (public_name hegel)
  (libraries hegel_ffi ipaddr sexplib0 threads.posix unix yojson)
  (private_modules
-  draw_compat
   generators_core
   generators_primitives
   generators_collections
@@ -14,21 +13,52 @@
  (instrumentation
   (backend bisect_ppx)))
 
-; Keep the public interfaces in one place. Only OxCaml understands call_pos;
-; ordinary OCaml retains explicit optional source positions.
+; Only compiler-flavor detection needs a shell. Run cppo directly before PPX.
 
 (rule
- (targets generators.mli hegel.mli)
- (deps generators.mli.in hegel.mli.in)
- (action
-  (bash
-   "case '%{ocaml_version}' in *+ox*) for name in generators hegel; do sed 's/?loc:Lexing.position/loc:[%call_pos]/g' $name.mli.in > $name.mli; done;; *) for name in generators hegel; do cp $name.mli.in $name.mli; done;; esac")))
-
-(rule
- (target draw_compat.ml)
- (deps draw_compat_ocaml.ml.inc draw_compat_oxcaml.ml.inc)
+ (target cppo-flags)
  (action
   (with-stdout-to
    %{target}
    (bash
-    "case '%{ocaml_version}' in *+ox*) cat %{dep:draw_compat_oxcaml.ml.inc};; *) cat %{dep:draw_compat_ocaml.ml.inc};; esac"))))
+    "case '%{ocaml_version}' in *+ox*) echo '-D';; *) echo '-U';; esac; echo OXCAML"))))
+
+(rule
+ (target generators.mli)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:generators.mli.in})))
+
+(rule
+ (target hegel.mli)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:hegel.mli.in})))
+
+(rule
+ (target generators.ml)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:generators.ml.in})))
+
+(rule
+ (target internal.ml)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:internal.ml.in})))

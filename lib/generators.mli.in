@@ -87,7 +87,11 @@ type unprintable
     ]} *)
 val draw
   :  ?label:string
+#ifdef OXCAML
+  -> loc:[%call_pos]
+#else
   -> ?loc:Lexing.position
+#endif
   -> Internal.test_case
   -> ('a, printable) generator
   -> 'a
@@ -99,7 +103,11 @@ val draw
     for a binding name that is reused or drawn in a loop. *)
 val draw_named
   :  label:string
+#ifdef OXCAML
+  -> loc:[%call_pos]
+#else
   -> ?loc:Lexing.position
+#endif
   -> repeatable:bool
   -> Internal.test_case
   -> ('a, printable) generator

@@ -41,6 +41,7 @@
           version = duneProjectVersion;
           src = ../.;
           duneVersion = "3";
+          nativeBuildInputs = [ ocamlPackages.cppo ];
           propagatedBuildInputs = with ocamlPackages; [
             core
             core_unix

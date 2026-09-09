@@ -10,6 +10,12 @@
 module Sexp = Sexplib0.Sexp
 module Ffi = Hegel_ffi.Ffi
 
+#ifdef OXCAML
+module DLS = Stdlib.Domain.Safe.DLS
+#else
+module DLS = Stdlib.Domain.DLS
+#endif
+
 (** A string-keyed hashtable module for the draw-name counters. *)
 module String_table = Stdlib.Hashtbl.Make (struct
     type t = string
@@ -323,9 +329,7 @@ let join (w : 'a worker) =
 ;;
 
 (** Domain-local flag to detect nested test cases. *)
-let in_test_context : bool Stdlib.Domain.DLS.key =
-  Stdlib.Domain.DLS.new_key (fun () -> false)
-;;
+let in_test_context : bool DLS.key = DLS.new_key (fun () -> false)
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available. The origin is derived from the exception
@@ -342,7 +346,7 @@ let extract_origin exn =
   let bt = Stdlib.Printexc.get_raw_backtrace () in
   let is_runtime_file file =
     String.ends_with file ~suffix:"stdlib.ml"
-    || String.ends_with file ~suffix:"lib/internal.ml"
+    || String.ends_with file ~suffix:"internal.ml.in"
   in
   let user_location =
     match Stdlib.Printexc.backtrace_slots bt with
@@ -870,11 +874,11 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
     ; owned_pools = { pools = []; lock = Mutex.create () }
     }
   in
-  Stdlib.Domain.DLS.set in_test_context true;
+  DLS.set in_test_context true;
   let status, captured =
     Fun.protect
       ~finally:(fun () ->
-        Stdlib.Domain.DLS.set in_test_context false;
+        DLS.set in_test_context false;
         free_owned_pools tc)
       (fun () ->
          match test_fn tc with
@@ -1132,7 +1136,7 @@ let run_test
       ?(failure_blobs = [])
       test_fn
   =
-  if Stdlib.Domain.DLS.get in_test_context
+  if DLS.get in_test_context
   then failwith "Cannot nest test cases - already inside a test case";
   (* Default the database key to the test's identity so each [let%hegel_test]
      gets a stable, distinct key: this scopes its persisted corpus and, under

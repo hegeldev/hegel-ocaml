@@ -780,7 +780,11 @@ val run_hegel_test_ppx
     ]} *)
 val draw
   :  ?label:string
+#ifdef OXCAML
+  -> loc:[%call_pos]
+#else
   -> ?loc:Lexing.position
+#endif
   -> test_case
   -> ('a, printable) generator
   -> 'a
@@ -792,7 +796,11 @@ val draw
     (prefer {!draw}). See {!Generators.draw_named}. *)
 val draw_named
   :  label:string
+#ifdef OXCAML
+  -> loc:[%call_pos]
+#else
   -> ?loc:Lexing.position
+#endif
   -> repeatable:bool
   -> test_case
   -> ('a, printable) generator
