@@ -7,7 +7,7 @@
     value.
 
     On the failing final replay each top-level application of the generated
-    function is printed through {!Hegel.note} as [name arg = result] (see
+    function is printed to the print region as [name arg = result] (see
     {!functions}). Applications nested inside a span (draw depth > 0) are
     suppressed, like any nested draw. [name] is the [?name] passed to the
     generator, else the draw-site binding name (via [let%hegel_test]), else
@@ -57,13 +57,13 @@ let make
          invocation in normal verbosity. *)
       if Internal.draw_depth tc = 0 && (is_fresh || Internal.is_high_verbosity tc)
       then
-        Internal.note
+        Internal.print_line
           tc
-          (Printf.sprintf
-             "%s %s = %s"
-             display
-             (Sexp.to_string_hum (sexp_of_arg arg))
-             (Sexp.to_string_hum (show_ret ret)));
+          [ Text (display ^ " ")
+          ; Value (sexp_of_arg arg)
+          ; Text " = "
+          ; Value (show_ret ret)
+          ];
       ret
     in
     adapt base

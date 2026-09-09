@@ -360,8 +360,8 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
     [let%hegel_test] PPX rewrites bindings to; it is not intended for direct use
     (prefer {!draw}). On the final replay of a failing test (or on every case
-    under verbose output), an outermost draw prints its value through
-    {!note} as [name = value], where [name] is [label], printed bare on
+    under verbose output), an outermost draw prints its value to the test
+    case's print region as [name = value], where [name] is [label], printed bare on
     its sole use and numbered ([label_1], [label_2], …) when [repeatable] is set
     — which the PPX does for a binding name that is reused or drawn in a loop.
     Draws nested inside a span (e.g. composite elements) are suppressed so only
@@ -390,22 +390,14 @@ let draw_named
       let value = build ~name:(Some name) tc in
       if Internal.draw_depth tc = 0
       then
-        Internal.note
-          tc
-          (Printf.sprintf "%s%s = %s" name location (Sexp.to_string_hum (sexp_of value)));
+        Internal.print_line tc [ Text (name ^ location ^ " = "); Value (sexp_of value) ];
       value
     | Printable { core; sexp_of } ->
       let value = do_draw core tc in
       if Internal.draw_depth tc = 0
       then (
         let name = Internal.draw_display_name tc ~label ~repeatable in
-        (* Render through Format so the pretty-printer breaks the sexp knowing
-         it starts after "name = ": continuation lines align under the value
-         instead of landing at column 0. *)
-        let rendered =
-          Stdlib.Format.asprintf "%s%s = %a" name location Sexp.pp_hum (sexp_of value)
-        in
-        Internal.note tc rendered);
+        Internal.print_line tc [ Text (name ^ location ^ " = "); Value (sexp_of value) ]);
       value
     | _ -> .
 ;;

@@ -610,6 +610,34 @@ let rec render_sexp ctx printer (sexp : Sexp.t) =
     Ffi.printer_end_group ctx printer ")"
 ;;
 
+(** One piece of a printed draw line: literal text, or a sexp laid out by the
+    engine (see {!render_sexp}). *)
+type draw_segment =
+  | Text of string
+  | Value of Sexp.t
+
+(** [print_line tc segments] appends one line assembled from [segments] to the
+    test case's print region. *)
+let print_line tc segments =
+  if should_print tc
+  then (
+    let ctx = tc.context in
+    let printer = Ffi.test_case_printer ctx tc.handle None in
+    Fun.protect
+      ~finally:(fun () -> Ffi.printer_free ctx printer)
+      (fun () ->
+         let indent = 2 * tc.note_indent in
+         Ffi.printer_text ctx printer (String.make indent ' ');
+         Ffi.printer_shift_indent ctx printer indent;
+         List.iter
+           (function
+             | Text s -> Ffi.printer_text ctx printer s
+             | Value sexp -> render_sexp ctx printer sexp)
+           segments;
+         Ffi.printer_shift_indent ctx printer (-indent);
+         Ffi.printer_hard_break ctx printer))
+;;
+
 (** [require tc ?msg condition] fails the current test case when [condition] is
     [false] by raising [Failure msg]. *)
 let require _tc ?(msg = "require: condition was false") condition =

@@ -388,6 +388,16 @@ val render_sexp
   -> Sexplib0.Sexp.t
   -> unit
 
+(** One piece of a printed draw line: literal text, or a sexp laid out by the
+    engine. *)
+type draw_segment =
+  | Text of string
+  | Value of Sexplib0.Sexp.t
+
+(** [print_line tc segments] appends one line assembled from [segments] to the
+    test case's print region, subject to the run's verbosity (like [note]). *)
+val print_line : test_case -> draw_segment list -> unit
+
 (** [event tc ~label] records [label] as observed on this test case for the
     end-of-run statistics report. *)
 val event : test_case -> label:string -> unit
