@@ -753,7 +753,7 @@ val run_hegel_test_ppx
 
 (** {3 Drawing values} *)
 
-(** [draw ?label tc gen] produces a typed value from the printable generator
+(** [draw ?label ?loc tc gen] produces a typed value from the printable generator
     [gen] using test case [tc].
 
     On the final replay of a failing test (or on every case under verbose
@@ -762,10 +762,10 @@ val run_hegel_test_ppx
     (["draw_1"], ["draw_2"], …) while a [label] is printed bare. To draw a generator
     with no printer, use {!draw_silent} or attach a printer with {!with_printer}.
 
-    A supplied [~loc] adds the source filename and line to the printed draw.
-    On regular OCaml it is optional; callers can pass [~loc:[%here]] with
-    ppx_here. On OxCaml its type is [loc:[%call_pos]], so the compiler supplies
-    the caller's position when omitted. Explicit [~loc] overrides that position.
+    [?loc] adds the source filename and line to the printed draw. In OxCaml, the
+    compiler automatically supplies the caller's position when omitted. Providing
+    [loc] overrides that position. The draw is then printed as
+    ["<draw> @ <filename>:<line_num>"].
 
     Inside a [let%hegel_test], the PPX supplies the binding name as the label, so
     [let x = draw tc gen] prints its value as [x = value].

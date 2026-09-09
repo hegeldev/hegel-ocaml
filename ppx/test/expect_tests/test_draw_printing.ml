@@ -87,8 +87,7 @@ let%expect_test "unlabeled draw is auto-named draw_N on final replay" =
     |}]
 ;;
 
-(* Inspect raw output here: the general snapshots scrub positions so that
-   explicit-only OCaml and implicit-position OxCaml share the same expectations. *)
+(* Preserve draw positions here; general value-printing snapshots hide them. *)
 let%expect_test "draw positions preserve explicit overrides and OxCaml call sites" =
   let module Alias = Hegel in
   let sites = ref [] in
@@ -105,17 +104,38 @@ let%expect_test "draw positions preserve explicit overrides and OxCaml call site
     let _ = Hegel.draw_named ~label:"named" ~repeatable:false tc gen in
     sites := [ "direct", line1; "alias", line2; "generators", line3; "named", line4 ];
     let _ = Hegel.draw ~label:"explicit" ~loc:explicit tc gen in
-    assert false);
-  let output = [%expect.output] in
-  assert (String.is_substring output ~substring:"explicit @ helper.ml:123 = 7");
-  List.iter !sites ~f:(fun (label, line) ->
-    let expected =
-      if String.is_substring Sys.ocaml_version ~substring:"+ox"
-      then Printf.sprintf "%s @ %s:%d = 7" label [%here].pos_fname line
-      else Printf.sprintf "%s = 7" label
-    in
-    assert (String.is_substring output ~substring:expected));
-  [%expect {| |}]
+    failwith "stop");
+  let output = Expect_scrub.scrub_blobs [%expect.output] in
+  (* Normalize the compiler's expected default: the exact caller position on
+     OxCaml, no position on regular OCaml. Unexpected positions (including a
+     missing position on OxCaml) stay visible; explicit overrides stay literal. *)
+  let output =
+    List.fold !sites ~init:output ~f:(fun output (label, line) ->
+      let pattern =
+        if String.is_substring Sys.ocaml_version ~substring:"+ox"
+        then Printf.sprintf "%s @ %s:%d =" label [%here].pos_fname line
+        else Printf.sprintf "%s =" label
+      in
+      String.substr_replace_all
+        output
+        ~pattern
+        ~with_:(Printf.sprintf "%s @ <compiler-default> =" label))
+  in
+  print_string output;
+  [%expect
+    {|
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      direct @ <compiler-default> = 7
+      alias @ <compiler-default> = 7
+      generators @ <compiler-default> = 7
+      named @ <compiler-default> = 7
+      explicit @ helper.ml:123 = 7
+
+    Exception: Failure("stop")
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
+    |}]
 ;;
 
 let%expect_test "successive unlabeled draws number draw_1, draw_2" =
