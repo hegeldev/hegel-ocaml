@@ -32,9 +32,30 @@ let%expect_test "draw_silent returns the value and prints nothing" =
   [%expect {| got=3 |}]
 ;;
 
-let%expect_test "labeled draw prints name = value on final replay" =
+let%expect_test "explicit draw locations print on final replay" =
   run_failing (fun tc ->
-    let _ = Hegel.draw ~label:"x" tc (integers ~min_value:7 ~max_value:7 ()) in
+    let gen = integers ~min_value:7 ~max_value:7 () in
+    let _ = Hegel.draw ~label:"x" ~loc:[%here] tc gen in
+    let _ = Hegel.draw ~loc:[%here] tc gen in
+    assert false);
+  print_string (Expect_scrub.scrub_report ~hide_draw_positions:false [%expect.output]);
+  [%expect
+    {|
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      x @ ppx/test/expect_tests/test_draw_printing.ml:<LINE> = 7
+      draw_1 @ ppx/test/expect_tests/test_draw_printing.ml:<LINE> = 7
+
+    Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line LINE, characters C1-C2: Assertion failed
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
+    |}]
+;;
+
+let%expect_test "labeled draw without explicit location prints on final replay" =
+  run_failing (fun tc ->
+    let gen = integers ~min_value:7 ~max_value:7 () in
+    let _ = Hegel.draw ~label:"x" tc gen in
     assert false);
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
@@ -62,6 +83,26 @@ let%expect_test "unlabeled draw is auto-named draw_N on final replay" =
       draw_1 = 123456
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line LINE, characters C1-C2: Assertion failed
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
+    |}]
+;;
+
+(* Preserve draw positions here; general value-printing snapshots hide them. *)
+let%expect_test "draw positions preserve explicit overrides" =
+  let explicit = { ([%here]) with pos_fname = "helper.ml"; pos_lnum = 123 } in
+  run_failing (fun tc ->
+    let gen = integers ~min_value:7 ~max_value:7 () in
+    let _ = Hegel.draw ~label:"explicit" ~loc:explicit tc gen in
+    failwith "stop");
+  print_string (Expect_scrub.scrub_blobs [%expect.output]);
+  [%expect
+    {|
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      explicit @ helper.ml:123 = 7
+
+    Exception: Failure("stop")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
@@ -309,28 +350,39 @@ let%expect_test
 (* ---- ppx_hegel_test label injection (end-to-end) ----
 
    Inside a [let%hegel_test] body, a draw bound to a simple variable —
-   [let x = draw tc g] — is rewritten by the PPX to [draw ~label:"x" tc g], so
-   the value prints as [x = value] (not a bare value) on the failing replay.
+   [let x = draw tc ~loc:pos g] — is rewritten by the PPX to
+   [draw_named ~label:"x" ~repeatable:false tc ~loc:pos g], preserving the
+   explicit location alongside the injected binding name on the failing replay.
    This file enables the [ppx_hegel_test] rewriter, so the test below exercises
    a real expansion. *)
 
 let%hegel_test label_injection_from_binding (tc : test_case) =
-  let x = Hegel.draw tc (integers ~min_value:7 ~max_value:7 ()) in
+  let gen = integers ~min_value:7 ~max_value:7 () in
+  let x =
+    Hegel.draw
+      tc
+      ~loc:
+        { Lexing.pos_fname = "explicit_draw"; pos_lnum = 123; pos_bol = 0; pos_cnum = 0 }
+      gen
+  in
+  let y = Hegel.draw tc gen in
   ignore (x : int);
+  ignore (y : int);
   assert false
 [@@settings settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal]
 ;;
 
-let%expect_test "ppx injects ~label from the binding name" =
+let%expect_test "ppx injects ~label from the binding name and preserves ~loc" =
   (try label_injection_from_binding () with
    | _ -> ());
-  print_string (Expect_scrub.scrub_report [%expect.output]);
+  print_string (Expect_scrub.scrub_report ~hide_draw_positions:false [%expect.output]);
   [%expect
     {|
     --- Failure: label_injection_from_binding (ppx/test/expect_tests/test_draw_printing.ml:<LINE>) ---
     Falsified after 1 test case (0 discarded):
 
-      x = 7
+      x @ explicit_draw:123 = 7
+      y = 7
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: [@@failure_blobs [ "<BLOB>" ]]

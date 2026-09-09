@@ -25,6 +25,7 @@
  (description
   "A property-based testing library that communicates with the Hegel engine to enable universal property-based testing from OCaml.")
  (depends
+  (cppo :build)
   (ocaml
    (>= 5.1))
   (sexplib0

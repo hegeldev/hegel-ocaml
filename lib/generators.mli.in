@@ -57,22 +57,26 @@ type unprintable
 
 (**/**)
 
-(** [draw ?label tc gen] produces a typed value from the printable generator
+(** [draw ?label ?loc tc gen] produces a typed value from the printable generator
     [gen] using test case [tc].
 
     On the final replay of a failing test (or on every case under verbose
     output), an outermost draw prints its value through [Internal.note] as
-    [name = value]. The [name] is [label] when given, else ["draw"]; an unlabeled
-    draw is numbered ([draw_1], [draw_2], …) while a [label] is printed bare.
+    [name = value] when no location is supplied. The [name] is [label] when given,
+    else ["draw"]. An unlabeled draw is numbered ([draw_1], [draw_2], …).
     Draws nested inside a span (e.g. composite elements) are suppressed so only
     the outermost value shows. To draw a generator with no printer, use
     {!draw_silent} or attach a printer with {!with_printer}.
 
+    [?loc] adds the source filename and line to the printed draw. In OxCaml, the
+    compiler automatically supplies the caller's position when omitted. Providing
+    [loc] overrides that position. The draw is then printed as
+    [name @ filename:line = value].
+
     Inside a [let%hegel_test], the PPX supplies the binding name as the label, so
-    [let x = draw tc gen] prints its value as [x = value]. You rarely pass
-    [?label] by hand. When the same name is shadowed or drawn in a loop, its
-    draws are numbered [x_1], [x_2], … in draw order; pass [?label] to override
-    the name (e.g. [draw ~label:"y" tc gen]).
+    [let x = draw tc gen] prints its value as [x = value]. When the same name is 
+    shadowed or drawn in a loop, its draws are numbered [x_1], [x_2], … in draw 
+    order. Pass [?label] to override the name (e.g. [draw ~label:"y" tc gen]).
 
     {[
       let%hegel_test draw_example tc =
@@ -80,7 +84,16 @@ type unprintable
         assert (n >= 0)
       ;;
     ]} *)
-val draw : ?label:string -> Internal.test_case -> ('a, printable) generator -> 'a
+val draw
+  :  ?label:string
+#ifdef OXCAML
+  -> loc:[%call_pos]
+#else
+  -> ?loc:Lexing.position
+#endif
+  -> Internal.test_case
+  -> ('a, printable) generator
+  -> 'a
 
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
     [let%hegel_test] PPX rewrites bindings to; not intended for direct use
@@ -89,6 +102,11 @@ val draw : ?label:string -> Internal.test_case -> ('a, printable) generator -> '
     for a binding name that is reused or drawn in a loop. *)
 val draw_named
   :  label:string
+#ifdef OXCAML
+  -> loc:[%call_pos]
+#else
+  -> ?loc:Lexing.position
+#endif
   -> repeatable:bool
   -> Internal.test_case
   -> ('a, printable) generator

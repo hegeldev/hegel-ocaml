@@ -4,6 +4,21 @@ include Generators_collections
 include Generators_combinators
 include Generators_functions
 
+#ifdef OXCAML
+(* The compiler fills these arguments at the caller, including through aliases
+   such as Hegel.draw. Forward explicitly so the core sees the original site. *)
+let draw ?label ~(loc : [%call_pos]) tc gen =
+  Generators_core.draw ?label ~loc tc gen
+;;
+
+let draw_named ~label ~(loc : [%call_pos]) ~repeatable tc gen =
+  Generators_core.draw_named ~label ~loc ~repeatable tc gen
+;;
+#else
+let draw = Generators_core.draw
+let draw_named = Generators_core.draw_named
+#endif
+
 module Ppx_internal = struct
   module Labels = Generators_core.Labels
 

@@ -11,6 +11,7 @@ homepage: "https://github.com/hegeldev/hegel-ocaml"
 bug-reports: "https://github.com/hegeldev/hegel-ocaml/issues"
 depends: [
   "dune" {>= "3.16"}
+  "cppo" {build}
   "ocaml" {>= "5.1"}
   "sexplib0" {>= "v0.17"}
   "ctypes" {>= "0.20"}

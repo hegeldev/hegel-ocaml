@@ -17,5 +17,11 @@ runs:
         done
       shell: bash
     - if: steps.parse.outputs.just == 'true'
-      run: sudo apt-get update && sudo apt-get install -y just
+      run: |
+        # Chrome is unused by CI. Its repository can have inconsistent indexes
+        # that make apt-get update fail before Ubuntu packages can be installed.
+        sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+          /etc/apt/sources.list.d/google-chrome.sources
+        sudo apt-get update
+        sudo apt-get install -y just
       shell: bash

@@ -63,8 +63,23 @@ let scrub_blobs s =
   Buffer.contents buf
 ;;
 
-let scrub_report s =
-  s
+(* OxCaml automatically adds draw positions. Keep general value-printing
+   snapshots shared across compilers; position tests inspect the raw output. *)
+let scrub_draw_positions s =
+  let open Core in
+  String.split s ~on:'\n'
+  |> List.map ~f:(fun line ->
+    match
+      String.substr_index line ~pattern:" @ ", String.substr_index line ~pattern:" = "
+    with
+    | Some start, Some stop when start < stop ->
+      String.prefix line start ^ String.drop_prefix line stop
+    | _ -> line)
+  |> String.concat ~sep:"\n"
+;;
+
+let scrub_report ?(hide_draw_positions = true) s =
+  (if hide_draw_positions then scrub_draw_positions s else s)
   |> Expect_test_helpers_core.hide_positions_in_string
   |> scrub_numeric_after ~marker:".ml:" ~placeholder:"<LINE>"
   |> scrub_blobs
