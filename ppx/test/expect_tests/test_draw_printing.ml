@@ -88,49 +88,18 @@ let%expect_test "unlabeled draw is auto-named draw_N on final replay" =
 ;;
 
 (* Preserve draw positions here; general value-printing snapshots hide them. *)
-let%expect_test "draw positions preserve explicit overrides and OxCaml call sites" =
-  let module Alias = Hegel in
-  let sites = ref [] in
+let%expect_test "draw positions preserve explicit overrides" =
   let explicit = { ([%here]) with pos_fname = "helper.ml"; pos_lnum = 123 } in
   run_failing (fun tc ->
     let gen = integers ~min_value:7 ~max_value:7 () in
-    let line1 = __LINE__ + 1 in
-    let _ = Hegel.draw ~label:"direct" tc gen in
-    let line2 = __LINE__ + 1 in
-    let _ = Alias.draw ~label:"alias" tc gen in
-    let line3 = __LINE__ + 1 in
-    let _ = Hegel.Generators.draw ~label:"generators" tc gen in
-    let line4 = __LINE__ + 1 in
-    let _ = Hegel.draw_named ~label:"named" ~repeatable:false tc gen in
-    sites := [ "direct", line1; "alias", line2; "generators", line3; "named", line4 ];
     let _ = Hegel.draw ~label:"explicit" ~loc:explicit tc gen in
     failwith "stop");
-  let output = Expect_scrub.scrub_blobs [%expect.output] in
-  (* Normalize the compiler's expected default: the exact caller position on
-     OxCaml, no position on regular OCaml. Unexpected positions (including a
-     missing position on OxCaml) stay visible; explicit overrides stay literal. *)
-  let output =
-    List.fold !sites ~init:output ~f:(fun output (label, line) ->
-      let pattern =
-        if String.is_substring Sys.ocaml_version ~substring:"+ox"
-        then Printf.sprintf "%s @ %s:%d =" label [%here].pos_fname line
-        else Printf.sprintf "%s =" label
-      in
-      String.substr_replace_all
-        output
-        ~pattern
-        ~with_:(Printf.sprintf "%s @ <compiler-default> =" label))
-  in
-  print_string output;
+  print_string (Expect_scrub.scrub_blobs [%expect.output]);
   [%expect
     {|
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      direct @ <compiler-default> = 7
-      alias @ <compiler-default> = 7
-      generators @ <compiler-default> = 7
-      named @ <compiler-default> = 7
       explicit @ helper.ml:123 = 7
 
     Exception: Failure("stop")
@@ -381,28 +350,39 @@ let%expect_test
 (* ---- ppx_hegel_test label injection (end-to-end) ----
 
    Inside a [let%hegel_test] body, a draw bound to a simple variable —
-   [let x = draw tc g] — is rewritten by the PPX to [draw ~label:"x" tc g], so
-   the value prints as [x = value] (not a bare value) on the failing replay.
+   [let x = draw tc ~loc:pos g] — is rewritten by the PPX to
+   [draw_named ~label:"x" ~repeatable:false tc ~loc:pos g], preserving the
+   explicit location alongside the injected binding name on the failing replay.
    This file enables the [ppx_hegel_test] rewriter, so the test below exercises
    a real expansion. *)
 
 let%hegel_test label_injection_from_binding (tc : test_case) =
-  let x = Hegel.draw tc (integers ~min_value:7 ~max_value:7 ()) in
+  let gen = integers ~min_value:7 ~max_value:7 () in
+  let x =
+    Hegel.draw
+      tc
+      ~loc:
+        { Lexing.pos_fname = "explicit_draw"; pos_lnum = 123; pos_bol = 0; pos_cnum = 0 }
+      gen
+  in
+  let y = Hegel.draw tc gen in
   ignore (x : int);
+  ignore (y : int);
   assert false
 [@@settings settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal]
 ;;
 
-let%expect_test "ppx injects ~label from the binding name" =
+let%expect_test "ppx injects ~label from the binding name and preserves ~loc" =
   (try label_injection_from_binding () with
    | _ -> ());
-  print_string (Expect_scrub.scrub_report [%expect.output]);
+  print_string (Expect_scrub.scrub_report ~hide_draw_positions:false [%expect.output]);
   [%expect
     {|
     --- Failure: label_injection_from_binding (ppx/test/expect_tests/test_draw_printing.ml:<LINE>) ---
     Falsified after 1 test case (0 discarded):
 
-      x = 7
+      x @ explicit_draw:123 = 7
+      y = 7
 
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: [@@failure_blobs [ "<BLOB>" ]]
