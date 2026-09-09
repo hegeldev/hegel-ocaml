@@ -4,11 +4,11 @@
 
 ```bash
 # No setup step: libhegel is located (or downloaded + cached) at runtime.
-just test        # Run tests with 100% coverage enforcement
-just format      # Auto-format code with ocamlformat
-just lint        # Check formatting (fails if unformatted)
-just docs        # Build API documentation with odoc
-just check       # Run lint + docs + test (the full CI check)
+just test          # Run tests with 100% coverage enforcement
+just format        # Auto-format code with ocamlformat
+just check-format  # Check formatting (fails if unformatted)
+just docs          # Build API documentation with odoc
+just check         # Run check-format + check-docs + check-tests (the full CI check)
 ```
 
 ## Tooling
@@ -17,7 +17,7 @@ just check       # Run lint + docs + test (the full CI check)
 - **Build system**: Dune 3.21.1
 - **Test framework**: Alcotest 1.9.1
 - **Code coverage**: bisect_ppx 2.8.3 (enforced at 100% via scripts/check-coverage.py)
-- **Formatter**: OCamlFormat 0.28.1 (version pinned in .ocamlformat)
+- **Formatter**: OCamlFormat 0.29.0 (version pinned in .ocamlformat)
 - **Documentation**: odoc 3.1.0
 - **Package manager**: opam 2.1.5
 - **PPX derivation**: ppxlib 0.35.0 (for `[@@deriving hegel_generator]`)
@@ -27,14 +27,22 @@ just check       # Run lint + docs + test (the full CI check)
 ```
 lib/                         # Library source
   dune                       # Library build config (bisect_ppx instrumented)
-  hegel.ml / hegel.mli       # Main module — re-exports the public API
+  hegel.ml / hegel.mli.in    # Main module — re-exports the public API.
+                             #   (.in files are cppo-preprocessed by dune rules
+                             #   — `#ifdef OXCAML` compiler compat — into the
+                             #   .ml/.mli the library builds from)
   ffi/                       # ctypes bindings to native libhegel (NOT instrumented)
     ffi.ml                   # dlopen + 1:1 C-ABI wrappers; settings/run/test_case
-                             #   handles; typed draws + string-generator handles
+                             #   handles; typed draws + string-generator handles;
+                             #   events; the pretty-printer document (printer_*,
+                             #   test_case_printer, note)
     loader.ml                # locate/download libhegel at runtime (env > sibling > release)
-  internal.ml                # Test runner + run lifecycle + typed-draw wrappers on
-                             #   top of Hegel_ffi.Ffi (the module CLAUDE calls "client")
-  generators.ml              # Re-export shim: include the four generators_* modules
+  internal.ml.in             # Test runner + run lifecycle + typed-draw wrappers on
+                             #   top of Hegel_ffi.Ffi; note/print_line/render_sexp +
+                             #   flush_document (engine-side output, see Pretty
+                             #   printing); events (cppo → internal.ml)
+  generators.ml.in           # Re-export shim: include the four generators_* modules
+                             #   (cppo → generators.ml; generators.mli.in likewise)
   generators_core.ml         # generator type; draw/draw_silent, map/flat_map/filter,
                              #   composite, span labels — the discriminated union
   generators_primitives.ml   # integers, booleans, floats, text, binary, just, formats
@@ -119,7 +127,9 @@ thin 1:1 wrappers: settings handles, the run lifecycle (`run_start`,
 typed draws (`generate_integer`, `generate_boolean`, `generate_float`,
 `generate_bytes`, `generate_string` + the `string_generator_*` handle
 constructors, `generate_date`/`time`/`datetime`, `generate_ipv4`/`ipv6`), spans,
-collections, pools, `target`, `mark_complete`. There is no CBOR: each value is
+collections, pools, `target`, `event`/`event_value`, the pretty-printer
+document (`printer_*`, `test_case_printer`, `note` — see Pretty printing
+below), `mark_complete`. There is no CBOR: each value is
 drawn by a dedicated typed call rather than a schema round-trip (this replaced the
 removed `hegel_generate`/CBOR-schema path in libhegel 0.26.0). There is no
 engine thread (removed in libhegel 0.30.1): `hegel_next_test_case` runs all
@@ -183,7 +193,7 @@ Generators are a discriminated union:
 - **CompositeList** — lists of any element core. Uses the collection protocol (with_collection / collection_more) to generate elements one at a time.
 - **Composite** — a `generate_fn` thunk run inside a labeled span; used by tuples, one_of, `lists ~unique`, and hash tables (all of which now always drive the collection protocol / draw sub-values directly — there is no schema fast path).
 - **Values** — the engine-pool core behind `Stateful.Pool`. Refunctionalized: it stores the table's `find`/`remove`/`is_empty` closures, not a concrete hashtable. `Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int)` (doc-hidden, with the ready-made `Int_table`) closes `make_pool_values`/`resolve_pool_draw` over a stdlib table; the optional `hegel.jane` library closes the same primitives (via `Ppx_internal`) over `Core.Hashtbl`. `hash_tables` follows the same strategy at the API level: `make_hash_tables ~of_pairs ~sexp_of_t` is table-agnostic, `hash_tables` closes it over `Stdlib.Hashtbl`, `Hegel_jane.hash_tables` over `Core.Hashtbl.Poly`.
-- **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (memoized on the argument via structural hash/equality — a polymorphic `Stdlib.Hashtbl` — so `sexp_of_arg` is display-only and an omitted one shows `<opaque>` without collapsing the key) and shows applied pairs as `name arg = result` via `note` on the final replay. Only *top-level* applications print — a pair applied at draw depth > 0 (inside a span) is suppressed, like a nested draw. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); the name threads even when the function is drawn nested. Result draws are wrapped in a `Labels.function_result` span.
+- **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (memoized on the argument via structural hash/equality — a polymorphic `Stdlib.Hashtbl` — so `sexp_of_arg` is display-only and an omitted one shows `<opaque>` without collapsing the key) and shows applied pairs as `name arg = result` in the print region on the final replay. Only *top-level* applications print — a pair applied at draw depth > 0 (inside a span) is suppressed, like a nested draw. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); the name threads even when the function is drawn nested. Result draws are wrapped in a `Labels.function_result` span.
 
 ### Inline Test Integration (ppx/ppx_hegel_test.ml)
 
@@ -363,6 +373,34 @@ lists no destructors for these three. The authority is
 `hegel-c/include/hegel.h` at the pinned tag (and `nm` on the downloaded
 `libhegel`, which exports all four of the functions above).
 
+### Pretty printing (engine-side layout)
+
+All user-visible test output — notes, drawn values, stateful traces, the
+require_equal diff — is assembled in libhegel's per-test-case *document*
+(`hegel_test_case_printer` / `hegel_note`), not streamed to stderr as it
+happens. `Internal.note` appends verbatim (pre-indented, possibly multi-line)
+lines; `Internal.print_line` assembles a draw line from `Text`/`Value`
+segments, laying each sexp out engine-side with `Internal.render_sexp`: an
+atom is its `Sexp.to_string` escaping, a list is a group — `(`, children
+separated by breakable spaces, `)` — so a value that fits the line prints
+inline (byte-identical to `Sexp.to_string_hum`; pinned by a test) and one
+that doesn't breaks all-or-nothing, one child per line (unlike `pp_hum`'s
+fill style), at the document's default width 79. After `mark_complete`,
+`run_test_case` reads the document back (`flush_document`:
+`printer_resolve` — required when clone regions exist, an argument error
+otherwise, hence the catch — then `printer_value`) and prints it to stderr
+inside the client-drawn failure frame; `printed_output` is "the document was
+non-empty". Verbosity gating stays client-side (`should_print`): under Quiet,
+or a non-final case at Normal, nothing is appended and the read is skipped.
+Clones write into their own region, anchored where the clone was made, so
+concurrent output assembles deterministically regardless of scheduling.
+Because indentation only materializes through break points, the first line of
+any output is indented with literal spaces and the content is wrapped in
+`shift_indent`/`-shift_indent` so continuation lines nest — the same pattern
+as hegel-rust's frontend; `note_indent` remains client-side bookkeeping.
+Flipping the `should_print` gate to always-append (so the engine sees every
+case's representation) is the intended future Tyche switch.
+
 ### Entry point
 
 The engine runs in-process, so there is no subprocess or session to manage.
@@ -380,9 +418,9 @@ print by default). `from_ppx` selects that line's syntax: a
 argument for a plain `run_hegel_test` caller. For persisting and replaying
 failing examples across runs, use `database` / `database_key`.
 
-### Test Runner (client.ml)
+### Test Runner (lib/internal.ml.in)
 
-`run_test` builds an `Ffi.settings` from the OCaml settings, calls
+`run_hegel_test` builds an `Ffi.settings` from the OCaml settings, calls
 `Ffi.run_start`, then loops on `Ffi.next_test_case` until it returns `None`. Each
 test case handle is wrapped in a `test_case` record and passed to the user's function. 
 The client controls when a final run occurs. Exceptions map to
@@ -405,8 +443,9 @@ in an `Exn.protect ~finally`.
 ### Testing
 
 - Every lib module has a corresponding `test/test_<module>.ml`
-- Unit tests use socketpair-based fake engines to avoid depending on the real hegel binary
-- End-to-end tests (tagged `_e2e`) require the real binary and live under the same test file
+- All tests run against the real engine: libhegel is dlopen'd in-process (and
+  downloaded on demand), so there are no fake engines. Some test names carry a
+  historical `_e2e` suffix; it no longer signals a different harness
 - `test/` must build under `-p hegel` (opam-repo-ci runs it): plain Alcotest
   functions calling `Hegel.run_hegel_test`, no `let%hegel_test`, no PPX beyond
   the `ppx_js_style` linter. White-box tests use the doc-hidden `(**/**)`
@@ -425,7 +464,6 @@ in an `Exn.protect ~finally`.
 - `Internal.Assume_rejected` — raised by `assume false`; mapped to `mark_complete INVALID`
 - `Internal.Data_exhausted` — raised when StopTest is received; skips `mark_complete`
 - `Hegel_ffi.Ffi.Usage_error` (re-exported as `Hegel.Usage_error`) — raised by `check_rc` on `HEGEL_E_INVALID_ARG`; `run_test_case` re-raises it untouched (no `mark_complete`, no shrinking), mirroring hegel-rust's `InvalidArgument` unwind. Generators therefore don't duplicate engine-side argument validation
-- `Connection.Request_error` — raised on protocol-level errors from the engine
 
 ### Typed Draws (no schema)
 
@@ -453,7 +491,7 @@ draw, and always freed (`Internal.with_string_generator`).
 - `scripts/check-coverage.py` parses `bisect-ppx-report summary` output
 - Unreachable engine-contract violations use `failwith "..."` (tested via unit tests on the transform)
 - `[@coverage off]` annotations are never used
-- Only the instrumented `hegel` library is measured; the `hegel_ffi` bindings, examples, and PPX code are not
+- Only the instrumented `hegel` library and the `hegel.jane` sublibrary are measured; the `hegel_ffi` bindings, examples, and PPX code are not
 
 ## Lessons Learned
 
