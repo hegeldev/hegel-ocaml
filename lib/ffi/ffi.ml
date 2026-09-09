@@ -57,6 +57,17 @@ module String_result = struct
   let () = seal t
 end
 
+(* [hegel_printer_value_result_t]: an engine-allocated UTF-8 buffer (not
+   NUL-terminated), freed with [hegel_printer_value_result_free]. *)
+module Printer_value_result = struct
+  type s
+
+  let t : s structure typ = structure "hegel_printer_value_result_t"
+  let data = field t "data" (ptr char)
+  let len = field t "len" size_t
+  let () = seal t
+end
+
 (* [hegel_date_t]: proleptic Gregorian date. [year] in [-999999, 999999]
    (bounded by the range passed to [hegel_generate_date]), [month] in [1, 12],
    [day] in [1, 31]. *)
@@ -484,6 +495,96 @@ let c_event_value =
     (ptr void @-> ptr void @-> double @-> string @-> returning int)
 ;;
 
+let text_len_typ = ptr void @-> ptr void @-> string @-> size_t @-> returning int
+
+let c_printer_options_new =
+  foreign "hegel_printer_options_new" (ptr void @-> ptr (ptr void) @-> returning int)
+;;
+
+let c_printer_options_free =
+  foreign "hegel_printer_options_free" (ptr void @-> ptr void @-> returning int)
+;;
+
+let c_printer_options_set_max_width =
+  foreign
+    "hegel_printer_options_set_max_width"
+    (ptr void @-> ptr void @-> uint64_t @-> returning int)
+;;
+
+let c_printer_new =
+  foreign "hegel_printer_new" (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+;;
+
+let c_printer_free = foreign "hegel_printer_free" (ptr void @-> ptr void @-> returning int)
+let c_printer_text = foreign "hegel_printer_text" text_len_typ
+let c_printer_breakable = foreign "hegel_printer_breakable" text_len_typ
+let c_printer_if_break = foreign "hegel_printer_if_break" text_len_typ
+let c_printer_comment = foreign "hegel_printer_comment" text_len_typ
+
+let c_printer_hard_break =
+  foreign "hegel_printer_hard_break" (ptr void @-> ptr void @-> returning int)
+;;
+
+let c_printer_begin_group =
+  foreign
+    "hegel_printer_begin_group"
+    (ptr void @-> ptr void @-> uint64_t @-> string @-> size_t @-> returning int)
+;;
+
+let c_printer_end_group = foreign "hegel_printer_end_group" text_len_typ
+
+let c_printer_shift_indent =
+  foreign
+    "hegel_printer_shift_indent"
+    (ptr void @-> ptr void @-> int64_t @-> returning int)
+;;
+
+let c_printer_deferred =
+  foreign
+    "hegel_printer_deferred"
+    (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+;;
+
+let c_printer_begin_speculative =
+  foreign "hegel_printer_begin_speculative" (ptr void @-> ptr void @-> returning int)
+;;
+
+let c_printer_commit_speculative =
+  foreign "hegel_printer_commit_speculative" (ptr void @-> ptr void @-> returning int)
+;;
+
+let c_printer_abort_speculative =
+  foreign "hegel_printer_abort_speculative" (ptr void @-> ptr void @-> returning int)
+;;
+
+let c_printer_resolve =
+  foreign "hegel_printer_resolve" (ptr void @-> ptr void @-> returning int)
+;;
+
+let c_printer_is_live =
+  foreign "hegel_printer_is_live" (ptr void @-> ptr void @-> ptr bool @-> returning int)
+;;
+
+let c_printer_value =
+  foreign
+    "hegel_printer_value"
+    (ptr void @-> ptr void @-> ptr Printer_value_result.t @-> returning int)
+;;
+
+let c_printer_value_result_free =
+  foreign
+    "hegel_printer_value_result_free"
+    (ptr void @-> ptr Printer_value_result.t @-> returning int)
+;;
+
+let c_test_case_printer =
+  foreign
+    "hegel_test_case_printer"
+    (ptr void @-> ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+;;
+
+let c_note = foreign "hegel_note" text_len_typ
+
 let c_mark_complete =
   foreign
     "hegel_mark_complete"
@@ -544,6 +645,8 @@ type string_generator = unit Ctypes.ptr
 type collection = unit Ctypes.ptr
 type pool = unit Ctypes.ptr
 type state_machine = unit Ctypes.ptr
+type printer = unit Ctypes.ptr
+type printer_options = unit Ctypes.ptr
 
 type backend =
   | Auto
@@ -1181,6 +1284,97 @@ let state_machine_free ctx state_machine =
 let target ctx tc value label = check_rc ctx (c_target ctx tc value label)
 let event ctx tc label = check_rc ctx (c_event ctx tc label)
 let event_value ctx tc value label = check_rc ctx (c_event_value ctx tc value label)
+
+(* ------------------------------------------------------------------ *)
+(* Pretty printer                                                      *)
+(* ------------------------------------------------------------------ *)
+
+let byte_len s = Unsigned.Size_t.of_int (String.length s)
+
+let opt_handle = function
+  | Some p -> p
+  | None -> null
+;;
+
+let printer_options_new ctx =
+  let out = allocate (ptr void) null in
+  check_rc ctx (c_printer_options_new ctx out);
+  !@out
+;;
+
+let printer_options_free ctx options = check_rc ctx (c_printer_options_free ctx options)
+
+let printer_options_set_max_width ctx options max_width =
+  check_rc
+    ctx
+    (c_printer_options_set_max_width ctx options (Unsigned.UInt64.of_int max_width))
+;;
+
+let printer_new ctx options =
+  let out = allocate (ptr void) null in
+  check_rc ctx (c_printer_new ctx (opt_handle options) out);
+  !@out
+;;
+
+let printer_free ctx printer = check_rc ctx (c_printer_free ctx printer)
+let printer_text ctx p s = check_rc ctx (c_printer_text ctx p s (byte_len s))
+
+let printer_breakable ctx p sep =
+  check_rc ctx (c_printer_breakable ctx p sep (byte_len sep))
+;;
+
+let printer_if_break ctx p s = check_rc ctx (c_printer_if_break ctx p s (byte_len s))
+let printer_comment ctx p s = check_rc ctx (c_printer_comment ctx p s (byte_len s))
+let printer_hard_break ctx p = check_rc ctx (c_printer_hard_break ctx p)
+
+let printer_begin_group ctx p ~indent open_ =
+  check_rc
+    ctx
+    (c_printer_begin_group ctx p (Unsigned.UInt64.of_int indent) open_ (byte_len open_))
+;;
+
+let printer_end_group ctx p close =
+  check_rc ctx (c_printer_end_group ctx p close (byte_len close))
+;;
+
+let printer_shift_indent ctx p delta =
+  check_rc ctx (c_printer_shift_indent ctx p (Int64.of_int delta))
+;;
+
+let printer_deferred ctx p =
+  let out = allocate (ptr void) null in
+  check_rc ctx (c_printer_deferred ctx p out);
+  !@out
+;;
+
+let printer_begin_speculative ctx p = check_rc ctx (c_printer_begin_speculative ctx p)
+let printer_commit_speculative ctx p = check_rc ctx (c_printer_commit_speculative ctx p)
+let printer_abort_speculative ctx p = check_rc ctx (c_printer_abort_speculative ctx p)
+let printer_resolve ctx p = check_rc ctx (c_printer_resolve ctx p)
+
+let printer_is_live ctx p =
+  let out = allocate bool false in
+  check_rc ctx (c_printer_is_live ctx p out);
+  !@out
+;;
+
+let printer_value ctx p =
+  let result = make Printer_value_result.t in
+  check_rc ctx (c_printer_value ctx p (addr result));
+  let n = Unsigned.Size_t.to_int (getf result Printer_value_result.len) in
+  let data = getf result Printer_value_result.data in
+  let s = string_from_ptr data ~length:n in
+  ignore (c_printer_value_result_free ctx (addr result) : int);
+  s
+;;
+
+let test_case_printer ctx tc options =
+  let out = allocate (ptr void) null in
+  check_rc ctx (c_test_case_printer ctx tc (opt_handle options) out);
+  !@out
+;;
+
+let note ctx tc text = check_rc ctx (c_note ctx tc text (byte_len text))
 
 let mark_complete ctx tc status origin =
   check_rc ctx (c_mark_complete ctx tc (status_to_int status) origin)

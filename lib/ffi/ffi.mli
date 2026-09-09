@@ -478,6 +478,110 @@ val event_value : context -> test_case -> float -> string -> unit
     is used only for {!Interesting} and must be stable per bug. *)
 val mark_complete : context -> test_case -> status -> string option -> unit
 
+(** {2 Pretty printer} *)
+
+(** Opaque pretty-printer handle ([hegel_printer_t]), addressing one region of
+    a document: the document body for a handle from {!printer_new} /
+    {!test_case_printer}, or a hole for a handle from {!printer_deferred}.
+    Every handle must be freed exactly once with {!printer_free}. *)
+type printer
+
+(** Opaque printer-options handle ([hegel_printer_options_t]): read only
+    during {!printer_new} / {!test_case_printer}, freed with
+    {!printer_options_free}. *)
+type printer_options
+
+(** [printer_options_new ctx] creates an options handle with every option at
+    its default ([max_width] 79). *)
+val printer_options_new : context -> printer_options
+
+(** [printer_options_free ctx options] releases [options]. *)
+val printer_options_free : context -> printer_options -> unit
+
+(** [printer_options_set_max_width ctx options w] sets the line width documents
+    constructed with [options] are laid out to. [w] must be positive. *)
+val printer_options_set_max_width : context -> printer_options -> int -> unit
+
+(** [printer_new ctx options] creates a standalone document ([None] means all
+    defaults). *)
+val printer_new : context -> printer_options option -> printer
+
+(** [printer_free ctx p] releases the handle [p]; document content is never
+    discarded by a free. *)
+val printer_free : context -> printer -> unit
+
+(** [printer_text ctx p s] emits [s] as literal, unbreakable text (UTF-8, no
+    newlines). *)
+val printer_text : context -> printer -> string -> unit
+
+(** [printer_breakable ctx p sep] emits a potential break point: [sep] if the
+    enclosing group fits on one line, else a newline plus indentation. *)
+val printer_breakable : context -> printer -> string -> unit
+
+(** [printer_if_break ctx p s] emits [s] only if the innermost open group
+    renders broken (e.g. a trailing comma). *)
+val printer_if_break : context -> printer -> string -> unit
+
+(** [printer_comment ctx p s] attaches [s] verbatim to the end of the current
+    line, forcing every group open at this position to break. *)
+val printer_comment : context -> printer -> string -> unit
+
+(** [printer_hard_break ctx p] emits an unconditional newline plus the current
+    indentation. *)
+val printer_hard_break : context -> printer -> unit
+
+(** [printer_begin_group ctx p ~indent open_] opens a group: emits [open_] and
+    increases the indentation of subsequent break points by [indent]. Breaking
+    is all-or-nothing per group. *)
+val printer_begin_group : context -> printer -> indent:int -> string -> unit
+
+(** [printer_end_group ctx p close] closes the innermost group, undoing its
+    indentation and emitting [close]. *)
+val printer_end_group : context -> printer -> string -> unit
+
+(** [printer_shift_indent ctx p delta] adjusts the indentation of subsequent
+    break points by [delta] (may be negative). *)
+val printer_shift_indent : context -> printer -> int -> unit
+
+(** [printer_deferred ctx p] opens a hole at [p]'s current position and returns
+    a handle onto it; content written through it is spliced in at the hole by
+    {!printer_resolve}. Free the returned handle with {!printer_free}. *)
+val printer_deferred : context -> printer -> printer
+
+(** [printer_begin_speculative ctx p] opens a speculative region: subsequent
+    writes through [p] buffer until committed or aborted. Regions nest. *)
+val printer_begin_speculative : context -> printer -> unit
+
+(** [printer_commit_speculative ctx p] closes the innermost speculative region
+    on [p], keeping its content. *)
+val printer_commit_speculative : context -> printer -> unit
+
+(** [printer_abort_speculative ctx p] closes the innermost speculative region
+    on [p], discarding its content. *)
+val printer_abort_speculative : context -> printer -> unit
+
+(** [printer_resolve ctx p] splices every deferred hole's content in at its
+    position and seals the document. Must be called on the document's root
+    handle. *)
+val printer_resolve : context -> printer -> unit
+
+(** [printer_is_live ctx p] says whether [p] can still be written to. *)
+val printer_is_live : context -> printer -> bool
+
+(** [printer_value ctx p] reads everything printed to the document, sealing it
+    (like {!printer_resolve}). Must be called on the root handle; reading again
+    returns the same document. *)
+val printer_value : context -> printer -> string
+
+(** [test_case_printer ctx tc options] fetches a handle onto [tc]'s region of
+    the test-case family document ([None] options means defaults; the first
+    call that explicitly configures a width fixes the document's width). *)
+val test_case_printer : context -> test_case -> printer_options option -> printer
+
+(** [note ctx tc text] appends [text] to [tc]'s print region; each
+    newline-separated line becomes its own output line. *)
+val note : context -> test_case -> string -> unit
+
 (** {2 Result inspection} *)
 
 (** [result_status ctx r] is the run's aggregate status: passed, failed, or
