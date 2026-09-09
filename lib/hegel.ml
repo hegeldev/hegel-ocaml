@@ -172,6 +172,14 @@ let require_equal = Internal.require_equal
     toward higher values. *)
 let target = Internal.target
 
+(** [event tc label] records [label] as observed on this test case for the
+    end-of-run statistics report. *)
+let event = Internal.event
+
+(** [event_value tc value label] records the finite observation [value] under
+    [label] for the end-of-run statistics report. *)
+let event_value = Internal.event_value
+
 (** [draw ?label tc gen] produces a typed value from the printable generator
     [gen]. On the final replay of a failing test, an outermost draw prints its
     value. See {!Generators.draw}. *)
@@ -228,3 +236,4 @@ let with_suppress_health_check = Internal.with_suppress_health_check
 let with_phases = Internal.with_phases
 let with_print_blob = Internal.with_print_blob
 let with_report_multiple_failures = Internal.with_report_multiple_failures
+let with_show_statistics = Internal.with_show_statistics

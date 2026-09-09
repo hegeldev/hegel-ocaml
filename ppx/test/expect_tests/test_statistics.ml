@@ -51,18 +51,17 @@ let%expect_test "shrink replays are excluded from the statistics" =
      run ~show_statistics:true (fun tc ->
        let v = draw_silent tc int_gen in
        event_value tc (float_of_int v) "v";
-       assert (v < 90))
+       assert (v < 50))
    with
    | _ -> ());
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
+    Statistics (over 2 test cases):
+      * v: count 2, min 0, median 26.5, mean 26.50, p90 53, max 53
     --- Failure ------------------------------------------------------------
-    Falsified after 5 test cases (0 discarded):
-
+    Falsified after 2 test cases (0 discarded):
     Exception: File "ppx/test/expect_tests/test_statistics.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
-    Statistics (over 5 test cases):
-      * v: count 5, min 0, median 50, mean 50.00, p90 90, max 90
     |}]
 ;;
