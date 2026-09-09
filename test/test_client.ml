@@ -249,6 +249,26 @@ let test_note_and_target () =
     assert (v >= 0))
 ;;
 
+(** A non-finite [event_value] observation is an engine-side argument error *)
+let test_event_value_non_finite () =
+  match
+    run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
+      event_value tc Float.nan "x")
+  with
+  | () -> Alcotest.fail "expected Usage_error"
+  | exception Hegel.Usage_error _ -> ()
+;;
+
+(** A non-UTF-8 [event] label is an engine-side argument error. *)
+let test_event_bad_label () =
+  match
+    run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
+      event tc "\xff")
+  with
+  | () -> Alcotest.fail "expected Usage_error"
+  | exception Hegel.Usage_error _ -> ()
+;;
+
 (** Force [database = Unset] (independent of CI auto-detection) to cover the
     [Unset] arm of settings translation. *)
 let test_run_database_unset () =
@@ -511,6 +531,8 @@ let tests =
   ; Alcotest.test_case "run assume rejects" `Quick test_run_assume_rejects
   ; Alcotest.test_case "run nested guard" `Quick test_run_nested_guard
   ; Alcotest.test_case "note and target" `Quick test_note_and_target
+  ; Alcotest.test_case "event_value non-finite" `Quick test_event_value_non_finite
+  ; Alcotest.test_case "event bad label" `Quick test_event_bad_label
   ; Alcotest.test_case "run database unset" `Quick test_run_database_unset
   ; Alcotest.test_case "run with full settings" `Quick test_run_with_full_settings
   ; Alcotest.test_case "run all settings branches" `Quick test_run_all_settings_branches
