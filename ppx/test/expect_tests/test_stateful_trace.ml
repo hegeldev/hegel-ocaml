@@ -89,7 +89,7 @@ let%expect_test "state trace across multiple rules" =
   [%expect
     {|
     --- Failure ------------------------------------------------------------
-    Falsified after 2 test cases (0 discarded):
+    Falsified after 3 test cases (0 discarded):
 
       state = ()
       Step 1: push
