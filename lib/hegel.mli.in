@@ -620,6 +620,9 @@ type settings = Internal.settings =
     (** Print a [rerun with:] line whose base64 blob
         encodes the engine choices that led to a failure. [true] by default. *)
   ; report_multiple_failures : bool (** [false] by default. *)
+  ; show_statistics : bool
+    (** Print an end-of-run statistics block aggregating {!event} /
+        {!event_value} observations. [false] by default. *)
   }
 
 (** [default_settings ()] creates default test settings, auto-detecting CI. In
@@ -687,6 +690,10 @@ val with_print_blob : bool -> settings -> settings
 (** [with_report_multiple_failures b s] makes a failing run report every distinct
     failure it found rather than just the first. *)
 val with_report_multiple_failures : bool -> settings -> settings
+
+(** [with_show_statistics b s] makes the run print an end-of-run statistics
+    block aggregating {!event} / {!event_value} observations. *)
+val with_show_statistics : bool -> settings -> settings
 
 (** {3 Running tests} *)
 
@@ -860,16 +867,62 @@ exception Assume_rejected
     primitives; the rejection itself is client-side and does not consult [tc]. *)
 val assume : test_case -> bool -> unit
 
-(** [target tc value label] sends a target command to guide the search engine
+(** [target tc ~label ~value] sends a target command to guide the search engine
     toward higher values.
 
     {[
       let%hegel_test grow_size tc =
         let v = draw tc (integers ~min_value:0 ~max_value:1000 ()) in
-        target tc (float_of_int v) "size";
+        target tc ~label:"size" ~value:(float_of_int v);
         assert (v <= 1000)
     ]} *)
-val target : test_case -> float -> string -> unit
+val target : test_case -> label:string -> value:float -> unit
+
+(** {3 Collecting statistics}
+
+    With {!with_show_statistics} enabled, every run prints test statistics. 
+
+    {[
+      let%hegel_test list_statistics tc =
+        let xs = draw_silent tc (lists (integers ()) ()) in
+        (match xs with
+         | [] -> event tc ~label:"empty input"
+         | _ -> ());
+        event_value tc ~label:"length" ~value:(float_of_int (List.length xs))
+    ]}
+
+    prints:
+
+    {v
+      Statistics (over 100 test cases):
+        * empty input: 5.0% of test cases
+        * length: count 100, min 0, median 4, mean 5.12, p90 9, max 15
+    v} *)
+
+(** [event tc ~label] records [label] as observed on this test case. The
+    end-of-run statistics report (see {!with_show_statistics}) shows the
+    fraction of test cases in which each label was recorded at least once.
+
+    {[
+      let%hegel_test observe_emptiness tc =
+        let xs = draw tc (lists (integers ()) ()) in
+        if List.is_empty xs then event tc ~label:"empty input";
+        assert (List.length (List.sort compare xs) = List.length xs)
+    ]} *)
+val event : test_case -> label:string -> unit
+
+(** [event_value tc ~label ~value] records the numeric observation [value]
+    under [label]. The end-of-run statistics report (see
+    {!with_show_statistics}) shows a distribution summary (count, min, median,
+    mean, p90, max) per label. [value] must be finite.
+
+    {[
+      let%hegel_test observe_length tc =
+        let xs = draw tc (lists (integers ()) ()) in
+        event_value tc ~label:"length" ~value:(float_of_int (List.length xs));
+        assert (List.length (List.sort compare xs) = List.length xs)
+    ]} *)
+val event_value : test_case -> label:string -> value:float -> unit
 
 (** {3 Debugging tests} *)
 

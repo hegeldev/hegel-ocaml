@@ -122,6 +122,7 @@ type settings = Internal.settings =
   ; phases : phase list option
   ; print_blob : bool
   ; report_multiple_failures : bool
+  ; show_statistics : bool
   }
 
 exception Assume_rejected = Internal.Assume_rejected
@@ -167,9 +168,17 @@ let require = Internal.require
     failure report. See {!Internal.require_equal}. *)
 let require_equal = Internal.require_equal
 
-(** [target tc value label] sends a target command to guide the search engine
+(** [target tc ~label ~value] sends a target command to guide the search engine
     toward higher values. *)
 let target = Internal.target
+
+(** [event tc ~label] records [label] as observed on this test case for the
+    end-of-run statistics report. *)
+let event = Internal.event
+
+(** [event_value tc ~label ~value] records the finite observation [value] under
+    [label] for the end-of-run statistics report. *)
+let event_value = Internal.event_value
 
 (** [draw ?label tc gen] produces a typed value from the printable generator
     [gen]. On the final replay of a failing test, an outermost draw prints its
@@ -227,3 +236,4 @@ let with_suppress_health_check = Internal.with_suppress_health_check
 let with_phases = Internal.with_phases
 let with_print_blob = Internal.with_print_blob
 let with_report_multiple_failures = Internal.with_report_multiple_failures
+let with_show_statistics = Internal.with_show_statistics

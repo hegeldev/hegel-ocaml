@@ -98,6 +98,9 @@ type settings =
     (** print a [rerun with:] line for a failure;
         [true] by default *)
   ; report_multiple_failures : bool (** false by default *)
+  ; show_statistics : bool
+    (** print an end-of-run statistics block aggregating {!event} /
+        {!event_value} observations; [false] by default *)
   }
 
 (** [default_settings ()] creates settings with defaults. Detects CI
@@ -158,9 +161,13 @@ val with_phases : phase list -> settings -> settings
     [rerun with:] line encoding the failure. *)
 val with_print_blob : bool -> settings -> settings
 
-(** [with_report_multiple_failures b s] returns settings [s] with [report_multiple_failures] 
+(** [with_report_multiple_failures b s] returns settings [s] with [report_multiple_failures]
     set to [b]. When [true], a failing run reports all the failures it found *)
 val with_report_multiple_failures : bool -> settings -> settings
+
+(** [with_show_statistics b s] returns settings [s] with [show_statistics] set
+    to [b]. *)
+val with_show_statistics : bool -> settings -> settings
 
 (** An opaque per-test-case handle, threaded to the test function and to the
     drawing primitives. Created and owned by the run loop.
@@ -369,9 +376,17 @@ val draw_display_name : test_case -> label:string -> repeatable:bool -> string
 
 (**/**)
 
-(** [target tc value label] records a targeting observation to guide the search
+(** [target tc ~label ~value] records a targeting observation to guide the search
     engine toward higher values. *)
-val target : test_case -> float -> string -> unit
+val target : test_case -> label:string -> value:float -> unit
+
+(** [event tc ~label] records [label] as observed on this test case for the
+    end-of-run statistics report. *)
+val event : test_case -> label:string -> unit
+
+(** [event_value tc ~label ~value] records the finite observation [value] under
+    [label] for the end-of-run statistics report. *)
+val event_value : test_case -> label:string -> value:float -> unit
 
 (**/**)
 

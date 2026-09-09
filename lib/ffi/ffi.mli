@@ -187,6 +187,10 @@ val settings_seed : context -> settings -> int option -> unit
 val settings_derandomize : context -> settings -> bool -> unit
 val settings_report_multiple_failures : context -> settings -> bool -> unit
 
+(** [settings_show_statistics ctx s b] makes the engine print an end-of-run
+    statistics block aggregating {!event}/{!event_value} observations. *)
+val settings_show_statistics : context -> settings -> bool -> unit
+
 (** [settings_database ctx s db] configures the on-disk example database:
     [None] leaves the default, [Some ""] disables it, [Some dir] uses [dir]. *)
 val settings_database : context -> settings -> string option -> unit
@@ -460,6 +464,15 @@ val state_machine_free : context -> state_machine -> unit
 
 (** [target ctx tc value label] records a targeting observation. *)
 val target : context -> test_case -> float -> string -> unit
+
+(** [event ctx tc label] records [label] as observed on the current test case,
+    for the end-of-run statistics report. *)
+val event : context -> test_case -> string -> unit
+
+(** [event_value ctx tc value label] records the numeric observation [value]
+    under [label] for the end-of-run statistics report. [value] must be
+    finite. *)
+val event_value : context -> test_case -> float -> string -> unit
 
 (** [mark_complete ctx tc status origin] reports the test case's outcome. [origin]
     is used only for {!Interesting} and must be stable per bug. *)
