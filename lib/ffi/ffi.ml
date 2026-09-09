@@ -150,6 +150,12 @@ let c_settings_report_multiple_failures =
     (ptr void @-> ptr void @-> bool @-> returning int)
 ;;
 
+let c_settings_show_statistics =
+  foreign
+    "hegel_settings_set_show_statistics"
+    (ptr void @-> ptr void @-> bool @-> returning int)
+;;
+
 let c_settings_database =
   foreign
     "hegel_settings_set_database"
@@ -470,6 +476,14 @@ let c_target =
   foreign "hegel_target" (ptr void @-> ptr void @-> double @-> string @-> returning int)
 ;;
 
+let c_event = foreign "hegel_event" (ptr void @-> ptr void @-> string @-> returning int)
+
+let c_event_value =
+  foreign
+    "hegel_event_value"
+    (ptr void @-> ptr void @-> double @-> string @-> returning int)
+;;
+
 let c_mark_complete =
   foreign
     "hegel_mark_complete"
@@ -696,6 +710,7 @@ let settings_report_multiple_failures ctx s b =
   check_rc ctx (c_settings_report_multiple_failures ctx s b)
 ;;
 
+let settings_show_statistics ctx s b = check_rc ctx (c_settings_show_statistics ctx s b)
 let settings_database ctx s d = check_rc ctx (c_settings_database ctx s d)
 let settings_database_key ctx s k = check_rc ctx (c_settings_database_key ctx s k)
 
@@ -1164,6 +1179,8 @@ let state_machine_free ctx state_machine =
 ;;
 
 let target ctx tc value label = check_rc ctx (c_target ctx tc value label)
+let event ctx tc label = check_rc ctx (c_event ctx tc label)
+let event_value ctx tc value label = check_rc ctx (c_event_value ctx tc value label)
 
 let mark_complete ctx tc status origin =
   check_rc ctx (c_mark_complete ctx tc (status_to_int status) origin)
