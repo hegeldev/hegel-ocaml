@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.18.2 - 2026-09-09
+
+This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.37.5](https://github.com/hegeldev/hegel-rust/releases/tag/v0.37.5) to [0.37.7](https://github.com/hegeldev/hegel-rust/releases/tag/v0.37.7).
+
 ## 0.18.1 - 2026-09-09
 
 This patch adds support for providing the location of a printed draw. `Hegel.draw` now accepts a `loc : Lexing.position` argument.
