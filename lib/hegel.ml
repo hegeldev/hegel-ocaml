@@ -168,15 +168,15 @@ let require = Internal.require
     failure report. See {!Internal.require_equal}. *)
 let require_equal = Internal.require_equal
 
-(** [target tc value label] sends a target command to guide the search engine
+(** [target tc ~label ~value] sends a target command to guide the search engine
     toward higher values. *)
 let target = Internal.target
 
-(** [event tc label] records [label] as observed on this test case for the
+(** [event tc ~label] records [label] as observed on this test case for the
     end-of-run statistics report. *)
 let event = Internal.event
 
-(** [event_value tc value label] records the finite observation [value] under
+(** [event_value tc ~label ~value] records the finite observation [value] under
     [label] for the end-of-run statistics report. *)
 let event_value = Internal.event_value
 

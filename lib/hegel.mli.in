@@ -867,16 +867,16 @@ exception Assume_rejected
     primitives; the rejection itself is client-side and does not consult [tc]. *)
 val assume : test_case -> bool -> unit
 
-(** [target tc value label] sends a target command to guide the search engine
+(** [target tc ~label ~value] sends a target command to guide the search engine
     toward higher values.
 
     {[
       let%hegel_test grow_size tc =
         let v = draw tc (integers ~min_value:0 ~max_value:1000 ()) in
-        target tc (float_of_int v) "size";
+        target tc ~label:"size" ~value:(float_of_int v);
         assert (v <= 1000)
     ]} *)
-val target : test_case -> float -> string -> unit
+val target : test_case -> label:string -> value:float -> unit
 
 (** {3 Collecting statistics}
 
@@ -886,9 +886,9 @@ val target : test_case -> float -> string -> unit
       let%hegel_test list_statistics tc =
         let xs = draw_silent tc (lists (integers ()) ()) in
         (match xs with
-         | [] -> event tc "empty input"
+         | [] -> event tc ~label:"empty input"
          | _ -> ());
-        event_value tc (float_of_int (List.length xs)) "length"
+        event_value tc ~label:"length" ~value:(float_of_int (List.length xs))
     ]}
 
     prints:
@@ -899,30 +899,30 @@ val target : test_case -> float -> string -> unit
         * length: count 100, min 0, median 4, mean 5.12, p90 9, max 15
     v} *)
 
-(** [event tc label] records [label] as observed on this test case. The
+(** [event tc ~label] records [label] as observed on this test case. The
     end-of-run statistics report (see {!with_show_statistics}) shows the
     fraction of test cases in which each label was recorded at least once.
 
     {[
       let%hegel_test observe_emptiness tc =
         let xs = draw tc (lists (integers ()) ()) in
-        if List.is_empty xs then event tc "empty input";
+        if List.is_empty xs then event tc ~label:"empty input";
         assert (List.length (List.sort compare xs) = List.length xs)
     ]} *)
-val event : test_case -> string -> unit
+val event : test_case -> label:string -> unit
 
-(** [event_value tc value label] records the numeric observation [value] under
-    [label]. The end-of-run statistics report (see {!with_show_statistics})
-    shows a distribution summary (count, min, median, mean, p90, max) per
-    label. [value] must be finite.
+(** [event_value tc ~label ~value] records the numeric observation [value]
+    under [label]. The end-of-run statistics report (see
+    {!with_show_statistics}) shows a distribution summary (count, min, median,
+    mean, p90, max) per label. [value] must be finite.
 
     {[
       let%hegel_test observe_length tc =
         let xs = draw tc (lists (integers ()) ()) in
-        event_value tc (float_of_int (List.length xs)) "length";
+        event_value tc ~label:"length" ~value:(float_of_int (List.length xs));
         assert (List.length (List.sort compare xs) = List.length xs)
     ]} *)
-val event_value : test_case -> float -> string -> unit
+val event_value : test_case -> label:string -> value:float -> unit
 
 (** {3 Debugging tests} *)
 

@@ -245,7 +245,7 @@ let test_note_and_target () =
   run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc int_gen in
     note tc "a note";
-    target tc (Float.of_int v) "v";
+    target tc ~label:"v" ~value:(Float.of_int v);
     assert (v >= 0))
 ;;
 
@@ -253,7 +253,7 @@ let test_note_and_target () =
 let test_event_value_non_finite () =
   match
     run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
-      event_value tc Float.nan "x")
+      event_value tc ~label:"x" ~value:Float.nan)
   with
   | () -> Alcotest.fail "expected Usage_error"
   | exception Hegel.Usage_error _ -> ()
@@ -262,7 +262,8 @@ let test_event_value_non_finite () =
 (** A non-UTF-8 [event] label is an engine-side argument error. *)
 let test_event_bad_label () =
   match
-    run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc -> event tc "\xff")
+    run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
+      event tc ~label:"\xff")
   with
   | () -> Alcotest.fail "expected Usage_error"
   | exception Hegel.Usage_error _ -> ()

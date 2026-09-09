@@ -13,10 +13,10 @@ let run ~show_statistics body =
 
 let record_events tc =
   let v = draw_silent tc int_gen in
-  event tc "always";
-  if v >= 50 then event tc "big draw";
-  event_value tc 1.0 "obs";
-  event_value tc 3.0 "obs"
+  event tc ~label:"always";
+  if v >= 50 then event tc ~label:"big draw";
+  event_value tc ~label:"obs" ~value:1.0;
+  event_value tc ~label:"obs" ~value:3.0
 ;;
 
 let%expect_test "no statistics block when show_statistics is off (the default)" =
@@ -50,7 +50,7 @@ let%expect_test "shrink replays are excluded from the statistics" =
   (try
      run ~show_statistics:true (fun tc ->
        let v = draw_silent tc int_gen in
-       event_value tc (float_of_int v) "v";
+       event_value tc ~label:"v" ~value:(float_of_int v);
        assert (v < 50))
    with
    | _ -> ());

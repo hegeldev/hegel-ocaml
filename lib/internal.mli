@@ -376,17 +376,17 @@ val draw_display_name : test_case -> label:string -> repeatable:bool -> string
 
 (**/**)
 
-(** [target tc value label] records a targeting observation to guide the search
+(** [target tc ~label ~value] records a targeting observation to guide the search
     engine toward higher values. *)
-val target : test_case -> float -> string -> unit
+val target : test_case -> label:string -> value:float -> unit
 
-(** [event tc label] records [label] as observed on this test case for the
+(** [event tc ~label] records [label] as observed on this test case for the
     end-of-run statistics report. *)
-val event : test_case -> string -> unit
+val event : test_case -> label:string -> unit
 
-(** [event_value tc value label] records the finite observation [value] under
+(** [event_value tc ~label ~value] records the finite observation [value] under
     [label] for the end-of-run statistics report. *)
-val event_value : test_case -> float -> string -> unit
+val event_value : test_case -> label:string -> value:float -> unit
 
 (**/**)
 
