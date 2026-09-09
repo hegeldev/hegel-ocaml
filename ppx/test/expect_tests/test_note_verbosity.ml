@@ -59,16 +59,16 @@ let%expect_test "Verbose notes on every case (not just the final replay)" =
     draw_1 = 0
     NOTE_MARKER
     Running test case
-    draw_1 = 59
+    draw_1 = 63
     NOTE_MARKER
     Running test case
-    draw_1 = 34
+    draw_1 = 14
     NOTE_MARKER
     Running test case
-    draw_1 = 47
+    draw_1 = 67
     NOTE_MARKER
     Running test case
-    draw_1 = 6
+    draw_1 = 1
     NOTE_MARKER
     Ending phase: Generate
     |}]
@@ -82,16 +82,16 @@ let%expect_test "Debug notes on every case (not just the final replay)" =
     Starting phase: Generate
     draw_1 = 0
     NOTE_MARKER
-    draw_1 = 59
+    draw_1 = 63
     NOTE_MARKER
     test case #2: status = Valid, choices = 1
-    draw_1 = 34
+    draw_1 = 14
     NOTE_MARKER
     test case #3: status = Valid, choices = 1
-    draw_1 = 47
+    draw_1 = 67
     NOTE_MARKER
     test case #4: status = Valid, choices = 1
-    draw_1 = 6
+    draw_1 = 1
     NOTE_MARKER
     test case #5: status = Valid, choices = 1
     Ending phase: Generate

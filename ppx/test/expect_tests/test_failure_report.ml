@@ -31,7 +31,7 @@ let%expect_test "later falsification counts plural test cases" =
   [%expect
     {|
     --- Failure ------------------------------------------------------------
-    Falsified after 3 test cases (0 discarded):
+    Falsified after 4 test cases (0 discarded):
 
       draw_1 = 60
 
