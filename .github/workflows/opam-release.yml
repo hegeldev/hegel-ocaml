@@ -1,9 +1,10 @@
 name: opam release
 
-# Publish hegel-ocaml to the central opam-repository whenever a GitHub release
-# is published. The release itself is cut by the `release` job in ci.yml (which
-# tags vX.Y.Z and runs `gh release create`); this workflow then opens a PR to
-# ocaml/opam-repository for the new version via `opam publish`.
+# Publish hegel-ocaml to the central opam-repository. Triggered manually
+# (Actions -> "opam release" -> Run workflow) with the tag of an existing
+# GitHub release; the release itself is cut by the `release` job in ci.yml
+# (which tags vX.Y.Z and runs `gh release create`). This workflow then opens a
+# PR to ocaml/opam-repository for that version via `opam publish`.
 #
 # Prerequisites (one-time setup):
 #   * A repository secret `OPAM_PUBLISH_TOKEN`: a GitHub personal access token
@@ -13,9 +14,6 @@ name: opam release
 #     from the fork.
 
 on:
-  release:
-    types: [published]
-  # Manual re-run / first-time publish for a tag that already exists.
   workflow_dispatch:
     inputs:
       tag:
@@ -25,7 +23,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: opam-release-${{ github.event.release.tag_name || inputs.tag }}
+  group: opam-release-${{ inputs.tag }}
   cancel-in-progress: false
 
 jobs:
@@ -37,7 +35,7 @@ jobs:
       # Needed to upload the bundled source archive as a release asset.
       contents: write
     env:
-      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      TAG: ${{ inputs.tag }}
       # Prebuilt libhegel artifacts (from the hegel-rust release) to bundle into
       # the opam source archive, one per platform the loader's dune-site supports.
       PREBUILT_ASSETS: libhegel-linux-amd64.so libhegel-linux-arm64.so libhegel-darwin-arm64.dylib
