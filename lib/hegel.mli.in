@@ -620,6 +620,9 @@ type settings = Internal.settings =
     (** Print a [rerun with:] line whose base64 blob
         encodes the engine choices that led to a failure. [true] by default. *)
   ; report_multiple_failures : bool (** [false] by default. *)
+  ; show_statistics : bool
+    (** Print an end-of-run statistics block aggregating {!event} /
+        {!event_value} observations. [false] by default. *)
   }
 
 (** [default_settings ()] creates default test settings, auto-detecting CI. In

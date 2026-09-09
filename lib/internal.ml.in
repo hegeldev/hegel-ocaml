@@ -92,6 +92,7 @@ type settings =
   ; phases : phase list option
   ; print_blob : bool
   ; report_multiple_failures : bool
+  ; show_statistics : bool
   }
 
 (** Outcome of replaying a single failure blob. *)
@@ -142,6 +143,7 @@ let default_settings () =
   ; phases = None
   ; print_blob = true
   ; report_multiple_failures = false
+  ; show_statistics = false
   }
 ;;
 
@@ -191,6 +193,10 @@ let with_print_blob b s = { s with print_blob = b }
 (** [with_report_multiple_failures b s] returns settings [s] with [report_multiple_failures] 
     set to [b]. When [true], a failing run reports all the failures it found *)
 let with_report_multiple_failures b s = { s with report_multiple_failures = b }
+
+(** [with_show_statistics b s] returns settings [s] with [show_statistics] set
+    to [b]. *)
+let with_show_statistics b s = { s with show_statistics = b }
 
 (** Draw-name bookkeeping: the per-name occurrence counter that numbers
     repeatable draws ([label_1], [label_2], …). Shared across every clone of a
@@ -671,6 +677,16 @@ let target tc value label =
   with_stop_guard tc (fun () -> Ffi.target tc.context tc.handle value label)
 ;;
 
+(** [event tc label] records [label] as observed on this test case for the
+    end-of-run statistics report. *)
+let event tc label = with_stop_guard tc (fun () -> Ffi.event tc.context tc.handle label)
+
+(** [event_value tc value label] records the finite observation [value] under
+    [label] for the end-of-run statistics report. *)
+let event_value tc value label =
+  with_stop_guard tc (fun () -> Ffi.event_value tc.context tc.handle value label)
+;;
+
 (** [start_span ?label tc] starts a generation span for better shrinking. *)
 let start_span ?(label = 0) tc =
   if tc.test_aborted
@@ -828,6 +844,7 @@ let build_ffi_settings ctx (settings : settings) ~database_key =
     Ffi.settings_seed ctx s settings.seed;
     Ffi.settings_derandomize ctx s settings.derandomize;
     Ffi.settings_report_multiple_failures ctx s settings.report_multiple_failures;
+    Ffi.settings_show_statistics ctx s settings.show_statistics;
     (match settings.database with
      | Unset -> ()
      | Disabled -> Ffi.settings_database ctx s (Some "")

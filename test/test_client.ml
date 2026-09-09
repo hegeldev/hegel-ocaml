@@ -262,8 +262,7 @@ let test_event_value_non_finite () =
 (** A non-UTF-8 [event] label is an engine-side argument error. *)
 let test_event_bad_label () =
   match
-    run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
-      event tc "\xff")
+    run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc -> event tc "\xff")
   with
   | () -> Alcotest.fail "expected Usage_error"
   | exception Hegel.Usage_error _ -> ()

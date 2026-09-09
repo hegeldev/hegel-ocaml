@@ -122,6 +122,7 @@ type settings = Internal.settings =
   ; phases : phase list option
   ; print_blob : bool
   ; report_multiple_failures : bool
+  ; show_statistics : bool
   }
 
 exception Assume_rejected = Internal.Assume_rejected
