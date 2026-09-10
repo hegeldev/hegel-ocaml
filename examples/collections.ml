@@ -1,7 +1,7 @@
 (** Collection and combinator examples.
 
-    Demonstrates: lists, assoc_lists, hash_tables, sampled_from, map,
-    flat_map, filter. *)
+    Demonstrates: lists, assoc_lists, hash_tables, sampled_from, map, flat_map,
+    filter. *)
 
 open Hegel
 
@@ -14,8 +14,7 @@ let%hegel_test test_filtered_list tc =
 [@@settings settings ~test_cases:100 ()]
 ;;
 
-(** Property: a list generated with [min_size] has at least that many elements.
-*)
+(** Property: a list generated with [min_size] has at least that many elements. *)
 let%hegel_test test_list_min_size tc =
   let lst =
     draw

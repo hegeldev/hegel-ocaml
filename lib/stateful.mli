@@ -64,18 +64,19 @@ module Pool : sig
 
       let alloc =
         Stateful.Rule.create ~name:"alloc" ~step:(fun _tc state ->
-            let h = fresh_handle () in
-            Stateful.Pool.add state.handles h;
-            { state with live = Set.add state.live h })
+          let h = fresh_handle () in
+          Stateful.Pool.add state.handles h;
+          { state with live = Set.add state.live h })
+      ;;
 
       let free =
         Stateful.Rule.create ~name:"free" ~step:(fun tc state ->
-            (* draws a handle a prior [alloc] put in the pool *)
-            let h = draw_silent tc (Stateful.Pool.values_consumed state.handles) in
-            release h;
-            { state with live = Set.remove state.live h })
-      ]}
-  *)
+          (* draws a handle a prior [alloc] put in the pool *)
+          let h = draw_silent tc (Stateful.Pool.values_consumed state.handles) in
+          release h;
+          { state with live = Set.remove state.live h })
+      ;;
+      ]} *)
   type 'a t
 
   (** Creates an empty {!Pool.t}. Pools are tied to a test case; do not
@@ -118,7 +119,7 @@ module Rule : sig
   (** A rule is one possible action in a stateful test. *)
   type 'state t
 
-  (** Declares a rule.
+  (** Declares a rule. It is strongly recommended to use [let%hegel_rule] instead.
 
       - [name] is printed in the final output when the rule is run
       - [step tc state] performs one application of the rule, drawing any
@@ -130,8 +131,9 @@ module Rule : sig
       {[
       let push =
         Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
-            let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
-            n :: stack)
+          let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
+          n :: stack)
+      ;;
       ]} *)
   val create : name:string -> step:(Internal.test_case -> 'state -> 'state) -> 'state t
 
@@ -157,7 +159,7 @@ module Invariant : sig
       Every invariant is checked on the initial and final states. *)
   val create
     :  name:string
-    -> inv:('state -> unit)
+    -> inv:(Internal.test_case -> 'state -> unit)
     -> ?always_check:bool
     -> unit
     -> 'state t
@@ -188,10 +190,10 @@ end
     {v
       state = 0
       Step 1: add
-        draw_1 = 3
+        n = 3
       state = 3
       Step 2: add
-        draw_2 = 7
+        n = 7
       state = 10
       Invariant my_invariant violated after step 2.
     v} *)

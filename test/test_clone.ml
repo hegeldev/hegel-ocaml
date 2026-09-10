@@ -56,7 +56,8 @@ let test_clone_reproducible () =
   Alcotest.(check (pair int int)) "seeded clone draws reproduce" a b
 ;;
 
-(* Cloning a clone yields a further independent stream that also draws cleanly. *)
+(* Cloning a clone yields a further independent stream that also draws
+   cleanly. *)
 let test_clone_of_clone () =
   let value = ref (-1) in
   Hegel.run_hegel_test ~settings:(one_case_settings ()) (fun tc ->

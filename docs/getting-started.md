@@ -288,13 +288,13 @@ require tc ~msg:"list must stay sorted" (is_sorted xs)
 
 ## Stateful testing
 
-`Stateful` applies a random sequence of *rules* to a model. Define a rule with
-`let%hegel_rule`: the rule is named after its binding, and the draws in its
-body print under their `let` names, like a test body's. Every invariant is
-checked on the initial and final states and sampled after intermediate steps.
-Set `always_check:true` when creating an invariant that must be checked after
-every step. Pass `?sexp_of_state` to `Stateful.run` to trace the model state
-through a failing sequence:
+`Stateful` applies a random sequence of rules (defined with `let%hegel_rule`) 
+to a model and checks invariants (defined with `let%hegel_invariant`) on it.  
+Each is named after its binding, and the draws in its body print under their 
+`let` names. Every invariant is checked on the initial and final states and 
+sampled after intermediate steps. Mark an invariant with `[@@always_check]` 
+to check it after every step. Pass `?sexp_of_state` to `Stateful.run` to 
+trace the model state.
 
 ```ocaml
 let%hegel_rule push tc stack =
@@ -302,41 +302,44 @@ let%hegel_rule push tc stack =
   n :: stack
 ;;
 
-let%hegel_test stack_stays_small tc =
+let%hegel_invariant stack_stays_small _tc stack = assert (List.length stack <= 2)
+[@@always_check]
+;;
+
+let%hegel_test stack_model tc =
   Stateful.run
     ~init:[]
     ~rules:[ push ]
-    ~invariants:
-      [ Stateful.Invariant.create
-          ~name:"stack stays small"
-          ~inv:(fun stack -> assert (List.length stack <= 2))
-          ~always_check:true
-          ()
-      ]
+    ~invariants:[ stack_stays_small ]
     ~sexp_of_state:[%sexp_of: int list]
     tc
 ;;
 ```
 
 When a sequence fails, the report shows each step, the draws it made, the state
-after it, and which step broke the invariant:
+after it, each invariant check, and which step broke the invariant:
 
 ```
   state = ()
+  Checking invariant stack_stays_small
   Step 1: push
     n = 0
   state = (0)
+  Checking invariant stack_stays_small
   Step 2: push
     n = 0
   state = (0 0)
+  Checking invariant stack_stays_small
   Step 3: push
     n = 0
   state = (0 0 0)
-  Invariant stack stays small violated after step 3.
+  Checking invariant stack_stays_small
+  Invariant stack_stays_small violated after step 3.
 ```
 
-A rule can also be built by hand with `Stateful.Rule.create ~name ~step`; its
-draws then print as `draw_1`, `draw_2`, … unless given an explicit `~label`.
+Rules and invariants can also be created with `Stateful.Rule.create` and
+`Stateful.Invariant.create`. Draws in a hand-built rule print as `draw_1`,
+`draw_2`, and so on unless given an explicit `~label`.
 
 See the `Hegel.Stateful` API docs for invariants across multiple
 rules and for value pools that let one rule act on data an earlier rule produced.

@@ -147,8 +147,8 @@ let test_extract_origin () =
     (Test_helpers.contains_substring origin "Failure")
 ;;
 
-(** With backtrace recording off there are no slots, exercising the
-    no-location fallback in [extract_origin]. *)
+(** With backtrace recording off there are no slots, exercising the no-location
+    fallback in [extract_origin]. *)
 let test_extract_origin_no_backtrace () =
   let was = Stdlib.Printexc.backtrace_status () in
   Stdlib.Printexc.record_backtrace false;
@@ -342,8 +342,8 @@ let test_run_database_unset () =
   run_hegel_test ~settings (fun tc -> ignore (Hegel.draw tc int_gen : int))
 ;;
 
-(** Exercise build_ffi_settings branches: phases, disabled database,
-    suppressed health checks, derandomize, seed. *)
+(** Exercise build_ffi_settings branches: phases, disabled database, suppressed
+    health checks, derandomize, seed. *)
 let test_run_with_full_settings () =
   let settings =
     Hegel.settings ~test_cases:10 ~seed:5 ()
@@ -412,8 +412,8 @@ let test_run_multiple_failures () =
   | None -> Alcotest.fail "expected multiple failures"
 ;;
 
-(** [color_enabled] decision table: a HEGEL_COLOR override of 1/0 wins,
-    anything else falls back to the tty state. *)
+(** [color_enabled] decision table: a HEGEL_COLOR override of 1/0 wins, anything
+    else falls back to the tty state. *)
 let test_color_enabled () =
   let check name expected ~override ~isatty =
     Alcotest.(check bool) name expected (Internal.color_enabled ~override ~isatty)
@@ -463,8 +463,8 @@ let test_stderr_color () =
 ;;
 
 (** [render_diff]'s default rendering prints both values in full, [-]/[+]
-    prefixed (red/green when [colored]); an installed renderer (the
-    [hegel.jane] [sexp_diff] hook) replaces it until uninstalled. *)
+    prefixed (red/green when [colored]); an installed renderer (the [hegel.jane]
+    [sexp_diff] hook) replaces it until uninstalled. *)
 let test_render_diff () =
   let original = Sexp.of_string "(1 2 3)" in
   let updated = Sexp.of_string "(1 9 3)" in
@@ -520,14 +520,15 @@ let test_run_flaky_on_replay () =
   | None -> Alcotest.fail "expected a flaky failure"
 ;;
 
-(** A health-check failure is a run-level error (no counterexample), surfaced
-    as a [Failure] carrying the engine's error message. *)
+(** A health-check failure is a run-level error (no counterexample), surfaced as
+    a [Failure] carrying the engine's error message. *)
 let test_run_health_check_failure () =
   let raised =
     try
       run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
         let v = Hegel.draw tc int_gen in
-        (* Always-false precondition: every case is invalid → FilterTooMuch. *)
+        (* Always-false precondition: every case is invalid →
+           FilterTooMuch. *)
         assume tc (v > 1_000_000));
       false
     with
@@ -537,8 +538,8 @@ let test_run_health_check_failure () =
   Alcotest.(check bool) "health-check failure surfaced" true raised
 ;;
 
-(** Exercise the optional-argument default paths of the primitives:
-    [start_span] without [~label], [pool_generate] without [~consume]. *)
+(** Exercise the optional-argument default paths of the primitives: [start_span]
+    without [~label], [pool_generate] without [~consume]. *)
 let test_run_primitive_defaults () =
   run_hegel_test ~settings:(Hegel.settings ~test_cases:3 ()) (fun tc ->
     Internal.start_span tc;

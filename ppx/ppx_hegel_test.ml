@@ -1,4 +1,5 @@
-(** PPX expander for [let%hegel_test ...].
+(** PPX expander for [let%hegel_test ...], [let%hegel_rule ...], and
+    [let%hegel_invariant ...].
 
     Rewrites:
     {[
@@ -18,7 +19,30 @@
     ]}
 
     [my_test] is has the type [unit -> unit]. The [@@settings ...] and
-    [@@failure_blobs ...] attributes are both optional. *)
+    [@@failure_blobs ...] attributes are both optional.
+
+    And the stateful pair
+    {[
+    let%hegel_rule push tc stack = body
+    let%hegel_invariant short tc stack = body [@@always_check]
+    ]}
+    into:
+    {[
+    let push = Hegel.Stateful.Rule.create ~name:"push" ~step:(fun tc stack -> body)
+
+    let short =
+      Hegel.Stateful.Invariant.create
+        ~name:"short"
+        ~inv:(fun tc stack -> body)
+        ~always_check:true
+        ()
+    ;;
+    ]}
+
+    In all three, [let x = draw tc gen] bindings in [body] have their binding
+    name injected so the drawn value prints as [x = value]. A rule or invariant
+    body runs on its own naming scope per step, so its names are judged for
+    repeatability within the body alone. *)
 
 open Ppxlib
 
@@ -39,9 +63,9 @@ let extract_settings_attr (attrs : attributes) : expression option =
     attrs
 ;;
 
-(** [parse_string_list e] returns the list of literal strings carried by
-    [e] when [e] has the shape [[ "..."; "..."; ... ]], else raises a
-    located error pointing at the offending sub-expression. *)
+(** [parse_string_list e] returns the list of literal strings carried by [e]
+    when [e] has the shape [[ "..."; "..."; ... ]], else raises a located error
+    pointing at the offending sub-expression. *)
 let rec parse_string_list (e : expression) : string list =
   match e.pexp_desc with
   | Pexp_construct ({ txt = Lident "[]"; _ }, None) -> []
@@ -64,8 +88,8 @@ let rec parse_string_list (e : expression) : string list =
       "ppx_hegel_test: expected a list literal of string literals"
 ;;
 
-(** [extract_failure_blobs_attr attrs] returns the parsed string list
-    if a [[@@failure_blobs ...]] attribute is present, else [None]. *)
+(** [extract_failure_blobs_attr attrs] returns the parsed string list if a
+    [[@@failure_blobs ...]] attribute is present, else [None]. *)
 let extract_failure_blobs_attr (attrs : attributes) : string list option =
   List.find_map
     (fun (attr : attribute) ->
@@ -88,7 +112,8 @@ let extract_failure_blobs_attr (attrs : attributes) : string list option =
 ;;
 
 (** [extract_function_name ~what pat] returns the name bound by [pat] if [pat]
-    is a simple variable, else raises naming [what] ("test" or "rule"). *)
+    is a simple variable, else raises naming [what] ("test", "rule", or
+    "invariant"). *)
 let extract_function_name ~what (pat : pattern) : string =
   match pat.ppat_desc with
   | Ppat_var { txt; _ } -> txt
@@ -206,8 +231,8 @@ let tc_arg_is ~tc_name (args : (arg_label * expression) list) : bool =
 ;;
 
 (** [draw_binding_name ~tc_name vb] returns [Some name] when [vb] is
-    [let <name> = draw tc …] — a simple-variable binding whose right-hand side is
-    a [draw] application on the test's own [tc] — and [None] otherwise. *)
+    [let <name> = draw tc …] — a simple-variable binding whose right-hand side
+    is a [draw] application on the test's own [tc] — and [None] otherwise. *)
 let draw_binding_name ~tc_name (vb : value_binding) : string option =
   match vb.pvb_pat.ppat_desc, vb.pvb_expr.pexp_desc with
   | ( Ppat_var { txt = name; _ }
@@ -217,9 +242,9 @@ let draw_binding_name ~tc_name (vb : value_binding) : string option =
 ;;
 
 (** [collect_repeatable body] maps each draw-bound name to whether its draws
-    should be numbered. A name is repeatable
-    if it is drawn more than once, or drawn anywhere at block depth > 0 (inside a
-    function, [for], or [while] body, where it may run repeatedly). *)
+    should be numbered. A name is repeatable if it is drawn more than once, or
+    drawn anywhere at block depth > 0 (inside a function, [for], or [while]
+    body, where it may run repeatedly). *)
 let collect_repeatable ~tc_name (body : expression) : (string, bool) Stdlib.Hashtbl.t =
   let flags : (string, bool) Stdlib.Hashtbl.t = Stdlib.Hashtbl.create 8 in
   let depth = ref 0 in
@@ -344,9 +369,9 @@ let draw_silent_binding_name ~tc_name (vb : value_binding) : string option =
     [x arg = result]. [~name] is ignored for every other generator, so the
     rewrite is harmless. Like {!inject_draw} it targets the internal
     [draw_silent_named] (keeping [~name] off the public [draw_silent]) and keeps
-    the module prefix the user wrote. It fires only for a simple-variable binding
-    whose right-hand side is a [draw_silent] application on [tc] with no explicit
-    [~name]. *)
+    the module prefix the user wrote. It fires only for a simple-variable
+    binding whose right-hand side is a [draw_silent] application on [tc] with no
+    explicit [~name]. *)
 let inject_draw_silent ~tc_name (vb : value_binding) : value_binding =
   match draw_silent_binding_name ~tc_name vb, vb.pvb_expr.pexp_desc with
   | ( Some name
@@ -366,11 +391,11 @@ let inject_draw_silent ~tc_name (vb : value_binding) : value_binding =
 
 (** A traversal that applies {!inject_draw} and {!inject_draw_silent} to every
     [let]-binding in an expression, threading the precomputed [flags], so labels
-    are injected throughout the test body (nested [let]s, helper functions, match
-    arms, …). Each binding is at most one of a [draw] or a [draw_silent] on [tc],
-    so the two injectors compose (each leaves the other's bindings untouched).
-    Draws nested inside a generation span are still suppressed at runtime by the
-    depth gate, so labeling them is harmless. *)
+    are injected throughout the test body (nested [let]s, helper functions,
+    match arms, …). Each binding is at most one of a [draw] or a [draw_silent]
+    on [tc], so the two injectors compose (each leaves the other's bindings
+    untouched). Draws nested inside a generation span are still suppressed at
+    runtime by the depth gate, so labeling them is harmless. *)
 let label_injector ~tc_name flags =
   object
     inherit Ast_traverse.map as super
@@ -383,32 +408,76 @@ let label_injector ~tc_name flags =
   end
 ;;
 
+(** [inject_labels fn] is the lambda [fn] ([fun tc <args> -> body]) with
+    [~label]/[~repeatable] injected into the draws on its own [tc] parameter, so
+    the counterexample replay prints [name = value]. *)
+let inject_labels (fn : expression) : expression =
+  match test_case_name fn with
+  | None -> fn
+  | Some tc_name ->
+    let flags = collect_repeatable ~tc_name (Ppx_compat.peel_fun_params fn) in
+    (label_injector ~tc_name flags)#expression fn
+;;
+
 (** Expander for a single [let%hegel_test ...] structure item. *)
 let expand_value_binding ~loc (vb : value_binding) : structure_item list =
-  let function_name = extract_function_name vb.pvb_pat in
+  let function_name = extract_function_name ~what:"test" vb.pvb_pat in
   let settings_expr = extract_settings_attr vb.pvb_attributes in
   let failure_blobs = extract_failure_blobs_attr vb.pvb_attributes in
-  (* The body of [let%hegel_test name <args> = expr] is parsed as
-     [let name = <args -> expr>]. We pass that lambda as the [test_fn] to
-     [Hegel.run_hegel_test], first injecting [~label]/[~repeatable] from the
-     binding names — for draws on the test's own [tc] — so the counterexample
-     replay prints [name = value]. With no recognizable [tc] parameter, the body
-     is passed through unchanged. *)
-  let body_fn =
-    match test_case_name vb.pvb_expr with
-    | None -> vb.pvb_expr
-    | Some tc_name ->
-      let flags = collect_repeatable ~tc_name (Ppx_compat.peel_fun_params vb.pvb_expr) in
-      (label_injector ~tc_name flags)#expression vb.pvb_expr
-  in
+  (* The body of [let%hegel_test name <args> = expr] is parsed as [let name = <args -> expr>]. We pass that lambda as the [test_fn] to
+     [Hegel.run_hegel_test]. *)
+  let body_fn = inject_labels vb.pvb_expr in
   build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn
 ;;
 
-(** The [hegel_test] extension is attached to [structure_item] (top-level
-    [let%hegel_test]). It supports only the non-recursive single-binding form.
-    The expander splices in a single top-level item: the test function itself,
-    an ordinary [unit -> unit] value with no registration or execution side
-    effect. *)
+(** Expander for a single [let%hegel_rule ...] structure item:
+    [let%hegel_rule name tc state = body] becomes
+    [let name = Hegel.Stateful.Rule.create ~name:"name" ~step:(fun tc state -> body)], with the rule's draws labelled like a test body's. The rule is
+    named after its binding. *)
+let expand_rule_binding ~loc (vb : value_binding) : structure_item list =
+  let rule_name = extract_function_name ~what:"rule" vb.pvb_pat in
+  let step = inject_labels vb.pvb_expr in
+  let name = Ast_builder.Default.estring ~loc rule_name in
+  [ [%stri
+      let [%p vb.pvb_pat] = Hegel.Stateful.Rule.create ~name:[%e name] ~step:[%e step]]
+  ]
+;;
+
+(** [has_always_check_attr attrs] is [true] when [[@@always_check]] is among
+    [attrs]. *)
+let has_always_check_attr (attrs : attributes) : bool =
+  List.exists
+    (fun (attr : attribute) -> String.equal attr.attr_name.txt "always_check")
+    attrs
+;;
+
+(** Expander for a single [let%hegel_invariant ...] structure item:
+    [let%hegel_invariant name tc state = body [@@always_check]] becomes
+    [let name = Hegel.Stateful.Invariant.create ~name:"name" ~inv:(fun tc state -> body) ~always_check:true ()] (the flag is [false] without the
+    attribute), with the body's draws labelled like a test body's. The invariant
+    is named after its binding. *)
+let expand_invariant_binding ~loc (vb : value_binding) : structure_item list =
+  let inv_name = extract_function_name ~what:"invariant" vb.pvb_pat in
+  let inv = inject_labels vb.pvb_expr in
+  let name = Ast_builder.Default.estring ~loc inv_name in
+  let always_check =
+    Ast_builder.Default.ebool ~loc (has_always_check_attr vb.pvb_attributes)
+  in
+  [ [%stri
+      let [%p vb.pvb_pat] =
+        Hegel.Stateful.Invariant.create
+          ~name:[%e name]
+          ~inv:[%e inv]
+          ~always_check:[%e always_check]
+          ()
+      ;;]
+  ]
+;;
+
+(** The [hegel_test], [hegel_rule], and [hegel_invariant] extensions are
+    attached to [structure_item] (top-level [let%hegel_test] / [let%hegel_rule]
+    / [let%hegel_invariant]). They support only the non-recursive single-binding
+    form. Each expander creates top-level item. *)
 let extension =
   Extension.declare_inline
     "hegel_test"
@@ -417,8 +486,28 @@ let extension =
     (fun ~loc ~path:_ vb -> expand_value_binding ~loc vb)
 ;;
 
+let rule_extension =
+  Extension.declare_inline
+    "hegel_rule"
+    Extension.Context.structure_item
+    Ast_pattern.(pstr (pstr_value nonrecursive (__ ^:: nil) ^:: nil))
+    (fun ~loc ~path:_ vb -> expand_rule_binding ~loc vb)
+;;
+
+let invariant_extension =
+  Extension.declare_inline
+    "hegel_invariant"
+    Extension.Context.structure_item
+    Ast_pattern.(pstr (pstr_value nonrecursive (__ ^:: nil) ^:: nil))
+    (fun ~loc ~path:_ vb -> expand_invariant_binding ~loc vb)
+;;
+
 let () =
   Driver.register_transformation
     "ppx_hegel_test"
-    ~rules:[ Context_free.Rule.extension extension ]
+    ~rules:
+      [ Context_free.Rule.extension extension
+      ; Context_free.Rule.extension rule_extension
+      ; Context_free.Rule.extension invariant_extension
+      ]
 ;;

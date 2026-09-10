@@ -61,10 +61,10 @@ let%expect_test "require_equal prints a sexp diff of the two values" =
     |}]
 ;;
 
-(* Two require calls at distinct source lines produce two distinct failures:
-   the origin is derived from the caller's line, not from require's raise site
-   inside the library (which would collapse every require failure in a run
-   into one origin). *)
+(* Two require calls at distinct source lines produce two distinct failures: the
+   origin is derived from the caller's line, not from require's raise site
+   inside the library (which would collapse every require failure in a run into
+   one origin). *)
 let%expect_test "require failures get caller-derived origins" =
   (try
      Hegel.run_hegel_test

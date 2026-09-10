@@ -896,9 +896,11 @@ type case_outcome =
   ; printed_output : bool
   }
 
-(** [flush_document tc] prints the document corresponding to a test case and its clones
-    to stderr and returns whether anything printed.  *)
-let flush_document (tc : test_case) =
+(** [flush_document tc ~framed] prints the document corresponding to a test
+    case and its clones and blocks to stderr and returns whether anything
+    printed. [framed] separates a non-empty document from the failure frame's
+    header with a blank line. *)
+let flush_document (tc : test_case) ~framed =
   if not (should_print tc)
   then false
   else (
@@ -915,19 +917,19 @@ let flush_document (tc : test_case) =
     if String.equal text ""
     then false
     else (
-      if tc.note_indent > 0 then Printf.eprintf "\n%!";
+      if framed then Printf.eprintf "\n%!";
       Printf.eprintf "%s%!" text;
       true))
 ;;
 
-(** [run_test_case ~settings ~test_fn ?note_indent ctx handle is_final] runs
+(** [run_test_case ~settings ~test_fn ?indent ctx handle is_final] runs
     [test_fn] over a single native test-case [handle], maps the outcome to a
     {!Ffi.status}, and marks the case complete. A [Ffi.Usage_error] (an invalid
     generator argument the engine rejected) is not an outcome: it propagates
     unchanged, aborting the run instead of being shrunk as a counterexample.
-    [note_indent] is the starting nesting depth of note/draw lines. Shared by
-    the engine-run and failure-blob replay paths. *)
-let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle is_final =
+    A non-zero [indent] runs the body through a {!block} indented that many
+    columns. Shared by the engine-run and failure-blob replay paths. *)
+let run_test_case ~(settings : settings) ~test_fn ?(indent = 0) ctx handle is_final =
   let (tc : test_case) =
     { handle
     ; context = ctx
@@ -935,11 +937,11 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
     ; verbosity = settings.verbosity
     ; test_aborted = false
     ; draw_depth = 0
-    ; note_indent
     ; draw_state = { counts = String_table.create 16; lock = Mutex.create () }
     ; owned_pools = { pools = []; lock = Mutex.create () }
     }
   in
+  let body_tc = if indent = 0 then tc else block tc ~indent in
   DLS.set in_test_context true;
   let status, captured =
     Fun.protect
@@ -947,7 +949,7 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
         DLS.set in_test_context false;
         free_owned_pools tc)
       (fun () ->
-         match test_fn tc with
+         match test_fn body_tc with
          | () -> Ffi.Valid, None
          | exception Assume_rejected -> Ffi.Invalid, None
          | exception Data_exhausted -> Ffi.Overrun, None
@@ -956,7 +958,7 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
          | exception exn -> Ffi.Interesting, Some (extract_origin exn, exn))
   in
   Ffi.mark_complete ctx handle status (Option.map fst captured);
-  { status; interesting = captured; printed_output = flush_document tc }
+  { status; interesting = captured; printed_output = flush_document tc ~framed:(indent > 0) }
 ;;
 
 (** Diagnostic raised when the engine's shrunk counterexample no longer fails on
@@ -985,7 +987,7 @@ let final_replay ~(settings : settings) ~ffi_settings ~test_fn ctx failure =
   let outcome =
     Fun.protect
       ~finally:(fun () -> Ffi.test_case_free ctx tc)
-      (fun () -> run_test_case ~settings ~test_fn ~note_indent:1 ctx tc true)
+      (fun () -> run_test_case ~settings ~test_fn ~indent:2 ctx tc true)
   in
   match outcome.interesting with
   | Some (_origin, exn) -> blob, exn, outcome.printed_output

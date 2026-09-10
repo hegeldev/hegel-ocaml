@@ -12,8 +12,8 @@ open Ctypes
 (* Locating and opening the shared library                            *)
 (* ------------------------------------------------------------------ *)
 
-(* {!Loader.locate} resolves (and, if necessary, downloads) the library path;
-   we open it here. The library is loaded on module init — i.e. the first time
+(* {!Loader.locate} resolves (and, if necessary, downloads) the library path; we
+   open it here. The library is loaded on module init — i.e. the first time
    anything in the process touches the Hegel engine. *)
 let lib =
   let path = Loader.locate () in
@@ -25,7 +25,7 @@ let lib =
 let foreign name typ = Foreign.foreign ~from:lib name typ
 
 (* [hegel_next_test_case] runs the engine on the calling thread. An engine call
-   can take a while, so release the OCaml runtime lock for its duration to let 
+   can take a while, so release the OCaml runtime lock for its duration to let
    other OCaml threads run. *)
 let foreign_blocking name typ =
   Foreign.foreign ~from:lib ~release_runtime_lock:true name typ
@@ -81,8 +81,7 @@ module Date_struct = struct
   let () = seal t
 end
 
-(* [hegel_time_t]: hour in [0, 23], minute/second in [0, 59], nanosecond in
-   [0, 999999999]. *)
+(* [hegel_time_t]: hour in [0, 23], minute/second in [0, 59], nanosecond in [0, 999999999]. *)
 module Time_struct = struct
   type s
 
@@ -278,10 +277,10 @@ let c_string_generator_text =
   foreign
     "hegel_string_generator_text"
     (ptr void
-     @-> uint64_t (* min_size *)
-     @-> uint64_t (* max_size *)
-     @-> string_opt (* codec *)
-     @-> uint32_t (* min_codepoint *)
+     @-> uint64_t
+     (* min_size *) @-> uint64_t (* max_size *)
+     @-> string_opt
+     (* codec *) @-> uint32_t (* min_codepoint *)
      @-> uint32_t (* max_codepoint *)
      @-> ptr (ptr char) (* categories *)
      @-> size_t
@@ -299,8 +298,8 @@ let c_string_generator_regex =
   foreign
     "hegel_string_generator_regex"
     (ptr void
-     @-> string (* pattern *)
-     @-> bool (* fullmatch *)
+     @-> string
+     (* pattern *) @-> bool (* fullmatch *)
      @-> ptr void (* alphabet (nullable) *)
      @-> ptr (ptr void)
      @-> returning int)
@@ -962,9 +961,9 @@ let optional_bytes_arg = function
 ;;
 
 (* Marshal an optional string list into a [const char *const *] + length + GC
-   root, distinguishing three cases the text-generator API cares about:
-   [None] → NULL (no restriction); [Some []] → a non-NULL pointer with length 0
-   (an explicit *empty* set); [Some names] → the names. *)
+   root, distinguishing three cases the text-generator API cares about: [None] →
+   NULL (no restriction); [Some []] → a non-NULL pointer with length 0 (an
+   explicit *empty* set); [Some names] → the names. *)
 let optional_string_array = function
   | None -> from_voidp (ptr char) null, Root.create (), Unsigned.Size_t.of_int 0
   | Some [] ->
@@ -1240,8 +1239,8 @@ let new_state_machine
 ;;
 
 (* [HEGEL_STATE_MACHINE_DONE]: written to the out parameter by
-   [hegel_state_machine_next_group] when the state machine has terminated and
-   by [hegel_state_machine_next_rule] when the worker's round is over. *)
+   [hegel_state_machine_next_group] when the state machine has terminated and by
+   [hegel_state_machine_next_rule] when the worker's round is over. *)
 let state_machine_done = Int64.min_int
 
 let read_index out =
@@ -1389,8 +1388,8 @@ let mark_complete ctx tc status origin =
 (* Result inspection                                                   *)
 (* ------------------------------------------------------------------ *)
 
-(* [HEGEL_RUN_STATUS_*] values. The catch-all maps any unknown future status
-   to [Run_error]. *)
+(* [HEGEL_RUN_STATUS_*] values. The catch-all maps any unknown future status to
+   [Run_error]. *)
 let result_status ctx r =
   let out = allocate int 0 in
   check_rc ctx (c_result_status ctx r out);

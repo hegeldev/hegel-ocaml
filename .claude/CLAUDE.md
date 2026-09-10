@@ -56,7 +56,9 @@ lib/                         # Library source
   derive.ml                  # Hegel.Derive: scope-resolved names derived code
                              #   refers to (hegel_generator_int/…/char/list/
                              #   option + the Sexplib0 sexp_of_* converters)
-  stateful.ml                # Stateful testing: Rule.create + run over action sequences
+  stateful.ml                # Stateful testing: Rule/Invariant.create (both take the
+                             #   test case) + run over action sequences. Rule and
+                             #   invariant bodies run on indent-2 block handles
   antithesis.ml              # Antithesis integration (emits an always-typed assertion)
   jane/                      # Optional hegel.jane sublibrary ((optional) in dune).
     hegel_jane.ml/.mli       #   Core.Hashtbl hash_tables + pool helpers and the
@@ -211,10 +213,14 @@ single top-level item: `let name = fun () -> Hegel.run_hegel_test ... (fun tc
 registration, no runtime library, and no side effect at module init. The same
 rewriter also provides `let%hegel_rule name tc state = body` →
 `let name = Hegel.Stateful.Rule.create ~name:"name" ~step:(fun tc state ->
-body)`, the analogue of hegel-rust's `#[rule]` methods: the rule is named
-after its binding and its body gets the same draw-name injection as a test
-body, judged at depth 0 — a rule body runs on its own naming scope per step
-(see Pretty printing), so `let n = draw tc g` prints as `n`, not `n_1`. Hegel
+body)` and `let%hegel_invariant name tc state = body [@@always_check]` →
+`Hegel.Stateful.Invariant.create ~name ~inv:(fun tc state -> body)
+~always_check:<attr present> ()`, the analogues of hegel-rust's `#[rule]` /
+`#[invariant]` methods: each is named after its binding and its body gets the
+same draw-name injection as a test body, judged at depth 0. A rule or
+invariant body runs on its own naming scope per step (see Pretty printing),
+so `let n = draw tc g` prints as `n`, not `n_1`. Invariants take the test case
+(`inv : test_case -> 'state -> unit`) so they can draw and note. Hegel
 has no test runner of its own and no `(inline_tests (backend ...))` stanza:
 the project's own tests wire each `let%hegel_test`-produced function into
 whatever test framework the project already uses (see `examples/*.ml`, which
@@ -456,8 +462,8 @@ failing examples across runs, use `database` / `database_key`.
 `Ffi.run_start`, then loops on `Ffi.next_test_case` until it returns `None`. Each
 test case handle is wrapped in a `test_case` record and passed to the user's function.
 `build_ffi_settings` cannot fail: every `hegel_settings_set_*` returns `HEGEL_OK`
-(the step count, once the one rejectable setting, is now a `Stateful.run
-?step_count` argument validated by `hegel_new_state_machine`).
+(the step count, formerly the only setting the engine could reject, is now a
+`Stateful.run ?step_count` argument validated by `hegel_new_state_machine`).
 The client controls when a final run occurs. Exceptions map to
 `Ffi.mark_complete` statuses: VALID, INVALID (`Assume_rejected`/`Flaky_strategy`),
 OVERRUN (`Data_exhausted` from a `Stop_test` during a primitive), INTERESTING

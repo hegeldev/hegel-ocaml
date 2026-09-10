@@ -41,7 +41,7 @@ end
 module Invariant = struct
   type 'state t =
     { name : string
-    ; inv : 'state -> unit
+    ; inv : Internal.test_case -> 'state -> unit
     ; always_check : bool
     }
 
@@ -78,7 +78,7 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state ?(step_count = 50) tc =
                 ~state_machine
                 ~invariant_index:i
          then (
-           match invariant.Invariant.inv state with
+           match invariant.Invariant.inv (Internal.block tc ~indent:2) state with
            | () -> ()
            | exception e ->
              Internal.note

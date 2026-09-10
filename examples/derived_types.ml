@@ -37,10 +37,9 @@ type entity =
   }
 [@@deriving hegel_generator]
 
-(** Property: the distance from any point to the origin is non-negative.
-    Derived [int] fields span the full native range, so the squares are
-    computed in floating point — [p.x * p.x] would wrap around for large
-    coordinates. *)
+(** Property: the distance from any point to the origin is non-negative. Derived
+    [int] fields span the full native range, so the squares are computed in
+    floating point — [p.x * p.x] would wrap around for large coordinates. *)
 let%hegel_test test_point_distance_nonnegative tc =
   let p = draw_silent tc hegel_generator_point in
   let x = float_of_int p.x

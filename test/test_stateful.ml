@@ -1,7 +1,8 @@
 open Core
 
 (* Stateful failure test: the [push] rule pushes an int in [0, 100] onto a
-   stack; the [pop] rule fails when the popped value is >= 50. Should shrink to [push 50; pop]. *)
+   stack; the [pop] rule fails when the popped value is >= 50. Should shrink to
+   [push 50; pop]. *)
 let stateful_failure_test () =
   let module S = Hegel.Stateful in
   let last_pop = ref None in
@@ -29,11 +30,11 @@ let stateful_failure_test () =
   Alcotest.(check (option int)) "last pop value" (Some 50) !last_pop
 ;;
 
-(* Stateful variables test: an [alloc]/[free] register allocator. [alloc]
-   draws a fresh integer id, deposits it in the variables, and records it in a
-   "live" set; [free] consumes an id from the variables and removes it from
-   the set. Variables size must match the size of the live set. Empty-variables
-   draws are rejected by [Pool.consume]'s internal [assume] call. *)
+(* Stateful variables test: an [alloc]/[free] register allocator. [alloc] draws
+   a fresh integer id, deposits it in the variables, and records it in a "live"
+   set; [free] consumes an id from the variables and removes it from the set.
+   Variables size must match the size of the live set. Empty-variables draws are
+   rejected by [Pool.consume]'s internal [assume] call. *)
 
 module Var_state = struct
   module S = Hegel.Stateful
@@ -83,7 +84,7 @@ let stateful_variables_test () =
       ~invariants:
         [ S.Invariant.create
             ~name:"pool_sz"
-            ~inv:(fun state ->
+            ~inv:(fun _tc state ->
               assert (
                 S.Pool.size state.Var_state.variables = Set.length state.Var_state.live))
             ()
@@ -148,9 +149,9 @@ let stateful_no_rules_test () =
       msg
 ;;
 
-(* Pins the engine-side contract documented on [Internal.pool_generate]:
-   drawing from an empty pool rejects the test case with [Assume_rejected],
-   not [Data_exhausted]. *)
+(* Pins the engine-side contract documented on [Internal.pool_generate]: drawing
+   from an empty pool rejects the test case with [Assume_rejected], not
+   [Data_exhausted]. *)
 let empty_pool_draw_rejects_test () =
   match
     Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
@@ -231,14 +232,14 @@ let test_always_check_invariant () =
   let always_check_invariant =
     S.Invariant.create
       ~name:"always_check"
-      ~inv:(fun _ -> incr always_inv_exec_count)
+      ~inv:(fun _tc _ -> incr always_inv_exec_count)
       ~always_check:true
       ()
   in
   let sampled_invariant =
     S.Invariant.create
       ~name:"sampled_check"
-      ~inv:(fun _ -> incr sampled_inv_exec_count)
+      ~inv:(fun _tc _ -> incr sampled_inv_exec_count)
       ()
   in
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ~seed:1 ()) (fun tc ->

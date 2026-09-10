@@ -7,8 +7,8 @@ module Generators = Generators
 (** Stateful property-based testing on top of {!Generators}. *)
 module Stateful = Stateful
 
-(** Auxiliary submodule for [@@deriving hegel_generator]. Included
-    below so [open Hegel] alone makes derived code resolve. *)
+(** Auxiliary submodule for [@@deriving hegel_generator]. Included below so
+    [open Hegel] alone makes derived code resolve. *)
 module Derive = Derive
 
 include Derive
@@ -75,9 +75,9 @@ let map = Generators.map
 let flat_map = Generators.flat_map
 let filter = Generators.filter
 
-(* Settings, test-case, and test-location types re-exported so the whole
-   public API lives directly under Hegel. The module re-exports above are
-   doc-hidden in the mli: white-box surfaces for the test suite. *)
+(* Settings, test-case, and test-location types re-exported so the whole public
+   API lives directly under Hegel. The module re-exports above are doc-hidden in
+   the mli: white-box surfaces for the test suite. *)
 
 type test_case = Internal.test_case
 
@@ -129,8 +129,7 @@ exception Usage_error = Hegel_ffi.Ffi.Usage_error
 
 (** {2 Convenience re-exports} *)
 
-(** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
-    runs a property test against the native engine, defaulting to
+(** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn] runs a property test against the native engine, defaulting to
     {!default_settings}. The [let%hegel_test] PPX runs tests through the
     equivalent {!run_hegel_test_ppx}. *)
 let run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn =
@@ -158,13 +157,13 @@ let assume = Internal.assume
     on every test case under [Verbose] or [Debug]. *)
 let note = Internal.note
 
-(** [require tc ?msg condition] fails the current test case when [condition]
-    is [false]. See {!Internal.require}. *)
+(** [require tc ?msg condition] fails the current test case when [condition] is
+    [false]. See {!Internal.require}. *)
 let require = Internal.require
 
-(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
-    the two values render to different sexps, printing a sexp diff in the
-    failure report. See {!Internal.require_equal}. *)
+(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when the
+    two values render to different sexps, printing a sexp diff in the failure
+    report. See {!Internal.require_equal}. *)
 let require_equal = Internal.require_equal
 
 (** [target tc ~label ~value] sends a target command to guide the search engine
@@ -209,16 +208,15 @@ type 'a worker = 'a Internal.worker
     {!Internal.spawn}. *)
 let spawn = Internal.spawn
 
-(** [join w] waits for worker [w] and returns its result, re-raising any exception
-    the worker raised. See {!Internal.join}. *)
+(** [join w] waits for worker [w] and returns its result, re-raising any
+    exception the worker raised. See {!Internal.join}. *)
 let join = Internal.join
 
 (** [with_printer sexp_of gen] attaches [sexp_of] so [gen] can be drawn with
     {!draw}. See {!Generators.with_printer}. *)
 let with_printer = Generators.with_printer
 
-(** [default_settings ()] creates default test settings with CI auto-detection.
-*)
+(** [default_settings ()] creates default test settings with CI auto-detection. *)
 let default_settings = Internal.default_settings
 
 (** [settings ?test_cases ?seed ()] creates settings with the given overrides

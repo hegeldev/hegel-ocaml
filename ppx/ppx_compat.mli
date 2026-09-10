@@ -7,8 +7,7 @@
 open Ppxlib
 
 (** [extract_tuple_types ct] returns [Some types] if [ct] is a tuple type,
-    [None] otherwise. On OxCaml, strips the optional labels from labeled tuples.
-*)
+    [None] otherwise. On OxCaml, strips the optional labels from labeled tuples. *)
 val extract_tuple_types : core_type -> core_type list option
 
 (** Constructor arguments with a uniform representation on every platform. *)
@@ -28,10 +27,9 @@ val map_constr_arg_types
   -> constructor_arguments
   -> constructor_arguments
 
-(** [sexp_of_str_type_decl ~loc ~path decls] emits [sexp_of_<t>] definitions
-    for [decls] through ppx_sexp_conv's expander. On OxCaml, fills the extra
-    mode arguments ([unboxed]/[stackify]/[portable]/[localize]) with
-    [false]. *)
+(** [sexp_of_str_type_decl ~loc ~path decls] emits [sexp_of_<t>] definitions for
+    [decls] through ppx_sexp_conv's expander. On OxCaml, fills the extra mode
+    arguments ([unboxed]/[stackify]/[portable]/[localize]) with [false]. *)
 val sexp_of_str_type_decl
   :  loc:Location.t
   -> path:string
@@ -39,8 +37,7 @@ val sexp_of_str_type_decl
   -> structure
 
 (** [extract_expr_tuple e] returns [Some es] if [e] is a tuple expression,
-    [None] otherwise. On OxCaml, strips the optional labels from labeled
-    tuples. *)
+    [None] otherwise. On OxCaml, strips the optional labels from labeled tuples. *)
 val extract_expr_tuple : expression -> expression list option
 
 (** [unwrap_pattern_constraint pat] returns [Some inner] if [pat] is a
@@ -55,8 +52,7 @@ val unwrap_pattern_constraint : pattern -> pattern option
 val expr_first_param_pat : expression -> pattern option
 
 (** [peel_fun_params e] strips the leading value-parameter lambdas of [e] and
-    returns the function body, or [e] unchanged when it is not such a function.
-*)
+    returns the function body, or [e] unchanged when it is not such a function. *)
 val peel_fun_params : expression -> expression
 
 (** [is_function_expr e] is [true] when [e] is a function literal ([fun … -> …]

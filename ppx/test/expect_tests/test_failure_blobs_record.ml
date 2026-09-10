@@ -14,7 +14,8 @@ let contains ~needle s =
 
 (* Pull the blob out of the report's [rerun with: ...] line: the substring
    between the first quote after [failure_blobs] and the next quote. Works for
-   both the [[@@failure_blobs [ "..." ]]] and [~failure_blobs:[ "..." ]] forms. *)
+   both the [[@@failure_blobs [ "..." ]]] and [~failure_blobs:[ "..." ]]
+   forms. *)
 let extract_blob out =
   (* A draw's source filename may itself contain "failure_blobs". *)
   let marker = "rerun with:" in

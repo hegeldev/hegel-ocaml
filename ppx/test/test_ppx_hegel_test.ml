@@ -1,7 +1,7 @@
 (** E2E tests for the [ppx_hegel_test] PPX.
 
-    These tests exercise the full expansion of [let%hegel_test] including
-    the [@@settings ...] attribute. *)
+    These tests exercise the full expansion of [let%hegel_test] including the
+    [@@settings ...] attribute. *)
 
 open! Core
 
@@ -135,6 +135,35 @@ let test_failing_writes_condition_false () =
            (List.Assoc.find_exn eval_assoc ~equal:String.equal "condition"))))
 ;;
 
+let%hegel_rule bump tc n =
+  let by = Hegel.draw tc (Hegel.integers ~min_value:1 ~max_value:3 ()) in
+  n + by
+;;
+
+let invariant_checks = ref 0
+
+let%hegel_invariant positive _ n =
+  incr invariant_checks;
+  assert (n >= 0)
+[@@always_check]
+;;
+
+let%hegel_test runs_rule (tc : Hegel.test_case) =
+  invariant_checks := 0;
+  Hegel.Stateful.run ~init:0 ~rules:[ bump ] ~invariants:[ positive ] ~step_count:5 tc;
+  assert (!invariant_checks > 2)
+[@@settings Hegel.settings ~test_cases:3 ()]
+;;
+
+let test_rule_is_named_by_its_binding () =
+  Alcotest.(check string) "rule name" "bump" (Hegel.Stateful.Rule.name bump);
+  Alcotest.(check string)
+    "invariant name"
+    "positive"
+    (Hegel.Stateful.Invariant.name positive);
+  with_tempdir ~f:(fun dir -> with_env_dir dir ~f:runs_rule)
+;;
+
 let test_no_settings_runs_with_defaults () =
   with_tempdir ~f:(fun dir ->
     with_env_dir dir ~f:(fun () ->
@@ -159,6 +188,10 @@ let () =
             "no [@@settings] uses defaults"
             `Quick
             test_no_settings_runs_with_defaults
+        ; Alcotest.test_case
+            "let%hegel_rule / let%hegel_invariant are named after their bindings"
+            `Quick
+            test_rule_is_named_by_its_binding
         ] )
     ]
 ;;
