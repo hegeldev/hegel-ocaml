@@ -288,16 +288,19 @@ require tc ~msg:"list must stay sorted" (is_sorted xs)
 
 ## Stateful testing
 
-`Stateful` applies a random sequence of *rules* to a model. Every invariant is
+`Stateful` applies a random sequence of *rules* to a model. Define a rule with
+`let%hegel_rule`: the rule is named after its binding, and the draws in its
+body print under their `let` names, like a test body's. Every invariant is
 checked on the initial and final states and sampled after intermediate steps.
 Set `always_check:true` when creating an invariant that must be checked after
 every step. Pass `?sexp_of_state` to `Stateful.run` to trace the model state
 through a failing sequence:
 
 ```ocaml
-let push =
-  Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
-    draw tc (integers ~min_value:0 ~max_value:9 ()) :: stack)
+let%hegel_rule push tc stack =
+  let n = draw tc (integers ~min_value:0 ~max_value:9 ()) in
+  n :: stack
+;;
 
 let%hegel_test stack_stays_small tc =
   Stateful.run
@@ -321,16 +324,19 @@ after it, and which step broke the invariant:
 ```
   state = ()
   Step 1: push
-    draw_1 = 0
+    n = 0
   state = (0)
   Step 2: push
-    draw_2 = 0
+    n = 0
   state = (0 0)
   Step 3: push
-    draw_3 = 0
+    n = 0
   state = (0 0 0)
   Invariant stack stays small violated after step 3.
 ```
+
+A rule can also be built by hand with `Stateful.Rule.create ~name ~step`; its
+draws then print as `draw_1`, `draw_2`, … unless given an explicit `~label`.
 
 See the `Hegel.Stateful` API docs for invariants across multiple
 rules and for value pools that let one rule act on data an earlier rule produced.

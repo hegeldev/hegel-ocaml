@@ -83,7 +83,6 @@ val phase_to_string : phase -> string
     @canonical Hegel.settings *)
 type settings =
   { test_cases : int
-  ; stateful_step_count : int
   ; verbosity : verbosity
   ; seed : int option
   ; derandomize : bool
@@ -125,10 +124,6 @@ val is_in_ci : unit -> bool
 
 (** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
 val with_test_cases : int -> settings -> settings
-
-(** [with_stateful_step_count n s] returns settings [s] with [stateful_step_count]
-    set to [n]. [n] must be at least 1. *)
-val with_stateful_step_count : int -> settings -> settings
 
 (** [with_verbosity v s] returns settings [s] with [verbosity] set to [v]. *)
 val with_verbosity : verbosity -> settings -> settings
@@ -183,15 +178,16 @@ val incr_draw_depth : test_case -> unit
 val decr_draw_depth : test_case -> unit
 val set_test_aborted : test_case -> bool -> unit
 
-(** [with_note_indent tc f] runs [f], nesting every {!note}/draw line it prints
-    one level deeper (restoring the depth even if [f] raises). Used to indent the
-    draws a stateful step makes under its [Step N] header. *)
-val with_note_indent : test_case -> (unit -> 'a) -> 'a
-
 (** [clone tc] forks a fresh clone of [tc] on an independent choice stream (its
     own native handle and context), freed by a GC finaliser once unreachable.
     Re-exported as [Hegel.clone]. *)
 val clone : test_case -> test_case
+
+(** [block tc ~indent] opens a test case onto the same choice stream as [tc]
+    whose print region is a block nested in [tc]'s: every {!note}/draw line it
+    prints is indented [indent] columns further than [tc]'s lines. Freed by a GC 
+    finalizer once unreachable. *)
+val block : test_case -> indent:int -> test_case
 
 (** A running worker spawned by {!spawn}; joined with {!join}. Re-exported as
     [Hegel.worker]. *)
@@ -466,14 +462,17 @@ val pool_generate : test_case -> pool:pool -> ?consume:bool -> unit -> int
     {!state_machine_free}. *)
 type state_machine = Hegel_ffi.Ffi.state_machine
 
-(** [new_state_machine tc ~rule_names ~invariant_names
-    ~invariants_always_check] registers a sequential engine-owned state machine
-    with the named rules and invariants. *)
+(** [new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check
+    ~step_count] registers a sequential engine-owned state machine with the
+    named rules and invariants, running at most [step_count] rules per test
+    case. Raises {!Usage_error} if [rule_names] is empty or [step_count] is
+    below 1. *)
 val new_state_machine
   :  test_case
   -> rule_names:string list
   -> invariant_names:string list
   -> invariants_always_check:bool list
+  -> step_count:int
   -> state_machine
 
 (** [state_machine_next_round tc ~state_machine] asks the engine whether the

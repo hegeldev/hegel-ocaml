@@ -172,24 +172,22 @@ let stateful_step_count_forwarded_test () =
   let count_rule =
     S.Rule.create ~name:"count" ~step:(fun _tc () -> incr steps_this_case)
   in
-  Hegel.run_hegel_test
-    ~settings:
-      (Hegel.settings ~test_cases:20 ~seed:0 () |> Hegel.with_stateful_step_count 5)
-    (fun tc ->
-       steps_this_case := 0;
-       S.run ~init:() ~rules:[ count_rule ] tc;
-       max_steps := max !max_steps !steps_this_case);
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ~seed:0 ()) (fun tc ->
+    steps_this_case := 0;
+    S.run ~init:() ~rules:[ count_rule ] ~step_count:5 tc;
+    max_steps := max !max_steps !steps_this_case);
   Alcotest.(check bool) "no case exceeded the configured cap" true (!max_steps <= 5)
 ;;
 
-(* A stateful step count below one is a usage error: the engine rejects it
-   ([HEGEL_E_INVALID_ARG]) when the run's settings are built, matching
-   hegel-rust (the [with_*] builders do not validate). *)
+(* A step count below one is a usage error: the engine rejects it
+   ([HEGEL_E_INVALID_ARG]) when the state machine is created, and the runner
+   propagates it unshrunk, matching hegel-rust. *)
 let stateful_step_count_below_one_test () =
+  let module S = Hegel.Stateful in
+  let rule = S.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) in
   match
-    Hegel.run_hegel_test
-      ~settings:(Hegel.settings () |> Hegel.with_stateful_step_count 0)
-      (fun _tc -> ())
+    Hegel.run_hegel_test ~settings:(Hegel.settings ()) (fun tc ->
+      S.run ~init:() ~rules:[ rule ] ~step_count:0 tc)
   with
   | () -> Alcotest.fail "expected Usage_error"
   | exception Hegel.Usage_error msg ->
@@ -210,11 +208,9 @@ let test_stateful_bounded_steps () =
   in
   let raised_msg = ref "" in
   (try
-     Hegel.run_hegel_test
-       ~settings:(Hegel.settings ~test_cases:1 () |> Hegel.with_stateful_step_count 10)
-       (fun tc ->
-          step_count := 0;
-          S.run ~init:() ~rules:[ step_rule ] tc)
+     Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
+       step_count := 0;
+       S.run ~init:() ~rules:[ step_rule ] ~step_count:10 tc)
    with
    | e ->
      raised_msg := Exn.to_string e;
@@ -245,16 +241,13 @@ let test_always_check_invariant () =
       ~inv:(fun _ -> incr sampled_inv_exec_count)
       ()
   in
-  Hegel.run_hegel_test
-    ~settings:
-      (Hegel.settings ~test_cases:1 ~seed:1 ()
-       |> Hegel.with_stateful_step_count stateful_step_count)
-    (fun tc ->
-       S.run
-         ~init:()
-         ~rules:[ noop ]
-         ~invariants:[ always_check_invariant; sampled_invariant ]
-         tc);
+  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ~seed:1 ()) (fun tc ->
+    S.run
+      ~init:()
+      ~rules:[ noop ]
+      ~invariants:[ always_check_invariant; sampled_invariant ]
+      ~step_count:stateful_step_count
+      tc);
   Alcotest.(check int)
     "always exec count = executed steps plus endpoint checks"
     (stateful_step_count + 2)
@@ -325,7 +318,7 @@ let tests =
       `Quick
       stateful_step_count_below_one_test
   ; Alcotest.test_case
-      "stateful: with_stateful_step_count bounds steps"
+      "stateful: step_count bounds steps"
       `Quick
       test_stateful_bounded_steps
   ; Alcotest.test_case

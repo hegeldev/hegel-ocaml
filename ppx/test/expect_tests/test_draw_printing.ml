@@ -266,12 +266,9 @@ let%hegel_test stateful_print tc =
   Stateful.Pool.add vars 42;
   let val_gen = with_printer sexp_of_int (Stateful.Pool.values_reusable vars) in
   let _x = Hegel.draw tc val_gen in
-  Stateful.run ~init:() ~rules:[ rule ] tc
+  Stateful.run ~init:() ~rules:[ rule ] ~step_count:3 tc
 [@@settings
-  settings ~test_cases:1 ~seed:0 ()
-  |> with_verbosity Verbose
-  |> with_phases [ Generate ]
-  |> with_stateful_step_count 3]
+  settings ~test_cases:1 ~seed:0 () |> with_verbosity Verbose |> with_phases [ Generate ]]
 ;;
 
 let%expect_test "stateful tests prints drawn data on passing test verbosity is verbose" =

@@ -113,7 +113,6 @@ type health_check = Internal.health_check =
 
 type settings = Internal.settings =
   { test_cases : int
-  ; stateful_step_count : int
   ; verbosity : verbosity
   ; seed : int option
   ; derandomize : bool
@@ -227,7 +226,6 @@ let default_settings = Internal.default_settings
 let settings = Internal.settings
 
 let with_test_cases = Internal.with_test_cases
-let with_stateful_step_count = Internal.with_stateful_step_count
 let with_verbosity = Internal.with_verbosity
 let with_seed = Internal.with_seed
 let with_derandomize = Internal.with_derandomize

@@ -87,15 +87,16 @@ let extract_failure_blobs_attr (attrs : attributes) : string list option =
     attrs
 ;;
 
-(** [extract_function_name pat] returns the name bound by [pat] if [pat] is a
-    simple variable, else raises. *)
-let extract_function_name (pat : pattern) : string =
+(** [extract_function_name ~what pat] returns the name bound by [pat] if [pat]
+    is a simple variable, else raises naming [what] ("test" or "rule"). *)
+let extract_function_name ~what (pat : pattern) : string =
   match pat.ppat_desc with
   | Ppat_var { txt; _ } -> txt
   | _ ->
     Location.raise_errorf
       ~loc:pat.ppat_loc
-      "ppx_hegel_test: the test binding must be a simple identifier"
+      "ppx_hegel_test: the %s binding must be a simple identifier"
+      what
 ;;
 
 (** [build_location_record ~loc ~function_name] returns an expression of type

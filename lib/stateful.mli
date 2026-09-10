@@ -172,7 +172,11 @@ end
     state threaded from [init]. Every invariant is checked on the initial and the
     final state. After a step, invariants are randomly sampled unless they were
     created with [always_check:true]. Raises [Hegel.Usage_error] if [rules] is
-    empty.
+    empty or [step_count] is below 1.
+
+    {[
+      Stateful.run ~init:[] ~rules:[ push; pop ] ~step_count:200 tc
+    ]}
 
     On a failing replay, each applied rule prints as [Step N: <name>], with the
     values the rule draws nested under it. When [sexp_of_state] is supplied, the
@@ -196,5 +200,6 @@ val run
   -> rules:'state Rule.t list
   -> ?invariants:'state Invariant.t list
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+  -> ?step_count:int
   -> Internal.test_case
   -> unit

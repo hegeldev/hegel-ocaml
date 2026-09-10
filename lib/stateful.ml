@@ -49,7 +49,7 @@ module Invariant = struct
   let name invariant = invariant.name
 end
 
-let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
+let run ~init ~rules ?(invariants = []) ?sexp_of_state ?(step_count = 50) tc =
   let rule_array = Array.of_list rules in
   let invariant_names = List.map (fun inv -> Invariant.name inv) invariants in
   let invariants_always_check =
@@ -61,6 +61,7 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
       ~rule_names:(List.map Rule.name rules)
       ~invariant_names
       ~invariants_always_check
+      ~step_count
   in
   let print_state state =
     Option.iter
@@ -98,7 +99,7 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
       let rule = rule_array.(rule_index) in
       let step_num = steps_attempted + 1 in
       Internal.note tc (Printf.sprintf "Step %d: %s" step_num rule.Rule.name);
-      (match Internal.with_note_indent tc (fun () -> rule.Rule.step tc state) with
+      (match rule.Rule.step (Internal.block tc ~indent:2) state with
        | new_state ->
          print_state new_state;
          exec_round ~state:new_state ~steps_attempted:step_num ~rejected

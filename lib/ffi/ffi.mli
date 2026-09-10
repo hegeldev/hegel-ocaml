@@ -177,7 +177,6 @@ val settings_free : context -> settings -> unit
 val settings_backend : context -> settings -> backend -> unit
 
 val settings_test_cases : context -> settings -> int -> unit
-val settings_stateful_step_count : context -> settings -> int -> unit
 val settings_verbosity : context -> settings -> verbosity -> unit
 
 (** [settings_seed ctx s seed] sets the RNG seed ([None] picks a fresh random
@@ -254,6 +253,16 @@ val test_case_free : context -> test_case -> unit
     be freed with {!test_case_free}. Raises {!Backend_error} on concurrent use of 
     [tc]. *)
 val test_case_clone : context -> test_case -> test_case
+
+(** [test_case_block ctx tc ~indent] opens a handle onto the {e same} choice
+    stream as [tc] ([hegel_test_case_block]) whose print region is a block
+    nested in [tc]'s at the current position: every line printed or noted
+    through it (and through the clones and blocks derived from it) is indented
+    [indent] columns further than [tc]'s lines, and the indentation ends with
+    the block. Drawing through it and through [tc] are the same thing, so the
+    two must not be driven concurrently. The handle is caller-owned and must
+    be freed with {!test_case_free}. *)
+val test_case_block : context -> test_case -> indent:int -> test_case
 
 (** {2 Per-test-case primitives} *)
 
@@ -393,14 +402,18 @@ val pool_generate : context -> test_case -> pool:pool -> consume:bool -> int
 val pool_free : context -> pool -> unit
 
 (** [new_state_machine ctx tc ~rule_names ~rule_groups ~invariant_names
-    ~invariants_always_check ~min_concurrency ~max_concurrency] registers an
-    engine-owned state machine with the named rules (each in the concurrency
-    group given by the parallel [rule_groups]) and invariants.
-    Returns the machine with the concurrency level the engine drew in
+    ~invariants_always_check ~min_concurrency ~max_concurrency ~step_count]
+    registers an engine-owned state machine with the named rules (each in the
+    concurrency group given by the parallel [rule_groups]) and invariants.
+    [step_count] is the target number of rounds per test case: every case runs
+    at least one round and at most [step_count], and each sampled invariant is
+    checked with probability [1 / step_count] per join point (the engine has no
+    default). Returns the machine with the concurrency level the engine drew in
     [\[min_concurrency, max_concurrency\]]. The engine owns rule selection.
     Raises {!Usage_error} if [rule_names] is empty, a group id is
-    [HEGEL_STATE_MACHINE_DONE], or the concurrency bounds are invalid, and
-    {!Stop_test} when the engine's choice budget is exhausted. *)
+    [HEGEL_STATE_MACHINE_DONE], the concurrency bounds are invalid, or
+    [step_count] is below 1, and {!Stop_test} when the engine's choice budget is
+    exhausted. *)
 val new_state_machine
   :  context
   -> test_case
@@ -410,6 +423,7 @@ val new_state_machine
   -> invariants_always_check:bool list
   -> min_concurrency:int
   -> max_concurrency:int
+  -> step_count:int
   -> state_machine * int
 
 (** [state_machine_next_group ctx tc ~state_machine] starts the machine's next

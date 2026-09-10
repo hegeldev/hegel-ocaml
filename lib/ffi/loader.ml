@@ -6,7 +6,8 @@
    2. A prebuilt libhegel bundled into the installed package via the [libhegel]
       dune-site (release tarballs ship the matching-platform binary there).
    3. A sibling [../hegel-rust/target/release/] (then [.../debug/]) checkout
-      relative to the current working directory.
+      relative to the current working directory, under the name cargo gives
+      the cdylib ([libhegel_c.<ext>]).
    4. A SHA-256-verified copy downloaded from the hegel-rust GitHub release,
       cached under [$XDG_CACHE_HOME|~/.cache]/hegel-ocaml/libhegel/<version>/.
       Set [HEGEL_LIBHEGEL_NO_DOWNLOAD=1] to opt out of the download fallback.
@@ -84,8 +85,15 @@ let ext_of_os = function
   | _ -> "so"
 ;;
 
-(* Name of the library file as produced by a local [cargo build] and as cached. *)
+(* Name of the library file as published and as cached. *)
 let local_basename ext = "libhegel." ^ ext
+
+(* Name of the cdylib a local [cargo build -p hegeltest-c] leaves in the
+   sibling checkout's target directory: the crate's library is [hegel_c], so
+   cargo names it [libhegel_c.<ext>] (no [lib] prefix on Windows). *)
+let sibling_basename ext =
+  (if String.equal ext "dll" then "" else "lib") ^ "hegel_c." ^ ext
+;;
 
 (* Name of the published release artifact for a given platform. *)
 let release_artifact key ext = Printf.sprintf "libhegel-%s.%s" key ext
@@ -170,7 +178,7 @@ let from_sibling ext =
     List.fold_left
       Filename.concat
       cwd
-      [ ".."; "hegel-rust"; "target"; sub; local_basename ext ]
+      [ ".."; "hegel-rust"; "target"; sub; sibling_basename ext ]
   in
   List.find_opt is_file [ candidate "release"; candidate "debug" ]
 ;;

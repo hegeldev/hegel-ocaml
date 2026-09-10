@@ -133,12 +133,6 @@ let c_settings_test_cases =
     (ptr void @-> ptr void @-> uint64_t @-> returning int)
 ;;
 
-let c_settings_stateful_step_count =
-  foreign
-    "hegel_settings_set_stateful_step_count"
-    (ptr void @-> ptr void @-> int64_t @-> returning int)
-;;
-
 let c_settings_verbosity =
   foreign "hegel_settings_set_verbosity" (ptr void @-> ptr void @-> int @-> returning int)
 ;;
@@ -226,6 +220,12 @@ let c_test_case_clone =
   foreign
     "hegel_test_case_clone"
     (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+;;
+
+let c_test_case_block =
+  foreign
+    "hegel_test_case_block"
+    (ptr void @-> ptr void @-> uint64_t @-> ptr (ptr void) @-> returning int)
 ;;
 
 let c_generate_boolean =
@@ -448,6 +448,7 @@ let c_new_state_machine =
      @-> ptr (ptr char)
      @-> ptr bool
      @-> size_t
+     @-> int64_t
      @-> int64_t
      @-> int64_t
      @-> ptr (ptr void)
@@ -794,10 +795,6 @@ let settings_test_cases ctx s n =
   check_rc ctx (c_settings_test_cases ctx s (Unsigned.UInt64.of_int n))
 ;;
 
-let settings_stateful_step_count ctx s n =
-  check_rc ctx (c_settings_stateful_step_count ctx s (Int64.of_int n))
-;;
-
 let settings_verbosity ctx s v =
   check_rc ctx (c_settings_verbosity ctx s (verbosity_to_int v))
 ;;
@@ -861,6 +858,12 @@ let test_case_free ctx tc = check_rc ctx (c_test_case_free ctx tc)
 let test_case_clone ctx tc =
   let out = allocate (ptr void) null in
   check_rc ctx (c_test_case_clone ctx tc out);
+  !@out
+;;
+
+let test_case_block ctx tc ~indent =
+  let out = allocate (ptr void) null in
+  check_rc ctx (c_test_case_block ctx tc (Unsigned.UInt64.of_int indent) out);
   !@out
 ;;
 
@@ -1206,6 +1209,7 @@ let new_state_machine
       ~invariants_always_check
       ~min_concurrency
       ~max_concurrency
+      ~step_count
   =
   let rules_ptr, rules_root = to_string_array rule_names in
   let groups = CArray.of_list int64_t (List.map Int64.of_int rule_groups) in
@@ -1225,6 +1229,7 @@ let new_state_machine
       (Unsigned.Size_t.of_int (List.length invariant_names))
       (Int64.of_int min_concurrency)
       (Int64.of_int max_concurrency)
+      (Int64.of_int step_count)
       out
       out_concurrency
   in
