@@ -44,7 +44,7 @@ type t =
   ; derandomize : bool
   ; database : database
   ; suppress_health_check : health_check list
-  ; phases : phase list option
+  ; phases : phase list
   ; print_blob : bool
   ; report_multiple_failures : bool
   ; show_statistics : bool
@@ -84,7 +84,7 @@ let default () =
   ; derandomize = in_ci
   ; database = (if in_ci then Disabled else Unset)
   ; suppress_health_check = []
-  ; phases = None
+  ; phases = [ Explicit; Reuse; Generate; Target; Shrink ]
   ; print_blob = true
   ; report_multiple_failures = false
   ; show_statistics = false

@@ -83,9 +83,7 @@ type t =
     (** Where failing examples are stored. When set, Hegel replays test cases
         from previous failed runs and records new failures as they occur. *)
   ; suppress_health_check : health_check list
-  ; phases : phase list option
-    (** [None] uses the engine's default phase list (all phases); [Some xs]
-        restricts execution to [xs]. *)
+  ; phases : phase list (** The phases to run. Defaults to all of them. *)
   ; print_blob : bool
     (** Print a [rerun with:] line whose base64 blob
         encodes the engine choices that led to a failure. [true] by default. *)

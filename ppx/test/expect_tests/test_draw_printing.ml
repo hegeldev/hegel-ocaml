@@ -281,7 +281,7 @@ let%hegel_test stateful_print tc =
 [@@settings
   { (Settings.create ~test_cases:1 ~seed:0 ()) with
     verbosity = Settings.Verbose
-  ; phases = Some [ Settings.Generate ]
+  ; phases = [ Settings.Generate ]
   }]
 ;;
 

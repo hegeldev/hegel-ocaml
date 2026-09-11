@@ -330,7 +330,7 @@ let test_run_with_full_settings () =
     { (Hegel.Settings.create ~test_cases:10 ~seed:5 ()) with
       derandomize = true
     ; database = Settings.Disabled
-    ; phases = Some [ Settings.Generate ]
+    ; phases = [ Settings.Generate ]
     ; suppress_health_check = [ Settings.Filter_too_much ]
     }
   in
@@ -349,13 +349,12 @@ let test_run_all_settings_branches () =
           verbosity
         ; database = Settings.Path dir
         ; phases =
-            Some
-              [ Settings.Explicit
-              ; Settings.Reuse
-              ; Settings.Generate
-              ; Settings.Target
-              ; Settings.Shrink
-              ]
+            [ Settings.Explicit
+            ; Settings.Reuse
+            ; Settings.Generate
+            ; Settings.Target
+            ; Settings.Shrink
+            ]
         ; suppress_health_check =
             [ Settings.Filter_too_much
             ; Settings.Too_slow
@@ -496,7 +495,7 @@ let test_run_flaky_on_replay () =
       run_hegel_test
         ~settings:
           { (Hegel.Settings.default ()) with
-            phases = Some [ Settings.Generate ]
+            phases = [ Settings.Generate ]
           ; database = Settings.Disabled
           ; verbosity = Settings.Quiet
           }

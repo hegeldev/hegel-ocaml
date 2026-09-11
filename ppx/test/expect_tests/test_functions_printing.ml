@@ -244,7 +244,7 @@ let func_call_loop verbosity =
     ~settings:
       { (Settings.create ~test_cases:1 ~seed:0 ()) with
         verbosity
-      ; phases = Some [ Settings.Generate ]
+      ; phases = [ Settings.Generate ]
       }
     (fun tc ->
        let f =

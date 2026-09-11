@@ -733,9 +733,7 @@ let build_ffi_settings ctx (settings : Settings.t) ~database_key =
    | Disabled -> Ffi.settings_database ctx s (Some "")
    | Path p -> Ffi.settings_database ctx s (Some p));
   Option.iter (fun k -> Ffi.settings_database_key ctx s (Some k)) database_key;
-  Option.iter
-    (fun phases -> Ffi.settings_phases ctx s (bitmask phase_bit phases))
-    settings.phases;
+  Ffi.settings_phases ctx s (bitmask phase_bit settings.phases);
   (match settings.suppress_health_check with
    | [] -> ()
    | checks -> Ffi.settings_suppress_health_check ctx s (bitmask health_check_bit checks));
