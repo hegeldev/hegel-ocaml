@@ -1,47 +1,60 @@
 (** {2 Introduction}
-    A stateful test exercises a system through a sequence of randomly chosen
-    actions ("rules") applied to a state. Rules are constructed with
-    {!Rule.create} from a [name] and a [step] function that performs one
-    application of the rule, drawing any arguments it needs from the test case
-    and returning the new state. Invariants are constructed with
-    {!Invariant.create}. Every invariant is checked on the initial state and on the
-    final state. Between steps, invariants are sampled unless created with 
-    [always_check:true].
+    A stateful test applies a random sequence of rules to a state. A rule is a
+    [step] function that takes the test case and the current state, draws
+    whatever data it needs, and returns the new state. An invariant is a property
+    that must always hold after each step.
 
-    To run a state machine, call {!run} inside a Hegel test. Examples in this
-    documentation assume [open Hegel].
+    With the [ppx_hegel_test] PPX, a state machine is a module written as
+    [module%hegel_state_machine M = struct … end]. Mark rules with [[@@rule]]
+    and invariants with [[@@invariant]] or [[@@invariant always_check]].
+    The PPX generates the [run] function for the state machine. If the module
+    defines [sexp_of_state] (e.g. [type state = … [@@deriving sexp_of]]) [run]
+    uses it to print the state after each step.
+
+    Without the PPX, create rules with {!Rule.create} and the invariants
+    with {!Invariant.create}, put them in a module of type {!State_machine},
+    and pass that to {!run}.
+
+    Every invariant is checked on the initial and final states. Between steps,
+    invariants are sampled unless marked [always_check].
+
+    Examples in this documentation assume [open Hegel].
 
     Example: an integer stack.
 
     {[
-    let push =
-      Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
-          let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
-          n :: stack)
+    module%hegel_state_machine Stack = struct
+      type state = int list [@@deriving sexp_of]
 
-    let pop =
-      Stateful.Rule.create ~name:"pop" ~step:(fun tc stack ->
-          assume tc (not (List.is_empty stack));
-          List.tl stack)
+      let push tc stack =
+        let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
+        n :: stack
+      [@@rule]
+      ;;
 
-    let%hegel_test integer_stack tc =
-      Stateful.run
-        ~init:[]
-        ~rules:[ push; pop ]
-        ~sexp_of_state:[%sexp_of: int list]
-        tc
-    ]}
+      let pop tc stack =
+        assume tc (not (List.is_empty stack));
+        List.tl stack
+      [@@rule]
+      ;;
 
-    Passing [?sexp_of_state] makes a failing sequence print the model state after
-    each step, so you can see how it evolved; see {!run}. *)
+      let short tc stack =
+        note tc (Printf.sprintf "%d elements" (List.length stack));
+        assert (List.length stack < 10)
+      [@@invariant always_check]
+      ;;
+    end
+
+    let%hegel_test integer_stack tc = Stack.run tc ~init:[]
+    ]} *)
 
 (** {2 Submodules} *)
 
 module Pool : sig
   (** A pool of previously generated values. They are populated with the results
-      of rules and may be used as arguments to later rules. A pool lets data flow
-      from one rule to another, so a rule can act on a handle or identifier that
-      an earlier rule produced rather than on a freshly drawn value.
+      of rules and may be used as arguments to later rules. A pool lets data
+      flow from one rule to another, so a rule can act on a handle or identifier
+      that an earlier rule produced rather than on a freshly drawn value.
 
       Create one with {!create} and populate it with {!add}. To draw from the
       pool, use the following generators:
@@ -79,8 +92,8 @@ module Pool : sig
       ]} *)
   type 'a t
 
-  (** Creates an empty {!Pool.t}. Pools are tied to a test case; do not
-      reuse one across test cases. *)
+  (** Creates an empty {!Pool.t}. Pools are tied to a test case. Do not reuse
+      one across test cases. *)
   val create : Internal.test_case -> 'a t
 
   (** Records [value] in [variables] for later draws.
@@ -98,16 +111,16 @@ module Pool : sig
       ]} *)
   val size : _ t -> int
 
-  (** Create an unprintable generator that returns a variable from the [pool] without removing it.
-      Calls [assume false] if the [pool] is empty.
+  (** Create an unprintable generator that returns a variable from the [pool]
+      without removing it. Calls [assume false] if the [pool] is empty.
 
       {[
       let existing = draw_silent tc (Stateful.Pool.values_reusable pool)
       ]} *)
   val values_reusable : 'a t -> ('a, Generators.unprintable) Generators.generator
 
-  (** Create an unprintable generator that removes and returns a variable from the [pool].
-      Calls [assume false] if the [pool] is empty.
+  (** Create an unprintable generator that removes and returns a variable from
+      the [pool]. Calls [assume false] if the [pool] is empty.
 
       {[
       let taken = draw_silent tc (Stateful.Pool.values_consumed pool)
@@ -119,7 +132,7 @@ module Rule : sig
   (** A rule is one possible action in a stateful test. *)
   type 'state t
 
-  (** Declares a rule. It is strongly recommended to use [let%hegel_rule] instead.
+  (** Declares a rule.
 
       - [name] is printed in the final output when the rule is run
       - [step tc state] performs one application of the rule, drawing any
@@ -152,11 +165,21 @@ module Invariant : sig
   (** Declares an invariant.
 
       - [name] is printed in the final output if the test fails on an invariant
-      - [inv state] checks the invariant on [state]
+      - [inv tc state] checks the invariant on [state]. Anything it draws or
+        notes through [tc] prints indented under the line before it.
       - [always_check] defaults to [false]. When [true], the invariant is
         checked after every step. Otherwise, it is sampled.
 
-      Every invariant is checked on the initial and final states. *)
+      Every invariant is checked on the initial and final states.
+
+      {[
+      let short =
+        Stateful.Invariant.create
+          ~name:"short"
+          ~inv:(fun _tc stack -> assert (List.length stack < 10))
+          ()
+      ;;
+      ]} *)
   val create
     :  name:string
     -> inv:(Internal.test_case -> 'state -> unit)
@@ -170,25 +193,50 @@ end
 
 (** {2 Running stateful tests} *)
 
-(** Executes a stateful test by repeatedly applying randomly chosen [rules] to a
-    state threaded from [init]. Every invariant is checked on the initial and the
-    final state. After a step, invariants are randomly sampled unless they were
-    created with [always_check:true]. Raises [Hegel.Usage_error] if [rules] is
-    empty or [step_count] is below 1.
+(** A state machine.
 
     {[
-      Stateful.run ~init:[] ~rules:[ push; pop ] ~step_count:200 tc
+    module Counter : Stateful.State_machine with type state = int = struct
+      type state = int
+
+      let add tc n = n + draw ~label:"by" tc (integers ~min_value:1 ~max_value:10 ())
+      let rules = [ Stateful.Rule.create ~name:"add" ~step:add ]
+
+      let invariants =
+        [ Stateful.Invariant.create ~name:"small" ~inv:(fun _tc n -> assert (n < 100)) ()
+        ]
+      ;;
+    end
+    ]} *)
+module type State_machine = sig
+  type state
+
+  val rules : state Rule.t list
+  val invariants : state Invariant.t list
+end
+
+(** [run tc (module M) ~init] executes a stateful test by repeatedly applying
+    randomly chosen rules of [M] starting from the [init] state. Every
+    invariant is checked on the initial and the final state. After a step,
+    invariants are randomly sampled unless they were created with
+    [always_check:true]. Raises [Hegel.Usage_error] if [M] has no rules or
+    [step_count] is below 1. [step_count] defaults to 50. Each case runs at
+    least one step and at most [step_count].
+
+    {[
+    let%hegel_test counter tc = Stateful.run tc (module Counter) ~init:0 ~step_count:200
     ]}
 
+    A [module%hegel_state_machine M] has an [M.run tc ~init], which
+    calls this function on [M].
+
     On a failing replay, each applied rule prints as [Step N: <name>], with the
-    values the rule draws nested under it. When [sexp_of_state] is supplied, the
-    model state also prints as [state = <value>] after the initial state and
-    after every step. An invariant that is violated prints
-    [Invariant name violated after step M], [... in the initial state], or
-    [... in the final state].
+    printed draws and notes nested under it. When [sexp_of_state] is supplied,
+    the model state is also printed after the initial state and after every step.
 
     {v
       state = 0
+      Checking invariants on the initial state.
       Step 1: add
         n = 3
       state = 3
@@ -198,10 +246,25 @@ end
       Invariant my_invariant violated after step 2.
     v} *)
 val run
+  :  Internal.test_case
+  -> ?step_count:int
+  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+  -> (module State_machine with type state = 'state)
+  -> init:'state
+  -> unit
+
+(**/**)
+
+(** [run_internal ~init ~rules ~invariants tc] is {!run} with the rules and
+    invariants passed as lists. The [run] that a [module%hegel_state_machine]
+    generates calls this. *)
+val run_internal
   :  init:'state
   -> rules:'state Rule.t list
-  -> ?invariants:'state Invariant.t list
+  -> invariants:'state Invariant.t list
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
   -> ?step_count:int
   -> Internal.test_case
   -> unit
+
+(**/**)
