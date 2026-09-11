@@ -65,14 +65,11 @@ type time =
 
 (** Randomness backend ([hegel_backend_t]), selected via {!settings_backend}.
 
-    - [Auto]: choose automatically (the default). urandom under Antithesis,
-      otherwise the seeded PRNG.
     - [Default]: expand a single seeded PRNG; runs are reproducible and
       shrinking / replay work as usual.
     - [Urandom]: read fresh entropy on every draw (for running under
       Antithesis); you almost certainly don't want it otherwise. *)
 type backend =
-  | Auto
   | Default
   | Urandom
 
@@ -176,8 +173,8 @@ val settings_new : context -> settings
 (** [settings_free ctx s] frees a settings handle. *)
 val settings_free : context -> settings -> unit
 
-(** [settings_backend ctx s b] pins the engine's randomness backend. Pinning is
-    one-way: there is no way to return a handle to [Auto] once set. *)
+(** [settings_backend ctx s b] sets the engine's randomness backend, overriding
+    the profile's choice. *)
 val settings_backend : context -> settings -> backend -> unit
 
 val settings_test_cases : context -> settings -> int -> unit

@@ -676,7 +676,6 @@ type printer = unit Ctypes.ptr
 type printer_options = unit Ctypes.ptr
 
 type backend =
-  | Auto
   | Default
   | Urandom
 
@@ -735,14 +734,13 @@ let hc_large_initial_test_case = 1 lsl 3
 (* ------------------------------------------------------------------ *)
 
 let backend_to_int = function
-  | Auto -> 0
   | Default -> 1
   | Urandom -> 2
 ;;
 
 let verbosity_to_int = function
-  | Quiet -> 0
-  | Normal -> 1
+  | Normal -> 0
+  | Quiet -> 1
   | Verbose -> 2
   | Debug -> 3
 ;;
