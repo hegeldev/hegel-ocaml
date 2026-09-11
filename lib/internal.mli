@@ -170,9 +170,7 @@ type test_case
 (**/**)
 
 val is_high_verbosity : test_case -> bool
-
 val should_print : test_case -> bool
-
 val draw_depth : test_case -> int
 val incr_draw_depth : test_case -> unit
 val decr_draw_depth : test_case -> unit
