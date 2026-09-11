@@ -2,7 +2,7 @@ open! Core
 open Hegel
 module G = Hegel.Generators
 
-let one_case_settings () = Hegel.settings ~test_cases:1 ()
+let one_case_settings () = Hegel.Settings.create ~test_cases:1 ()
 let small_int = G.integers ~min_value:0 ~max_value:9 ()
 
 (* A clone can be drawn from within the test body, and the parent stays usable
@@ -44,7 +44,7 @@ let test_clone_reproducible () =
   let run () =
     let pair = ref (0, 0) in
     Hegel.run_hegel_test
-      ~settings:(one_case_settings () |> with_seed (Some 42))
+      ~settings:{ (one_case_settings ()) with seed = Some 42 }
       (fun tc ->
          let p = Hegel.draw_silent tc small_int in
          let c = Hegel.draw_silent (Hegel.clone tc) small_int in

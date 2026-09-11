@@ -4,9 +4,10 @@ let int_gen = integers ~min_value:0 ~max_value:100 ()
 
 let run ~show_statistics body =
   let settings =
-    Hegel.settings ~test_cases:5 ~seed:0 ()
-    |> with_database Disabled
-    |> with_show_statistics show_statistics
+    { (Hegel.Settings.create ~test_cases:5 ~seed:0 ()) with
+      database = Settings.Disabled
+    ; show_statistics
+    }
   in
   Hegel.run_hegel_test ~settings body
 ;;

@@ -49,7 +49,7 @@ let test_assoc_lists_min_greater_than_max () =
 
 (** Test: lists(integers) generates a list where all elements are in range. *)
 let test_lists_of_integers_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:50 ()) (fun tc ->
     let gen = lists (integers ~min_value:0 ~max_value:100 ()) ~max_size:3 () in
     let items = Hegel.draw tc gen in
     Alcotest.(check bool) "max 3" true (List.length items <= 3);
@@ -58,7 +58,7 @@ let test_lists_of_integers_e2e () =
 
 (** Test: lists(booleans, min_size=3, max_size=5) → length in [3,5]. *)
 let test_lists_booleans_bounds_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:50 ()) (fun tc ->
     let gen = lists (booleans ()) ~min_size:3 ~max_size:5 () in
     let items = Hegel.draw tc gen in
     let n = List.length items in
@@ -67,7 +67,7 @@ let test_lists_booleans_bounds_e2e () =
 
 (** Test: lists(filtered integers) → all elements satisfy predicate. *)
 let test_lists_non_basic_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:50 ()) (fun tc ->
     let elem = filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ()) in
     let gen = lists elem ~min_size:1 ~max_size:3 () in
     let items = Hegel.draw tc gen in
@@ -78,7 +78,7 @@ let test_lists_non_basic_e2e () =
 
 (** Test: lists(non-basic) without max_size (max_size=None in collection). *)
 let test_lists_non_basic_no_max_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let elem = filter (fun _ -> true) (integers ~min_value:0 ~max_value:10 ()) in
     let gen = lists elem () in
     let items = Hegel.draw tc gen in
@@ -87,7 +87,7 @@ let test_lists_non_basic_no_max_e2e () =
 
 (** Test: lists(lists(booleans)) → nested lists work. *)
 let test_lists_nested_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:50 ()) (fun tc ->
     let inner = lists (booleans ()) ~max_size:3 () in
     let gen = lists inner ~max_size:3 () in
     let outer_items = Hegel.draw tc gen in
@@ -97,7 +97,7 @@ let test_lists_nested_e2e () =
 
 (** Test: lists(basic, unique=true) E2E — elements are distinct. *)
 let test_lists_unique_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:50 ()) (fun tc ->
     let gen =
       lists
         (integers ~min_value:0 ~max_value:1000 ())
@@ -115,7 +115,7 @@ let test_lists_unique_e2e () =
 
 (** Test: lists(non-basic, unique=true) E2E — elements are distinct. *)
 let test_lists_non_basic_unique_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:50 ()) (fun tc ->
     let elem = filter (fun v -> v >= 0) (integers ~min_value:0 ~max_value:1000 ()) in
     let gen = lists elem ~min_size:1 ~max_size:5 ~unique:true () in
     let items = Hegel.draw tc gen in
@@ -132,7 +132,9 @@ let test_lists_non_basic_unique_e2e () =
 let test_lists_non_basic_unique_exhaustion_e2e () =
   Hegel.run_hegel_test
     ~settings:
-      (Hegel.settings ~test_cases:10 () |> with_suppress_health_check [ Filter_too_much ])
+      { (Hegel.Settings.create ~test_cases:10 ()) with
+        suppress_health_check = [ Settings.Filter_too_much ]
+      }
     (fun tc ->
        let elem = filter (fun _ -> true) (integers ~min_value:0 ~max_value:0 ()) in
        (* Asking for ≥2 unique elements from {0} — impossible. The engine's
@@ -144,7 +146,7 @@ let test_lists_non_basic_unique_exhaustion_e2e () =
 
 (** Test: assoc_lists(non-basic keys) E2E — generates pairs. *)
 let test_assoc_lists_non_basic_keys_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let key_gen = filter (fun _ -> true) (integers ~min_value:0 ~max_value:100 ()) in
     let val_gen = integers ~min_value:0 ~max_value:100 () in
     let gen = assoc_lists key_gen val_gen ~min_size:0 ~max_size:5 () in
@@ -154,7 +156,7 @@ let test_assoc_lists_non_basic_keys_e2e () =
 
 (** Test: assoc_lists(non-basic values) E2E — generates pairs. *)
 let test_assoc_lists_non_basic_values_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let key_gen = integers ~min_value:0 ~max_value:100 () in
     let val_gen = filter (fun _ -> true) (integers ~min_value:0 ~max_value:100 ()) in
     let gen = assoc_lists key_gen val_gen ~min_size:0 ~max_size:5 () in
@@ -170,7 +172,9 @@ let test_assoc_lists_non_basic_values_e2e () =
 let test_lists_unique_under_map_e2e () =
   Hegel.run_hegel_test
     ~settings:
-      (Hegel.settings ~test_cases:5 () |> with_suppress_health_check [ Filter_too_much ])
+      { (Hegel.Settings.create ~test_cases:5 ()) with
+        suppress_health_check = [ Settings.Filter_too_much ]
+      }
     (fun tc ->
        let gen =
          lists
@@ -191,7 +195,7 @@ let test_lists_unique_under_map_e2e () =
 (** Test: hash_tables produces a [Hashtbl.t] within the size bounds, holding the
     generated entries. *)
 let test_hash_tables_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:50 ()) (fun tc ->
     let gen =
       hash_tables
         (integers ~min_value:0 ~max_value:100 ())
@@ -220,7 +224,9 @@ let test_hash_tables_min_greater_than_max () =
 let test_assoc_lists_unique_keys_under_filter_e2e () =
   Hegel.run_hegel_test
     ~settings:
-      (Hegel.settings ~test_cases:5 () |> with_suppress_health_check [ Filter_too_much ])
+      { (Hegel.Settings.create ~test_cases:5 ()) with
+        suppress_health_check = [ Settings.Filter_too_much ]
+      }
     (fun tc ->
        let gen =
          assoc_lists

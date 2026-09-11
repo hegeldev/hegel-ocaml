@@ -27,10 +27,10 @@ let test_max_filter_attempts () =
   Alcotest.(check int) "max attempts" 3 max_filter_attempts
 ;;
 
-(* [with_tc f] runs [f] with a real per-test-case handle from the native engine.
-   Used by the collection-record tests, which exercise the OCaml-side collection
-   bookkeeping. *)
-let with_tc f = Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) f
+(* [with_tc f] runs [f] with a real per-test-case handle from the native
+   engine. Used by the collection-record tests, which exercise the OCaml-side
+   collection bookkeeping. *)
+let with_tc f = Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) f
 
 let test_collection_new () =
   with_tc (fun data ->
@@ -75,7 +75,7 @@ let test_discardable_group_exception () =
 
 (** Test: map doubles values correctly. *)
 let test_map_doubles_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let gen = integers ~min_value:1 ~max_value:5 () |> map (fun v -> v * 2) in
     let v = Hegel.draw_silent tc gen in
     assert (v >= 2 && v <= 10);
@@ -84,7 +84,7 @@ let test_map_doubles_e2e () =
 
 (** Test: double map composes correctly (Leaf draw-closure composition). *)
 let test_double_map_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let gen =
       integers ~min_value:1 ~max_value:5 ()
       |> map (fun v -> v * 2)
@@ -96,7 +96,7 @@ let test_double_map_e2e () =
 
 (** Test: map on non-basic (Mapped branch of do_draw). *)
 let test_map_on_filtered_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let gen =
       filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ())
       |> map (fun v -> v * 2)
@@ -107,7 +107,7 @@ let test_map_on_filtered_e2e () =
 
 (** Test: flat_map through engine. *)
 let test_flat_map_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let gen =
       flat_map
         (fun n -> integers ~min_value:0 ~max_value:(max 1 n) ())
@@ -119,7 +119,7 @@ let test_flat_map_e2e () =
 
 (** Test: filter through engine. *)
 let test_filter_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let gen = filter (fun v -> v mod 2 = 0) (integers ~min_value:0 ~max_value:100 ()) in
     let v = Hegel.draw tc gen in
     assert (v mod 2 = 0))
@@ -129,7 +129,9 @@ let test_filter_e2e () =
 let test_filter_exhaustion_e2e () =
   Hegel.run_hegel_test
     ~settings:
-      (Hegel.settings ~test_cases:10 () |> with_suppress_health_check [ Filter_too_much ])
+      { (Hegel.Settings.create ~test_cases:10 ()) with
+        suppress_health_check = [ Settings.Filter_too_much ]
+      }
     (fun tc ->
        let gen = filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ()) in
        ignore (Hegel.draw tc gen))
@@ -137,7 +139,7 @@ let test_filter_exhaustion_e2e () =
 
 (** Test: group helper through engine. *)
 let test_group_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:5 ()) (fun tc ->
     let n =
       group Labels.list tc (fun () ->
         Internal.generate_integer tc ~min_value:0 ~max_value:10)
@@ -147,7 +149,7 @@ let test_group_e2e () =
 
 (** Test: discardable_group through engine — success path. *)
 let test_discardable_group_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:5 ()) (fun tc ->
     let n =
       discardable_group Labels.tuple tc (fun () ->
         Internal.generate_integer tc ~min_value:0 ~max_value:10)
@@ -184,7 +186,7 @@ let test_with_printer () =
 (* [filter] over an unprintable generator stays unprintable; it can still be
    drawn via [draw_silent]. *)
 let test_filter_on_unprintable () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:5 ()) (fun tc ->
     let gen = filter (fun _ -> true) (sampled_from [ 1; 2; 3 ]) in
     let v = Hegel.draw_silent tc gen in
     assert (List.mem v [ 1; 2; 3 ]))

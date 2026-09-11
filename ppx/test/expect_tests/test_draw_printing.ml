@@ -15,7 +15,8 @@ open Generators
 (* Quiet, deterministic run; swallow the failure the property raises so the
    expect block only sees what we printed. *)
 let run_failing
-      ?(settings = settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal)
+      ?(settings =
+        { (Settings.create ~test_cases:20 ~seed:0 ()) with verbosity = Settings.Normal })
       body
   =
   try Hegel.run_hegel_test ~settings body with
@@ -24,7 +25,7 @@ let run_failing
 
 let%expect_test "draw_silent returns the value and prints nothing" =
   Hegel.run_hegel_test
-    ~settings:(settings ~test_cases:1 () |> with_verbosity Normal)
+    ~settings:{ (Settings.create ~test_cases:1 ()) with verbosity = Settings.Normal }
     (fun tc ->
        let v = Hegel.draw_silent tc (integers ~min_value:3 ~max_value:3 ()) in
        printf "got=%d" v);
@@ -278,7 +279,10 @@ let%hegel_test stateful_print tc =
   let _x = Hegel.draw tc val_gen in
   Pusher.run tc ~init:() ~step_count:3
 [@@settings
-  settings ~test_cases:1 ~seed:0 () |> with_verbosity Verbose |> with_phases [ Generate ]]
+  { (Settings.create ~test_cases:1 ~seed:0 ()) with
+    verbosity = Settings.Verbose
+  ; phases = Some [ Settings.Generate ]
+  }]
 ;;
 
 let%expect_test "stateful tests prints drawn data on passing test verbosity is verbose" =
@@ -373,7 +377,8 @@ let%hegel_test label_injection_from_binding (tc : test_case) =
   ignore (x : int);
   ignore (y : int);
   assert false
-[@@settings settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal]
+[@@settings
+  { (Settings.create ~test_cases:20 ~seed:0 ()) with verbosity = Settings.Normal }]
 ;;
 
 let%expect_test "ppx injects ~label from the binding name and preserves ~loc" =
@@ -401,7 +406,8 @@ let%hegel_test qualified_generators_draw (tc : test_case) =
   let g = Generators.draw tc (integers ~min_value:9 ~max_value:9 ()) in
   ignore (g : int);
   assert false
-[@@settings settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal]
+[@@settings
+  { (Settings.create ~test_cases:20 ~seed:0 ()) with verbosity = Settings.Normal }]
 ;;
 
 let%expect_test "a Generators-qualified draw is labeled (prefix preserved)" =
@@ -433,7 +439,8 @@ let%hegel_test local_draw_not_on_tc_untouched (tc : test_case) =
   let z = Hegel.draw tc (integers ~min_value:1 ~max_value:1 ()) in
   ignore (z : int);
   assert false
-[@@settings settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal]
+[@@settings
+  { (Settings.create ~test_cases:20 ~seed:0 ()) with verbosity = Settings.Normal }]
 ;;
 
 let%expect_test "a local non-Hegel draw (not on tc) is not rewritten" =
@@ -466,7 +473,8 @@ let%hegel_test repeated_binding_numbers (tc : test_case) =
   let x = Hegel.draw tc (integers ~min_value:3 ~max_value:3 ()) in
   ignore (x : int);
   assert false
-[@@settings settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal]
+[@@settings
+  { (Settings.create ~test_cases:20 ~seed:0 ()) with verbosity = Settings.Normal }]
 ;;
 
 let%expect_test "a reused binding name numbers x_1, x_2, x_3" =
@@ -496,7 +504,8 @@ let%hegel_test looped_binding_numbers (tc : test_case) =
     ignore (x : int)
   done;
   assert false
-[@@settings settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal]
+[@@settings
+  { (Settings.create ~test_cases:20 ~seed:0 ()) with verbosity = Settings.Normal }]
 ;;
 
 let%expect_test "a draw inside a loop numbers x_1, x_2" =
@@ -525,7 +534,8 @@ let%expect_test "a draw inside a loop numbers x_1, x_2" =
 
 let%expect_test "verbose prints draws on a passing run" =
   Hegel.run_hegel_test
-    ~settings:(settings ~test_cases:1 ~seed:0 () |> with_verbosity Verbose)
+    ~settings:
+      { (Settings.create ~test_cases:1 ~seed:0 ()) with verbosity = Settings.Verbose }
     (fun tc ->
        let _ = Hegel.draw tc (integers ~min_value:5 ~max_value:5 ()) in
        ());

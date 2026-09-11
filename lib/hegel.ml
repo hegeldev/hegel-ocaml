@@ -7,8 +7,10 @@ module Generators = Generators
 (** Stateful property-based testing on top of {!Generators}. *)
 module Stateful = Stateful
 
-(** Auxiliary submodule for [@@deriving hegel_generator]. Included below so
-    [open Hegel] alone makes derived code resolve. *)
+module Settings = Settings
+
+(** Auxiliary submodule for [@@deriving hegel_generator]. Included
+    below so [open Hegel] alone makes derived code resolve. *)
 module Derive = Derive
 
 include Derive
@@ -75,9 +77,9 @@ let map = Generators.map
 let flat_map = Generators.flat_map
 let filter = Generators.filter
 
-(* Settings, test-case, and test-location types re-exported so the whole public
-   API lives directly under Hegel. The module re-exports above are doc-hidden in
-   the mli: white-box surfaces for the test suite. *)
+(* Test-case and test-location types re-exported so the whole
+   public API lives directly under Hegel. The module re-exports above are
+   doc-hidden in the mli: white-box surfaces for the test suite. *)
 
 type test_case = Internal.test_case
 
@@ -87,50 +89,14 @@ type test_location = Antithesis.test_location =
   ; begin_line : int
   }
 
-type verbosity = Internal.verbosity =
-  | Quiet
-  | Normal
-  | Verbose
-  | Debug
-
-type database = Internal.database =
-  | Unset
-  | Disabled
-  | Path of string
-
-type phase = Internal.phase =
-  | Explicit
-  | Reuse
-  | Generate
-  | Target
-  | Shrink
-
-type health_check = Internal.health_check =
-  | Filter_too_much
-  | Too_slow
-  | Test_cases_too_large
-  | Large_initial_test_case
-
-type settings = Internal.settings =
-  { test_cases : int
-  ; verbosity : verbosity
-  ; seed : int option
-  ; derandomize : bool
-  ; database : database
-  ; suppress_health_check : health_check list
-  ; phases : phase list option
-  ; print_blob : bool
-  ; report_multiple_failures : bool
-  ; show_statistics : bool
-  }
-
 exception Assume_rejected = Internal.Assume_rejected
 exception Usage_error = Hegel_ffi.Ffi.Usage_error
 
 (** {2 Convenience re-exports} *)
 
-(** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn] runs a property test against the native engine, defaulting to
-    {!default_settings}. The [let%hegel_test] PPX runs tests through the
+(** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
+    runs a property test against the native engine, defaulting to
+    [Settings.default ()]. The [let%hegel_test] PPX runs tests through the
     equivalent {!run_hegel_test_ppx}. *)
 let run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn =
   Internal.run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn
@@ -215,21 +181,3 @@ let join = Internal.join
 (** [with_printer sexp_of gen] attaches [sexp_of] so [gen] can be drawn with
     {!draw}. See {!Generators.with_printer}. *)
 let with_printer = Generators.with_printer
-
-(** [default_settings ()] creates default test settings with CI auto-detection. *)
-let default_settings = Internal.default_settings
-
-(** [settings ?test_cases ?seed ()] creates settings with the given overrides
-    applied to {!default_settings}. Convenience constructor for common cases. *)
-let settings = Internal.settings
-
-let with_test_cases = Internal.with_test_cases
-let with_verbosity = Internal.with_verbosity
-let with_seed = Internal.with_seed
-let with_derandomize = Internal.with_derandomize
-let with_database = Internal.with_database
-let with_suppress_health_check = Internal.with_suppress_health_check
-let with_phases = Internal.with_phases
-let with_print_blob = Internal.with_print_blob
-let with_report_multiple_failures = Internal.with_report_multiple_failures
-let with_show_statistics = Internal.with_show_statistics

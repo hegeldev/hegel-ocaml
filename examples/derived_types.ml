@@ -46,7 +46,7 @@ let%hegel_test test_point_distance_nonnegative tc =
   and y = float_of_int p.y in
   let dist = sqrt ((x *. x) +. (y *. y)) in
   assert (dist >= 0.0)
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 (** Property: hegel_generator_color covers all three constructors. *)
@@ -59,7 +59,7 @@ let%hegel_test test_color_all_variants tc =
    | Green -> Hashtbl.replace saw_colors "green" true
    | Blue -> Hashtbl.replace saw_colors "blue" true);
   assert (Hashtbl.length saw_colors >= 1)
-[@@settings settings ~test_cases:50 ()]
+[@@settings Settings.create ~test_cases:50 ()]
 ;;
 
 let saw_circle = ref false
@@ -80,7 +80,7 @@ let%hegel_test test_shape_all_variants tc =
     ignore (String.length s);
     saw_labeled := true
   | Dot -> saw_dot := true
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 let saw_tagged = ref false
@@ -93,7 +93,7 @@ let%hegel_test test_entity_valid tc =
   match e.tag with
   | Some _ -> saw_tagged := true
   | None -> saw_untagged := true
-[@@settings settings ~test_cases:50 ()]
+[@@settings Settings.create ~test_cases:50 ()]
 ;;
 
 let () =

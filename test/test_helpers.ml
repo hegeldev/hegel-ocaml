@@ -33,7 +33,7 @@ let with_tempdir ~prefix ~f =
 
 let expect_usage_error gen substring =
   match
-    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+    Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ()) (fun tc ->
       ignore (Hegel.draw tc gen))
   with
   | exception Hegel.Usage_error msg ->

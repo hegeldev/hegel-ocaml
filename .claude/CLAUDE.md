@@ -38,6 +38,11 @@ lib/                         # Library source
                              #   test_case_printer, note)
     loader.ml                # locate/download libhegel at runtime (env > site >
                              #   sibling ../hegel-rust build (libhegel_c.<ext>) > release)
+  settings.ml / settings.mli # Hegel.Settings: the settings record (type t), its
+
+                             #   verbosity/database/phase/health_check enums,
+
+                             #   CI-aware default () and create ?test_cases ?seed ()
   internal.ml.in             # Test runner + run lifecycle + typed-draw wrappers on
                              #   top of Hegel_ffi.Ffi; note/print_line/render_sexp +
                              #   flush_document (engine-side output, see Pretty
@@ -461,17 +466,30 @@ case's representation) is the intended future Tyche switch.
 The engine runs in-process, so there is no subprocess or session to manage.
 The public entry point is `Hegel.run_hegel_test ?settings ?test_location
 test_fn` — `Internal.run_hegel_test`, which is `Internal.run_test` with [settings]
-defaulting to `default_settings ()`. The `let%hegel_test` PPX targets the
+defaulting to `Settings.default ()`. The `let%hegel_test` PPX targets the
 doc-hidden `Hegel.run_hegel_test_ppx` — a thin wrapper that sets `~from_ppx:true`
 on `Internal.run_hegel_test` — so the PPX-vs-plain signal never appears on the
 public `run_hegel_test`. The `[@@failure_blobs ...]` record/replay workflow is
 supported: the PPX forwards the listed blobs as `~failure_blobs`, which replays
 the first blob as a standalone deterministic case (pair it with
-`with_print_blob false` to suppress the `rerun with:` line that failing runs
+`print_blob = false` to suppress the `rerun with:` line that failing runs
 print by default). `from_ppx` selects that line's syntax: a
 `[@@failure_blobs [...]]` attribute under the PPX, a `~failure_blobs:[...]`
 argument for a plain `run_hegel_test` caller. For persisting and replaying
 failing examples across runs, use `database` / `database_key`.
+
+### Settings (lib/settings.ml)
+
+`Hegel.Settings` is a plain record (`Settings.t`) in the base_quickcheck
+`Test.Config.t` style: `Settings.default ()` builds the CI-aware defaults,
+`Settings.create ?test_cases ?seed ()` layers the two most common overrides
+(taking `seed` as an `int`), and every other field is set with OCaml's record
+update syntax — `{ (Settings.create ~seed:0 ()) with verbosity = Settings.Verbose }`.
+There are deliberately no `with_*` builder functions. The enums (`verbosity`,
+`database`, `phase`, `health_check`) live in the same module, so their
+constructors are written qualified (`Settings.Disabled`) rather than relying on
+type-directed disambiguation. `Internal` does `open Settings` for its own
+pattern matches.
 
 ### Test Runner (lib/internal.ml.in)
 

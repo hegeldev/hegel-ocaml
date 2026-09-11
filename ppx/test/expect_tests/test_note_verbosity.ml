@@ -6,9 +6,7 @@ let int_gen = Hegel.integers ~min_value:0 ~max_value:100 ()
 
 (** A passing property (5 cases) that notes the marker on every case. *)
 let run_passing verbosity =
-  let settings =
-    Hegel.settings ~test_cases:5 ~seed:1 () |> Hegel.with_verbosity verbosity
-  in
+  let settings = { (Hegel.Settings.create ~test_cases:5 ~seed:1 ()) with verbosity } in
   Hegel.run_hegel_test ~settings (fun tc ->
     ignore (Hegel.draw tc int_gen : int);
     Hegel.note tc marker)
@@ -17,9 +15,7 @@ let run_passing verbosity =
 (** A property that fails (so the engine performs a final replay) and notes the
     marker on every case. *)
 let run_failing verbosity =
-  let settings =
-    Hegel.settings ~test_cases:5 ~seed:1 () |> Hegel.with_verbosity verbosity
-  in
+  let settings = { (Hegel.Settings.create ~test_cases:5 ~seed:1 ()) with verbosity } in
   try
     Hegel.run_hegel_test ~settings (fun tc ->
       Hegel.note tc marker;
@@ -29,14 +25,14 @@ let run_failing verbosity =
 ;;
 
 let%expect_test "Quiet suppresses notes entirely" =
-  run_passing Quiet;
+  run_passing Hegel.Settings.Quiet;
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect {| |}]
 ;;
 
 let%expect_test "Normal notes only on the final failing replay" =
-  run_passing Normal;
-  run_failing Normal;
+  run_passing Hegel.Settings.Normal;
+  run_failing Hegel.Settings.Normal;
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
@@ -51,7 +47,7 @@ let%expect_test "Normal notes only on the final failing replay" =
 ;;
 
 let%expect_test "Verbose notes on every case (not just the final replay)" =
-  run_passing Verbose;
+  run_passing Hegel.Settings.Verbose;
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
@@ -75,7 +71,7 @@ let%expect_test "Verbose notes on every case (not just the final replay)" =
 ;;
 
 let%expect_test "Debug notes on every case (not just the final replay)" =
-  run_passing Debug;
+  run_passing Hegel.Settings.Debug;
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
@@ -101,7 +97,9 @@ let%expect_test "Debug notes on every case (not just the final replay)" =
 
 let%expect_test "prints from clone interleave deterministically" =
   let settings =
-    Hegel.settings ~test_cases:1 ~seed:0 () |> Hegel.with_database Hegel.Disabled
+    { (Hegel.Settings.create ~test_cases:1 ~seed:0 ()) with
+      database = Hegel.Settings.Disabled
+    }
   in
   (try
      Hegel.run_hegel_test ~settings (fun tc ->

@@ -23,7 +23,7 @@ let%hegel_test map_fusion tc =
   let g = int_fn () in
   let xs = draw tc (lists small_int ~max_size:10 ()) in
   assert (List.map g (List.map f xs) = List.map (fun x -> g (f x)) xs)
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 (** Property (filter keeps matches): every element [List.filter p] keeps does
@@ -36,7 +36,7 @@ let%hegel_test filter_keeps_matching tc =
   in
   let xs = draw tc (lists (integers ~min_value:0 ~max_value:20 ()) ~max_size:10 ()) in
   List.iter (fun x -> assert (p x)) (List.filter p xs)
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 (** Property (flip is involutive): flipping a generated two-argument function
@@ -55,7 +55,7 @@ let%hegel_test flip_flip_is_identity tc =
   let b = draw tc small_int in
   let flip g x y = g y x in
   assert (flip (flip f) a b = f a b)
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 (** Property (a generated function is a genuine function): a generated
@@ -76,7 +76,7 @@ let%hegel_test functions_are_deterministic tc =
   let b = draw tc (booleans ()) in
   let c = draw tc small_int in
   assert (f a b c = f a b c)
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 let () =

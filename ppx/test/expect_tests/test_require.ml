@@ -4,7 +4,10 @@
     disabled — see [test_failure_report.ml] for why. *)
 
 let sexp_of_int_list = Core.List.sexp_of_t Core.Int.sexp_of_t
-let settings () = Hegel.settings ~test_cases:10 () |> Hegel.with_database Disabled
+
+let settings () =
+  { (Hegel.Settings.create ~test_cases:10 ()) with database = Hegel.Settings.Disabled }
+;;
 
 let%expect_test "require fails with the default message" =
   (try
@@ -69,10 +72,11 @@ let%expect_test "require failures get caller-derived origins" =
   (try
      Hegel.run_hegel_test
        ~settings:
-         (Hegel.settings ~test_cases:300 ~seed:9 ()
-          |> Hegel.with_database Disabled
-          |> Hegel.with_report_multiple_failures true
-          |> Hegel.with_print_blob false)
+         { (Hegel.Settings.create ~test_cases:300 ~seed:9 ()) with
+           database = Hegel.Settings.Disabled
+         ; report_multiple_failures = true
+         ; print_blob = false
+         }
        (fun tc ->
           let v = Hegel.draw tc (Hegel.integers ~min_value:0 ~max_value:100 ()) in
           Hegel.require tc ~msg:"too big" (v < 60);

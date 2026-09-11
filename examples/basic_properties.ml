@@ -14,7 +14,7 @@ let%hegel_test test_integer_arithmetic tc =
   assert (- (-a) = a);
   (* Absolute value is non-negative *)
   assert (abs a >= 0)
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 (** Property: boolean identities. *)
@@ -27,7 +27,7 @@ let%hegel_test test_boolean_laws tc =
   assert ((not (not p)) = p);
   (* Commutativity of AND *)
   assert ((p && q) = (q && p))
-[@@settings settings ~test_cases:50 ()]
+[@@settings Settings.create ~test_cases:50 ()]
 ;;
 
 (** Property: division identity (with assume to avoid division by zero). *)
@@ -38,21 +38,21 @@ let%hegel_test test_division tc =
   note tc (Printf.sprintf "n=%d d=%d" n d);
   (* Integer division: n = (n / d) * d + (n mod d) *)
   assert (n = (n / d * d) + (n mod d))
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 (** Property: text strings have non-negative length. *)
 let%hegel_test test_text_length tc =
   let s = draw tc (text ~min_size:0 ~max_size:50 ()) in
   assert (String.length s >= 0)
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 (** Property: binary blobs have non-negative byte length. *)
 let%hegel_test test_binary_length tc =
   let b = draw tc (binary ~min_size:0 ~max_size:50 ()) in
   assert (String.length b >= 0)
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 (** Property: finite floats are their own doubles divided by two. Uses
@@ -64,7 +64,7 @@ let%hegel_test test_float_finite tc =
       (floats ~min_value:(-1e6) ~max_value:1e6 ~allow_nan:false ~allow_infinity:false ())
   in
   assert (Float.is_finite x)
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 let () =

@@ -3,7 +3,7 @@ open Generators
 
 (** Test: integers(0, 100) generates values in range. *)
 let test_integers_in_range () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let gen = integers ~min_value:0 ~max_value:100 () in
     let v = Hegel.draw tc gen in
     assert (v >= 0 && v <= 100))
@@ -12,7 +12,7 @@ let test_integers_in_range () =
 (** Test: unbounded integers() E2E — the engine requires a [min_value], so the
     generator must supply default bounds; values stay within OCaml's native int. *)
 let test_integers_unbounded_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ()) (fun tc ->
     let v = Hegel.draw tc (integers ()) in
     assert (v >= Core.Int.min_value && v <= Core.Int.max_value);
     let xs = Hegel.draw tc (lists (integers ()) ()) in
@@ -44,14 +44,14 @@ let test_booleans_probability_too_high () =
 
 (** Test: booleans ~p:1.0 always draws true. *)
 let test_booleans_probability_one_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ()) (fun tc ->
     let b = Hegel.draw tc (booleans ~p:1.0 ()) in
     assert b)
 ;;
 
 (** Test: booleans ~p:0.0 always draws false. *)
 let test_booleans_probability_zero_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ()) (fun tc ->
     let b = Hegel.draw tc (booleans ~p:0.0 ()) in
     assert (not b))
 ;;
@@ -181,49 +181,49 @@ let test_text_alphabet_with_max_codepoint () =
     allow_infinity default to true) produces a valid schema the engine accepts.
     The value may be NaN/infinity, so we only require that a draw succeeds. *)
 let test_floats_default_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ()) (fun tc ->
     let (_ : float) = Hegel.draw tc (floats ()) in
     ())
 ;;
 
 (** Test: default text() E2E — the default form omits max_size *)
 let test_text_default_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ()) (fun tc ->
     let s = Hegel.draw tc (text ()) in
     assert (String.length s >= 0))
 ;;
 
 (** Test: default binary() E2E — the default form omits max_size *)
 let test_binary_default_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ()) (fun tc ->
     let b = Hegel.draw tc (binary ()) in
     assert (String.length b >= 0))
 ;;
 
 (** Test: just always returns the constant. *)
 let test_just_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw_silent tc (just 42) in
     Alcotest.(check int) "always 42" 42 v)
 ;;
 
 (** Test: from_regex generates matching strings. *)
 let test_from_regex_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (from_regex "[0-9]+" ()) in
     assert (String.length v > 0))
 ;;
 
 (** Test: emails generates strings containing at-sign. *)
 let test_emails_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (emails ()) in
     assert (String.contains v '@'))
 ;;
 
 (** Test: urls generates strings starting with http. *)
 let test_urls_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (urls ()) in
     assert (
       String.length v >= 7
@@ -232,7 +232,7 @@ let test_urls_e2e () =
 
 (** Test: domains generates non-empty strings. *)
 let test_domains_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (domains ()) in
     assert (String.length v > 0))
 ;;
@@ -241,7 +241,7 @@ let test_domains_e2e () =
     calendar dates with year in [1, 9999] (round-tripped through
     [Core.Date.of_string]). *)
 let test_dates_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let d = Hegel.draw tc (dates ()) in
     assert (String.length d = 10 && d.[4] = '-' && d.[7] = '-');
     let y = Core.Date.year (Core.Date.of_string d) in
@@ -265,7 +265,7 @@ let last_time = { hour = 23; minute = 59; second = 59; nanosecond = 999_999_999 
     within the day. *)
 let test_times_e2e () =
   let saw_sub_microsecond = ref false in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:100 ()) (fun tc ->
     let s = Hegel.draw tc (times ()) in
     let t = time_of_string s in
     assert (within ~lo:first_time ~hi:last_time t);
@@ -281,7 +281,7 @@ let datetime_of_string s =
 
 (** Test: times honors inclusive bounds. *)
 let test_times_bounds_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:100 ()) (fun tc ->
     let lo = Hegel.draw tc (times ()) in
     let min_time = time_of_string lo in
     let max_time = time_of_string (Hegel.draw tc (times ~min_time ())) in
@@ -293,7 +293,7 @@ let test_times_bounds_e2e () =
 
 (** Test: dates honors inclusive bounds. *)
 let test_dates_bounds_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:100 ()) (fun tc ->
     let lo = Hegel.draw tc (dates ()) in
     let min_date = date_of_string lo in
     let max_date = date_of_string (Hegel.draw tc (dates ~min_date ())) in
@@ -306,7 +306,7 @@ let test_dates_bounds_e2e () =
 (** Test: datetimes generates [YYYY-MM-DDTHH:MM:SS.fffffffff] strings whose date
     and time parts decode to values in the default ranges. *)
 let test_datetimes_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let date, time = datetime_of_string (Hegel.draw tc (datetimes ())) in
     assert (date.year >= 1 && date.year <= 9999);
     assert (within ~lo:first_time ~hi:last_time time))
@@ -314,7 +314,7 @@ let test_datetimes_e2e () =
 
 (** Test: datetimes honors inclusive bounds. *)
 let test_datetimes_bounds_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:100 ()) (fun tc ->
     let lo = Hegel.draw tc (datetimes ()) in
     let min_datetime = datetime_of_string lo in
     let max_datetime = datetime_of_string (Hegel.draw tc (datetimes ~min_datetime ())) in
@@ -328,7 +328,7 @@ let test_datetimes_bounds_e2e () =
 
 let expect_usage_error name gen expected =
   match
-    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+    Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ()) (fun tc ->
       ignore (Hegel.draw tc gen : string))
   with
   | exception Hegel.Usage_error msg ->
@@ -400,49 +400,49 @@ let test_datetimes_invalid_bounds () =
 
 (** Test: text with a category restriction (a non-surrogate category). *)
 let test_text_categories_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (text ~categories:[ "Lu" ] ~max_size:5 ()) in
     assert (String.length v >= 0))
 ;;
 
 (** Test: text excluding a category that already lists surrogates (Cs). *)
 let test_text_exclude_categories_cs_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (text ~exclude_categories:[ "Cs" ] ~max_size:5 ()) in
     assert (String.length v >= 0))
 ;;
 
 (** Test: text restricted to a codepoint range. *)
 let test_text_codepoint_range_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (text ~min_codepoint:65 ~max_codepoint:90 ~max_size:5 ()) in
     assert (String.length v >= 0))
 ;;
 
 (** Test: text with an explicit include-characters set. *)
 let test_text_include_characters_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (text ~include_characters:"abc" ~max_size:5 ()) in
     assert (String.length v >= 0))
 ;;
 
 (** Test: text with an explicit exclude-characters set. *)
 let test_text_exclude_characters_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (text ~exclude_characters:"z" ~max_size:5 ()) in
     assert (not (String.contains v 'z')))
 ;;
 
 (** Test: text over a fixed alphabet only draws from that alphabet. *)
 let test_text_alphabet_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (text ~alphabet:"abc" ~max_size:5 ()) in
     assert (String.for_all (fun c -> c = 'a' || c = 'b' || c = 'c') v))
 ;;
 
 (** Test: characters restricted by category draws single characters. *)
 let test_characters_categories_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let v = Hegel.draw tc (characters ~categories:[ "Lu" ] ()) in
     assert (String.length v >= 1))
 ;;
@@ -451,7 +451,7 @@ let test_characters_categories_e2e () =
     (codepoints 0-255) — not just the ASCII subset. *)
 let test_chars_e2e () =
   let saw_above_ascii = ref false in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:100 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:100 ()) (fun tc ->
     let c = Hegel.draw tc (chars ()) in
     if Char.code c > 127 then saw_above_ascii := true);
   assert !saw_above_ascii
