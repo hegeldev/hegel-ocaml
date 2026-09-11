@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.20.1 - 2026-09-11
+
+This patch loads `libhegel` lazily, on the first `Hegel_ffi.Ffi.context_new`, rather
+than at module initialization. This avoids having to load the dynamic library in code
+that only builds generators.
+
 ## 0.20.0 - 2026-09-11
 
 This release reworks stateful testing around a state machine module. 
