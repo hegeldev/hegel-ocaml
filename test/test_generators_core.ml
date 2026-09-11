@@ -27,9 +27,9 @@ let test_max_filter_attempts () =
   Alcotest.(check int) "max attempts" 3 max_filter_attempts
 ;;
 
-(* [with_tc f] runs [f] with a real per-test-case handle from the native
-   engine. Used by the collection-record tests, which exercise the OCaml-side
-   collection bookkeeping. *)
+(* [with_tc f] runs [f] with a real per-test-case handle from the native engine.
+   Used by the collection-record tests, which exercise the OCaml-side collection
+   bookkeeping. *)
 let with_tc f = Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) f
 
 let test_collection_new () =
@@ -277,8 +277,8 @@ let test_printer_assoc_list_composite () =
     "((1 2))"
 ;;
 
-(* Hash tables render by folding the [Stdlib.Hashtbl]; a single entry keeps
-   the iteration order deterministic. *)
+(* Hash tables render by folding the [Stdlib.Hashtbl]; a single entry keeps the
+   iteration order deterministic. *)
 let test_printer_hash_table () =
   let table = Stdlib.Hashtbl.create 1 in
   Stdlib.Hashtbl.replace table 1 2;

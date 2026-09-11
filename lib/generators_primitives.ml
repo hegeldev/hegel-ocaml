@@ -10,19 +10,18 @@ let integers ?(min_value = Int.min_int) ?(max_value = Int.max_int) () =
     ~sexp_of:sexp_of_int
 ;;
 
-(** [booleans ?p ()] creates a generator for boolean values,
-    [true] with probability [p] (default [0.5]). *)
+(** [booleans ?p ()] creates a generator for boolean values, [true] with
+    probability [p] (default [0.5]). *)
 let booleans ?(p = 0.5) () =
   leaf ~draw:(fun tc -> Internal.generate_boolean tc p None) ~sexp_of:sexp_of_bool
 ;;
 
 (** The smallest positive (subnormal) 64-bit float. Passed as
-    [smallest_nonzero_magnitude] so the engine places no magnitude restriction on
-    drawn floats. *)
+    [smallest_nonzero_magnitude] so the engine places no magnitude restriction
+    on drawn floats. *)
 let smallest_nonzero_magnitude = 5e-324
 
-(** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
-     ?allow_infinity ()] creates a generator for floating-point values.
+(** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan ?allow_infinity ()] creates a generator for floating-point values.
 
     Unbounded ends are sent to the engine as [neg_infinity] / [infinity].
 
@@ -74,8 +73,8 @@ let surrogate_categories = [ "Cs"; "C" ]
 
 (** [effective_categories ?categories ?exclude_categories ()] applies the
     character-category validation and surrogate auto-exclusion shared by {!text}
-    and {!characters}, returning the effective [(categories, exclude_categories)]
-    options to pass to the engine. *)
+    and {!characters}, returning the effective
+    [(categories, exclude_categories)] options to pass to the engine. *)
 let effective_categories ?categories ?exclude_categories () =
   (match categories, exclude_categories with
    | Some _, Some _ ->
@@ -107,9 +106,9 @@ let effective_categories ?categories ?exclude_categories () =
   categories, effective_exclude_categories
 ;;
 
-(** [text_generator ~min_size ~max_size ...] is the shared {!Leaf} builder behind
-    {!text} and {!characters}: it resolves the effective character categories and
-    draws a text string over the described alphabet. *)
+(** [text_generator ~min_size ~max_size ...] is the shared {!Leaf} builder
+    behind {!text} and {!characters}: it resolves the effective character
+    categories and draws a text string over the described alphabet. *)
 let text_generator
       ~min_size
       ~max_size
@@ -141,8 +140,7 @@ let text_generator
     ~sexp_of:sexp_of_string
 ;;
 
-(** [text ?min_size ?max_size ?codec ?min_codepoint ?max_codepoint ?categories
-     ?exclude_categories ?include_characters ?exclude_characters ?alphabet ()]
+(** [text ?min_size ?max_size ?codec ?min_codepoint ?max_codepoint ?categories ?exclude_categories ?include_characters ?exclude_characters ?alphabet ()]
     creates a generator for Unicode text strings.
 
     Character filtering options restrict which characters may appear. The
@@ -204,8 +202,7 @@ let text
       ()
 ;;
 
-(** [characters ?codec ?min_codepoint ?max_codepoint ?categories
-     ?exclude_categories ?include_characters ?exclude_characters ()] creates a
+(** [characters ?codec ?min_codepoint ?max_codepoint ?categories ?exclude_categories ?include_characters ?exclude_characters ()] creates a
     generator for single Unicode characters (as single-character UTF-8 strings).
 
     Character filtering options restrict which characters may appear. Surrogate
@@ -258,12 +255,11 @@ let make_characters ~of_char ~sexp_of () =
     ~sexp_of
 ;;
 
-(** [chars ()] creates a generator for single characters (codepoints 0-255,
-    i.e. Latin-1) as native [char] values. *)
+(** [chars ()] creates a generator for single characters (codepoints 0-255, i.e.
+    Latin-1) as native [char] values. *)
 let chars () = make_characters ~of_char:Fun.id ~sexp_of:sexp_of_char ()
 
-(** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.
-*)
+(** [binary ?min_size ?max_size ()] creates a generator for binary byte strings. *)
 let binary ?(min_size = 0) ?max_size () =
   if min_size < 0
   then
@@ -302,23 +298,21 @@ let emails () = leaf ~draw:Internal.generate_email ~sexp_of:sexp_of_string
 
 (** [urls ()] creates a generator for valid URL strings.
 
-    URLs follow RFC 3986, of the form
-    [scheme://domain\[:port\]/path\[#fragment\]] with [scheme] one of
-    [http]/[https], the domain drawn from {!domains} (up to 255 characters), an
-    optional port in [1, 65535], zero or more [/]-separated path segments of up
-    to 100 characters each, and an optional fragment of up to 100 characters.
-    Path and fragment characters are percent-encoded. *)
+    URLs follow RFC 3986, of the form [scheme://domain[:port]/path[#fragment]]
+    with [scheme] one of [http]/[https], the domain drawn from {!domains} (up to
+    255 characters), an optional port in [1, 65535], zero or more [/]-separated
+    path segments of up to 100 characters each, and an optional fragment of up
+    to 100 characters. Path and fragment characters are percent-encoded. *)
 let urls () = leaf ~draw:Internal.generate_url ~sexp_of:sexp_of_string
 
 (** [domains ?max_length ()] creates a generator for domain name strings.
 
     Domains are RFC 1035 fully-qualified domain names: a top-level domain
     sampled from the IANA TLD list followed by up to 126 dot-separated labels,
-    each 1 to 63 characters matching
-    [\[a-zA-Z\](\[a-zA-Z0-9-\]{0,61}\[a-zA-Z0-9\])?] (punycode [xn--] labels
-    reserved by RFC 5890 are excluded). Generated domains never exceed
-    [max_length] (default 255, per RFC 1035 §2.3.4); when provided, [max_length]
-    must be in [4, 255]. *)
+    each 1 to 63 characters matching [[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?]
+    (punycode [xn--] labels reserved by RFC 5890 are excluded). Generated
+    domains never exceed [max_length] (default 255, per RFC 1035 §2.3.4); when
+    provided, [max_length] must be in [4, 255]. *)
 let domains ?max_length () =
   let max_length = Option.value max_length ~default:255 in
   leaf ~draw:(fun tc -> Internal.generate_domain tc ~max_length) ~sexp_of:sexp_of_string
@@ -349,10 +343,10 @@ let last_date = { year = 9999; month = 12; day = 31 }
 let first_time = { hour = 0; minute = 0; second = 0; nanosecond = 0 }
 let last_time = { hour = 23; minute = 59; second = 59; nanosecond = 999_999_999 }
 
-(** [make_dates ~of_date ~sexp_of ?min_date ?max_date ()] builds a generator
-    for dates in [\[min_date, max_date\]] over any representation. [of_date]
-    converts each drawn {!date} to the desired representation. The default 
-    range is [\[0001-01-01, 9999-12-31\]]. *)
+(** [make_dates ~of_date ~sexp_of ?min_date ?max_date ()] builds a generator for
+    dates in [[min_date, max_date]] over any representation. [of_date] converts
+    each drawn {!date} to the desired representation. The default range is
+    [[0001-01-01, 9999-12-31]]. *)
 let make_dates ~of_date ~sexp_of ?(min_date = first_date) ?(max_date = last_date) () =
   leaf
     ~draw:(fun tc ->
@@ -360,10 +354,10 @@ let make_dates ~of_date ~sexp_of ?(min_date = first_date) ?(max_date = last_date
     ~sexp_of
 ;;
 
-(** [make_times ~of_time ~sexp_of ?min_time ?max_time ()] builds a generator
-    for times of day in [\[min_time, max_time\]] over any representation.
-    [of_time] converts each drawn {!time} to the desired representation. The 
-    default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
+(** [make_times ~of_time ~sexp_of ?min_time ?max_time ()] builds a generator for
+    times of day in [[min_time, max_time]] over any representation. [of_time]
+    converts each drawn {!time} to the desired representation. The default range
+    is [[00:00:00.000000000, 23:59:59.999999999]]. *)
 let make_times ~of_time ~sexp_of ?(min_time = first_time) ?(max_time = last_time) () =
   leaf
     ~draw:(fun tc ->
@@ -371,10 +365,11 @@ let make_times ~of_time ~sexp_of ?(min_time = first_time) ?(max_time = last_time
     ~sexp_of
 ;;
 
-(** [make_datetimes ~of_datetime ~sexp_of ?min_datetime ?max_datetime ()] builds a
-    generator for naive datetimes in [\[min_datetime, max_datetime\]] over any 
-    representation. [of_datetime] converts each drawn [(date, time)] pair to the 
-    desired representation. The default range is [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
+(** [make_datetimes ~of_datetime ~sexp_of ?min_datetime ?max_datetime ()] builds
+    a generator for naive datetimes in [[min_datetime, max_datetime]] over any
+    representation. [of_datetime] converts each drawn [(date, time)] pair to the
+    desired representation. The default range is
+    [[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999]]. *)
 let make_datetimes
       ~of_datetime
       ~sexp_of
@@ -389,24 +384,24 @@ let make_datetimes
     ~sexp_of
 ;;
 
-(** [dates ?min_date ?max_date ()] creates a generator for ISO 8601
-    [YYYY-MM-DD] date strings in [\[min_date, max_date\]]. The default range is
-    [\[0001-01-01, 9999-12-31\]]. *)
+(** [dates ?min_date ?max_date ()] creates a generator for ISO 8601 [YYYY-MM-DD]
+    date strings in [[min_date, max_date]]. The default range is
+    [[0001-01-01, 9999-12-31]]. *)
 let dates ?min_date ?max_date () =
   make_dates ~of_date:format_date ~sexp_of:sexp_of_string ?min_date ?max_date ()
 ;;
 
 (** [times ?min_time ?max_time ()] creates a generator for ISO 8601
-    [HH:MM:SS.fffffffff] time-of-day strings in [\[min_time, max_time\]]. The
-    default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
+    [HH:MM:SS.fffffffff] time-of-day strings in [[min_time, max_time]]. The
+    default range is [[00:00:00.000000000, 23:59:59.999999999]]. *)
 let times ?min_time ?max_time () =
   make_times ~of_time:format_time ~sexp_of:sexp_of_string ?min_time ?max_time ()
 ;;
 
-(** [datetimes ?min_datetime ?max_datetime ()] creates a generator for naive
-    ISO 8601 [YYYY-MM-DDTHH:MM:SS.fffffffff] datetime strings in
-    [\[min_datetime, max_datetime\]]. The default range is
-    [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
+(** [datetimes ?min_datetime ?max_datetime ()] creates a generator for naive ISO
+    8601 [YYYY-MM-DDTHH:MM:SS.fffffffff] datetime strings in
+    [[min_datetime, max_datetime]]. The default range is
+    [[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999]]. *)
 let datetimes ?min_datetime ?max_datetime () =
   make_datetimes
     ~of_datetime:format_datetime

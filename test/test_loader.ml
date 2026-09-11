@@ -12,8 +12,8 @@ module Loader = Hegel_ffi.Loader
 let payload = "first half of the payload second half of the payload"
 
 (* A [curl] stand-in: honors [-o <dest>] and writes {!payload} to it in two
-   chunks with a pause in between. [FAKE_CURL_EXIT] forces a failure exit
-   code (simulating a network error) without writing anything. *)
+   chunks with a pause in between. [FAKE_CURL_EXIT] forces a failure exit code
+   (simulating a network error) without writing anything. *)
 let fake_curl_script =
   {|#!/bin/sh
 if [ -n "${FAKE_CURL_EXIT:-}" ]; then exit "$FAKE_CURL_EXIT"; fi
@@ -27,10 +27,10 @@ printf 'second half of the payload' >> "$out"
 |}
 ;;
 
-(* Set up a tempdir containing the stubbed [curl] and pass its path, the
-   PATH value that puts the stub first, and the payload's checksum to [f].
-   The checksum is computed with the loader's own [sha256_of_file] so the
-   test agrees with the implementation about hashing. *)
+(* Set up a tempdir containing the stubbed [curl] and pass its path, the PATH
+   value that puts the stub first, and the payload's checksum to [f]. The
+   checksum is computed with the loader's own [sha256_of_file] so the test
+   agrees with the implementation about hashing. *)
 let with_download_fixture ~f =
   Test_helpers.with_tempdir ~prefix:"hegel-loader-test-" ~f:(fun dir ->
     let curl_path = Filename.concat dir "curl" in

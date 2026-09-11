@@ -241,7 +241,14 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
       let _ = Hegel.draw ~label:"n" tc (integers ~min_value:7 ~max_value:7 ()) in
       assert false)
   in
-  run_failing (fun tc -> Stateful.run ~init:() ~rules:[ rule ] tc);
+  let module M = struct
+    type state = unit
+
+    let rules = [ rule ]
+    let invariants = []
+  end
+  in
+  run_failing (fun tc -> Stateful.run tc (module M) ~init:());
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
@@ -256,22 +263,22 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
     |}]
 ;;
 
+module%hegel_state_machine Pusher = struct
+  let push tc () =
+    let _n = Hegel.draw tc (integers ~min_value:7 ~max_value:7 ()) in
+    ()
+  [@@rule]
+  ;;
+end
+
 let%hegel_test stateful_print tc =
-  let rule =
-    Stateful.Rule.create ~name:"push" ~step:(fun tc _state ->
-      let _n = Hegel.draw tc (integers ~min_value:7 ~max_value:7 ()) in
-      ())
-  in
   let vars = Stateful.Pool.create tc in
   Stateful.Pool.add vars 42;
   let val_gen = with_printer sexp_of_int (Stateful.Pool.values_reusable vars) in
   let _x = Hegel.draw tc val_gen in
-  Stateful.run ~init:() ~rules:[ rule ] tc
+  Pusher.run tc ~init:() ~step_count:3
 [@@settings
-  settings ~test_cases:1 ~seed:0 ()
-  |> with_verbosity Verbose
-  |> with_phases [ Generate ]
-  |> with_stateful_step_count 3]
+  settings ~test_cases:1 ~seed:0 () |> with_verbosity Verbose |> with_phases [ Generate ]]
 ;;
 
 let%expect_test "stateful tests prints drawn data on passing test verbosity is verbose" =
@@ -283,11 +290,11 @@ let%expect_test "stateful tests prints drawn data on passing test verbosity is v
     Running test case
     _x = 42
     Step 1: push
-      _n_1 = 7
+      _n = 7
     Step 2: push
-      _n_2 = 7
+      _n = 7
     Step 3: push
-      _n_3 = 7
+      _n = 7
     Ending phase: Generate
     |}]
 ;;
@@ -349,12 +356,9 @@ let%expect_test
 
 (* ---- ppx_hegel_test label injection (end-to-end) ----
 
-   Inside a [let%hegel_test] body, a draw bound to a simple variable —
-   [let x = draw tc ~loc:pos g] — is rewritten by the PPX to
-   [draw_named ~label:"x" ~repeatable:false tc ~loc:pos g], preserving the
-   explicit location alongside the injected binding name on the failing replay.
-   This file enables the [ppx_hegel_test] rewriter, so the test below exercises
-   a real expansion. *)
+   Inside a [let%hegel_test] body, a draw bound to a simple variable — [let x = draw tc ~loc:pos g] — is rewritten by the PPX to [draw_named ~label:"x" ~repeatable:false tc ~loc:pos g], preserving the explicit location alongside
+   the injected binding name on the failing replay. This file enables the
+   [ppx_hegel_test] rewriter, so the test below exercises a real expansion. *)
 
 let%hegel_test label_injection_from_binding (tc : test_case) =
   let gen = integers ~min_value:7 ~max_value:7 () in
@@ -418,8 +422,8 @@ let%expect_test "a Generators-qualified draw is labeled (prefix preserved)" =
 
 (* A local function also named [draw] that is not Hegel's is left untouched,
    because the rewrite keys off the receiver (the draw must be applied to the
-   test's own [tc]). Here [draw 5] is not applied to [tc], so it gets no
-   label and the user's own [draw] runs; only the genuine [Hegel.draw tc] is
+   test's own [tc]). Here [draw 5] is not applied to [tc], so it gets no label
+   and the user's own [draw] runs; only the genuine [Hegel.draw tc] is
    labeled. *)
 
 let%hegel_test local_draw_not_on_tc_untouched (tc : test_case) =
@@ -515,9 +519,9 @@ let%expect_test "a draw inside a loop numbers x_1, x_2" =
 (* ---- verbose verbosity prints draws on a non-final case ----
 
    At [Normal]/[Quiet] verbosity a passing test prints nothing, since printing
-   is gated on the failing final replay. A single case keeps the snapshot clean: 
-   the engine emits its own [Running test case] lines between cases under verbose, 
-   which a multi-case run would capture. *)
+   is gated on the failing final replay. A single case keeps the snapshot clean:
+   the engine emits its own [Running test case] lines between cases under
+   verbose, which a multi-case run would capture. *)
 
 let%expect_test "verbose prints draws on a passing run" =
   Hegel.run_hegel_test

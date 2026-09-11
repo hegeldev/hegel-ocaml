@@ -1,33 +1,33 @@
 (* Locates the native libhegel shared library at runtime
 
-   Search order:
-   1. [$HEGEL_LIBHEGEL_PATH] — an explicit path to the library file (or a
-      directory containing [libhegel.<ext>]).
-   2. A prebuilt libhegel bundled into the installed package via the [libhegel]
-      dune-site (release tarballs ship the matching-platform binary there).
-   3. A sibling [../hegel-rust/target/release/] (then [.../debug/]) checkout
-      relative to the current working directory.
-   4. A SHA-256-verified copy downloaded from the hegel-rust GitHub release,
-      cached under [$XDG_CACHE_HOME|~/.cache]/hegel-ocaml/libhegel/<version>/.
-      Set [HEGEL_LIBHEGEL_NO_DOWNLOAD=1] to opt out of the download fallback.
+   Search order: 1. [$HEGEL_LIBHEGEL_PATH] — an explicit path to the library
+   file (or a directory containing [libhegel.<ext>]). 2. A prebuilt libhegel
+   bundled into the installed package via the [libhegel] dune-site (release
+   tarballs ship the matching-platform binary there). 3. A sibling
+   [../hegel-rust/target/release/] (then [.../debug/]) checkout relative to the
+   current working directory, under the name cargo gives the cdylib
+   ([libhegel_c.<ext>]). 4. A SHA-256-verified copy downloaded from the
+   hegel-rust GitHub release, cached under
+   [$XDG_CACHE_HOME|~/.cache]/hegel-ocaml/libhegel/<version>/. Set
+   [HEGEL_LIBHEGEL_NO_DOWNLOAD=1] to opt out of the download fallback.
 
    This module lives in the (uninstrumented) [hegel_ffi] library, so its
    filesystem/network branches are not subject to the coverage gate. *)
 
 (** The libhegel version these bindings target. *)
-let version = "0.37.7"
+let version = "0.38.0"
 
 (* Baked-in SHA-256 checksums of the published [libhegel-<os>-<arch>.<ext>]
-   artifacts for {!version}, keyed by "<os>-<arch>". Platforms without an
-   entry (e.g. macOS amd64 / Intel) are not published upstream.
+   artifacts for {!version}, keyed by "<os>-<arch>". Platforms without an entry
+   (e.g. macOS amd64 / Intel) are not published upstream.
 
    Regenerate after bumping {!version} with: scripts/update-checksums.py *)
 let checksums =
-  [ "darwin-arm64", "2d9b48c2aa12173412e472ef196e372f772e086529efd5cf39d1d3dc425edea1"
-  ; "linux-amd64", "f946eeca9515a77e3fb4ee529b9066b6a08f9b875eff2d358e17ace40155d7e9"
-  ; "linux-arm64", "19b4e155871b17c85f9a6ea45489bc3e148714987894ac274de44b882f675864"
-  ; "windows-amd64", "5f528c62e3709ecb9ec205aa8176a3fcea7e2c0d0cdfa4edd406f120a375d35e"
-  ; "windows-arm64", "1940088e6e9854cdd1d690de8cc5e8c33d20e2e8686a92ef31a5313e87af8563"
+  [ "darwin-arm64", "dccfbf64c16a7bcf0487a97f4ffe9e150bdc09ffb2ff363fb73cbb4c1247d2c4"
+  ; "linux-amd64", "3c8f09d453264a867f3d66356f5d4ddf35cfdd46e19dbd187c80b4b64e80358b"
+  ; "linux-arm64", "6908ea12d75c3f457b92713791445bdea66bde05fdad3ce6f3c3526f679433ae"
+  ; "windows-amd64", "04692972dd7ce4b7490f2e6a2332c277cc5c836a7d9b8616e9e2e9b5e0b6e8d4"
+  ; "windows-arm64", "67a037b662dbbe6a9e3749fadd17ab626da52d68feeb814e35ef348153f12444"
   ]
 ;;
 
@@ -64,8 +64,8 @@ let os_id () =
      | other -> failwith (Printf.sprintf "hegel: unsupported operating system %S" other))
 ;;
 
-(* Architecture identifier used in the libhegel release-artifact name
-   ("amd64" / "arm64"). *)
+(* Architecture identifier used in the libhegel release-artifact name ("amd64" /
+   "arm64"). *)
 let arch_id () =
   let raw =
     match Sys.os_type with
@@ -84,8 +84,15 @@ let ext_of_os = function
   | _ -> "so"
 ;;
 
-(* Name of the library file as produced by a local [cargo build] and as cached. *)
+(* Name of the library file as published and as cached. *)
 let local_basename ext = "libhegel." ^ ext
+
+(* Name of the cdylib a local [cargo build -p hegeltest-c] leaves in the sibling
+   checkout's target directory: the crate's library is [hegel_c], so cargo names
+   it [libhegel_c.<ext>] (no [lib] prefix on Windows). *)
+let sibling_basename ext =
+  (if String.equal ext "dll" then "" else "lib") ^ "hegel_c." ^ ext
+;;
 
 (* Name of the published release artifact for a given platform. *)
 let release_artifact key ext = Printf.sprintf "libhegel-%s.%s" key ext
@@ -170,7 +177,7 @@ let from_sibling ext =
     List.fold_left
       Filename.concat
       cwd
-      [ ".."; "hegel-rust"; "target"; sub; local_basename ext ]
+      [ ".."; "hegel-rust"; "target"; sub; sibling_basename ext ]
   in
   List.find_opt is_file [ candidate "release"; candidate "debug" ]
 ;;
@@ -183,14 +190,14 @@ let from_sibling ext =
 let download_verified ~url ~expected ~cache_path =
   mkdir_p (Filename.dirname cache_path);
   (* Concurrent processes (e.g. several test binaries starting with a cold
-     cache) may all reach this point at once, so each must download to its
-     OWN temporary file: a shared temporary path would let one process rename
-     (or delete) a file another is still writing. The PID makes the name
-     unique across live processes on this host; the random salt guards
-     against PID reuse colliding with a stale file left by a killed process
-     (such leftovers are otherwise inert: nothing else ever reads them). The
-     temporary file stays in the cache directory so the rename below cannot
-     cross filesystems. *)
+     cache) may all reach this point at once, so each must download to its OWN
+     temporary file: a shared temporary path would let one process rename (or
+     delete) a file another is still writing. The PID makes the name unique
+     across live processes on this host; the random salt guards against PID
+     reuse colliding with a stale file left by a killed process (such leftovers
+     are otherwise inert: nothing else ever reads them). The temporary file
+     stays in the cache directory so the rename below cannot cross
+     filesystems. *)
   let tmp =
     Printf.sprintf
       "%s.%d.%06x.tmp"
@@ -221,8 +228,8 @@ let download_verified ~url ~expected ~cache_path =
          actual));
   (* Atomic publish. If a concurrent process won the race, POSIX [rename]
      silently (and atomically) replaces its identical, verified copy. On
-     platforms where replacing an in-use file can fail (e.g. Windows), fall
-     back to the winner's copy when it verifies. *)
+     platforms where replacing an in-use file can fail (e.g. Windows), fall back
+     to the winner's copy when it verifies. *)
   (try Sys.rename tmp cache_path with
    | Sys_error _ as e ->
      remove_tmp ();
@@ -265,9 +272,9 @@ let from_cache_or_download os_id ext =
     download_verified ~url ~expected ~cache_path)
 ;;
 
-(** [locate ()] returns the path to a usable libhegel shared library, downloading
-    and caching it if necessary. Raises [Failure] with a descriptive message if
-    no library can be found or fetched. *)
+(** [locate ()] returns the path to a usable libhegel shared library,
+    downloading and caching it if necessary. Raises [Failure] with a descriptive
+    message if no library can be found or fetched. *)
 let locate () =
   let os_id = os_id () in
   let ext = ext_of_os os_id in

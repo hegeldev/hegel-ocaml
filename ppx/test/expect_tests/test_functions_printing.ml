@@ -2,7 +2,8 @@ open! Core
 open Hegel
 open Generators
 
-(* swallow the failure the property raises so the expect block only sees what we printed. *)
+(* swallow the failure the property raises so the expect block only sees what we
+   printed. *)
 let run_failing body =
   try
     Hegel.run_hegel_test

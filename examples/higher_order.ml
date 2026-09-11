@@ -1,8 +1,8 @@
 (** Higher-order examples: generating functions as test inputs.
 
     Demonstrates: functions, functions2, functions3. A generated function draws
-    each result lazily from its [returns] generator, memoized per argument, so it
-    behaves as a genuine function within a test case. On a failing replay it
+    each result lazily from its [returns] generator, memoized per argument, so
+    it behaves as a genuine function within a test case. On a failing replay it
     prints only the argument/result pairs the property actually applied (e.g.
     [f 3 = 7]) rather than an opaque [<function>]. *)
 

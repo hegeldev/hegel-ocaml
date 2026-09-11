@@ -83,7 +83,6 @@ let phase_to_string = function
 (** Configuration for a Hegel test run. *)
 type settings =
   { test_cases : int
-  ; stateful_step_count : int
   ; verbosity : verbosity
   ; seed : int option
   ; derandomize : bool
@@ -134,7 +133,6 @@ let is_in_ci () =
 let default_settings () =
   let in_ci = is_in_ci () in
   { test_cases = 100
-  ; stateful_step_count = 50
   ; verbosity = Normal
   ; seed = None
   ; derandomize = in_ci
@@ -159,10 +157,6 @@ let settings ?(test_cases = 100) ?seed () =
 
 (** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
 let with_test_cases n s = { s with test_cases = n }
-
-(** [with_stateful_step_count n s] returns settings [s] with [stateful_step_count]
-    set to [n]. [n] must be at least 1. *)
-let with_stateful_step_count n s = { s with stateful_step_count = n }
 
 (** [with_verbosity v s] returns settings [s] with [verbosity] set to [v]. *)
 let with_verbosity v s = { s with verbosity = v }
@@ -220,14 +214,8 @@ type owned_pools =
 (** Per-test-case state passed explicitly to the test function. Holds the
     native test-case handle, the final-replay flag, whether verbose output is
     on, abort state, the current generation-span depth (used to print only the
-    outermost drawn value), the {!draw_state} numbering repeatable draws, 
-    and {!type:owned_pools}. [note_indent] is the nesting depth
-    every {!note}/draw line is indented to (two spaces per level). It starts at 1
-    on the final replay, so the whole body sits inside the framed failure report,
-    and at 0 otherwise; a caller bumps it further to group sub-output (e.g. the
-    draws made within a stateful step nest under its [Step N] header). Note/draw
-    lines are appended to the engine's per-test-case document and printed when
-    the case completes (see [flush_document]). *)
+    outermost drawn value), the {!draw_state} numbering repeatable draws,
+    and {!type:owned_pools}. *)
 type test_case =
   { handle : Ffi.test_case
   ; context : Ffi.context
@@ -235,7 +223,6 @@ type test_case =
   ; verbosity : verbosity
   ; mutable test_aborted : bool
   ; mutable draw_depth : int
-  ; mutable note_indent : int
   ; draw_state : draw_state
   ; owned_pools : owned_pools
   }
@@ -263,22 +250,14 @@ let incr_draw_depth (tc : test_case) = tc.draw_depth <- tc.draw_depth + 1
 let decr_draw_depth (tc : test_case) = tc.draw_depth <- tc.draw_depth - 1
 let set_test_aborted (tc : test_case) v = tc.test_aborted <- v
 
-(** [with_note_indent tc f] runs [f], nesting every {!note}/draw line it prints
-    one level deeper. The depth is restored when [f] raises, so an aborted or
-    failing step does not over-indent later output. *)
-let with_note_indent (tc : test_case) f =
-  tc.note_indent <- tc.note_indent + 1;
-  Fun.protect ~finally:(fun () -> tc.note_indent <- tc.note_indent - 1) f
-;;
-
 (** [clone tc] forks a fresh {!test_case} onto an independent choice stream of the
     same underlying native test case (see {!Ffi.test_case_clone}), paired with its
     own native context so it can be drawn from on another thread concurrently with
     [tc]. The clone shares [tc]'s outcome and budget but generates from its own
     stream. The {!draw_state} (repeatable-draw numbering) is {e shared} with [tc]
-    behind its lock, and the span depth and note indent are copied so draws forked
-    mid-span stay nested. Only the per-stream abort flag starts fresh, and the
-    immutable configuration is copied.
+    behind its lock, and the span depth is copied so draws forked mid-span stay
+    nested. Only the per-stream abort flag starts fresh, and the immutable
+    configuration is copied.
 
     The native handle and context are freed by a GC finaliser once the clone is
     unreachable, so a clone may be captured and used freely. *)
@@ -292,7 +271,6 @@ let clone (tc : test_case) =
     ; verbosity = tc.verbosity
     ; test_aborted = false
     ; draw_depth = tc.draw_depth
-    ; note_indent = tc.note_indent
     ; draw_state = tc.draw_state
     ; owned_pools = tc.owned_pools
     }
@@ -303,6 +281,30 @@ let clone (tc : test_case) =
        Ffi.context_free context)
     c;
   c
+;;
+
+(** [block tc ~indent] opens a {!test_case} for an indented section of [tc]'s
+    output. *)
+let block (tc : test_case) ~indent =
+  let context = Ffi.context_new () in
+  let handle = Ffi.test_case_block tc.context tc.handle ~indent in
+  let b =
+    { handle
+    ; context
+    ; is_final = tc.is_final
+    ; verbosity = tc.verbosity
+    ; test_aborted = false
+    ; draw_depth = 0
+    ; draw_state = { counts = String_table.create 16; lock = Mutex.create () }
+    ; owned_pools = tc.owned_pools
+    }
+  in
+  Stdlib.Gc.finalise_last
+    (fun () ->
+       Ffi.test_case_free context handle;
+       Ffi.context_free context)
+    b;
+  b
 ;;
 
 type 'a worker =
@@ -583,17 +585,10 @@ let should_print tc =
   | Verbose | Debug -> true
 ;;
 
-(** [note tc message] appends [message] to the test case's print region of the
-    engine's family document, subject to {!should_print}; the document is
-    printed once the case completes (see [flush_document]). Every line of a
-    (possibly multi-line) message is indented to the current [note_indent]. *)
-let note tc message =
-  if should_print tc
-  then (
-    let indent = String.make (2 * tc.note_indent) ' ' in
-    let body = String.concat ("\n" ^ indent) (String.split_on_char '\n' message) in
-    Ffi.note tc.context tc.handle (indent ^ body))
-;;
+(** [note tc message] appends [message] to the test case's
+    print region of the engine's family document, subject to {!should_print};
+    the document is printed once the case completes (see [flush_document]). *)
+let note tc message = if should_print tc then Ffi.note tc.context tc.handle message
 
 (** [render_sexp ctx printer sexp] writes [sexp] to [printer] in s-expression
     syntax. Lists are printed with breaks between elemnts when the line overflows. *)
@@ -626,15 +621,11 @@ let print_line tc segments =
     Fun.protect
       ~finally:(fun () -> Ffi.printer_free ctx printer)
       (fun () ->
-         let indent = 2 * tc.note_indent in
-         Ffi.printer_text ctx printer (String.make indent ' ');
-         Ffi.printer_shift_indent ctx printer indent;
          List.iter
            (function
              | Text s -> Ffi.printer_text ctx printer s
              | Value sexp -> render_sexp ctx printer sexp)
            segments;
-         Ffi.printer_shift_indent ctx printer (-indent);
          Ffi.printer_hard_break ctx printer))
 ;;
 
@@ -786,11 +777,13 @@ let pool_generate tc ~pool ?(consume = false) () =
   with_stop_guard tc (fun () -> Ffi.pool_generate tc.context tc.handle ~pool ~consume)
 ;;
 
-(** [new_state_machine tc ~rule_names ~invariant_names
-    ~invariants_always_check] registers a sequential engine-owned state machine:
-    one concurrency group, concurrency fixed at 1, every rule pulled by worker
-    0. Release it with {!state_machine_free}. *)
-let new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check =
+(** [new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check
+    ~step_count] registers a sequential engine-owned state machine: one
+    concurrency group, concurrency fixed at 1, every rule pulled by worker 0,
+    running at most [step_count] rules per test case. Release it with
+    {!state_machine_free}. *)
+let new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check ~step_count
+  =
   with_stop_guard tc (fun () ->
     fst
       (Ffi.new_state_machine
@@ -801,7 +794,8 @@ let new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check =
          ~invariant_names
          ~invariants_always_check
          ~min_concurrency:1
-         ~max_concurrency:1))
+         ~max_concurrency:1
+         ~step_count))
 ;;
 
 (** [state_machine_next_round tc ~state_machine] asks the engine whether the
@@ -876,31 +870,24 @@ let bitmask bit_of items = List.fold_left (fun acc x -> acc lor bit_of x) 0 item
     settings handle from the OCaml [settings]. The caller must free it. *)
 let build_ffi_settings ctx (settings : settings) ~database_key =
   let s = Ffi.settings_new ctx in
-  try
-    Ffi.settings_test_cases ctx s settings.test_cases;
-    Ffi.settings_stateful_step_count ctx s settings.stateful_step_count;
-    Ffi.settings_verbosity ctx s (ffi_verbosity settings.verbosity);
-    Ffi.settings_seed ctx s settings.seed;
-    Ffi.settings_derandomize ctx s settings.derandomize;
-    Ffi.settings_report_multiple_failures ctx s settings.report_multiple_failures;
-    Ffi.settings_show_statistics ctx s settings.show_statistics;
-    (match settings.database with
-     | Unset -> ()
-     | Disabled -> Ffi.settings_database ctx s (Some "")
-     | Path p -> Ffi.settings_database ctx s (Some p));
-    Option.iter (fun k -> Ffi.settings_database_key ctx s (Some k)) database_key;
-    Option.iter
-      (fun phases -> Ffi.settings_phases ctx s (bitmask phase_bit phases))
-      settings.phases;
-    (match settings.suppress_health_check with
-     | [] -> ()
-     | checks ->
-       Ffi.settings_suppress_health_check ctx s (bitmask health_check_bit checks));
-    s
-  with
-  | e ->
-    Ffi.settings_free ctx s;
-    raise e
+  Ffi.settings_test_cases ctx s settings.test_cases;
+  Ffi.settings_verbosity ctx s (ffi_verbosity settings.verbosity);
+  Ffi.settings_seed ctx s settings.seed;
+  Ffi.settings_derandomize ctx s settings.derandomize;
+  Ffi.settings_report_multiple_failures ctx s settings.report_multiple_failures;
+  Ffi.settings_show_statistics ctx s settings.show_statistics;
+  (match settings.database with
+   | Unset -> ()
+   | Disabled -> Ffi.settings_database ctx s (Some "")
+   | Path p -> Ffi.settings_database ctx s (Some p));
+  Option.iter (fun k -> Ffi.settings_database_key ctx s (Some k)) database_key;
+  Option.iter
+    (fun phases -> Ffi.settings_phases ctx s (bitmask phase_bit phases))
+    settings.phases;
+  (match settings.suppress_health_check with
+   | [] -> ()
+   | checks -> Ffi.settings_suppress_health_check ctx s (bitmask health_check_bit checks));
+  s
 ;;
 
 type case_outcome =
@@ -909,9 +896,11 @@ type case_outcome =
   ; printed_output : bool
   }
 
-(** [flush_document tc] prints the document corresponding to a test case and its clones
-    to stderr and returns whether anything printed.  *)
-let flush_document (tc : test_case) =
+(** [flush_document tc ~framed] prints the document corresponding to a test
+    case and its clones and blocks to stderr and returns whether anything
+    printed. [framed] separates a non-empty document from the failure frame's
+    header with a blank line. *)
+let flush_document (tc : test_case) ~framed =
   if not (should_print tc)
   then false
   else (
@@ -928,19 +917,19 @@ let flush_document (tc : test_case) =
     if String.equal text ""
     then false
     else (
-      if tc.note_indent > 0 then Printf.eprintf "\n%!";
+      if framed then Printf.eprintf "\n%!";
       Printf.eprintf "%s%!" text;
       true))
 ;;
 
-(** [run_test_case ~settings ~test_fn ?note_indent ctx handle is_final] runs
+(** [run_test_case ~settings ~test_fn ?indent ctx handle is_final] runs
     [test_fn] over a single native test-case [handle], maps the outcome to a
     {!Ffi.status}, and marks the case complete. A [Ffi.Usage_error] (an invalid
     generator argument the engine rejected) is not an outcome: it propagates
     unchanged, aborting the run instead of being shrunk as a counterexample.
-    [note_indent] is the starting nesting depth of note/draw lines. Shared by
-    the engine-run and failure-blob replay paths. *)
-let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle is_final =
+    A non-zero [indent] runs the body through a {!block} indented that many
+    columns. Shared by the engine-run and failure-blob replay paths. *)
+let run_test_case ~(settings : settings) ~test_fn ?(indent = 0) ctx handle is_final =
   let (tc : test_case) =
     { handle
     ; context = ctx
@@ -948,11 +937,11 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
     ; verbosity = settings.verbosity
     ; test_aborted = false
     ; draw_depth = 0
-    ; note_indent
     ; draw_state = { counts = String_table.create 16; lock = Mutex.create () }
     ; owned_pools = { pools = []; lock = Mutex.create () }
     }
   in
+  let body_tc = if indent = 0 then tc else block tc ~indent in
   DLS.set in_test_context true;
   let status, captured =
     Fun.protect
@@ -960,7 +949,7 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
         DLS.set in_test_context false;
         free_owned_pools tc)
       (fun () ->
-         match test_fn tc with
+         match test_fn body_tc with
          | () -> Ffi.Valid, None
          | exception Assume_rejected -> Ffi.Invalid, None
          | exception Data_exhausted -> Ffi.Overrun, None
@@ -969,7 +958,7 @@ let run_test_case ~(settings : settings) ~test_fn ?(note_indent = 0) ctx handle 
          | exception exn -> Ffi.Interesting, Some (extract_origin exn, exn))
   in
   Ffi.mark_complete ctx handle status (Option.map fst captured);
-  { status; interesting = captured; printed_output = flush_document tc }
+  { status; interesting = captured; printed_output = flush_document tc ~framed:(indent > 0) }
 ;;
 
 (** Diagnostic raised when the engine's shrunk counterexample no longer fails on
@@ -998,7 +987,7 @@ let final_replay ~(settings : settings) ~ffi_settings ~test_fn ctx failure =
   let outcome =
     Fun.protect
       ~finally:(fun () -> Ffi.test_case_free ctx tc)
-      (fun () -> run_test_case ~settings ~test_fn ~note_indent:1 ctx tc true)
+      (fun () -> run_test_case ~settings ~test_fn ~indent:2 ctx tc true)
   in
   match outcome.interesting with
   | Some (_origin, exn) -> blob, exn, outcome.printed_output
