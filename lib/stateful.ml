@@ -41,7 +41,7 @@ end
 module Invariant = struct
   type 'state t =
     { name : string
-    ; inv : 'state -> unit
+    ; inv : Internal.test_case -> 'state -> unit
     ; always_check : bool
     }
 
@@ -49,7 +49,9 @@ module Invariant = struct
   let name invariant = invariant.name
 end
 
-let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
+let indent_tc tc = if Internal.should_print tc then Internal.block tc ~indent:2 else tc
+
+let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
   let rule_array = Array.of_list rules in
   let invariant_names = List.map (fun inv -> Invariant.name inv) invariants in
   let invariants_always_check =
@@ -61,6 +63,7 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
       ~rule_names:(List.map Rule.name rules)
       ~invariant_names
       ~invariants_always_check
+      ~step_count
   in
   let print_state state =
     Option.iter
@@ -77,7 +80,7 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
                 ~state_machine
                 ~invariant_index:i
          then (
-           match invariant.Invariant.inv state with
+           match invariant.Invariant.inv (indent_tc tc) state with
            | () -> ()
            | exception e ->
              Internal.note
@@ -89,7 +92,12 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
              raise e))
       invariants
   in
+  let announce_checks which =
+    if not (List.is_empty invariants)
+    then Internal.note tc (Printf.sprintf "Checking invariants on the %s state." which)
+  in
   print_state init;
+  announce_checks "initial";
   check_invariants ~where:"in the initial state" ~sample:false init;
   let rec exec_round ~state ~steps_attempted ~rejected =
     match Internal.state_machine_next_rule tc ~state_machine with
@@ -98,7 +106,7 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
       let rule = rule_array.(rule_index) in
       let step_num = steps_attempted + 1 in
       Internal.note tc (Printf.sprintf "Step %d: %s" step_num rule.Rule.name);
-      (match Internal.with_note_indent tc (fun () -> rule.Rule.step tc state) with
+      (match rule.Rule.step (indent_tc tc) state with
        | new_state ->
          print_state new_state;
          exec_round ~state:new_state ~steps_attempted:step_num ~rejected
@@ -131,5 +139,24 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state tc =
     ~finally:(fun () -> Internal.state_machine_free tc ~state_machine)
     (fun () ->
        let final_state = loop ~state:init ~steps_attempted:0 in
+       announce_checks "final";
        check_invariants ~where:"in the final state" ~sample:false final_state)
+;;
+
+module type State_machine = sig
+  type state
+
+  val rules : state Rule.t list
+  val invariants : state Invariant.t list
+end
+
+let run
+      (type s)
+      ?step_count
+      ?sexp_of_state
+      tc
+      (module M : State_machine with type state = s)
+      ~(init : s)
+  =
+  run_internal ~init ~rules:M.rules ~invariants:M.invariants ?sexp_of_state ?step_count tc
 ;;

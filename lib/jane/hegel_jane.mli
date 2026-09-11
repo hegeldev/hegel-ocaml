@@ -6,28 +6,28 @@
     To use [hegel.jane], add [hegel.jane] and [core] to your dune [libraries]:
 
     {[
-      (test
-       (name my_tests)
-       (libraries hegel hegel.jane core alcotest)
-       (preprocess (pps ppx_hegel_test)))
+    test
+      (name my_tests)
+      (libraries hegel hegel.jane core alcotest)
+      (preprocess (pps ppx_hegel_test))
     ]}
 
     Then draw [Core] values directly:
 
     {[
-      open Hegel
+    open Hegel
 
-      (* Optional: show a structural [sexp_diff] on [require_equal] failures. *)
-      let () = Hegel_jane.set_sexp_diff ()
+    (* Optional: show a structural [sexp_diff] on [require_equal] failures. *)
+    let () = Hegel_jane.set_sexp_diff ()
 
-      let%hegel_test dates_are_in_range tc =
-        let d = draw tc (Hegel_jane.dates ()) in
-        assert (Core.Date.year d >= 1 && Core.Date.year d <= 9999)
-      ;;
+    let%hegel_test dates_are_in_range tc =
+      let d = draw tc (Hegel_jane.dates ()) in
+      assert (Core.Date.year d >= 1 && Core.Date.year d <= 9999)
+    ;;
     ]} *)
 
-(** [dates ?min_date ?max_date ()] creates a generator for [Core.Date.t]
-    values in [\[min_date, max_date\]]. The default range is [\[0001-01-01, 9999-12-31\]]. *)
+(** [dates ?min_date ?max_date ()] creates a generator for [Core.Date.t] values
+    in [[min_date, max_date]]. The default range is [[0001-01-01, 9999-12-31]]. *)
 val dates
   :  ?min_date:Core.Date.t
   -> ?max_date:Core.Date.t
@@ -35,21 +35,22 @@ val dates
   -> (Core.Date.t, Hegel.printable) Hegel.generator
 
 (** [ofdays ?min_ofday ?max_ofday ()] creates a generator for
-    [Core.Time_ns.Ofday.t] values in [\[min_ofday, max_ofday\]]. The default
-    range is [\[00:00:00.000000000, 24:00:00.000000000\]]. *)
+    [Core.Time_ns.Ofday.t] values in [[min_ofday, max_ofday]]. The default range
+    is [[00:00:00.000000000, 24:00:00.000000000]]. *)
 val ofdays
   :  ?min_ofday:Core.Time_ns.Ofday.t
   -> ?max_ofday:Core.Time_ns.Ofday.t
   -> unit
   -> (Core.Time_ns.Ofday.t, Hegel.printable) Hegel.generator
 
-(** [chars ()] creates a generator for single characters (codepoints 0-255,
-    i.e. Latin-1) as [Core.Char.t] values. *)
+(** [chars ()] creates a generator for single characters (codepoints 0-255, i.e.
+    Latin-1) as [Core.Char.t] values. *)
 val chars : unit -> (Core.Char.t, Hegel.printable) Hegel.generator
 
-(** [times ?min_time ?max_time ()] creates a generator for
-    [Core.Time_ns.t] values in [\[min_time, max_time\]]. The default range is
-    the full representable range: [\[1823-11-12T00:06:21.572612096Z, 2116-02-20T23:53:38.427387903Z\]]. *)
+(** [times ?min_time ?max_time ()] creates a generator for [Core.Time_ns.t]
+    values in [[min_time, max_time]]. The default range is the full
+    representable range:
+    [[1823-11-12T00:06:21.572612096Z, 2116-02-20T23:53:38.427387903Z]]. *)
 val times
   :  ?min_time:Core.Time_ns.t
   -> ?max_time:Core.Time_ns.t
@@ -57,8 +58,9 @@ val times
   -> (Core.Time_ns.t, Hegel.printable) Hegel.generator
 
 (** [time_spans ?min_span ?max_span ()] creates a generator for
-    [Core.Time_ns.Span.t] values in [\[min_span, max_span\]]. The default range
-    is the full representable range: [\[-53375d23h53m38.427387904s, 53375d23h53m38.427387903s\]]. *)
+    [Core.Time_ns.Span.t] values in [[min_span, max_span]]. The default range is
+    the full representable range:
+    [[-53375d23h53m38.427387904s, 53375d23h53m38.427387903s]]. *)
 val time_spans
   :  ?min_span:Core.Time_ns.Span.t
   -> ?max_span:Core.Time_ns.Span.t
@@ -82,10 +84,9 @@ val hash_tables
     local [values] table, removing it when [consume]. *)
 val resolve_draw : (int, 'a) Core.Hashtbl.t -> consume:bool -> int -> 'a
 
-(** [pool_values ~pool ~values ~consume] builds a generator that picks a
-    value from the engine pool [pool], resolving the drawn id against the
-    local [values] table. When [consume], the picked value is removed from the
-    pool. *)
+(** [pool_values ~pool ~values ~consume] builds a generator that picks a value
+    from the engine pool [pool], resolving the drawn id against the local
+    [values] table. When [consume], the picked value is removed from the pool. *)
 val pool_values
   :  pool:Hegel.Internal.pool
   -> values:(int, 'a) Core.Hashtbl.t
@@ -104,13 +105,12 @@ val sexp_diff_renderer
 
 (**/**)
 
-(** [set_sexp_diff ()] makes [Hegel.require_equal] failures print a
-    structural [sexp_diff] diff instead of the default both-values rendering.
-    Call it once. It stays installed for the rest of the process. *)
+(** [set_sexp_diff ()] makes [Hegel.require_equal] failures print a structural
+    [sexp_diff] diff instead of the default both-values rendering. Call it once.
+    It stays installed for the rest of the process. *)
 val set_sexp_diff : unit -> unit
 
-(** Auxiliary submodule for [@@deriving hegel_generator] for
-    [Core] generators.
+(** Auxiliary submodule for [@@deriving hegel_generator] for [Core] generators.
 
     This module enables the generator deriver to use generators for [Core] types
     such as [Date.t], [Time_ns.t], [Time_ns.Span.t] and [Time_ns.Ofday.t].
@@ -118,33 +118,32 @@ val set_sexp_diff : unit -> unit
     generators for [Core] types.
 
     {[
-      open! Core
-      open Hegel_jane.Derive
+    open! Core
+    open Hegel_jane.Derive
 
-      type event =
-        { id : int
-        ; day : Date.t
-        ; elapsed : Time_ns.Span.t
-        }
-      [@@deriving hegel_generator]
+    type event =
+      { id : int
+      ; day : Date.t
+      ; elapsed : Time_ns.Span.t
+      }
+    [@@deriving hegel_generator]
     ]}
 
-    Use [Core]-typed fields with their short paths (for example, [Date.t] instead
-    of [Core.Date.t]).
+    Use [Core]-typed fields with their short paths (for example, [Date.t]
+    instead of [Core.Date.t]).
 
     {[
-      type good = { day : Date.t } [@@deriving hegel_generator]
+    type good = { day : Date.t } [@@deriving hegel_generator]
 
-      (* Does not compile: [Core.Date] has no [hegel_generator]. *)
-      type bad = { day : Core.Date.t } [@@deriving hegel_generator]
+    (* Does not compile: [Core.Date] has no [hegel_generator]. *)
+    type bad = { day : Core.Date.t } [@@deriving hegel_generator]
     ]}
 
     To keep a [Core]-qualified type, set its generator directly:
 
     {[
-      type pinned =
-        { day : (Core.Date.t[@hegel.generator Hegel_jane.dates ()]) }
-      [@@deriving hegel_generator]
+    type pinned = { day : (Core.Date.t[@hegel.generator Hegel_jane.dates ()]) }
+    [@@deriving hegel_generator]
     ]} *)
 module Derive : sig
   (**/**)

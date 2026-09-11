@@ -15,7 +15,7 @@
     - [@hegel.do_not_generate] on variant constructors
     - always-printable derived generators: the deriver also derives
       [sexp_of_<t>] (via ppx_sexp_conv's expander) and bakes it in with
-      [with_printer]; [\[@sexp.opaque\]] is the escape hatch for un-sexpable
+      [with_printer]; [[@sexp.opaque]] is the escape hatch for un-sexpable
       fields *)
 
 open! Core
@@ -133,7 +133,7 @@ type weather =
   }
 [@@deriving hegel_generator]
 
-(** A record-field override: limit an int to [\[3, 5\]] by swapping in a custom
+(** A record-field override: limit an int to [[3, 5]] by swapping in a custom
     generator (the quickcheck idiom for range-limiting a field). *)
 type ranked =
   { name : string
@@ -159,10 +159,10 @@ type compass =
   | Broken [@hegel.do_not_generate]
 [@@deriving hegel_generator]
 
-(** A data-carrying variant with an excluded constructor whose argument type
-    has no generator. [\[@hegel.do_not_generate\]] implies opaque printing for
-    the excluded arguments (the deriver wraps them in [\[@sexp.opaque\]]
-    before invoking ppx_sexp_conv's expander). *)
+(** A data-carrying variant with an excluded constructor whose argument type has
+    no generator. [[@hegel.do_not_generate]] implies opaque printing for the
+    excluded arguments (the deriver wraps them in [[@sexp.opaque]] before
+    invoking ppx_sexp_conv's expander). *)
 type task_result =
   | Finished of int
   | Blocked of ungeneratable [@hegel.do_not_generate]
@@ -181,10 +181,10 @@ type with_opaque =
   }
 [@@deriving hegel_generator]
 
-(** Test: derived [int] fields use the same full default range as
-    [integers ()], not the old 30-bit clamp. The engine over-weights boundary
-    values (empirically ~36% of unbounded draws exceed 2³⁰−1 in magnitude), so
-    200 cases see one with near-certainty. *)
+(** Test: derived [int] fields use the same full default range as [integers ()],
+    not the old 30-bit clamp. The engine over-weights boundary values
+    (empirically ~36% of unbounded draws exceed 2³⁰−1 in magnitude), so 200
+    cases see one with near-certainty. *)
 let test_int_full_range_e2e () =
   let clamp = 1073741823 in
   let saw_beyond_clamp = ref false in
@@ -362,7 +362,7 @@ let%hegel_test test_qualified_field_e2e tc =
 ;;
 
 (** Test: a [@hegel.generator] field override pins the field to the custom
-    generator's distribution — every draw lands in [\[3, 5\]] *)
+    generator's distribution — every draw lands in [[3, 5]] *)
 let test_field_override_range_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:200 ()) (fun tc ->
     let r = Hegel.draw_silent tc hegel_generator_ranked in
@@ -395,10 +395,9 @@ let test_do_not_generate_nullary_e2e () =
   assert !saw_south
 ;;
 
-(** Test: [@hegel.do_not_generate] on a data-carrying constructor whose
-    argument type has no generator — the type still derives (the deriver never
-    references [hegel_generator_ungeneratable]) and the constructor never
-    appears. *)
+(** Test: [@hegel.do_not_generate] on a data-carrying constructor whose argument
+    type has no generator — the type still derives (the deriver never references
+    [hegel_generator_ungeneratable]) and the constructor never appears. *)
 let test_do_not_generate_data_e2e () =
   let saw_finished = ref false in
   let saw_cancelled = ref false in
@@ -421,8 +420,8 @@ let%hegel_test test_printer_e2e tc =
 [@@settings Hegel.settings ~test_cases:20 ()]
 ;;
 
-(** Test: an [\[@sexp.opaque\]] field prints as the opaque placeholder while
-    [\[@hegel.generator\]] supplies its values. *)
+(** Test: an [[@sexp.opaque]] field prints as the opaque placeholder while
+    [[@hegel.generator]] supplies its values. *)
 let%hegel_test test_opaque_field_e2e tc =
   let w = Hegel.draw tc hegel_generator_with_opaque in
   ignore (w.id : int);

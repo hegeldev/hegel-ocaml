@@ -1,7 +1,7 @@
 (** E2E tests for the [ppx_hegel_test] PPX.
 
-    These tests exercise the full expansion of [let%hegel_test] including
-    the [@@settings ...] attribute. *)
+    These tests exercise the full expansion of [let%hegel_test] including the
+    [@@settings ...] attribute. *)
 
 open! Core
 
@@ -135,6 +135,44 @@ let test_failing_writes_condition_false () =
            (List.Assoc.find_exn eval_assoc ~equal:String.equal "condition"))))
 ;;
 
+let invariant_checks = ref 0
+
+module%hegel_state_machine Counter = struct
+  let bump tc n =
+    let by = Hegel.draw tc (Hegel.integers ~min_value:1 ~max_value:3 ()) in
+    n + by
+  [@@rule]
+  ;;
+
+  let positive _tc n =
+    incr invariant_checks;
+    assert (n >= 0)
+  [@@invariant always_check]
+  ;;
+
+  let helper = 42
+end
+
+let%hegel_test runs_machine (tc : Hegel.test_case) =
+  invariant_checks := 0;
+  Counter.run tc ~init:0 ~step_count:5;
+  assert (!invariant_checks > 2)
+[@@settings Hegel.settings ~test_cases:3 ()]
+;;
+
+let test_state_machine_collects_marked_bindings () =
+  Alcotest.(check (list string))
+    "rule names"
+    [ "bump" ]
+    (List.map Counter.rules ~f:Hegel.Stateful.Rule.name);
+  Alcotest.(check (list string))
+    "invariant names"
+    [ "positive" ]
+    (List.map Counter.invariants ~f:Hegel.Stateful.Invariant.name);
+  Alcotest.(check int) "unmarked items are kept" 42 Counter.helper;
+  with_tempdir ~f:(fun dir -> with_env_dir dir ~f:runs_machine)
+;;
+
 let test_no_settings_runs_with_defaults () =
   with_tempdir ~f:(fun dir ->
     with_env_dir dir ~f:(fun () ->
@@ -159,6 +197,10 @@ let () =
             "no [@@settings] uses defaults"
             `Quick
             test_no_settings_runs_with_defaults
+        ; Alcotest.test_case
+            "module%hegel_state_machine collects [@@rule]/[@@invariant] bindings"
+            `Quick
+            test_state_machine_collects_marked_bindings
         ] )
     ]
 ;;

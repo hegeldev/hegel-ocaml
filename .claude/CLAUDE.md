@@ -36,7 +36,8 @@ lib/                         # Library source
                              #   handles; typed draws + string-generator handles;
                              #   events; the pretty-printer document (printer_*,
                              #   test_case_printer, note)
-    loader.ml                # locate/download libhegel at runtime (env > sibling > release)
+    loader.ml                # locate/download libhegel at runtime (env > site >
+                             #   sibling ../hegel-rust build (libhegel_c.<ext>) > release)
   internal.ml.in             # Test runner + run lifecycle + typed-draw wrappers on
                              #   top of Hegel_ffi.Ffi; note/print_line/render_sexp +
                              #   flush_document (engine-side output, see Pretty
@@ -55,7 +56,12 @@ lib/                         # Library source
   derive.ml                  # Hegel.Derive: scope-resolved names derived code
                              #   refers to (hegel_generator_int/…/char/list/
                              #   option + the Sexplib0 sexp_of_* converters)
-  stateful.ml                # Stateful testing: Rule.create + run over action sequences
+  stateful.ml                # Stateful testing. Rule/Invariant.create (both take the
+                             #   test case), the State_machine module type, and
+                             #   run tc (module M) ~init. The doc-hidden run_internal
+                             #   takes the lists directly and is what the run generated
+                             #   by module%hegel_state_machine calls.
+                             #   Rule and invariant bodies run on indent-2 block handles
   antithesis.ml              # Antithesis integration (emits an always-typed assertion)
   jane/                      # Optional hegel.jane sublibrary ((optional) in dune).
     hegel_jane.ml/.mli       #   Core.Hashtbl hash_tables + pool helpers and the
@@ -72,6 +78,9 @@ ppx/                         # PPX rewriters and derivers
   ppx_hegel_test.ml          # Expander: rewrites [let%hegel_test name tc = body]
                              # into a plain callable function (no registration,
                              # no runtime library — see Inline Test Integration below)
+                             # and [module%hegel_state_machine M = struct .. end]
+                             # into that module plus generated rules/invariants/run
+                             # from its [@@rule]/[@@invariant] bindings
   ppx_compat_pre-53.ml       # AST compat shim for ppxlib < 0.36 (OCaml < 5.3)
   ppx_compat_post-53.ml      # AST compat shim for ppxlib >= 0.36 (OCaml >= 5.3)
   ppx_compat_oxcaml.ml       # AST compat shim for the OxCaml compiler
@@ -118,7 +127,10 @@ There is no subprocess, socket, or wire protocol. The engine is the native
 `libhegel` C library (from hegel-rust, header `hegel-c/include/hegel.h`), called
 in-process via ctypes. `Hegel_ffi.Loader` resolves the shared library at runtime
 (mirroring hegel-go): `$HEGEL_LIBHEGEL_PATH`, then a sibling
-`../hegel-rust/target/{release,debug}/` checkout, then a SHA-256-verified
+`../hegel-rust/target/{release,debug}/libhegel_c.<ext>` checkout (the name
+`cargo build -p hegeltest-c` gives the cdylib; dune sandboxes run tests from
+`_build/.sandbox/...`, so that relative path does not resolve under
+`dune runtest` — set `HEGEL_LIBHEGEL_PATH` there), then a SHA-256-verified
 download from the hegel-rust GitHub release cached under
 `~/.cache/hegel-ocaml/libhegel/<version>/` (opt out with
 `HEGEL_LIBHEGEL_NO_DOWNLOAD=1`). `Hegel_ffi.Ffi` `dlopen`s that path and exposes
@@ -127,9 +139,11 @@ thin 1:1 wrappers: settings handles, the run lifecycle (`run_start`,
 typed draws (`generate_integer`, `generate_boolean`, `generate_float`,
 `generate_bytes`, `generate_string` + the `string_generator_*` handle
 constructors, `generate_date`/`time`/`datetime`, `generate_ipv4`/`ipv6`), spans,
-collections, pools, `target`, `event`/`event_value`, the pretty-printer
-document (`printer_*`, `test_case_printer`, `note` — see Pretty printing
-below), `mark_complete`. There is no CBOR: each value is
+collections, pools, state machines (`new_state_machine` takes the per-machine
+`~step_count` since libhegel 0.38.0; there is no settings-level step count),
+`target`, `event`/`event_value`, derived handles (`test_case_clone`,
+`test_case_block`), the pretty-printer document (`printer_*`,
+`test_case_printer`, `note` — see Pretty printing below), `mark_complete`. There is no CBOR: each value is
 drawn by a dedicated typed call rather than a schema round-trip (this replaced the
 removed `hegel_generate`/CBOR-schema path in libhegel 0.26.0). There is no
 engine thread (removed in libhegel 0.30.1): `hegel_next_test_case` runs all
@@ -200,7 +214,25 @@ Generators are a discriminated union:
 The `ppx_hegel_test` PPX rewrites `let%hegel_test name tc = body` into a
 single top-level item: `let name = fun () -> Hegel.run_hegel_test ... (fun tc
 -> body)`. That's it — `name` is an ordinary `unit -> unit` value with no
-registration, no runtime library, and no side effect at module init. Hegel
+registration, no runtime library, and no side effect at module init. The same
+rewriter also handles `module%hegel_state_machine M = struct … end`, the
+analogue of hegel-rust's `#[hegel::state_machine] impl`. At expansion time it
+collects the bindings marked `[@@rule]`, `[@@invariant]`, or
+`[@@invariant always_check]` into appended `rules` and `invariants` lists
+(`Rule.create ~name:"<binding>" ~step:<binding>` and the same for
+`Invariant.create`) plus a `run ?step_count ?sexp_of_state tc ~init`. There
+is no registry and no runtime discovery. The generated `run` calls the
+doc-hidden `Stateful.run_internal`, which takes the lists directly, because
+the expanded module need not declare `type state` and the public
+`Stateful.run` takes a `State_machine` module. `sexp_of_state` defaults to
+the module's own when it binds one or derives it on `type state`
+(`defines_sexp_of_state`). The markers are stripped from the emitted items,
+every other item is kept, and a module with no `[@@rule]` is a compile error.
+Marked bodies get the same draw-name injection as a test body, judged at
+depth 0. A rule or invariant body runs in its own naming scope each step (see
+Pretty printing), so `let n = draw tc g` prints as `n`, not `n_1`. Invariants
+take the test case (`inv : test_case -> 'state -> unit`) so they can draw and
+note. Hegel
 has no test runner of its own and no `(inline_tests (backend ...))` stanza:
 the project's own tests wire each `let%hegel_test`-produced function into
 whatever test framework the project already uses (see `examples/*.ml`, which
@@ -360,12 +392,18 @@ Who owns what in hegel-ocaml:
 - state machines → `Stateful.run`, the same way
 - variable pools → the test case. `Stateful.Pool.create` is public and has no
   lexical scope, so `Internal.new_pool` adds the handle to the test case's
-  `owned_pools` (a `Ffi.pool list` + mutex, which a clone shares with the test
-  case it was cloned from, like `draw_state`), and `run_test_case` calls
-  `free_owned_pools` once the case is complete — matching the order in
+  `owned_pools` (a `Ffi.pool list` + mutex, which a clone or block shares with
+  the test case it was derived from, like `draw_state`), and `run_test_case`
+  calls `free_owned_pools` once the case is complete — matching the order in
   hegel-rust's own
   `hegel-c/tests/c_abi_inprocess.rs`, which frees all three before
   `hegel_mark_complete`.
+- derived test-case handles (`Internal.clone` → `hegel_test_case_clone`,
+  `Internal.block` → `hegel_test_case_block`) → a GC finaliser
+  (`Gc.finalise_last`) frees the handle and its own context once the OCaml
+  record is unreachable. Not lexical, because user code may
+  capture the record (a `Stateful.Pool.create` inside a rule body stores the
+  block `tc` and uses its handle in later rules).
 
 Note: the published reference at <https://hegel.dev/reference/libhegel> is
 **stale on this point** — it still documents the pre-0.31.0 `int64_t` ids and
@@ -394,10 +432,27 @@ non-empty". Verbosity gating stays client-side (`should_print`): under Quiet,
 or a non-final case at Normal, nothing is appended and the read is skipped.
 Clones write into their own region, anchored where the clone was made, so
 concurrent output assembles deterministically regardless of scheduling.
-Because indentation only materializes through break points, the first line of
-any output is indented with literal spaces and the content is wrapped in
-`shift_indent`/`-shift_indent` so continuation lines nest — the same pattern
-as hegel-rust's frontend; `note_indent` remains client-side bookkeeping.
+Indentation is engine-side too (libhegel 0.37.10 block handles): `Internal.block
+tc ~indent` opens a handle onto the *same* choice stream whose print region is
+a block nested in `tc`'s at the current position, every line `indent` columns
+further in, ending with the block. `Stateful.run` runs each rule's `step` and
+each invariant body with `block tc ~indent:2` so their draws nest under the
+`Step N: name` note. It only creates the block when `should_print tc` holds
+(`Stateful.section`); a non-printing case runs the body on `tc` itself, since
+a block per step costs a native handle, a context, and a GC finaliser, which
+measured as 50% more wall time and 20x the major collections on a
+200-case x 500-step machine. And
+`final_replay` runs the body via `run_test_case ~indent:2` so it sits inside
+the client-drawn failure frame (`flush_document ~framed` adds the blank line
+after the frame header). The client prepends no spaces anywhere. Mirroring
+hegel-rust's `TestCase::child`, a block starts at span depth 0 and opens a
+fresh `draw_state` (a rule's draw names are scoped to that one invocation: a
+`[@@rule]` body's `let n = draw ..` prints as `n` in every step, and a
+closure defined inside a `let%hegel_test` body — flagged repeatable by the
+PPX — as `n_1` in every step), while sharing `owned_pools`; a clone instead
+copies the span depth and shares the parent's `draw_state`.
+Unlike a clone, a block must not be driven concurrently with its parent. `hegel_test_case_set_worker` (worker attribution) is not bound:
+`Stateful.run` is sequential (concurrency fixed at 1).
 Flipping the `should_print` gate to always-append (so the engine sees every
 case's representation) is the intended future Tyche switch.
 
@@ -422,7 +477,10 @@ failing examples across runs, use `database` / `database_key`.
 
 `run_hegel_test` builds an `Ffi.settings` from the OCaml settings, calls
 `Ffi.run_start`, then loops on `Ffi.next_test_case` until it returns `None`. Each
-test case handle is wrapped in a `test_case` record and passed to the user's function. 
+test case handle is wrapped in a `test_case` record and passed to the user's function.
+`build_ffi_settings` cannot fail: every `hegel_settings_set_*` returns `HEGEL_OK`
+(the step count, formerly the only setting the engine could reject, is now a
+`Stateful.run ?step_count` argument validated by `hegel_new_state_machine`).
 The client controls when a final run occurs. Exceptions map to
 `Ffi.mark_complete` statuses: VALID, INVALID (`Assume_rejected`/`Flaky_strategy`),
 OVERRUN (`Data_exhausted` from a `Stop_test` during a primitive), INTERESTING

@@ -28,3 +28,13 @@
  (foreign_stubs
   (language c)
   (names unsetenv_stubs)))
+
+; Runs on its own so nothing else in the process has loaded libhegel first.
+
+(test
+ (name test_lazy_load)
+ (package hegel)
+ (modules test_lazy_load)
+ (libraries hegel hegel_ffi alcotest core core_unix)
+ (preprocess
+  (pps ppx_js_style -- -allow-unannotated-ignores)))

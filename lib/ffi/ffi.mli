@@ -36,15 +36,15 @@ type failure
     {!string_generator_free}. *)
 type string_generator
 
-(** Opaque collection handle ([hegel_collection_t]). Using a collection from 
+(** Opaque collection handle ([hegel_collection_t]). Using a collection from
     multiple threads will throw an error. *)
 type collection
 
-(** Opaque variable-pool handle ([hegel_pool_t]). Unlike a {!type:collection} it 
+(** Opaque variable-pool handle ([hegel_pool_t]). Unlike a {!type:collection} it
     can be used from multiple threads. *)
 type pool
 
-(** Opaque state-machine handle ([hegel_state_machine_t]). It can be shared 
+(** Opaque state-machine handle ([hegel_state_machine_t]). It can be shared
     across clones. *)
 type state_machine
 
@@ -96,10 +96,10 @@ type status =
     - [Run_failed]: the property failed; inspect each distinct counterexample
       via {!result_failures}.
     - [Run_error]: the run itself failed: a failed health check, a
-      nondeterministic test, a run-scoped client mistake, or a violated
-      internal engine invariant (a bug in hegel, reported with a bug-report
-      diagnostic). It produced no verdict on the property. There are no
-      failures to inspect; the message is read via {!result_error}. *)
+      nondeterministic test, a run-scoped client mistake, or a violated internal
+      engine invariant (a bug in hegel, reported with a bug-report diagnostic).
+      It produced no verdict on the property. There are no failures to inspect;
+      the message is read via {!result_error}. *)
 type run_status =
   | Run_passed
   | Run_failed
@@ -160,7 +160,11 @@ val last_error_message : context -> string
 
 (** {2 Context} *)
 
+(** The first call loads libhegel and resolves its symbols. Until then the
+    library is not touched, so programs that only derive generators never need
+    it. *)
 val context_new : unit -> context
+
 val context_free : context -> unit
 
 (** {2 Settings} *)
@@ -177,7 +181,6 @@ val settings_free : context -> settings -> unit
 val settings_backend : context -> settings -> backend -> unit
 
 val settings_test_cases : context -> settings -> int -> unit
-val settings_stateful_step_count : context -> settings -> int -> unit
 val settings_verbosity : context -> settings -> verbosity -> unit
 
 (** [settings_seed ctx s seed] sets the RNG seed ([None] picks a fresh random
@@ -191,8 +194,8 @@ val settings_report_multiple_failures : context -> settings -> bool -> unit
     statistics block aggregating {!event}/{!event_value} observations. *)
 val settings_show_statistics : context -> settings -> bool -> unit
 
-(** [settings_database ctx s db] configures the on-disk example database:
-    [None] leaves the default, [Some ""] disables it, [Some dir] uses [dir]. *)
+(** [settings_database ctx s db] configures the on-disk example database: [None]
+    leaves the default, [Some ""] disables it, [Some dir] uses [dir]. *)
 val settings_database : context -> settings -> string option -> unit
 
 (** [settings_database_key ctx s key] scopes stored/replayed examples; [None]
@@ -202,8 +205,8 @@ val settings_database_key : context -> settings -> string option -> unit
 (** [settings_phases ctx s mask] enables exactly the phases in the bitmask. *)
 val settings_phases : context -> settings -> int -> unit
 
-(** [settings_suppress_health_check ctx s mask] disables the health checks in the
-    bitmask. *)
+(** [settings_suppress_health_check ctx s mask] disables the health checks in
+    the bitmask. *)
 val settings_suppress_health_check : context -> settings -> int -> unit
 
 (** {2 Run lifecycle} *)
@@ -212,17 +215,16 @@ val settings_suppress_health_check : context -> settings -> int -> unit
     {!Backend_error} on failure. The handle must be freed with {!run_free}. *)
 val run_start : context -> settings -> run
 
-(** [next_test_case ctx run] blocks until the engine produces the next test case,
-    or returns [None] when the run is finished. Raises {!Backend_error} on
+(** [next_test_case ctx run] blocks until the engine produces the next test
+    case, or returns [None] when the run is finished. Raises {!Backend_error} on
     engine error or caller misuse. *)
 val next_test_case : context -> run -> test_case option
 
 (** [test_case_from_blob ctx settings blob] builds a standalone test case that
     replays the example encoded in a base64 failure [blob]. Raises
-    {!Usage_error} (with the engine's diagnostic) when the blob is missing,
-    not UTF-8, or cannot be decoded. The engine never returns a null handle
-    without setting an error. The handle must be freed with
-    {!test_case_free}. *)
+    {!Usage_error} (with the engine's diagnostic) when the blob is missing, not
+    UTF-8, or cannot be decoded. The engine never returns a null handle without
+    setting an error. The handle must be freed with {!test_case_free}. *)
 val test_case_from_blob : context -> settings -> string option -> test_case
 
 (** [run_result ctx run] returns the aggregated result of a finished run. Raises
@@ -245,15 +247,25 @@ val failure_free : context -> failure -> unit
     (run-owned from {!next_test_case}, cloned, or from a failure blob). *)
 val test_case_free : context -> test_case -> unit
 
-(** [test_case_clone ctx tc] forks a handle onto an {e independent stream}
-    of the same underlying test case ([hegel_test_case_clone]). The clone shares
-    that test case's outcome and choice budget. The handle draws from its own 
-    choice sequence, so it may be driven from another thread concurrently with [tc]. 
-    Cloning occupies one choice position on [tc]'s stream. Drive the returned 
-    handle through a {e separate} context. The handle is caller-owned and must
-    be freed with {!test_case_free}. Raises {!Backend_error} on concurrent use of 
-    [tc]. *)
+(** [test_case_clone ctx tc] forks a handle onto an {e independent stream} of
+    the same underlying test case ([hegel_test_case_clone]). The clone shares
+    that test case's outcome and choice budget. The handle draws from its own
+    choice sequence, so it may be driven from another thread concurrently with
+    [tc]. Cloning occupies one choice position on [tc]'s stream. Drive the
+    returned handle through a {e separate} context. The handle is caller-owned
+    and must be freed with {!test_case_free}. Raises {!Backend_error} on
+    concurrent use of [tc]. *)
 val test_case_clone : context -> test_case -> test_case
+
+(** [test_case_block ctx tc ~indent] opens a handle onto the {e same} choice
+    stream as [tc] ([hegel_test_case_block]) whose print region is a block
+    nested in [tc]'s at the current position: every line printed or noted
+    through it (and through the clones and blocks derived from it) is indented
+    [indent] columns further than [tc]'s lines, and the indentation ends with
+    the block. Drawing through it and through [tc] are the same thing, so the
+    two must not be driven concurrently. The handle is caller-owned and must be
+    freed with {!test_case_free}. *)
+val test_case_block : context -> test_case -> indent:int -> test_case
 
 (** {2 Per-test-case primitives} *)
 
@@ -264,11 +276,11 @@ val test_case_clone : context -> test_case -> test_case
 val generate_boolean : context -> test_case -> float -> bool option -> bool
 
 (** [generate_integer ctx tc ~min_value ~max_value] draws an integer in
-    [\[min_value, max_value\]]. Raises {!Stop_test} on budget exhaustion. *)
+    [[min_value, max_value]]. Raises {!Stop_test} on budget exhaustion. *)
 val generate_integer : context -> test_case -> min_value:int -> max_value:int -> int
 
 (** [generate_float ctx tc ...] draws a width-64 float in
-    [\[min_value, max_value\]] under the given NaN / infinity / exclusion policy.
+    [[min_value, max_value]] under the given NaN / infinity / exclusion policy.
     Pass [neg_infinity] / [infinity] for unbounded ends and
     [smallest_nonzero_magnitude] (e.g. [5e-324]) for no magnitude restriction.
     Raises {!Stop_test} on budget exhaustion. *)
@@ -285,13 +297,14 @@ val generate_float
   -> float
 
 (** [generate_bytes ctx tc ~min_size ~max_size] draws a byte string with length
-    in [\[min_size, max_size\]] ([max_size = None] means unbounded). Raises
+    in [[min_size, max_size]] ([max_size = None] means unbounded). Raises
     {!Stop_test} on budget exhaustion. *)
 val generate_bytes : context -> test_case -> min_size:int -> max_size:int option -> string
 
 (** [string_generator_text ctx ...] builds a text string generator over the
-    described alphabet. [max_size = None] means unbounded. Raises {!Backend_error}
-    on invalid parameters. The handle must be freed with {!string_generator_free}. *)
+    described alphabet. [max_size = None] means unbounded. Raises
+    {!Backend_error} on invalid parameters. The handle must be freed with
+    {!string_generator_free}. *)
 val string_generator_text
   :  context
   -> min_size:int
@@ -392,15 +405,18 @@ val pool_generate : context -> test_case -> pool:pool -> consume:bool -> int
 (** [pool_free ctx pool] releases [pool]. *)
 val pool_free : context -> pool -> unit
 
-(** [new_state_machine ctx tc ~rule_names ~rule_groups ~invariant_names
-    ~invariants_always_check ~min_concurrency ~max_concurrency] registers an
-    engine-owned state machine with the named rules (each in the concurrency
-    group given by the parallel [rule_groups]) and invariants.
-    Returns the machine with the concurrency level the engine drew in
-    [\[min_concurrency, max_concurrency\]]. The engine owns rule selection.
-    Raises {!Usage_error} if [rule_names] is empty, a group id is
-    [HEGEL_STATE_MACHINE_DONE], or the concurrency bounds are invalid, and
-    {!Stop_test} when the engine's choice budget is exhausted. *)
+(** [new_state_machine ctx tc ~rule_names ~rule_groups ~invariant_names ~invariants_always_check ~min_concurrency ~max_concurrency ~step_count]
+    registers an engine-owned state machine with the named rules (each in the
+    concurrency group given by the parallel [rule_groups]) and invariants.
+    [step_count] is the target number of rounds per test case: every case runs
+    at least one round and at most [step_count], and each sampled invariant is
+    checked with probability [1 / step_count] per join point (the engine has no
+    default). Returns the machine with the concurrency level the engine drew in
+    [[min_concurrency, max_concurrency]]. The engine owns rule selection. Raises
+    {!Usage_error} if [rule_names] is empty, a group id is
+    [HEGEL_STATE_MACHINE_DONE], the concurrency bounds are invalid, or
+    [step_count] is below 1, and {!Stop_test} when the engine's choice budget is
+    exhausted. *)
 val new_state_machine
   :  context
   -> test_case
@@ -410,13 +426,14 @@ val new_state_machine
   -> invariants_always_check:bool list
   -> min_concurrency:int
   -> max_concurrency:int
+  -> step_count:int
   -> state_machine * int
 
 (** [state_machine_next_group ctx tc ~state_machine] starts the machine's next
     round on the root handle, returning the round's concurrency group id, or
-    [None] ([HEGEL_STATE_MACHINE_DONE]) when the machine has terminated.
-    Call it before the first rule and after every round. Raises {!Stop_test}
-    when the engine's choice budget is exhausted. *)
+    [None] ([HEGEL_STATE_MACHINE_DONE]) when the machine has terminated. Call it
+    before the first rule and after every round. Raises {!Stop_test} when the
+    engine's choice budget is exhausted. *)
 val state_machine_next_group
   :  context
   -> test_case
@@ -447,8 +464,7 @@ val state_machine_rule_rejected
   -> worker_index:int
   -> unit
 
-(** [state_machine_should_check_invariant ctx tc ~state_machine
-    ~invariant_index] decides whether to run invariant [invariant_index] at the
+(** [state_machine_should_check_invariant ctx tc ~state_machine ~invariant_index] decides whether to run invariant [invariant_index] at the
     current join point. It always returns [true] for an invariant flagged at
     creation. Otherwise, it returns the engine's sampling decision. Raises
     {!Stop_test} when the engine's choice budget is exhausted. *)
@@ -470,29 +486,27 @@ val target : context -> test_case -> float -> string -> unit
 val event : context -> test_case -> string -> unit
 
 (** [event_value ctx tc value label] records the numeric observation [value]
-    under [label] for the end-of-run statistics report. [value] must be
-    finite. *)
+    under [label] for the end-of-run statistics report. [value] must be finite. *)
 val event_value : context -> test_case -> float -> string -> unit
 
-(** [mark_complete ctx tc status origin] reports the test case's outcome. [origin]
-    is used only for {!Interesting} and must be stable per bug. *)
+(** [mark_complete ctx tc status origin] reports the test case's outcome.
+    [origin] is used only for {!Interesting} and must be stable per bug. *)
 val mark_complete : context -> test_case -> status -> string option -> unit
 
 (** {2 Pretty printer} *)
 
-(** Opaque pretty-printer handle ([hegel_printer_t]), addressing one region of
-    a document: the document body for a handle from {!printer_new} /
-    {!test_case_printer}, or a hole for a handle from {!printer_deferred}.
-    Every handle must be freed exactly once with {!printer_free}. *)
+(** Opaque pretty-printer handle ([hegel_printer_t]), addressing one region of a
+    document: the document body for a handle from {!printer_new} /
+    {!test_case_printer}, or a hole for a handle from {!printer_deferred}. Every
+    handle must be freed exactly once with {!printer_free}. *)
 type printer
 
-(** Opaque printer-options handle ([hegel_printer_options_t]): read only
-    during {!printer_new} / {!test_case_printer}, freed with
-    {!printer_options_free}. *)
+(** Opaque printer-options handle ([hegel_printer_options_t]): read only during
+    {!printer_new} / {!test_case_printer}, freed with {!printer_options_free}. *)
 type printer_options
 
-(** [printer_options_new ctx] creates an options handle with every option at
-    its default ([max_width] 79). *)
+(** [printer_options_new ctx] creates an options handle with every option at its
+    default ([max_width] 79). *)
 val printer_options_new : context -> printer_options
 
 (** [printer_options_free ctx options] releases [options]. *)
@@ -556,8 +570,8 @@ val printer_begin_speculative : context -> printer -> unit
     on [p], keeping its content. *)
 val printer_commit_speculative : context -> printer -> unit
 
-(** [printer_abort_speculative ctx p] closes the innermost speculative region
-    on [p], discarding its content. *)
+(** [printer_abort_speculative ctx p] closes the innermost speculative region on
+    [p], discarding its content. *)
 val printer_abort_speculative : context -> printer -> unit
 
 (** [printer_resolve ctx p] splices every deferred hole's content in at its
@@ -574,8 +588,8 @@ val printer_is_live : context -> printer -> bool
 val printer_value : context -> printer -> string
 
 (** [test_case_printer ctx tc options] fetches a handle onto [tc]'s region of
-    the test-case family document ([None] options means defaults; the first
-    call that explicitly configures a width fixes the document's width). *)
+    the test-case family document ([None] options means defaults; the first call
+    that explicitly configures a width fixes the document's width). *)
 val test_case_printer : context -> test_case -> printer_options option -> printer
 
 (** [note ctx tc text] appends [text] to [tc]'s print region; each

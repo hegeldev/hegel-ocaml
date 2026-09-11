@@ -136,8 +136,8 @@ let test_lists_non_basic_unique_exhaustion_e2e () =
     (fun tc ->
        let elem = filter (fun _ -> true) (integers ~min_value:0 ~max_value:0 ()) in
        (* Asking for ≥2 unique elements from {0} — impossible. The engine's
-          many.reject() limit will fire and send StopTest, which
-          collection_reject converts to Data_exhausted. *)
+         many.reject() limit will fire and send StopTest, which
+         collection_reject converts to Data_exhausted. *)
        let gen = lists elem ~min_size:2 ~unique:true () in
        ignore (Hegel.draw tc gen))
 ;;
@@ -165,9 +165,8 @@ let test_assoc_lists_non_basic_values_e2e () =
 (** Regression: [lists ~unique:true] over a [map] that collapses distinct raw
     values must not return duplicates post-transform. The engine enforces
     uniqueness on raw values, so a non-injective [map] would yield duplicate
-    OCaml values if we took the fast path. The fix routes [unique=true] to
-    the dedup path when the element transform isn't known to preserve
-    distinctness. *)
+    OCaml values if we took the fast path. The fix routes [unique=true] to the
+    dedup path when the element transform isn't known to preserve distinctness. *)
 let test_lists_unique_under_map_e2e () =
   Hegel.run_hegel_test
     ~settings:
@@ -189,8 +188,8 @@ let test_lists_unique_under_map_e2e () =
        Alcotest.(check int) "all unique" n uniq)
 ;;
 
-(** Test: hash_tables produces a [Hashtbl.t] within the size bounds, holding
-    the generated entries. *)
+(** Test: hash_tables produces a [Hashtbl.t] within the size bounds, holding the
+    generated entries. *)
 let test_hash_tables_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:50 ()) (fun tc ->
     let gen =

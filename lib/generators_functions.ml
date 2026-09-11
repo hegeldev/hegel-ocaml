@@ -1,5 +1,5 @@
-(** Generators for functions as test inputs, after Koen Claessen's {i Shrinking 
-    and Showing Functions}.
+(** Generators for functions as test inputs, after Koen Claessen's
+    {i Shrinking and Showing Functions}.
 
     A drawn function is backed by a per-test-case memo table. The first time it
     is applied to a given argument it draws a fresh result from [returns] and
@@ -19,8 +19,8 @@ open Generators_core
    core behind {!functions}/{!functions2}/{!functions3}. [adapt] is the identity
    function, or currying for the multi-argument variants. [sexp_of_arg] renders
    the argument when a pair is shown. The memo table keys on the argument itself
-   via structural hash/equality. The shown label is [explicit_name] when the 
-   caller passed [~name], else the draw-site [name] (the binding, via the PPX), 
+   via structural hash/equality. The shown label is [explicit_name] when the
+   caller passed [~name], else the draw-site [name] (the binding, via the PPX),
    else ["function"]. *)
 let make
   : type a b c p.
@@ -53,8 +53,8 @@ let make
           Stdlib.Hashtbl.replace table arg ret;
           ret, true
       in
-      (* print every function call in verbose/debug verbosity, print only the first
-         invocation in normal verbosity. *)
+      (* print every function call in verbose/debug verbosity, print only the
+         first invocation in normal verbosity. *)
       if Internal.draw_depth tc = 0 && (is_fresh || Internal.is_high_verbosity tc)
       then
         Internal.print_line
@@ -79,13 +79,14 @@ let sexp_or sexp_of_arg =
     ['a -> 'b] whose results are drawn from [returns].
 
     The result carries no printer (its output type is a function), so draw it
-    with {!Hegel.draw_silent}. Applying the drawn function to an argument draws a
-    result from [returns] the first time that argument is seen and memoizes it.
+    with {!Hegel.draw_silent}. Applying the drawn function to an argument draws
+    a result from [returns] the first time that argument is seen and memoizes
+    it.
 
     On the failing final replay each top-level application prints as
     [name arg = result] (applications nested inside a span are suppressed).
-    [name] is [?name] when you pass it — an explicit label always wins — else the
-    draw-site binding name inside a [let%hegel_test], else ["function"].
+    [name] is [?name] when you pass it — an explicit label always wins — else
+    the draw-site binding name inside a [let%hegel_test], else ["function"].
 
     The memo table keys on the argument itself, so distinct arguments always get
     independent results. [sexp_of_arg] only renders the argument in the shown

@@ -12,12 +12,14 @@ check-tests:
     # ../hegel-rust/target build > verified download); see lib/ffi/loader.ml.
     dune build --instrument-with bisect_ppx \
       test/test_hegel.exe \
+      test/test_lazy_load.exe \
       ppx/test/test_ppx_derive.exe \
       ppx/test/test_ppx_hegel_test.exe
     export BISECT_FILE="$PWD/_build/default/test/bisect"
     ./_build/default/ppx/test/test_ppx_derive.exe
     ./_build/default/ppx/test/test_ppx_hegel_test.exe
     ./_build/default/test/test_hegel.exe
+    ./_build/default/test/test_lazy_load.exe
     # The ppx_expect tests are an inline-tests library (no standalone exe), so
     # run them through dune; coverage merges via BISECT_FILE.
     dune runtest ppx/test/expect_tests --instrument-with bisect_ppx --force
@@ -66,11 +68,12 @@ check-tests-no-coverage:
     #!/usr/bin/env bash
     set -euo pipefail
     eval $(opam env)
-    dune build test/test_hegel.exe ppx/test/test_ppx_derive.exe \
-      ppx/test/test_ppx_hegel_test.exe
+    dune build test/test_hegel.exe test/test_lazy_load.exe \
+      ppx/test/test_ppx_derive.exe ppx/test/test_ppx_hegel_test.exe
     ./_build/default/ppx/test/test_ppx_derive.exe
     ./_build/default/ppx/test/test_ppx_hegel_test.exe
     ./_build/default/test/test_hegel.exe
+    ./_build/default/test/test_lazy_load.exe
     # ppx_expect tests are an inline-tests library (no standalone exe), so run
     # them through dune. --force ensures they execute even if dune considers
     # them cached.

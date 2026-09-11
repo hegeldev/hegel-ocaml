@@ -48,8 +48,8 @@ let bounds_tests
   ]
 ;;
 
-(** Test: time_spans covers the representable range by default,
-    including negative spans. *)
+(** Test: time_spans covers the representable range by default, including
+    negative spans. *)
 let test_time_spans_default_bounds () =
   let module Span = Core.Time_ns.Span in
   let saw_negative = ref false in
@@ -190,8 +190,8 @@ let test_hash_tables_min_greater_than_max () =
     (Hegel_jane.hash_tables (integers ()) (booleans ()) ~min_size:5 ~max_size:3 ())
 ;;
 
-(* Hash tables render through [Hashtbl.Poly.sexp_of_t]; a single entry keeps
-   the iteration order deterministic. *)
+(* Hash tables render through [Hashtbl.Poly.sexp_of_t]; a single entry keeps the
+   iteration order deterministic. *)
 let test_printer_hash_table () =
   check_printer
     "hash table"
@@ -220,8 +220,8 @@ let test_resolve_draw () =
   Alcotest.(check bool) "unknown id raises Flaky_strategy" true raised
 ;;
 
-(* Draws through the engine's pool protocol against a Core.Hashtbl-backed
-   pool, exercising [pool_values]' [is_empty] closure. *)
+(* Draws through the engine's pool protocol against a Core.Hashtbl-backed pool,
+   exercising [pool_values]' [is_empty] closure. *)
 let test_pool_values_e2e () =
   run_hegel_test ~settings:(settings ~test_cases:5 ()) (fun tc ->
     let pool = Internal.new_pool tc in
