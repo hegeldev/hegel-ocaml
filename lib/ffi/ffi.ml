@@ -12,24 +12,51 @@ open Ctypes
 (* Locating and opening the shared library                            *)
 (* ------------------------------------------------------------------ *)
 
-(* {!Loader.locate} resolves (and, if necessary, downloads) the library path; we
-   open it here. The library is loaded on module init — i.e. the first time
-   anything in the process touches the Hegel engine. *)
-let lib =
-  let path = Loader.locate () in
-  try Dl.dlopen ~filename:path ~flags:[ Dl.RTLD_NOW; Dl.RTLD_GLOBAL ] with
-  | Dl.DL_error msg ->
-    failwith (Printf.sprintf "hegel: failed to load libhegel from %s: %s" path msg)
+(* [memoize] is a thread-safe lazy value, used to avoid an eager dlopen in code
+   that wants to derive hegel generators but doesn't run the hegel engine and
+   hence doesn't require libhegel. *)
+let memoize f =
+  let mutex = Mutex.create () in
+  let value = lazy (f ()) in
+  let forced = Atomic.make None in
+  fun () ->
+    match Atomic.get forced with
+    | Some v -> v
+    | None ->
+      Mutex.protect mutex (fun () ->
+        let v = Lazy.force value in
+        Atomic.set forced (Some v);
+        v)
 ;;
 
-let foreign name typ = Foreign.foreign ~from:lib name typ
+let lib =
+  memoize (fun () ->
+    let path = Loader.locate () in
+    try Dl.dlopen ~filename:path ~flags:[ Dl.RTLD_NOW; Dl.RTLD_GLOBAL ] with
+    | Dl.DL_error msg ->
+      failwith (Printf.sprintf "hegel: failed to load libhegel from %s: %s" path msg))
+;;
+
+let binding_initializers = ref []
+
+let foreign ?(release_runtime_lock = false) name typ =
+  let binding =
+    memoize (fun () -> Foreign.foreign ~from:(lib ()) ~release_runtime_lock name typ)
+  in
+  let initialize () =
+    let (_ : _ -> _) = binding () in
+    ()
+  in
+  binding_initializers := initialize :: !binding_initializers;
+  fun arg ->
+    let f = binding () in
+    f arg
+;;
 
 (* [hegel_next_test_case] runs the engine on the calling thread. An engine call
    can take a while, so release the OCaml runtime lock for its duration to let
    other OCaml threads run. *)
-let foreign_blocking name typ =
-  Foreign.foreign ~from:lib ~release_runtime_lock:true name typ
-;;
+let foreign_blocking name typ = foreign ~release_runtime_lock:true name typ
 
 (* ------------------------------------------------------------------ *)
 (* C structs returned by the typed draws                              *)
@@ -774,8 +801,19 @@ let last_error_message ctx = c_last_error_message ctx
 (* Test context                                                       *)
 (* ------------------------------------------------------------------ *)
 
-let context_new () = c_context_new ()
 let context_free ctx = ignore (c_context_free ctx : int)
+
+let initialize =
+  memoize (fun () ->
+    (* Resolve the full ABI before exposing a context. *)
+    List.iter (fun initialize -> initialize ()) (List.rev !binding_initializers);
+    binding_initializers := [])
+;;
+
+let context_new () =
+  initialize ();
+  c_context_new ()
+;;
 
 (* ------------------------------------------------------------------ *)
 (* Settings                                                            *)

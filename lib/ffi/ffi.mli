@@ -160,7 +160,11 @@ val last_error_message : context -> string
 
 (** {2 Context} *)
 
+(** The first call loads libhegel and resolves its symbols. Until then the
+    library is not touched, so programs that only derive generators never need
+    it. *)
 val context_new : unit -> context
+
 val context_free : context -> unit
 
 (** {2 Settings} *)
