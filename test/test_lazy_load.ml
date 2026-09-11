@@ -6,17 +6,16 @@ open! Core
 module Unix = Core_unix
 
 let missing_library = "/nonexistent/libhegel.so"
+let other_missing_library = "/nonexistent/other-libhegel.so"
 
-let expect_load_failure () =
+let expect_load_failure ~path () =
   match Hegel_ffi.Ffi.context_new () with
   | (_ : Hegel_ffi.Ffi.context) -> Alcotest.fail "context_new succeeded without libhegel"
   | exception Failure msg ->
     Alcotest.(check bool)
-      "context_new fails on the missing library"
+      ("context_new fails to load " ^ path)
       true
-      (String.is_prefix
-         msg
-         ~prefix:("hegel: failed to load libhegel from " ^ missing_library))
+      (String.is_prefix msg ~prefix:("hegel: failed to load libhegel from " ^ path))
 ;;
 
 let test_generators_do_not_load_libhegel () =
@@ -29,9 +28,9 @@ let test_generators_do_not_load_libhegel () =
     Hegel.lists (Hegel.integers ()) ()
   in
   (* The engine is only reached on the first context. *)
-  expect_load_failure ();
-  (* The failure is memoized: a second call re-raises rather than retrying. *)
-  expect_load_failure ()
+  expect_load_failure ~path:missing_library ();
+  Unix.putenv ~key:"HEGEL_LIBHEGEL_PATH" ~data:other_missing_library;
+  expect_load_failure ~path:missing_library ()
 ;;
 
 let () =
