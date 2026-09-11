@@ -30,15 +30,21 @@ val decr_draw_depth : test_case -> unit
 val set_test_aborted : test_case -> bool -> unit
 
 (** [clone tc] forks a fresh clone of [tc] on an independent choice stream (its
-    own native handle and context), freed by a GC finaliser once unreachable.
+    own native handle and context), owned and freed by the test case once it
+    completes.
     Re-exported as [Hegel.clone]. *)
 val clone : test_case -> test_case
 
-(** [block tc ~indent] opens a test case onto the same choice stream as [tc]
-    whose print region is a block nested in [tc]'s: every {!note}/draw line it
-    prints is indented [indent] columns further than [tc]'s lines. Freed by a GC
-    finalizer once unreachable. *)
-val block : test_case -> indent:int -> test_case
+(** [with_block tc ~indent f] runs [f] on a test case onto the same choice
+    stream as [tc] whose print region is a block nested in [tc]'s: every
+    {!note}/draw line it prints is indented [indent] columns further than [tc]'s
+    lines. The block is freed when [f] returns or raises, so it must not escape
+    [f]. *)
+val with_block : test_case -> indent:int -> (test_case -> 'a) -> 'a
+
+(** [owned_clone_count tc] is the number of clone handles the test case
+    currently owns; they are freed together once the case completes. *)
+val owned_clone_count : test_case -> int
 
 (** A running worker spawned by {!spawn}; joined with {!join}. Re-exported as
     [Hegel.worker]. *)

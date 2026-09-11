@@ -395,20 +395,26 @@ Who owns what in hegel-ocaml:
 - collections → `Generators_core.with_collection` (`Fun.protect`, so a
   `Data_exhausted` mid-draw still frees)
 - state machines → `Stateful.run`, the same way
-- variable pools → the test case. `Stateful.Pool.create` is public and has no
-  lexical scope, so `Internal.new_pool` adds the handle to the test case's
-  `owned_pools` (a `Ffi.pool list` + mutex, which a clone or block shares with
-  the test case it was derived from, like `draw_state`), and `run_test_case`
-  calls `free_owned_pools` once the case is complete — matching the order in
-  hegel-rust's own
-  `hegel-c/tests/c_abi_inprocess.rs`, which frees all three before
-  `hegel_mark_complete`.
-- derived test-case handles (`Internal.clone` → `hegel_test_case_clone`,
-  `Internal.block` → `hegel_test_case_block`) → a GC finaliser
-  (`Gc.finalise_last`) frees the handle and its own context once the OCaml
-  record is unreachable. Not lexical, because user code may
-  capture the record (a `Stateful.Pool.create` inside a rule body stores the
-  block `tc` and uses its handle in later rules).
+- blocks → `Internal.with_block` (`Fun.protect`, freed with its context when
+  the body returns or raises), mirroring hegel-rust's lexically scoped
+  `TestCase::child`. So the `tc` a rule or invariant body receives is valid
+  only for that step (documented on `Rule.create`/`Invariant.create`).
+- variable pools and clones → the test case. `Stateful.Pool.create` and
+  `Hegel.clone` are public and have no lexical scope, and user code may
+  capture them, so `Internal.new_pool` / `Internal.clone` add the handle to
+  the test case's `owned` record (pools, plus `(context, handle)` pairs for
+  clones, behind a mutex; a clone or block shares the record with the test
+  case it was derived from, like `draw_state`), and `run_test_case` calls
+  `free_owned` once the case is complete — matching the order in hegel-rust's
+  own `hegel-c/tests/c_abi_inprocess.rs`, which frees everything before
+  `hegel_mark_complete`. A `Stateful.Pool` stores a *clone* of the test case
+  it was created on, not the block itself (as hegel-rust's `pool()` does), so
+  a pool created inside a rule body keeps working after that step's block is
+  freed. Clones and blocks used to be freed by a `Gc.finalise_last` finaliser
+  instead; that was a use-after-free, because the compiler treats a record as
+  dead after its last field read, so the finaliser could run in the middle of
+  an engine call that had just read `tc.context` (a `note` from an invariant
+  body segfaulted under a small minor heap).
 
 Note: the published reference at <https://hegel.dev/reference/libhegel> is
 **stale on this point** — it still documents the pre-0.31.0 `int64_t` ids and
@@ -437,14 +443,15 @@ non-empty". Verbosity gating stays client-side (`should_print`): under Quiet,
 or a non-final case at Normal, nothing is appended and the read is skipped.
 Clones write into their own region, anchored where the clone was made, so
 concurrent output assembles deterministically regardless of scheduling.
-Indentation is engine-side too (libhegel 0.37.10 block handles): `Internal.block
-tc ~indent` opens a handle onto the *same* choice stream whose print region is
-a block nested in `tc`'s at the current position, every line `indent` columns
-further in, ending with the block. `Stateful.run` runs each rule's `step` and
-each invariant body with `block tc ~indent:2` so their draws nest under the
+Indentation is engine-side too (libhegel 0.37.10 block handles):
+`Internal.with_block tc ~indent f` runs `f` on a handle onto the *same* choice
+stream whose print region is a block nested in `tc`'s at the current position,
+every line `indent` columns further in, ending with the block; the block is
+freed when `f` returns. `Stateful.run` runs each rule's `step` and each
+invariant body with `with_block tc ~indent:2` so their draws nest under the
 `Step N: name` note. It only creates the block when `should_print tc` holds
 (`Stateful.section`); a non-printing case runs the body on `tc` itself, since
-a block per step costs a native handle, a context, and a GC finaliser, which
+a block per step costs a native handle and a context, which
 measured as 50% more wall time and 20x the major collections on a
 200-case x 500-step machine. And
 `final_replay` runs the body via `run_test_case ~indent:2` so it sits inside

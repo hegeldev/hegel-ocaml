@@ -398,6 +398,46 @@ let stateful_hand_written_machine_test () =
     !checks
 ;;
 
+(* A pool created inside a rule body outlives that step. Regression test against
+   a previous use-after-free. *)
+let test_pool_created_inside_rule () =
+  let module S = Hegel.Stateful in
+  let module M = struct
+    type state = int S.Pool.t option
+
+    let rules =
+      [ S.Rule.create ~name:"open" ~step:(fun tc state ->
+          match state with
+          | Some _ -> state
+          | None ->
+            let pool = S.Pool.create tc in
+            S.Pool.add pool 1;
+            Some pool)
+      ; S.Rule.create ~name:"use" ~step:(fun tc state ->
+          match state with
+          | None ->
+            Hegel.assume tc false;
+            state
+          | Some pool ->
+            S.Pool.add pool 2;
+            let v = Hegel.draw_silent tc (S.Pool.values_reusable pool) in
+            assert (v = 1 || v = 2);
+            state)
+      ]
+    ;;
+
+    let invariants = []
+  end
+  in
+  let settings =
+    { (Hegel.Settings.create ~test_cases:5 ~seed:0 ()) with
+      verbosity = Hegel.Settings.Verbose
+    ; database = Hegel.Settings.Disabled
+    }
+  in
+  Hegel.run_hegel_test ~settings (fun tc -> S.run tc (module M) ~init:None ~step_count:20)
+;;
+
 let tests =
   [ Alcotest.test_case "stateful: failing property shrinks" `Quick stateful_failure_test
   ; Alcotest.test_case
@@ -442,5 +482,9 @@ let tests =
       "stateful: swarm yields a long single-rule chain"
       `Quick
       test_swarm_long_single_rule_run
+  ; Alcotest.test_case
+      "stateful: pool created inside a rule outlives the step"
+      `Quick
+      test_pool_created_inside_rule
   ]
 ;;

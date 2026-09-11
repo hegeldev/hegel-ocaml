@@ -164,8 +164,8 @@ let draw_silent = Generators.draw_silent
 let draw_silent_named = Generators.draw_silent_named
 
 (** [clone tc] forks an independent clone of [tc] for driving generation from
-    another thread; its native resources are freed by a GC finaliser once the
-    clone is unreachable. See {!Internal.clone}. *)
+    another thread; its native resources are owned by the test case and freed
+    once the case completes. See {!Internal.clone}. *)
 let clone = Internal.clone
 
 type 'a worker = 'a Internal.worker

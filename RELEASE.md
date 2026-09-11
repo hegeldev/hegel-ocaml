@@ -21,3 +21,6 @@ are now in `Settings`. The `phases` field is now a `phase list`.
   ; database = Settings.Disabled
   }]
 ```
+
+This release also fixes a use-after-free in stateful tests and `spawn`ed clones.
+
