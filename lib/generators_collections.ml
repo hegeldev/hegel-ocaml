@@ -34,9 +34,9 @@ let draw_association_pairs keys values ~min_size ~max_size data =
     collect [])
 ;;
 
-(** [assoc_lists keys values ?min_size ?max_size ()] creates a generator
-    for association lists over printable [keys] and [values]: [(key, value)]
-    pairs, in generation order, whose keys are unique.
+(** [assoc_lists keys values ?min_size ?max_size ()] creates a generator for
+    association lists over printable [keys] and [values]: [(key, value)] pairs,
+    in generation order, whose keys are unique.
 
     Key-value pairs are generated one at a time via the collection protocol,
     with duplicate keys rejected client-side. *)
@@ -109,8 +109,8 @@ let hash_tables keys values ?min_size ?max_size () =
     lists of printable [elements].
 
     Elements are generated one at a time via the collection protocol inside a
-    {!Labels.list} span. When [unique] is [true], duplicate elements are rejected
-    client-side so the generated list contains only distinct elements. *)
+    {!Labels.list} span. When [unique] is [true], duplicate elements are
+    rejected client-side so the generated list contains only distinct elements. *)
 let lists
       (elements : ('a, printable) generator)
       ?(min_size = 0)

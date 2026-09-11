@@ -288,31 +288,27 @@ require tc ~msg:"list must stay sorted" (is_sorted xs)
 
 ## Stateful testing
 
-`Stateful` applies a random sequence of *rules* to a model. Every invariant is
-checked on the initial and final states and sampled after intermediate steps.
-Set `always_check:true` when creating an invariant that must be checked after
-every step. Pass `?sexp_of_state` to `Stateful.run` to trace the model state
-through a failing sequence:
+`Stateful` applies a random sequence of rules to the SUT and checks invariants
+on it. First, create a state machine with `module%hegel_state_machine`. Mark rules with `[@@rule]` and invariants with `[@@invariant]`. `let` names. Every invariant
+ is checked on the initial and final states and
+sampled after intermediate steps, or after every step when marked
+`[@@invariant always_check]`. Pass `?sexp_of_state` to `Stateful.run` to trace 
+the model state. Draws are also printed with their `let`-bound name.
 
 ```ocaml
-let push =
-  Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
-    draw tc (integers ~min_value:0 ~max_value:9 ()) :: stack)
+module%hegel_state_machine Stack = struct
+  type state = int list [@@deriving sexp_of]
 
-let%hegel_test stack_stays_small tc =
-  Stateful.run
-    ~init:[]
-    ~rules:[ push ]
-    ~invariants:
-      [ Stateful.Invariant.create
-          ~name:"stack stays small"
-          ~inv:(fun stack -> assert (List.length stack <= 2))
-          ~always_check:true
-          ()
-      ]
-    ~sexp_of_state:[%sexp_of: int list]
-    tc
-;;
+  let push tc stack =
+    let n = draw tc (integers ~min_value:0 ~max_value:9 ()) in
+    n :: stack
+  [@@rule]
+
+  let stack_stays_small _tc stack = assert (List.length stack <= 2)
+  [@@invariant always_check]
+end
+
+let%hegel_test stack_model tc = Stack.run tc ~init:[]
 ```
 
 When a sequence fails, the report shows each step, the draws it made, the state
@@ -320,17 +316,49 @@ after it, and which step broke the invariant:
 
 ```
   state = ()
+  Checking invariants on the initial state.
   Step 1: push
-    draw_1 = 0
+    n = 0
   state = (0)
   Step 2: push
-    draw_2 = 0
+    n = 0
   state = (0 0)
   Step 3: push
-    draw_3 = 0
+    n = 0
   state = (0 0 0)
-  Invariant stack stays small violated after step 3.
+  Invariant stack_stays_small violated after step 3.
 ```
+
+State machines can also be created without the PPX. Create the rules and
+invariants with `Stateful.Rule.create` and `Stateful.Invariant.create`, put
+them in a module of type `Stateful.State_machine`, and pass it to
+`Stateful.run`. This is the same `Stack` as above, written by hand:
+
+```ocaml
+module Stack = struct
+  type state = int list
+
+  let push tc stack =
+    let n = draw ~label:"n" tc (integers ~min_value:0 ~max_value:9 ()) in
+    n :: stack
+
+  let stack_stays_small _tc stack = assert (List.length stack <= 2)
+  let rules = [ Stateful.Rule.create ~name:"push" ~step:push ]
+
+  let invariants =
+    [ Stateful.Invariant.create
+        ~name:"stack_stays_small"
+        ~inv:stack_stays_small
+        ~always_check:true
+        ()
+    ]
+end
+
+let%hegel_test stack_model tc =
+  Stateful.run tc (module Stack) ~init:[] ~sexp_of_state:[%sexp_of: int list]
+```
+
+In state machines not written with the PPX, draws print as `draw_1`, `draw_2`, ... unless given a `~label`.
 
 See the `Hegel.Stateful` API docs for invariants across multiple
 rules and for value pools that let one rule act on data an earlier rule produced.

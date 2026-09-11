@@ -31,8 +31,7 @@ let%hegel_test test_event_e2e tc =
 [@@settings Hegel.settings ~test_cases:20 ()]
 ;;
 
-(** Test: the wrapper-module generators are ordinary values, drawable
-    directly. *)
+(** Test: the wrapper-module generators are ordinary values, drawable directly. *)
 let%hegel_test test_wrapper_module_generators_e2e tc =
   let d = Hegel.draw_silent tc Date.hegel_generator in
   let span = Hegel.draw_silent tc Time_ns.Span.hegel_generator in

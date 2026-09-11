@@ -101,9 +101,9 @@ and tuple_thunk ~loc components =
   [%expr fun _hegel_tc -> [%e body]]
 ;;
 
-(** [drawn_record ~loc ~wrap labels] returns an expression that draws the
-    fields in declaration order and applies [wrap] to the record literal.
-    [wrap] lets an inline-record constructor enclose the literal directly *)
+(** [drawn_record ~loc ~wrap labels] returns an expression that draws the fields
+    in declaration order and applies [wrap] to the record literal. [wrap] lets
+    an inline-record constructor enclose the literal directly *)
 let drawn_record ~loc ~wrap (labels : label_declaration list) : expression =
   if labels = []
   then Location.raise_errorf ~loc "ppx_hegel_generator: empty record types not supported";
@@ -132,8 +132,8 @@ let drawn_record ~loc ~wrap (labels : label_declaration list) : expression =
     (wrap record_expr)
 ;;
 
-(** [generator_of_record ~loc labels] returns a [test_case -> record]
-    function that draws the fields in declaration order. *)
+(** [generator_of_record ~loc labels] returns a [test_case -> record] function
+    that draws the fields in declaration order. *)
 let generator_of_record ~loc (labels : label_declaration list) : expression =
   [%expr fun _hegel_tc -> [%e drawn_record ~loc ~wrap:Fun.id labels]]
 ;;
@@ -245,8 +245,8 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) : express
   else generator_of_data_variant ~loc constrs
 ;;
 
-(** [opaque_excluded_args td] adds [\[@sexp.opaque\]] to the argument types of
-    [\[@hegel.do_not_generate\]] constructors. *)
+(** [opaque_excluded_args td] adds [[@sexp.opaque]] to the argument types of
+    [[@hegel.do_not_generate]] constructors. *)
 let opaque_excluded_args (td : type_declaration) : type_declaration =
   match td.ptype_kind with
   | Ptype_variant constrs ->
@@ -274,8 +274,8 @@ let opaque_excluded_args (td : type_declaration) : type_declaration =
 ;;
 
 (** [excluded_constructor_uses ~loc td] returns one [let _ = ...] item per
-    excluded constructor, each constructing it once. Without these the
-    compiler reports a constructor never used to build values warning. *)
+    excluded constructor, each constructing it once. Without these the compiler
+    reports a constructor never used to build values warning. *)
 let excluded_constructor_uses ~loc (td : type_declaration) : structure =
   match td.ptype_kind with
   | Ptype_variant constrs ->
@@ -287,7 +287,8 @@ let excluded_constructor_uses ~loc (td : type_declaration) : structure =
            let constr_lid = { txt = Lident cd.pcd_name.txt; loc } in
            let construct arg = Ast_builder.Default.pexp_construct ~loc constr_lid arg in
            let evar name = Ast_builder.Default.evar ~loc name in
-           (* turn an excluded constructor C(a,b,...) into fun a -> fun b -> ... -> C(a, b, ...) *)
+           (* turn an excluded constructor C(a,b,...) into fun a -> fun b ->
+              ... -> C(a, b, ...) *)
            let to_curried_lam names body =
              List.fold_right
                (fun name acc ->
@@ -346,9 +347,9 @@ let generate_impl ~ctxt ((rec_flag, type_decls) : rec_flag * type_declaration li
              ~loc
              { txt = Lident ("sexp_of_" ^ td.ptype_name.txt); loc }
          in
-         (* A record yields a [test_case -> t] thunk that [composite] wraps
-            into a generator. A variant or an alias yields a complete
-            generator expression. *)
+         (* A record yields a [test_case -> t] thunk that [composite] wraps into
+            a generator. A variant or an alias yields a complete generator
+            expression. *)
          let generator_expr =
            match td.ptype_kind, td.ptype_manifest with
            | Ptype_record labels, _ ->

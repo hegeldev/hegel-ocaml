@@ -303,8 +303,8 @@ let test_dates_bounds_e2e () =
     Alcotest.(check string) "point range" lo point)
 ;;
 
-(** Test: datetimes generates [YYYY-MM-DDTHH:MM:SS.fffffffff] strings whose
-    date and time parts decode to values in the default ranges. *)
+(** Test: datetimes generates [YYYY-MM-DDTHH:MM:SS.fffffffff] strings whose date
+    and time parts decode to values in the default ranges. *)
 let test_datetimes_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
     let date, time = datetime_of_string (Hegel.draw tc (datetimes ())) in
@@ -358,8 +358,8 @@ let test_dates_invalid_bounds () =
     ]
 ;;
 
-(** Test: time bounds the engine rejects (an out-of-range part, crossed
-    bounds) abort the run with [Usage_error] carrying the engine's diagnostic. *)
+(** Test: time bounds the engine rejects (an out-of-range part, crossed bounds)
+    abort the run with [Usage_error] carrying the engine's diagnostic. *)
 let test_times_invalid_bounds () =
   List.iter
     (fun (name, min_time, max_time, expected) ->

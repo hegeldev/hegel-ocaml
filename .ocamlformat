@@ -1,2 +1,4 @@
 profile = janestreet
 version = 0.29.0
+wrap-comments = true
+parse-docstrings = true

@@ -9,10 +9,10 @@ module Unix = Core_unix
 
 (** [with_tempdir ~prefix ~f] creates a tempdir via [mkdtemp] under the system
     temp directory (honoring [TMPDIR]), using [prefix] as the leaf-name prefix.
-    It passes the tempdir's path to [f], and removes the directory (and any
-    flat files inside it) on exit — including on exception. Intended for tests
-    whose tempdirs only contain top-level files; subdirectories are not
-    recursively removed. *)
+    It passes the tempdir's path to [f], and removes the directory (and any flat
+    files inside it) on exit — including on exception. Intended for tests whose
+    tempdirs only contain top-level files; subdirectories are not recursively
+    removed. *)
 let with_tempdir ~prefix ~f =
   let dir =
     Core_unix.mkdtemp (Filename.concat (Stdlib.Filename.get_temp_dir_name ()) prefix)
@@ -44,8 +44,7 @@ let expect_usage_error gen substring =
   | () -> Alcotest.fail "expected Usage_error"
 ;;
 
-(** [contains_substring s sub] returns [true] if [sub] appears anywhere in [s].
-*)
+(** [contains_substring s sub] returns [true] if [sub] appears anywhere in [s]. *)
 let contains_substring s sub =
   let slen = String.length s
   and sublen = String.length sub in

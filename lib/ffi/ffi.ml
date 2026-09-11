@@ -54,7 +54,7 @@ let foreign ?(release_runtime_lock = false) name typ =
 ;;
 
 (* [hegel_next_test_case] runs the engine on the calling thread. An engine call
-   can take a while, so release the OCaml runtime lock for its duration to let 
+   can take a while, so release the OCaml runtime lock for its duration to let
    other OCaml threads run. *)
 let foreign_blocking name typ = foreign ~release_runtime_lock:true name typ
 
@@ -108,8 +108,7 @@ module Date_struct = struct
   let () = seal t
 end
 
-(* [hegel_time_t]: hour in [0, 23], minute/second in [0, 59], nanosecond in
-   [0, 999999999]. *)
+(* [hegel_time_t]: hour in [0, 23], minute/second in [0, 59], nanosecond in [0, 999999999]. *)
 module Time_struct = struct
   type s
 
@@ -158,12 +157,6 @@ let c_settings_test_cases =
   foreign
     "hegel_settings_set_test_cases"
     (ptr void @-> ptr void @-> uint64_t @-> returning int)
-;;
-
-let c_settings_stateful_step_count =
-  foreign
-    "hegel_settings_set_stateful_step_count"
-    (ptr void @-> ptr void @-> int64_t @-> returning int)
 ;;
 
 let c_settings_verbosity =
@@ -255,6 +248,12 @@ let c_test_case_clone =
     (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
 ;;
 
+let c_test_case_block =
+  foreign
+    "hegel_test_case_block"
+    (ptr void @-> ptr void @-> uint64_t @-> ptr (ptr void) @-> returning int)
+;;
+
 let c_generate_boolean =
   foreign
     "hegel_generate_boolean"
@@ -305,10 +304,10 @@ let c_string_generator_text =
   foreign
     "hegel_string_generator_text"
     (ptr void
-     @-> uint64_t (* min_size *)
-     @-> uint64_t (* max_size *)
-     @-> string_opt (* codec *)
-     @-> uint32_t (* min_codepoint *)
+     @-> uint64_t
+     (* min_size *) @-> uint64_t (* max_size *)
+     @-> string_opt
+     (* codec *) @-> uint32_t (* min_codepoint *)
      @-> uint32_t (* max_codepoint *)
      @-> ptr (ptr char) (* categories *)
      @-> size_t
@@ -326,8 +325,8 @@ let c_string_generator_regex =
   foreign
     "hegel_string_generator_regex"
     (ptr void
-     @-> string (* pattern *)
-     @-> bool (* fullmatch *)
+     @-> string
+     (* pattern *) @-> bool (* fullmatch *)
      @-> ptr void (* alphabet (nullable) *)
      @-> ptr (ptr void)
      @-> returning int)
@@ -475,6 +474,7 @@ let c_new_state_machine =
      @-> ptr (ptr char)
      @-> ptr bool
      @-> size_t
+     @-> int64_t
      @-> int64_t
      @-> int64_t
      @-> ptr (ptr void)
@@ -832,10 +832,6 @@ let settings_test_cases ctx s n =
   check_rc ctx (c_settings_test_cases ctx s (Unsigned.UInt64.of_int n))
 ;;
 
-let settings_stateful_step_count ctx s n =
-  check_rc ctx (c_settings_stateful_step_count ctx s (Int64.of_int n))
-;;
-
 let settings_verbosity ctx s v =
   check_rc ctx (c_settings_verbosity ctx s (verbosity_to_int v))
 ;;
@@ -899,6 +895,12 @@ let test_case_free ctx tc = check_rc ctx (c_test_case_free ctx tc)
 let test_case_clone ctx tc =
   let out = allocate (ptr void) null in
   check_rc ctx (c_test_case_clone ctx tc out);
+  !@out
+;;
+
+let test_case_block ctx tc ~indent =
+  let out = allocate (ptr void) null in
+  check_rc ctx (c_test_case_block ctx tc (Unsigned.UInt64.of_int indent) out);
   !@out
 ;;
 
@@ -997,9 +999,9 @@ let optional_bytes_arg = function
 ;;
 
 (* Marshal an optional string list into a [const char *const *] + length + GC
-   root, distinguishing three cases the text-generator API cares about:
-   [None] → NULL (no restriction); [Some []] → a non-NULL pointer with length 0
-   (an explicit *empty* set); [Some names] → the names. *)
+   root, distinguishing three cases the text-generator API cares about: [None] →
+   NULL (no restriction); [Some []] → a non-NULL pointer with length 0 (an
+   explicit *empty* set); [Some names] → the names. *)
 let optional_string_array = function
   | None -> from_voidp (ptr char) null, Root.create (), Unsigned.Size_t.of_int 0
   | Some [] ->
@@ -1244,6 +1246,7 @@ let new_state_machine
       ~invariants_always_check
       ~min_concurrency
       ~max_concurrency
+      ~step_count
   =
   let rules_ptr, rules_root = to_string_array rule_names in
   let groups = CArray.of_list int64_t (List.map Int64.of_int rule_groups) in
@@ -1263,6 +1266,7 @@ let new_state_machine
       (Unsigned.Size_t.of_int (List.length invariant_names))
       (Int64.of_int min_concurrency)
       (Int64.of_int max_concurrency)
+      (Int64.of_int step_count)
       out
       out_concurrency
   in
@@ -1273,8 +1277,8 @@ let new_state_machine
 ;;
 
 (* [HEGEL_STATE_MACHINE_DONE]: written to the out parameter by
-   [hegel_state_machine_next_group] when the state machine has terminated and
-   by [hegel_state_machine_next_rule] when the worker's round is over. *)
+   [hegel_state_machine_next_group] when the state machine has terminated and by
+   [hegel_state_machine_next_rule] when the worker's round is over. *)
 let state_machine_done = Int64.min_int
 
 let read_index out =
@@ -1422,8 +1426,8 @@ let mark_complete ctx tc status origin =
 (* Result inspection                                                   *)
 (* ------------------------------------------------------------------ *)
 
-(* [HEGEL_RUN_STATUS_*] values. The catch-all maps any unknown future status
-   to [Run_error]. *)
+(* [HEGEL_RUN_STATUS_*] values. The catch-all maps any unknown future status to
+   [Run_error]. *)
 let result_status ctx r =
   let out = allocate int 0 in
   check_rc ctx (c_result_status ctx r out);

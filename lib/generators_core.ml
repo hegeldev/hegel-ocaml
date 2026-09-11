@@ -76,8 +76,8 @@ type 'a core =
   | Function : { build : name:string option -> Internal.test_case -> 'a } -> 'a core
 
 (** Phantom witness that a generator carries a printer and so may be drawn with
-    {!draw}. Defined as a private polymorphic variant (not left abstract) so
-    the two witnesses are provably distinct: since OCaml 5.5 the exhaustiveness
+    {!draw}. Defined as a private polymorphic variant (not left abstract) so the
+    two witnesses are provably distinct: since OCaml 5.5 the exhaustiveness
     checker no longer assumes two module-local abstract types differ
     (ocaml/ocaml#13712), which would make matches on [(_, printable) generator]
     partial. *)
@@ -103,8 +103,7 @@ type ('a, 'p) generator =
       -> ('a, printable) generator
   | Unprintable : { core : 'a core } -> ('a, unprintable) generator
 
-(** [core_of gen] is the generation structure of [gen], discarding printability.
-*)
+(** [core_of gen] is the generation structure of [gen], discarding printability. *)
 let core_of : type a p. (a, p) generator -> a core = function
   | Printable { core; _ } -> core
   | Unprintable { core } -> core
@@ -119,9 +118,9 @@ let leaf ~draw ~sexp_of = Printable { core = Leaf { draw }; sexp_of }
     whose output type has no known printer (e.g. {!just}). *)
 let leaf_silent ~draw = Unprintable { core = Leaf { draw } }
 
-(** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding a
-    printable generator that {!draw} accepts. This is the explicit way to make a
-    [map]/[flat_map]/[sampled_from]/[just] result printable. *)
+(** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding
+    a printable generator that {!draw} accepts. This is the explicit way to make
+    a [map]/[flat_map]/[sampled_from]/[just] result printable. *)
 let with_printer : type a p. (a -> Sexp.t) -> (a, p) generator -> (a, printable) generator
   =
   fun sexp_of gen -> Printable { core = core_of gen; sexp_of }
@@ -134,19 +133,19 @@ let printer : type a. (a, printable) generator -> a -> Sexp.t = function
 ;;
 
 (** [composite_with_label ~label generate_fn] builds an unprintable generator
-    whose [generate_fn] draws run inside a span tagged [label]. Internal: it lets
-    the library and the derive PPX tag composites with the right structural label
-    (e.g. {!Labels.enum_variant}); user code uses {!composite}, which always tags
-    the struct/record label. *)
+    whose [generate_fn] draws run inside a span tagged [label]. Internal: it
+    lets the library and the derive PPX tag composites with the right structural
+    label (e.g. {!Labels.enum_variant}); user code uses {!composite}, which
+    always tags the struct/record label. *)
 let composite_with_label ~label generate_fn =
   Unprintable { core = Composite { label; generate_fn } }
 ;;
 
 (** [composite generate_fn] builds an unprintable generator from an imperative
     [generate_fn] that draws sub-values from the test case and returns a value.
-    The draws run inside a {!Labels.fixed_dict} span (the struct/record grouping),
-    so they are suppressed on the final replay and only an outer [draw] of the
-    whole value prints. *)
+    The draws run inside a {!Labels.fixed_dict} span (the struct/record
+    grouping), so they are suppressed on the final replay and only an outer
+    [draw] of the whole value prints. *)
 let composite generate_fn = composite_with_label ~label:Labels.fixed_dict generate_fn
 
 (** [make_pool_values ~pool ~find ~remove ~is_empty ~consume] builds an
@@ -206,8 +205,8 @@ type collection =
   ; max_size : int option
   }
 
-(** [get_collection coll data] initializes the engine-side collection and returns its
-    handle. Raises {!Internal.Data_exhausted} on StopTest. *)
+(** [get_collection coll data] initializes the engine-side collection and
+    returns its handle. Raises {!Internal.Data_exhausted} on StopTest. *)
 let get_collection coll data =
   match coll.handle with
   | Some h -> h
@@ -233,8 +232,8 @@ let with_collection ~min_size ?max_size data f =
 
 (** [collection_more coll data] returns [true] if more elements should be
     generated, [false] when the collection is complete. Once it returns [false],
-    subsequent calls return [false] immediately. Raises {!Internal.Data_exhausted}
-    on StopTest. *)
+    subsequent calls return [false] immediately. Raises
+    {!Internal.Data_exhausted} on StopTest. *)
 let collection_more coll data =
   if coll.finished
   then false
@@ -246,8 +245,8 @@ let collection_more coll data =
 ;;
 
 (** [collection_reject coll data] rejects the last element of the collection.
-    No-op if the collection is already finished. Raises {!Internal.Data_exhausted}
-    on StopTest. *)
+    No-op if the collection is already finished. Raises
+    {!Internal.Data_exhausted} on StopTest. *)
 let collection_reject coll data =
   if not coll.finished
   then (
@@ -262,8 +261,8 @@ let resolve_pool_draw ~find ~remove ~consume variable_id =
     if consume then remove variable_id;
     v
   | None ->
-    (* State diverged between the engine and the client, or a bug in the
-        pool bookkeeping. *)
+    (* State diverged between the engine and the client, or a bug in the pool
+       bookkeeping. *)
     raise Internal.Flaky_strategy
 ;;
 
@@ -287,8 +286,7 @@ module Int_table = Stdlib.Hashtbl.Make (struct
 module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) = struct
   (** [resolve_draw values ~consume variable_id] resolves a drawn pool id
       against the local [values] table, removing it when [consume]. Raises
-      [Internal.Flaky_strategy] on an unknown id (an engine-contract
-      violation). *)
+      [Internal.Flaky_strategy] on an unknown id (an engine-contract violation). *)
   let resolve_draw values ~consume variable_id =
     resolve_pool_draw
       ~find:(fun id -> Tbl.find_opt values id)
@@ -297,10 +295,10 @@ module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) = struct
       variable_id
   ;;
 
-  (** [pool_values ~pool ~values ~consume] builds an unprintable generator
-      that picks a value from the engine pool [pool], resolving the drawn id
-      against the local [values] table. When [consume], the picked value is
-      removed from the pool. *)
+  (** [pool_values ~pool ~values ~consume] builds an unprintable generator that
+      picks a value from the engine pool [pool], resolving the drawn id against
+      the local [values] table. When [consume], the picked value is removed from
+      the pool. *)
   let pool_values ~pool ~values ~consume =
     make_pool_values
       ~pool
@@ -360,10 +358,10 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
     [let%hegel_test] PPX rewrites bindings to; it is not intended for direct use
     (prefer {!draw}). On the final replay of a failing test (or on every case
-    under verbose output), an outermost draw prints its value to the test
-    case's print region as [name = value], where [name] is [label], printed bare on
-    its sole use and numbered ([label_1], [label_2], …) when [repeatable] is set
-    — which the PPX does for a binding name that is reused or drawn in a loop.
+    under verbose output), an outermost draw prints its value to the test case's
+    print region as [name = value], where [name] is [label], printed bare on its
+    sole use and numbered ([label_1], [label_2], …) when [repeatable] is set —
+    which the PPX does for a binding name that is reused or drawn in a loop.
     Draws nested inside a span (e.g. composite elements) are suppressed so only
     the outermost value shows. *)
 let draw_named
@@ -402,16 +400,16 @@ let draw_named
     | _ -> .
 ;;
 
-(** [draw ?label ?loc tc gen] produces a typed value from the printable generator
-    [gen] using test case [tc].
+(** [draw ?label ?loc tc gen] produces a typed value from the printable
+    generator [gen] using test case [tc].
 
     On the final replay of a failing test (or on every case under verbose
     output), an outermost draw prints its value through {!Internal.note} as
     [name = value]. The [name] is [label] when given, else ["draw"]; an
-    unlabeled draw is numbered ([draw_1], [draw_2], …) while a [label] is printed
-    bare. When [loc] is provided, the draw is printed as [draw @ loc]. Draws 
-    nested inside a span (e.g. composite elements) are suppressed so only the 
-    outermost value shows. To draw a generator that carries no printer, use 
+    unlabeled draw is numbered ([draw_1], [draw_2], …) while a [label] is
+    printed bare. When [loc] is provided, the draw is printed as [draw @ loc].
+    Draws nested inside a span (e.g. composite elements) are suppressed so only
+    the outermost value shows. To draw a generator that carries no printer, use
     {!draw_silent}, or attach a printer with {!with_printer}. *)
 let draw ?label ?loc tc gen =
   draw_named
@@ -431,7 +429,7 @@ let draw_silent : type a p. Internal.test_case -> (a, p) generator -> a =
 ;;
 
 (** [draw_silent_named ~name tc gen] is {!draw_silent} threading the draw-site
-    [name] into a function generator ({!Generators.functions}). Not intended for 
+    [name] into a function generator ({!Generators.functions}). Not intended for
     direct use (prefer {!draw_silent}). *)
 let draw_silent_named
   : type a p. name:string -> Internal.test_case -> (a, p) generator -> a
