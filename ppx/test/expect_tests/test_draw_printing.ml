@@ -241,7 +241,14 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
       let _ = Hegel.draw ~label:"n" tc (integers ~min_value:7 ~max_value:7 ()) in
       assert false)
   in
-  run_failing (fun tc -> Stateful.run ~init:() ~rules:[ rule ] tc);
+  let module M = struct
+    type state = unit
+
+    let rules = [ rule ]
+    let invariants = []
+  end
+  in
+  run_failing (fun tc -> Stateful.run tc (module M) ~init:());
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
@@ -256,17 +263,20 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
     |}]
 ;;
 
-let%hegel_rule push tc () =
-  let _n = Hegel.draw tc (integers ~min_value:7 ~max_value:7 ()) in
-  ()
-;;
+module%hegel_state_machine Pusher = struct
+  let push tc () =
+    let _n = Hegel.draw tc (integers ~min_value:7 ~max_value:7 ()) in
+    ()
+  [@@rule]
+  ;;
+end
 
 let%hegel_test stateful_print tc =
   let vars = Stateful.Pool.create tc in
   Stateful.Pool.add vars 42;
   let val_gen = with_printer sexp_of_int (Stateful.Pool.values_reusable vars) in
   let _x = Hegel.draw tc val_gen in
-  Stateful.run ~init:() ~rules:[ push ] ~step_count:3 tc
+  Pusher.run tc ~init:() ~step_count:3
 [@@settings
   settings ~test_cases:1 ~seed:0 () |> with_verbosity Verbose |> with_phases [ Generate ]]
 ;;

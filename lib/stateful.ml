@@ -49,7 +49,7 @@ module Invariant = struct
   let name invariant = invariant.name
 end
 
-let run ~init ~rules ?(invariants = []) ?sexp_of_state ?(step_count = 50) tc =
+let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
   let rule_array = Array.of_list rules in
   let invariant_names = List.map (fun inv -> Invariant.name inv) invariants in
   let invariants_always_check =
@@ -90,7 +90,12 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state ?(step_count = 50) tc =
              raise e))
       invariants
   in
+  let announce_checks which =
+    if not (List.is_empty invariants)
+    then Internal.note tc (Printf.sprintf "Checking invariants on the %s state." which)
+  in
   print_state init;
+  announce_checks "initial";
   check_invariants ~where:"in the initial state" ~sample:false init;
   let rec exec_round ~state ~steps_attempted ~rejected =
     match Internal.state_machine_next_rule tc ~state_machine with
@@ -132,5 +137,24 @@ let run ~init ~rules ?(invariants = []) ?sexp_of_state ?(step_count = 50) tc =
     ~finally:(fun () -> Internal.state_machine_free tc ~state_machine)
     (fun () ->
        let final_state = loop ~state:init ~steps_attempted:0 in
+       announce_checks "final";
        check_invariants ~where:"in the final state" ~sample:false final_state)
+;;
+
+module type State_machine = sig
+  type state
+
+  val rules : state Rule.t list
+  val invariants : state Invariant.t list
+end
+
+let run
+      (type s)
+      tc
+      ?step_count
+      ?sexp_of_state
+      (module M : State_machine with type state = s)
+      ~(init : s)
+  =
+  run_internal ~init ~rules:M.rules ~invariants:M.invariants ?sexp_of_state ?step_count tc
 ;;

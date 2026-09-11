@@ -56,9 +56,12 @@ lib/                         # Library source
   derive.ml                  # Hegel.Derive: scope-resolved names derived code
                              #   refers to (hegel_generator_int/…/char/list/
                              #   option + the Sexplib0 sexp_of_* converters)
-  stateful.ml                # Stateful testing: Rule/Invariant.create (both take the
-                             #   test case) + run over action sequences. Rule and
-                             #   invariant bodies run on indent-2 block handles
+  stateful.ml                # Stateful testing. Rule/Invariant.create (both take the
+                             #   test case), the State_machine module type, and
+                             #   run tc (module M) ~init. The doc-hidden run_internal
+                             #   takes the lists directly and is what the run generated
+                             #   by module%hegel_state_machine calls.
+                             #   Rule and invariant bodies run on indent-2 block handles
   antithesis.ml              # Antithesis integration (emits an always-typed assertion)
   jane/                      # Optional hegel.jane sublibrary ((optional) in dune).
     hegel_jane.ml/.mli       #   Core.Hashtbl hash_tables + pool helpers and the
@@ -75,8 +78,9 @@ ppx/                         # PPX rewriters and derivers
   ppx_hegel_test.ml          # Expander: rewrites [let%hegel_test name tc = body]
                              # into a plain callable function (no registration,
                              # no runtime library — see Inline Test Integration below)
-                             # and [let%hegel_rule name tc state = body] into a
-                             # Stateful.Rule.create with draw names injected
+                             # and [module%hegel_state_machine M = struct .. end]
+                             # into that module plus generated rules/invariants/run
+                             # from its [@@rule]/[@@invariant] bindings
   ppx_compat_pre-53.ml       # AST compat shim for ppxlib < 0.36 (OCaml < 5.3)
   ppx_compat_post-53.ml      # AST compat shim for ppxlib >= 0.36 (OCaml >= 5.3)
   ppx_compat_oxcaml.ml       # AST compat shim for the OxCaml compiler
@@ -211,16 +215,24 @@ The `ppx_hegel_test` PPX rewrites `let%hegel_test name tc = body` into a
 single top-level item: `let name = fun () -> Hegel.run_hegel_test ... (fun tc
 -> body)`. That's it — `name` is an ordinary `unit -> unit` value with no
 registration, no runtime library, and no side effect at module init. The same
-rewriter also provides `let%hegel_rule name tc state = body` →
-`let name = Hegel.Stateful.Rule.create ~name:"name" ~step:(fun tc state ->
-body)` and `let%hegel_invariant name tc state = body [@@always_check]` →
-`Hegel.Stateful.Invariant.create ~name ~inv:(fun tc state -> body)
-~always_check:<attr present> ()`, the analogues of hegel-rust's `#[rule]` /
-`#[invariant]` methods: each is named after its binding and its body gets the
-same draw-name injection as a test body, judged at depth 0. A rule or
-invariant body runs on its own naming scope per step (see Pretty printing),
-so `let n = draw tc g` prints as `n`, not `n_1`. Invariants take the test case
-(`inv : test_case -> 'state -> unit`) so they can draw and note. Hegel
+rewriter also handles `module%hegel_state_machine M = struct … end`, the
+analogue of hegel-rust's `#[hegel::state_machine] impl`. At expansion time it
+collects the bindings marked `[@@rule]`, `[@@invariant]`, or
+`[@@invariant always_check]` into appended `rules` and `invariants` lists
+(`Rule.create ~name:"<binding>" ~step:<binding>` and the same for
+`Invariant.create`) plus a `run ?step_count ?sexp_of_state tc ~init`. There
+is no registry and no runtime discovery. The generated `run` calls the
+doc-hidden `Stateful.run_internal`, which takes the lists directly, because
+the expanded module need not declare `type state` and the public
+`Stateful.run` takes a `State_machine` module. `sexp_of_state` defaults to
+the module's own when it binds one or derives it on `type state`
+(`defines_sexp_of_state`). The markers are stripped from the emitted items,
+every other item is kept, and a module with no `[@@rule]` is a compile error.
+Marked bodies get the same draw-name injection as a test body, judged at
+depth 0. A rule or invariant body runs in its own naming scope each step (see
+Pretty printing), so `let n = draw tc g` prints as `n`, not `n_1`. Invariants
+take the test case (`inv : test_case -> 'state -> unit`) so they can draw and
+note. Hegel
 has no test runner of its own and no `(inline_tests (backend ...))` stanza:
 the project's own tests wire each `let%hegel_test`-produced function into
 whatever test framework the project already uses (see `examples/*.ml`, which
@@ -430,7 +442,7 @@ the client-drawn failure frame (`flush_document ~framed` adds the blank line
 after the frame header). The client prepends no spaces anywhere. Mirroring
 hegel-rust's `TestCase::child`, a block starts at span depth 0 and opens a
 fresh `draw_state` (a rule's draw names are scoped to that one invocation: a
-`let%hegel_rule` body's `let n = draw ..` prints as `n` in every step, and a
+`[@@rule]` body's `let n = draw ..` prints as `n` in every step, and a
 closure defined inside a `let%hegel_test` body — flagged repeatable by the
 PPX — as `n_1` in every step), while sharing `owned_pools`; a clone instead
 copies the span depth and shares the parent's `draw_state`.

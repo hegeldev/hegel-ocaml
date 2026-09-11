@@ -1,5 +1,4 @@
-(** PPX expander for [let%hegel_test ...], [let%hegel_rule ...], and
-    [let%hegel_invariant ...].
+(** PPX expander for [let%hegel_test ...] and [module%hegel_state_machine ...].
 
     Rewrites:
     {[
@@ -18,31 +17,41 @@
       ;;
     ]}
 
-    [my_test] is has the type [unit -> unit]. The [@@settings ...] and
+    [my_test] has the type [unit -> unit]. The [@@settings ...] and
     [@@failure_blobs ...] attributes are both optional.
 
-    And the stateful pair
+    A state machine is a module whose rules and invariants are marked:
     {[
-    let%hegel_rule push tc stack = body
-    let%hegel_invariant short tc stack = body [@@always_check]
-    ]}
-    into:
-    {[
-    let push = Hegel.Stateful.Rule.create ~name:"push" ~step:(fun tc stack -> body)
+    module%hegel_state_machine Counter = struct
+      type state = int [@@deriving sexp_of]
 
-    let short =
-      Hegel.Stateful.Invariant.create
-        ~name:"short"
-        ~inv:(fun tc stack -> body)
-        ~always_check:true
-        ()
+      let add tc n = n + draw tc (integers ~min_value:1 ~max_value:10 ()) [@@rule]
+      let small _tc n = assert (n < 100) [@@invariant]
+      let positive _tc n = assert (n >= 0) [@@invariant always_check]
+    end
+    ]}
+    The above is rewritten into the following:
+    {[
+    let rules = [ Hegel.Stateful.Rule.create ~name:"add" ~step:add ]
+
+    let invariants =
+      [ Hegel.Stateful.Invariant.create ~name:"small" ~inv:small ~always_check:false ()
+      ; Hegel.Stateful.Invariant.create
+          ~name:"positive"
+          ~inv:positive
+          ~always_check:true
+          ()
+      ]
+    ;;
+
+    let run ?step_count ?(sexp_of_state = sexp_of_state) tc ~init =
+      Hegel.Stateful.run_internal ~init ~rules ~invariants ~sexp_of_state ?step_count tc
     ;;
     ]}
 
-    In all three, [let x = draw tc gen] bindings in [body] have their binding
-    name injected so the drawn value prints as [x = value]. A rule or invariant
-    body runs on its own naming scope per step, so its names are judged for
-    repeatability within the body alone. *)
+    In a test body and in a marked rule or invariant body, a
+    [let x = draw tc gen] binding has its name injected so the drawn value
+    prints as [x = value]. *)
 
 open Ppxlib
 
@@ -430,54 +439,195 @@ let expand_value_binding ~loc (vb : value_binding) : structure_item list =
   build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn
 ;;
 
-(** Expander for a single [let%hegel_rule ...] structure item:
-    [let%hegel_rule name tc state = body] becomes
-    [let name = Hegel.Stateful.Rule.create ~name:"name" ~step:(fun tc state -> body)], with the rule's draws labelled like a test body's. The rule is
-    named after its binding. *)
-let expand_rule_binding ~loc (vb : value_binding) : structure_item list =
-  let rule_name = extract_function_name ~what:"rule" vb.pvb_pat in
-  let step = inject_labels vb.pvb_expr in
-  let name = Ast_builder.Default.estring ~loc rule_name in
-  [ [%stri
-      let [%p vb.pvb_pat] = Hegel.Stateful.Rule.create ~name:[%e name] ~step:[%e step]]
-  ]
+(** A marker attribute on a binding inside a [module%hegel_state_machine]. *)
+type marker =
+  | Rule
+  | Invariant of { always_check : bool }
+
+let marker_of_attr (attr : attribute) : marker option =
+  match attr.attr_name.txt, attr.attr_payload with
+  | "rule", PStr [] -> Some Rule
+  | "rule", _ ->
+    Location.raise_errorf ~loc:attr.attr_loc "ppx_hegel_test: [@@@@rule] takes no payload"
+  | "invariant", PStr [] -> Some (Invariant { always_check = false })
+  | ( "invariant"
+    , PStr
+        [ { pstr_desc =
+              Pstr_eval
+                ({ pexp_desc = Pexp_ident { txt = Lident "always_check"; _ }; _ }, _)
+          ; _
+          }
+        ] ) -> Some (Invariant { always_check = true })
+  | "invariant", _ ->
+    Location.raise_errorf
+      ~loc:attr.attr_loc
+      "ppx_hegel_test: [@@@@invariant] takes no payload, or [always_check]"
+  | _ -> None
 ;;
 
-(** [has_always_check_attr attrs] is [true] when [[@@always_check]] is among
-    [attrs]. *)
-let has_always_check_attr (attrs : attributes) : bool =
-  List.exists
-    (fun (attr : attribute) -> String.equal attr.attr_name.txt "always_check")
-    attrs
+let is_marker (attr : attribute) =
+  String.equal attr.attr_name.txt "rule" || String.equal attr.attr_name.txt "invariant"
 ;;
 
-(** Expander for a single [let%hegel_invariant ...] structure item:
-    [let%hegel_invariant name tc state = body [@@always_check]] becomes
-    [let name = Hegel.Stateful.Invariant.create ~name:"name" ~inv:(fun tc state -> body) ~always_check:true ()] (the flag is [false] without the
-    attribute), with the body's draws labelled like a test body's. The invariant
-    is named after its binding. *)
-let expand_invariant_binding ~loc (vb : value_binding) : structure_item list =
-  let inv_name = extract_function_name ~what:"invariant" vb.pvb_pat in
-  let inv = inject_labels vb.pvb_expr in
-  let name = Ast_builder.Default.estring ~loc inv_name in
-  let always_check =
-    Ast_builder.Default.ebool ~loc (has_always_check_attr vb.pvb_attributes)
+(** [expand_machine_item item] returns [item] with its marker attributes
+    removed and the draws in marked bodies labeled and the
+    [(name, marker)] of every marked binding it held. *)
+let expand_machine_item (item : structure_item) : structure_item * (string * marker) list =
+  match item.pstr_desc with
+  | Pstr_value (rec_flag, vbs) ->
+    let expand_binding (vb : value_binding) =
+      match List.filter_map marker_of_attr vb.pvb_attributes with
+      | [] -> vb, None
+      | _ :: _ :: _ ->
+        Location.raise_errorf
+          ~loc:vb.pvb_loc
+          "ppx_hegel_test: a binding can be marked [@@@@rule] or [@@@@invariant], not \
+           both"
+      | [ marker ] ->
+        let what =
+          match marker with
+          | Rule -> "rule"
+          | Invariant _ -> "invariant"
+        in
+        let name = extract_function_name ~what vb.pvb_pat in
+        ( { vb with
+            pvb_expr = inject_labels vb.pvb_expr
+          ; pvb_attributes = List.filter (fun a -> not (is_marker a)) vb.pvb_attributes
+          }
+        , Some (name, marker) )
+    in
+    let vbs, marked = List.split (List.map expand_binding vbs) in
+    { item with pstr_desc = Pstr_value (rec_flag, vbs) }, List.filter_map Fun.id marked
+  | _ -> item, []
+;;
+
+let has_sexp_of_state (items : structure_item list) : bool =
+  let mentions_sexp (e : expression) =
+    let finder =
+      object
+        inherit [bool] Ast_traverse.fold as super
+
+        method! expression e found =
+          match e.pexp_desc with
+          | Pexp_ident { txt = Lident ("sexp_of" | "sexp"); _ } -> true
+          | _ -> super#expression e found
+      end
+    in
+    finder#expression e false
   in
-  [ [%stri
-      let [%p vb.pvb_pat] =
-        Hegel.Stateful.Invariant.create
-          ~name:[%e name]
-          ~inv:[%e inv]
-          ~always_check:[%e always_check]
-          ()
-      ;;]
-  ]
+  List.exists
+    (fun (item : structure_item) ->
+       match item.pstr_desc with
+       | Pstr_value (_, vbs) ->
+         List.exists
+           (fun (vb : value_binding) ->
+              match vb.pvb_pat.ppat_desc with
+              | Ppat_var { txt = "sexp_of_state"; _ } -> true
+              | _ -> false)
+           vbs
+       | Pstr_type (_, decls) ->
+         List.exists
+           (fun (decl : type_declaration) ->
+              String.equal decl.ptype_name.txt "state"
+              && List.exists
+                   (fun (attr : attribute) ->
+                      String.equal attr.attr_name.txt "deriving"
+                      &&
+                      match attr.attr_payload with
+                      | PStr [ { pstr_desc = Pstr_eval (e, _); _ } ] -> mentions_sexp e
+                      | _ -> false)
+                   decl.ptype_attributes)
+           decls
+       | _ -> false)
+    items
 ;;
 
-(** The [hegel_test], [hegel_rule], and [hegel_invariant] extensions are
-    attached to [structure_item] (top-level [let%hegel_test] / [let%hegel_rule]
-    / [let%hegel_invariant]). They support only the non-recursive single-binding
-    form. Each expander creates top-level item. *)
+(** Expander for [module%hegel_state_machine M = struct … end]. It keeps the
+    body's items, with the marker attributes removed and the draws in marked
+    bodies labelled, and appends [rules], [invariants], and
+    [run ?step_count ?sexp_of_state tc ~init]. At least one [[@@rule]] binding
+    is required. *)
+let expand_state_machine ~loc (mb : module_binding) : structure_item list =
+  let items =
+    match mb.pmb_expr.pmod_desc with
+    | Pmod_structure items -> items
+    | _ ->
+      Location.raise_errorf
+        ~loc
+        "ppx_hegel_test: module%%hegel_state_machine expects a [struct … end] body"
+  in
+  let items, marked = List.split (List.map expand_machine_item items) in
+  let marked = List.concat marked in
+  let rules, invariants =
+    List.fold_right
+      (fun (name, marker) (rules, invariants) ->
+         match marker with
+         | Rule -> name :: rules, invariants
+         | Invariant { always_check } -> rules, (name, always_check) :: invariants)
+      marked
+      ([], [])
+  in
+  if List.is_empty rules
+  then
+    Location.raise_errorf
+      ~loc
+      "ppx_hegel_test: a state machine needs at least one [@@@@rule] binding";
+  let open Ast_builder.Default in
+  let rule_exprs =
+    List.map
+      (fun name ->
+         [%expr
+           Hegel.Stateful.Rule.create
+             ~name:[%e estring ~loc name]
+             ~step:[%e evar ~loc name]])
+      rules
+  in
+  let invariant_exprs =
+    List.map
+      (fun (name, always_check) ->
+         [%expr
+           Hegel.Stateful.Invariant.create
+             ~name:[%e estring ~loc name]
+             ~inv:[%e evar ~loc name]
+             ~always_check:[%e ebool ~loc always_check]
+             ()])
+      invariants
+  in
+  let run =
+    if has_sexp_of_state items
+    then
+      [%stri
+        let run ?step_count ?(sexp_of_state = sexp_of_state) tc ~init =
+          Hegel.Stateful.run_internal
+            ~init
+            ~rules
+            ~invariants
+            ~sexp_of_state
+            ?step_count
+            tc
+        ;;]
+    else
+      [%stri
+        let run ?step_count ?sexp_of_state tc ~init =
+          Hegel.Stateful.run_internal
+            ~init
+            ~rules
+            ~invariants
+            ?sexp_of_state
+            ?step_count
+            tc
+        ;;]
+  in
+  let generated =
+    [ [%stri let rules = [%e elist ~loc rule_exprs]]
+    ; [%stri let invariants = [%e elist ~loc invariant_exprs]]
+    ; run
+    ]
+  in
+  let pmb_expr = { mb.pmb_expr with pmod_desc = Pmod_structure (items @ generated) } in
+  [ pstr_module ~loc { mb with pmb_expr } ]
+;;
+
 let extension =
   Extension.declare_inline
     "hegel_test"
@@ -486,20 +636,12 @@ let extension =
     (fun ~loc ~path:_ vb -> expand_value_binding ~loc vb)
 ;;
 
-let rule_extension =
+let state_machine_extension =
   Extension.declare_inline
-    "hegel_rule"
+    "hegel_state_machine"
     Extension.Context.structure_item
-    Ast_pattern.(pstr (pstr_value nonrecursive (__ ^:: nil) ^:: nil))
-    (fun ~loc ~path:_ vb -> expand_rule_binding ~loc vb)
-;;
-
-let invariant_extension =
-  Extension.declare_inline
-    "hegel_invariant"
-    Extension.Context.structure_item
-    Ast_pattern.(pstr (pstr_value nonrecursive (__ ^:: nil) ^:: nil))
-    (fun ~loc ~path:_ vb -> expand_invariant_binding ~loc vb)
+    Ast_pattern.(pstr (pstr_module __ ^:: nil))
+    (fun ~loc ~path:_ mb -> expand_state_machine ~loc mb)
 ;;
 
 let () =
@@ -507,7 +649,6 @@ let () =
     "ppx_hegel_test"
     ~rules:
       [ Context_free.Rule.extension extension
-      ; Context_free.Rule.extension rule_extension
-      ; Context_free.Rule.extension invariant_extension
+      ; Context_free.Rule.extension state_machine_extension
       ]
 ;;
