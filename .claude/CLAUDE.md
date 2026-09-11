@@ -435,8 +435,13 @@ concurrent output assembles deterministically regardless of scheduling.
 Indentation is engine-side too (libhegel 0.37.10 block handles): `Internal.block
 tc ~indent` opens a handle onto the *same* choice stream whose print region is
 a block nested in `tc`'s at the current position, every line `indent` columns
-further in, ending with the block. `Stateful.run` runs each rule's `step` with
-`block tc ~indent:2` so its draws nest under the `Step N: name` note, and
+further in, ending with the block. `Stateful.run` runs each rule's `step` and
+each invariant body with `block tc ~indent:2` so their draws nest under the
+`Step N: name` note. It only creates the block when `should_print tc` holds
+(`Stateful.section`); a non-printing case runs the body on `tc` itself, since
+a block per step costs a native handle, a context, and a GC finaliser, which
+measured as 50% more wall time and 20x the major collections on a
+200-case x 500-step machine. And
 `final_replay` runs the body via `run_test_case ~indent:2` so it sits inside
 the client-drawn failure frame (`flush_document ~framed` adds the blank line
 after the frame header). The client prepends no spaces anywhere. Mirroring

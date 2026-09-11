@@ -49,6 +49,8 @@ module Invariant = struct
   let name invariant = invariant.name
 end
 
+let indent_tc tc = if Internal.should_print tc then Internal.block tc ~indent:2 else tc
+
 let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
   let rule_array = Array.of_list rules in
   let invariant_names = List.map (fun inv -> Invariant.name inv) invariants in
@@ -78,7 +80,7 @@ let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
                 ~state_machine
                 ~invariant_index:i
          then (
-           match invariant.Invariant.inv (Internal.block tc ~indent:2) state with
+           match invariant.Invariant.inv (indent_tc tc) state with
            | () -> ()
            | exception e ->
              Internal.note
@@ -104,7 +106,7 @@ let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
       let rule = rule_array.(rule_index) in
       let step_num = steps_attempted + 1 in
       Internal.note tc (Printf.sprintf "Step %d: %s" step_num rule.Rule.name);
-      (match rule.Rule.step (Internal.block tc ~indent:2) state with
+      (match rule.Rule.step (indent_tc tc) state with
        | new_state ->
          print_state new_state;
          exec_round ~state:new_state ~steps_attempted:step_num ~rejected
@@ -150,9 +152,9 @@ end
 
 let run
       (type s)
-      tc
       ?step_count
       ?sexp_of_state
+      tc
       (module M : State_machine with type state = s)
       ~(init : s)
   =

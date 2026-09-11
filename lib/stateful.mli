@@ -246,9 +246,9 @@ end
       Invariant my_invariant violated after step 2.
     v} *)
 val run
-  :  Internal.test_case
-  -> ?step_count:int
+  :  ?step_count:int
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+  -> Internal.test_case
   -> (module State_machine with type state = 'state)
   -> init:'state
   -> unit
