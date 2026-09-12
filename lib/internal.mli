@@ -264,7 +264,7 @@ val event_value : test_case -> label:string -> value:float -> unit
 (**/**)
 
 (** [start_span ?label tc] starts a generation span for better shrinking. *)
-val start_span : ?label:int -> test_case -> unit
+val start_span : ?label:int64 -> test_case -> unit
 
 (** [stop_span ?discard tc] ends the current generation span. *)
 val stop_span : ?discard:bool -> test_case -> unit

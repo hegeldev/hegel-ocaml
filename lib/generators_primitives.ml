@@ -6,6 +6,7 @@ open Generators_core
     OCaml native [int] limit. *)
 let integers ?(min_value = Int.min_int) ?(max_value = Int.max_int) () =
   leaf
+    ~name:"integers"
     ~draw:(fun tc -> Internal.generate_integer tc ~min_value ~max_value)
     ~sexp_of:sexp_of_int
 ;;
@@ -13,7 +14,10 @@ let integers ?(min_value = Int.min_int) ?(max_value = Int.max_int) () =
 (** [booleans ?p ()] creates a generator for boolean values, [true] with
     probability [p] (default [0.5]). *)
 let booleans ?(p = 0.5) () =
-  leaf ~draw:(fun tc -> Internal.generate_boolean tc p None) ~sexp_of:sexp_of_bool
+  leaf
+    ~name:"booleans"
+    ~draw:(fun tc -> Internal.generate_boolean tc p None)
+    ~sexp_of:sexp_of_bool
 ;;
 
 (** The smallest positive (subnormal) 64-bit float. Passed as
@@ -54,6 +58,7 @@ let floats
   let min_value = Option.value min_value ~default:neg_infinity in
   let max_value = Option.value max_value ~default:infinity in
   leaf
+    ~name:"floats"
     ~draw:(fun tc ->
       Internal.generate_float
         tc
@@ -125,6 +130,7 @@ let text_generator
     effective_categories ?categories ?exclude_categories ()
   in
   leaf
+    ~name:"text"
     ~draw:(fun tc ->
       Internal.generate_text
         tc
@@ -236,6 +242,7 @@ let characters
     range (codepoints 0-255, i.e. Latin-1). *)
 let make_characters ~of_char ~sexp_of () =
   leaf
+    ~name:"characters"
     ~draw:(fun tc ->
       let s =
         Internal.generate_text
@@ -270,6 +277,7 @@ let binary ?(min_size = 0) ?max_size () =
      raise (Internal.Usage_error (Printf.sprintf "max_size=%d must be non-negative" ms))
    | _ -> ());
   leaf
+    ~name:"binary"
     ~draw:(fun tc -> Internal.generate_bytes tc ~min_size ~max_size)
     ~sexp_of:sexp_of_string
 ;;
@@ -277,7 +285,7 @@ let binary ?(min_size = 0) ?max_size () =
 (** [just value] creates a generator that always produces [value].
 
     The output type is chosen by the caller, so no printer is carried. *)
-let just value = leaf_silent ~draw:(fun _ -> value)
+let just value = leaf_silent ~name:"just" ~draw:(fun _ -> value)
 
 (** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
     a regular expression [pattern], written in the syntax of Python's [re]
@@ -285,6 +293,7 @@ let just value = leaf_silent ~draw:(fun _ -> value)
     [pattern]; otherwise a match anywhere suffices. *)
 let from_regex pattern ?(fullmatch = true) () =
   leaf
+    ~name:"from_regex"
     ~draw:(fun tc -> Internal.generate_regex tc ~pattern ~fullmatch)
     ~sexp_of:sexp_of_string
 ;;
@@ -294,7 +303,7 @@ let from_regex pattern ?(fullmatch = true) () =
     Addresses follow RFC 5321/5322: a local part of 1 to 64 characters from the
     RFC 5322 [atext] set, an [@], and a domain from {!domains}, with the overall
     address length capped at 254 octets (RFC 5321 §4.5.3.1.3). *)
-let emails () = leaf ~draw:Internal.generate_email ~sexp_of:sexp_of_string
+let emails () = leaf ~name:"emails" ~draw:Internal.generate_email ~sexp_of:sexp_of_string
 
 (** [urls ()] creates a generator for valid URL strings.
 
@@ -303,7 +312,7 @@ let emails () = leaf ~draw:Internal.generate_email ~sexp_of:sexp_of_string
     255 characters), an optional port in [1, 65535], zero or more [/]-separated
     path segments of up to 100 characters each, and an optional fragment of up
     to 100 characters. Path and fragment characters are percent-encoded. *)
-let urls () = leaf ~draw:Internal.generate_url ~sexp_of:sexp_of_string
+let urls () = leaf ~name:"urls" ~draw:Internal.generate_url ~sexp_of:sexp_of_string
 
 (** [domains ?max_length ()] creates a generator for domain name strings.
 
@@ -315,7 +324,10 @@ let urls () = leaf ~draw:Internal.generate_url ~sexp_of:sexp_of_string
     provided, [max_length] must be in [4, 255]. *)
 let domains ?max_length () =
   let max_length = Option.value max_length ~default:255 in
-  leaf ~draw:(fun tc -> Internal.generate_domain tc ~max_length) ~sexp_of:sexp_of_string
+  leaf
+    ~name:"domains"
+    ~draw:(fun tc -> Internal.generate_domain tc ~max_length)
+    ~sexp_of:sexp_of_string
 ;;
 
 type date = Internal.date =
@@ -349,6 +361,7 @@ let last_time = { hour = 23; minute = 59; second = 59; nanosecond = 999_999_999 
     [[0001-01-01, 9999-12-31]]. *)
 let make_dates ~of_date ~sexp_of ?(min_date = first_date) ?(max_date = last_date) () =
   leaf
+    ~name:"dates"
     ~draw:(fun tc ->
       of_date (Internal.generate_date tc ~min_value:min_date ~max_value:max_date))
     ~sexp_of
@@ -360,6 +373,7 @@ let make_dates ~of_date ~sexp_of ?(min_date = first_date) ?(max_date = last_date
     is [[00:00:00.000000000, 23:59:59.999999999]]. *)
 let make_times ~of_time ~sexp_of ?(min_time = first_time) ?(max_time = last_time) () =
   leaf
+    ~name:"times"
     ~draw:(fun tc ->
       of_time (Internal.generate_time tc ~min_value:min_time ~max_value:max_time))
     ~sexp_of
@@ -378,6 +392,7 @@ let make_datetimes
       ()
   =
   leaf
+    ~name:"datetimes"
     ~draw:(fun tc ->
       of_datetime
         (Internal.generate_datetime tc ~min_value:min_datetime ~max_value:max_datetime))

@@ -161,10 +161,11 @@ val with_printer
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
 val printer : ('a, printable) generator -> 'a -> Sexplib0.Sexp.t
 
-(** [leaf ~draw ~sexp_of] builds a printable generator from a single typed
-    engine draw. Not part of the public API. *)
+(** [leaf ~name ~draw ~sexp_of] builds a printable generator from a single
+    typed engine draw, labeled from [name]. Not part of the public API. *)
 val leaf
-  :  draw:(Internal.test_case -> 'a)
+  :  name:string
+  -> draw:(Internal.test_case -> 'a)
   -> sexp_of:('a -> Sexplib0.Sexp.t)
   -> ('a, printable) generator
 
@@ -870,37 +871,50 @@ end
     library's own modules, and white-box tests. Not for direct use — no
     stability guarantees. *)
 module Ppx_internal : sig
-  (** Constants for span labels used in generation tracking. *)
+  (** Span labels: opaque values identifying a generator to the engine, which
+      treats two spans with the same label as coming from the same generator
+      when shrinking. *)
   module Labels : sig
-    val list : int
-    val list_element : int
-    val set : int
-    val set_element : int
-    val map : int
-    val map_entry : int
-    val tuple : int
-    val one_of : int
-    val optional : int
-    val fixed_dict : int
-    val flat_map : int
-    val filter : int
-    val mapped : int
-    val sampled_from : int
-    val enum_variant : int
-    val stateful_rule : int
+    (** [from_name name] is the label of a generator named [name] (64-bit
+        FNV-1a, as [hegel_label_from_name]). *)
+    val from_name : string -> int64
+
+    (** [combine labels] is the label of a generator built from others: its
+        own label first, then its components' (as [hegel_label_combine]). *)
+    val combine : int64 list -> int64
+
+    val list : int64
+    val set : int64
+    val assoc_list : int64
+    val hash_table : int64
+    val tuple : int64
+    val one_of : int64
+    val optional : int64
+    val fixed_dict : int64
+    val flat_map : int64
+    val filter : int64
+    val mapped : int64
+    val enum_variant : int64
+    val pool : int64
+    val function_ : int64
+    val function_result : int64
+    val stateful_rule : int64
   end
+
+  (** [label_of gen] is the span label of [gen]. *)
+  val label_of : ('a, 'p) generator -> int64
 
   (** Maximum number of filter attempts before calling [assume false]. *)
   val max_filter_attempts : int
 
   (** [group label data f] runs [f ()] inside a span with the given [label]. The
       span is stopped with [discard:false] regardless of whether [f] raises. *)
-  val group : int -> Internal.test_case -> (unit -> 'a) -> 'a
+  val group : int64 -> Internal.test_case -> (unit -> 'a) -> 'a
 
   (** [discardable_group label data f] runs [f ()] inside a span with [label].
       If [f] raises, the span is stopped with [discard:true]; otherwise
       [discard:false]. *)
-  val discardable_group : int -> Internal.test_case -> (unit -> 'a) -> 'a
+  val discardable_group : int64 -> Internal.test_case -> (unit -> 'a) -> 'a
 
   (** [resolve_pool_draw ~find ~remove ~consume id] resolves a drawn pool [id]
       via the [find] closure. When [consume], the picked value is removed. *)
@@ -951,7 +965,7 @@ module Ppx_internal : sig
       span with [label] instead of the fixed struct/record label. Used by the
       derive PPX to tag composites (e.g. {!Labels.enum_variant}). *)
   val composite_with_label
-    :  label:int
+    :  label:int64
     -> (Internal.test_case -> 'a)
     -> ('a, unprintable) generator
 end

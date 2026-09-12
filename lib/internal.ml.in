@@ -580,7 +580,7 @@ let event_value tc ~label ~value =
 ;;
 
 (** [start_span ?label tc] starts a generation span for better shrinking. *)
-let start_span ?(label = 0) tc =
+let start_span ?(label = 0L) tc =
   if tc.test_aborted
   then ()
   else with_stop_guard tc (fun () -> Ffi.start_span tc.context tc.handle label)

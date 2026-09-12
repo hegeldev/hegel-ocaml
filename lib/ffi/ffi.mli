@@ -409,8 +409,20 @@ val generate_ipv4 : context -> test_case -> string
 (** [generate_ipv6 ctx tc] draws an IPv6 address as its 16 network-order bytes. *)
 val generate_ipv6 : context -> test_case -> string
 
-val start_span : context -> test_case -> int -> unit
+(** [start_span ctx tc label] opens a span. [label] identifies the generator
+    that opened it (the engine's [uint64_t], as an [int64]): two spans with the
+    same label are treated as coming from the same generator when shrinking. *)
+val start_span : context -> test_case -> int64 -> unit
+
 val stop_span : context -> test_case -> bool -> unit
+
+(** [label_from_name ctx name] is the engine's label for a generator named
+    [name]: the 64-bit FNV-1a hash of its bytes. *)
+val label_from_name : context -> string -> int64
+
+(** [label_combine ctx labels] is the engine's label for a generator built from
+    others: a hash of [labels] in order (the generator's own label first). *)
+val label_combine : context -> int64 list -> int64
 
 (** [new_collection ctx tc ~min_size ~max_size] starts an engine-managed
     collection ([max_size = None] means unbounded). *)

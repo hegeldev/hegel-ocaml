@@ -38,7 +38,9 @@ let one_of (generators : ('a, printable) generator list) : ('a, printable) gener
     let drawn_printer = ref (printer first) in
     let core =
       Composite
-        { label = Labels.one_of
+        { label =
+            Labels.combine
+              (Labels.one_of :: List.map (Fun.compose label_of_core core_of) generators)
         ; generate_fn =
             (fun data ->
               let idx = Internal.generate_integer data ~min_value:0 ~max_value:(n - 1) in
@@ -55,7 +57,7 @@ let one_of (generators : ('a, printable) generator list) : ('a, printable) gener
     option fields go through the same machinery. *)
 let optional_core (element : 'a core) : 'a option core =
   Composite
-    { label = Labels.optional
+    { label = Labels.combine [ Labels.optional; label_of_core element ]
     ; generate_fn =
         (fun data ->
           if Internal.generate_boolean data 0.5 None
@@ -91,10 +93,12 @@ let ip_addresses ?version () =
   let sexp_of ip = Sexp.Atom (Ipaddr.to_string ip) in
   let v4 tc = Ipaddr.V4 (Ipaddr.V4.of_octets_exn (Internal.generate_ipv4 tc)) in
   let v6 tc = Ipaddr.V6 (Ipaddr.V6.of_octets_exn (Internal.generate_ipv6 tc)) in
+  let v4 = leaf ~name:"ipv4" ~draw:v4 ~sexp_of
+  and v6 = leaf ~name:"ipv6" ~draw:v6 ~sexp_of in
   match version with
-  | Some `V4 -> leaf ~draw:v4 ~sexp_of
-  | Some `V6 -> leaf ~draw:v6 ~sexp_of
-  | None -> one_of [ leaf ~draw:v4 ~sexp_of; leaf ~draw:v6 ~sexp_of ]
+  | Some `V4 -> v4
+  | Some `V6 -> v6
+  | None -> one_of [ v4; v6 ]
 ;;
 
 (** [tuples2 g1 g2] creates a generator for 2-element tuples of printable
@@ -107,7 +111,7 @@ let tuples2 (type a b) (g1 : (a, printable) generator) (g2 : (b, printable) gene
   let sexp_of (a, b) = Sexp.List [ p1 a; p2 b ] in
   let core =
     Composite
-      { label = Labels.tuple
+      { label = Labels.combine [ Labels.tuple; label_of g1; label_of g2 ]
       ; generate_fn =
           (fun data ->
             let a = do_draw (core_of g1) data in
@@ -133,7 +137,7 @@ let tuples3
   let sexp_of (a, b, c) = Sexp.List [ p1 a; p2 b; p3 c ] in
   let core =
     Composite
-      { label = Labels.tuple
+      { label = Labels.combine [ Labels.tuple; label_of g1; label_of g2; label_of g3 ]
       ; generate_fn =
           (fun data ->
             let a = do_draw (core_of g1) data in
@@ -162,7 +166,9 @@ let tuples4
   let sexp_of (a, b, c, d) = Sexp.List [ p1 a; p2 b; p3 c; p4 d ] in
   let core =
     Composite
-      { label = Labels.tuple
+      { label =
+          Labels.combine
+            [ Labels.tuple; label_of g1; label_of g2; label_of g3; label_of g4 ]
       ; generate_fn =
           (fun data ->
             let a = do_draw (core_of g1) data in

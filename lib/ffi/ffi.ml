@@ -507,6 +507,16 @@ let c_start_span =
   foreign "hegel_start_span" (ptr void @-> ptr void @-> uint64_t @-> returning int)
 ;;
 
+let c_label_from_name =
+  foreign "hegel_label_from_name" (ptr void @-> string @-> ptr uint64_t @-> returning int)
+;;
+
+let c_label_combine =
+  foreign
+    "hegel_label_combine"
+    (ptr void @-> ptr uint64_t @-> size_t @-> ptr uint64_t @-> returning int)
+;;
+
 let c_stop_span =
   foreign "hegel_stop_span" (ptr void @-> ptr void @-> bool @-> returning int)
 ;;
@@ -1361,7 +1371,26 @@ let generate_ipv4 ctx tc = generate_ip_bytes ctx tc c_generate_ipv4 4
 let generate_ipv6 ctx tc = generate_ip_bytes ctx tc c_generate_ipv6 16
 
 let start_span ctx tc label =
-  check_rc ctx (c_start_span ctx tc (Unsigned.UInt64.of_int label))
+  check_rc ctx (c_start_span ctx tc (Unsigned.UInt64.of_int64 label))
+;;
+
+let label_from_name ctx name =
+  let out = allocate uint64_t Unsigned.UInt64.zero in
+  check_rc ctx (c_label_from_name ctx name out);
+  Unsigned.UInt64.to_int64 !@out
+;;
+
+let label_combine ctx labels =
+  let arr = CArray.of_list uint64_t (List.map Unsigned.UInt64.of_int64 labels) in
+  let out = allocate uint64_t Unsigned.UInt64.zero in
+  check_rc
+    ctx
+    (c_label_combine
+       ctx
+       (CArray.start arr)
+       (Unsigned.Size_t.of_int (CArray.length arr))
+       out);
+  Unsigned.UInt64.to_int64 !@out
 ;;
 
 let stop_span ctx tc discard = check_rc ctx (c_stop_span ctx tc discard)
