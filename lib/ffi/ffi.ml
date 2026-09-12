@@ -199,6 +199,94 @@ let c_settings_database_key =
     (ptr void @-> ptr void @-> string_opt @-> returning int)
 ;;
 
+let c_settings_new_for_profile =
+  foreign
+    "hegel_settings_new_for_profile"
+    (ptr void @-> string @-> ptr (ptr void) @-> returning int)
+;;
+
+let c_settings_print_blob =
+  foreign
+    "hegel_settings_set_print_blob"
+    (ptr void @-> ptr void @-> bool @-> returning int)
+;;
+
+let c_settings_register_profile =
+  foreign
+    "hegel_settings_register_profile"
+    (ptr void @-> string @-> ptr void @-> returning int)
+;;
+
+let c_set_default_profile =
+  foreign "hegel_set_default_profile" (ptr void @-> string_opt @-> returning int)
+;;
+
+let c_settings_get_test_cases =
+  foreign
+    "hegel_settings_get_test_cases"
+    (ptr void @-> ptr void @-> ptr uint64_t @-> returning int)
+;;
+
+let c_settings_get_verbosity =
+  foreign
+    "hegel_settings_get_verbosity"
+    (ptr void @-> ptr void @-> ptr int @-> returning int)
+;;
+
+let c_settings_get_seed =
+  foreign
+    "hegel_settings_get_seed"
+    (ptr void @-> ptr void @-> ptr uint64_t @-> ptr bool @-> returning int)
+;;
+
+let c_settings_get_derandomize =
+  foreign
+    "hegel_settings_get_derandomize"
+    (ptr void @-> ptr void @-> ptr bool @-> returning int)
+;;
+
+let c_settings_get_database =
+  foreign
+    "hegel_settings_get_database"
+    (ptr void @-> ptr void @-> ptr string_opt @-> returning int)
+;;
+
+let c_settings_get_phases =
+  foreign
+    "hegel_settings_get_phases"
+    (ptr void @-> ptr void @-> ptr uint32_t @-> returning int)
+;;
+
+let c_settings_get_suppress_health_check =
+  foreign
+    "hegel_settings_get_suppress_health_check"
+    (ptr void @-> ptr void @-> ptr uint32_t @-> returning int)
+;;
+
+let c_settings_get_report_multiple_failures =
+  foreign
+    "hegel_settings_get_report_multiple_failures"
+    (ptr void @-> ptr void @-> ptr bool @-> returning int)
+;;
+
+let c_settings_get_show_statistics =
+  foreign
+    "hegel_settings_get_show_statistics"
+    (ptr void @-> ptr void @-> ptr bool @-> returning int)
+;;
+
+let c_settings_get_print_blob =
+  foreign
+    "hegel_settings_get_print_blob"
+    (ptr void @-> ptr void @-> ptr bool @-> returning int)
+;;
+
+let c_settings_get_backend =
+  foreign
+    "hegel_settings_get_backend"
+    (ptr void @-> ptr void @-> ptr int @-> returning int)
+;;
+
 let c_settings_phases =
   foreign
     "hegel_settings_set_phases"
@@ -417,6 +505,16 @@ let c_test_case_from_blob =
 
 let c_start_span =
   foreign "hegel_start_span" (ptr void @-> ptr void @-> uint64_t @-> returning int)
+;;
+
+let c_label_from_name =
+  foreign "hegel_label_from_name" (ptr void @-> string @-> ptr uint64_t @-> returning int)
+;;
+
+let c_label_combine =
+  foreign
+    "hegel_label_combine"
+    (ptr void @-> ptr uint64_t @-> size_t @-> ptr uint64_t @-> returning int)
 ;;
 
 let c_stop_span =
@@ -676,7 +774,6 @@ type printer = unit Ctypes.ptr
 type printer_options = unit Ctypes.ptr
 
 type backend =
-  | Auto
   | Default
   | Urandom
 
@@ -735,16 +832,29 @@ let hc_large_initial_test_case = 1 lsl 3
 (* ------------------------------------------------------------------ *)
 
 let backend_to_int = function
-  | Auto -> 0
   | Default -> 1
   | Urandom -> 2
 ;;
 
 let verbosity_to_int = function
-  | Quiet -> 0
-  | Normal -> 1
+  | Normal -> 0
+  | Quiet -> 1
   | Verbose -> 2
   | Debug -> 3
+;;
+
+let verbosity_of_int = function
+  | 0 -> Normal
+  | 1 -> Quiet
+  | 2 -> Verbose
+  | 3 -> Debug
+  | n -> raise (Backend_error (Printf.sprintf "hegel: unknown verbosity %d" n))
+;;
+
+let backend_of_int = function
+  | 1 -> Default
+  | 2 -> Urandom
+  | n -> raise (Backend_error (Printf.sprintf "hegel: unknown backend %d" n))
 ;;
 
 let status_to_int = function
@@ -857,6 +967,78 @@ let settings_phases ctx s mask =
 
 let settings_suppress_health_check ctx s mask =
   check_rc ctx (c_settings_suppress_health_check ctx s (Unsigned.UInt32.of_int mask))
+;;
+
+let settings_print_blob ctx s b = check_rc ctx (c_settings_print_blob ctx s b)
+
+let settings_new_for_profile ctx name =
+  let out = allocate (ptr void) null in
+  check_rc ctx (c_settings_new_for_profile ctx name out);
+  !@out
+;;
+
+let settings_register_profile ctx name s =
+  check_rc ctx (c_settings_register_profile ctx name s)
+;;
+
+let set_default_profile ctx name = check_rc ctx (c_set_default_profile ctx name)
+
+let settings_get_test_cases ctx s =
+  let out = allocate uint64_t Unsigned.UInt64.zero in
+  check_rc ctx (c_settings_get_test_cases ctx s out);
+  Unsigned.UInt64.to_int !@out
+;;
+
+let settings_get_verbosity ctx s =
+  let out = allocate int 0 in
+  check_rc ctx (c_settings_get_verbosity ctx s out);
+  verbosity_of_int !@out
+;;
+
+let settings_get_seed ctx s =
+  let seed = allocate uint64_t Unsigned.UInt64.zero in
+  let has_seed = allocate bool false in
+  check_rc ctx (c_settings_get_seed ctx s seed has_seed);
+  if !@has_seed then Some (Unsigned.UInt64.to_int !@seed) else None
+;;
+
+let get_bool getter ctx s =
+  let out = allocate bool false in
+  check_rc ctx (getter ctx s out);
+  !@out
+;;
+
+let settings_get_derandomize ctx s = get_bool c_settings_get_derandomize ctx s
+
+let settings_get_database ctx s =
+  let out = allocate string_opt None in
+  check_rc ctx (c_settings_get_database ctx s out);
+  !@out
+;;
+
+let get_mask getter ctx s =
+  let out = allocate uint32_t Unsigned.UInt32.zero in
+  check_rc ctx (getter ctx s out);
+  Unsigned.UInt32.to_int !@out
+;;
+
+let settings_get_phases ctx s = get_mask c_settings_get_phases ctx s
+
+let settings_get_suppress_health_check ctx s =
+  get_mask c_settings_get_suppress_health_check ctx s
+;;
+
+let settings_get_report_multiple_failures ctx s =
+  get_bool c_settings_get_report_multiple_failures ctx s
+;;
+
+let settings_get_show_statistics ctx s = get_bool c_settings_get_show_statistics ctx s
+let settings_get_print_blob ctx s = get_bool c_settings_get_print_blob ctx s
+
+let settings_get_backend ctx s =
+  let out = allocate int 0 in
+  check_rc ctx (c_settings_get_backend ctx s out);
+  backend_of_int !@out
 ;;
 
 (* ------------------------------------------------------------------ *)
@@ -1189,7 +1371,26 @@ let generate_ipv4 ctx tc = generate_ip_bytes ctx tc c_generate_ipv4 4
 let generate_ipv6 ctx tc = generate_ip_bytes ctx tc c_generate_ipv6 16
 
 let start_span ctx tc label =
-  check_rc ctx (c_start_span ctx tc (Unsigned.UInt64.of_int label))
+  check_rc ctx (c_start_span ctx tc (Unsigned.UInt64.of_int64 label))
+;;
+
+let label_from_name ctx name =
+  let out = allocate uint64_t Unsigned.UInt64.zero in
+  check_rc ctx (c_label_from_name ctx name out);
+  Unsigned.UInt64.to_int64 !@out
+;;
+
+let label_combine ctx labels =
+  let arr = CArray.of_list uint64_t (List.map Unsigned.UInt64.of_int64 labels) in
+  let out = allocate uint64_t Unsigned.UInt64.zero in
+  check_rc
+    ctx
+    (c_label_combine
+       ctx
+       (CArray.start arr)
+       (Unsigned.Size_t.of_int (CArray.length arr))
+       out);
+  Unsigned.UInt64.to_int64 !@out
 ;;
 
 let stop_span ctx tc discard = check_rc ctx (c_stop_span ctx tc discard)

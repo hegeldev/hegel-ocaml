@@ -38,6 +38,10 @@ lib/                         # Library source
                              #   test_case_printer, note)
     loader.ml                # locate/download libhegel at runtime (env > site >
                              #   sibling ../hegel-rust build (libhegel_c.<ext>) > release)
+  settings.ml / settings.mli # Hegel.Settings: the settings record (type t), its
+                             #   verbosity/database/phase/health_check enums,
+                             #   default ()/from_profile/create materialized from
+                             #   the engine's settings profiles (to_ffi/of_ffi)
   internal.ml.in             # Test runner + run lifecycle + typed-draw wrappers on
                              #   top of Hegel_ffi.Ffi; note/print_line/render_sexp +
                              #   flush_document (engine-side output, see Pretty
@@ -207,7 +211,8 @@ Generators are a discriminated union:
 - **CompositeList** — lists of any element core. Uses the collection protocol (with_collection / collection_more) to generate elements one at a time.
 - **Composite** — a `generate_fn` thunk run inside a labeled span; used by tuples, one_of, `lists ~unique`, and hash tables (all of which now always drive the collection protocol / draw sub-values directly — there is no schema fast path).
 - **Values** — the engine-pool core behind `Stateful.Pool`. Refunctionalized: it stores the table's `find`/`remove`/`is_empty` closures, not a concrete hashtable. `Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int)` (doc-hidden, with the ready-made `Int_table`) closes `make_pool_values`/`resolve_pool_draw` over a stdlib table; the optional `hegel.jane` library closes the same primitives (via `Ppx_internal`) over `Core.Hashtbl`. `hash_tables` follows the same strategy at the API level: `make_hash_tables ~of_pairs ~sexp_of_t` is table-agnostic, `hash_tables` closes it over `Stdlib.Hashtbl`, `Hegel_jane.hash_tables` over `Core.Hashtbl.Poly`.
-- **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (memoized on the argument via structural hash/equality — a polymorphic `Stdlib.Hashtbl` — so `sexp_of_arg` is display-only and an omitted one shows `<opaque>` without collapsing the key) and shows applied pairs as `name arg = result` in the print region on the final replay. Only *top-level* applications print — a pair applied at draw depth > 0 (inside a span) is suppressed, like a nested draw. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); the name threads even when the function is drawn nested. Result draws are wrapped in a `Labels.function_result` span.
+- **Span labels** (libhegel 0.39.0) — a label is an opaque `uint64_t` (OCaml `int64`) identifying the generator that opened a span; the engine treats two spans with the same label as coming from the same generator when it shrinks and mutates, and does nothing else with it. There are no predefined label constants in the ABI any more. `Generators_core.Labels.from_name`/`combine` compute the engine's own hashes (64-bit FNV-1a over the name's bytes / over the labels' little-endian bytes in order — `hegel_label_from_name`/`hegel_label_combine`, pinned equal by `test_labels_match_engine` through the `Ffi.label_*` bindings) so no context is needed at generator construction. Every core stores its `label`, fixed at construction: a `Leaf` from its primitive's name (`leaf ~name:"integers"` → `hegel_ocaml.integers`), and everything built from other generators as `combine [own kind; components' labels…]` (`lists (integers ())` ≠ `lists (text ())`; `map` on a leaf stays a leaf but combines `Labels.mapped` in; `with_printer` leaves the label alone; `Values` is the constant `Labels.pool`). `label_of_core`/`Ppx_internal.label_of` read it back. The deriver emits `combine [fixed_dict|enum_variant; from_name "<type name>"]` so two derived types of the same shape stay distinct. Names are prefixed `hegel_ocaml.` to keep clear of libhegel's own `hegel.<kind>` spans.
+- **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (memoized on the argument via structural hash/equality — a polymorphic `Stdlib.Hashtbl` — so `sexp_of_arg` is display-only and an omitted one shows `<opaque>` without collapsing the key) and shows applied pairs as `name arg = result` in the print region on the final replay. Only *top-level* applications print — a pair applied at draw depth > 0 (inside a span) is suppressed, like a nested draw. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); the name threads even when the function is drawn nested. Result draws are wrapped in a span labelled `combine [Labels.function_result; label of returns]`.
 
 ### Inline Test Integration (ppx/ppx_hegel_test.ml)
 
@@ -390,20 +395,26 @@ Who owns what in hegel-ocaml:
 - collections → `Generators_core.with_collection` (`Fun.protect`, so a
   `Data_exhausted` mid-draw still frees)
 - state machines → `Stateful.run`, the same way
-- variable pools → the test case. `Stateful.Pool.create` is public and has no
-  lexical scope, so `Internal.new_pool` adds the handle to the test case's
-  `owned_pools` (a `Ffi.pool list` + mutex, which a clone or block shares with
-  the test case it was derived from, like `draw_state`), and `run_test_case`
-  calls `free_owned_pools` once the case is complete — matching the order in
-  hegel-rust's own
-  `hegel-c/tests/c_abi_inprocess.rs`, which frees all three before
-  `hegel_mark_complete`.
-- derived test-case handles (`Internal.clone` → `hegel_test_case_clone`,
-  `Internal.block` → `hegel_test_case_block`) → a GC finaliser
-  (`Gc.finalise_last`) frees the handle and its own context once the OCaml
-  record is unreachable. Not lexical, because user code may
-  capture the record (a `Stateful.Pool.create` inside a rule body stores the
-  block `tc` and uses its handle in later rules).
+- blocks → `Internal.with_block` (`Fun.protect`, freed with its context when
+  the body returns or raises), mirroring hegel-rust's lexically scoped
+  `TestCase::child`. So the `tc` a rule or invariant body receives is valid
+  only for that step (documented on `Rule.create`/`Invariant.create`).
+- variable pools and clones → the test case. `Stateful.Pool.create` and
+  `Hegel.clone` are public and have no lexical scope, and user code may
+  capture them, so `Internal.new_pool` / `Internal.clone` add the handle to
+  the test case's `owned` record (pools, plus `(context, handle)` pairs for
+  clones, behind a mutex; a clone or block shares the record with the test
+  case it was derived from, like `draw_state`), and `run_test_case` calls
+  `free_owned` once the case is complete — matching the order in hegel-rust's
+  own `hegel-c/tests/c_abi_inprocess.rs`, which frees everything before
+  `hegel_mark_complete`. A `Stateful.Pool` stores a *clone* of the test case
+  it was created on, not the block itself (as hegel-rust's `pool()` does), so
+  a pool created inside a rule body keeps working after that step's block is
+  freed. Clones and blocks used to be freed by a `Gc.finalise_last` finaliser
+  instead; that was a use-after-free, because the compiler treats a record as
+  dead after its last field read, so the finaliser could run in the middle of
+  an engine call that had just read `tc.context` (a `note` from an invariant
+  body segfaulted under a small minor heap).
 
 Note: the published reference at <https://hegel.dev/reference/libhegel> is
 **stale on this point** — it still documents the pre-0.31.0 `int64_t` ids and
@@ -432,14 +443,15 @@ non-empty". Verbosity gating stays client-side (`should_print`): under Quiet,
 or a non-final case at Normal, nothing is appended and the read is skipped.
 Clones write into their own region, anchored where the clone was made, so
 concurrent output assembles deterministically regardless of scheduling.
-Indentation is engine-side too (libhegel 0.37.10 block handles): `Internal.block
-tc ~indent` opens a handle onto the *same* choice stream whose print region is
-a block nested in `tc`'s at the current position, every line `indent` columns
-further in, ending with the block. `Stateful.run` runs each rule's `step` and
-each invariant body with `block tc ~indent:2` so their draws nest under the
+Indentation is engine-side too (libhegel 0.37.10 block handles):
+`Internal.with_block tc ~indent f` runs `f` on a handle onto the *same* choice
+stream whose print region is a block nested in `tc`'s at the current position,
+every line `indent` columns further in, ending with the block; the block is
+freed when `f` returns. `Stateful.run` runs each rule's `step` and each
+invariant body with `with_block tc ~indent:2` so their draws nest under the
 `Step N: name` note. It only creates the block when `should_print tc` holds
 (`Stateful.section`); a non-printing case runs the body on `tc` itself, since
-a block per step costs a native handle, a context, and a GC finaliser, which
+a block per step costs a native handle and a context, which
 measured as 50% more wall time and 20x the major collections on a
 200-case x 500-step machine. And
 `final_replay` runs the body via `run_test_case ~indent:2` so it sits inside
@@ -461,26 +473,70 @@ case's representation) is the intended future Tyche switch.
 The engine runs in-process, so there is no subprocess or session to manage.
 The public entry point is `Hegel.run_hegel_test ?settings ?test_location
 test_fn` — `Internal.run_hegel_test`, which is `Internal.run_test` with [settings]
-defaulting to `default_settings ()`. The `let%hegel_test` PPX targets the
+defaulting to `Settings.default ()`. The `let%hegel_test` PPX targets the
 doc-hidden `Hegel.run_hegel_test_ppx` — a thin wrapper that sets `~from_ppx:true`
 on `Internal.run_hegel_test` — so the PPX-vs-plain signal never appears on the
 public `run_hegel_test`. The `[@@failure_blobs ...]` record/replay workflow is
 supported: the PPX forwards the listed blobs as `~failure_blobs`, which replays
 the first blob as a standalone deterministic case (pair it with
-`with_print_blob false` to suppress the `rerun with:` line that failing runs
+`print_blob = false` to suppress the `rerun with:` line that failing runs
 print by default). `from_ppx` selects that line's syntax: a
 `[@@failure_blobs [...]]` attribute under the PPX, a `~failure_blobs:[...]`
 argument for a plain `run_hegel_test` caller. For persisting and replaying
 failing examples across runs, use `database` / `database_key`.
+
+### Settings (lib/settings.ml)
+
+`Hegel.Settings` is a plain record (`Settings.t`) in the base_quickcheck
+`Test.Config.t` style: `Settings.default ()` is the engine's resolved
+`default` settings profile, `Settings.create ?test_cases ?seed ()` layers the
+two most common overrides (taking `seed` as an `int`), and every other field
+is set with OCaml's record update syntax —
+`{ (Settings.create ~seed:0 ()) with verbosity = Settings.Verbose }`.
+There are deliberately no `with_*` builder functions. The enums (`verbosity`,
+`database`, `phase`, `health_check`) live in the same module, so their
+constructors are written qualified (`Settings.Disabled`) rather than relying on
+type-directed disambiguation. `Internal` does `open Settings` for its own
+pattern matches.
+
+Defaults are the engine's (libhegel 0.40.0 settings profiles): there is no
+OCaml-side CI detection any more. `Settings.default ()` /
+`Settings.from_profile name` call `hegel_settings_new_for_profile` (with the
+reserved name `default` for the former) on a throwaway context and read the resolved
+handle back field by field through the `hegel_settings_get_*` getters
+(`Settings.of_ffi`), the way hegel-rust's `Settings::new` does; that is what
+makes `hegel.toml`, `HEGEL_DEFAULT_PROFILE`, `HEGEL_CONFIG`, and the shipped
+`ci`/`workload` profiles apply to OCaml runs. `Settings.register_profile` and
+`Settings.set_default_profile` wrap the matching engine calls. Going the other
+way, `Settings.to_ffi` (what `Internal.build_ffi_settings` calls) sets *every*
+field on a fresh handle — including `database` with `NULL` for `Unset` and the
+health-check mask even when empty — so the record, not the profile the fresh
+handle was resolved from, is authoritative for the run. The record has no
+`backend` field: nothing sets it, so the profile's choice (`urandom` under
+`workload`) applies. `print_blob` is read back like every other field, but
+the engine's base has it off and hegel-ocaml's default is on: `Settings`
+registers `development` as the `base` settings with `print_blob = true`
+(`development_registered`, a `lazy` forced by `default`/`from_profile`/
+`register_profile` so it lands before the first resolution and before any
+user registration of the same name). A `hegel.toml` `[profiles.development]`
+section still merges over the snapshot but may not set `extends` on it;
+`base` and `workload` resolve with it off. The client does the printing
+(`print_failure_body` gates on `settings.print_blob`). `hegel_settings_new`
+can now fail (an unknown default profile, a malformed `hegel.toml`): it raises
+`Usage_error` with the engine's diagnostic. `hegel.toml` is loaded once per
+process, so `test_client.ml` exercises it in a child process
+(`HEGEL_TEST_CONFIG_CHILD`, dispatched at the top of `test_hegel.ml`).
 
 ### Test Runner (lib/internal.ml.in)
 
 `run_hegel_test` builds an `Ffi.settings` from the OCaml settings, calls
 `Ffi.run_start`, then loops on `Ffi.next_test_case` until it returns `None`. Each
 test case handle is wrapped in a `test_case` record and passed to the user's function.
-`build_ffi_settings` cannot fail: every `hegel_settings_set_*` returns `HEGEL_OK`
-(the step count, formerly the only setting the engine could reject, is now a
-`Stateful.run ?step_count` argument validated by `hegel_new_state_machine`).
+The setters in `build_ffi_settings` (`Settings.to_ffi`) cannot fail: every
+`hegel_settings_set_*` returns `HEGEL_OK` (the step count, formerly the only
+setting the engine could reject, is now a `Stateful.run ?step_count` argument
+validated by `hegel_new_state_machine`); only the initial `hegel_settings_new`
+can, on a bad profile configuration, raising `Usage_error`.
 The client controls when a final run occurs. Exceptions map to
 `Ffi.mark_complete` statuses: VALID, INVALID (`Assume_rejected`/`Flaky_strategy`),
 OVERRUN (`Data_exhausted` from a `Stop_test` during a primitive), INTERESTING

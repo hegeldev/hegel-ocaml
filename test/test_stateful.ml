@@ -29,7 +29,7 @@ let stateful_failure_test () =
   end
   in
   (try
-     Hegel.run_hegel_test ~settings:(Hegel.settings ~seed:0 ()) (fun tc ->
+     Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~seed:0 ()) (fun tc ->
        S.run tc (module Stack) ~init:[]);
      failwith "expected property to fail"
    with
@@ -82,46 +82,50 @@ let var_use_rule =
 ;;
 
 let stateful_variables_test () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ~seed:0 ()) (fun tc ->
-    let module S = Hegel.Stateful in
-    var_next_id := 0;
-    let module Allocator = struct
-      type state = Var_state.t
+  Hegel.run_hegel_test
+    ~settings:(Hegel.Settings.create ~test_cases:10 ~seed:0 ())
+    (fun tc ->
+       let module S = Hegel.Stateful in
+       var_next_id := 0;
+       let module Allocator = struct
+         type state = Var_state.t
 
-      let rules = [ var_alloc_rule; var_free_rule ]
+         let rules = [ var_alloc_rule; var_free_rule ]
 
-      let invariants =
-        [ S.Invariant.create
-            ~name:"pool_sz"
-            ~inv:(fun _tc state ->
-              assert (
-                S.Pool.size state.Var_state.variables = Set.length state.Var_state.live))
-            ()
-        ]
-      ;;
-    end
-    in
-    S.run
-      tc
-      (module Allocator)
-      ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc })
+         let invariants =
+           [ S.Invariant.create
+               ~name:"pool_sz"
+               ~inv:(fun _tc state ->
+                 assert (
+                   S.Pool.size state.Var_state.variables = Set.length state.Var_state.live))
+               ()
+           ]
+         ;;
+       end
+       in
+       S.run
+         tc
+         (module Allocator)
+         ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc })
 ;;
 
 let stateful_variables_draw_test () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ~seed:0 ()) (fun tc ->
-    let module S = Hegel.Stateful in
-    var_next_id := 0;
-    let module Allocator = struct
-      type state = Var_state.t
+  Hegel.run_hegel_test
+    ~settings:(Hegel.Settings.create ~test_cases:5 ~seed:0 ())
+    (fun tc ->
+       let module S = Hegel.Stateful in
+       var_next_id := 0;
+       let module Allocator = struct
+         type state = Var_state.t
 
-      let rules = [ var_alloc_rule; var_use_rule ]
-      let invariants = []
-    end
-    in
-    S.run
-      tc
-      (module Allocator)
-      ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc })
+         let rules = [ var_alloc_rule; var_use_rule ]
+         let invariants = []
+       end
+       in
+       S.run
+         tc
+         (module Allocator)
+         ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc })
 ;;
 
 let stateful_usage_error_test () =
@@ -147,7 +151,7 @@ let stateful_usage_error_test () =
   end
   in
   match
-    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ()) (fun tc ->
+    Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ()) (fun tc ->
       S.run tc (module M) ~init:())
   with
   | () -> Alcotest.fail "expected Usage_error"
@@ -174,7 +178,7 @@ let stateful_no_rules_test () =
   end
   in
   match
-    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
+    Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
       Hegel.Stateful.run tc (module Empty) ~init:())
   with
   | () -> Alcotest.fail "expected Usage_error"
@@ -190,7 +194,7 @@ let stateful_no_rules_test () =
    [Data_exhausted]. *)
 let empty_pool_draw_rejects_test () =
   match
-    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
+    Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
       let pool = Hegel.Internal.new_pool tc in
       ignore (Hegel.Internal.pool_generate tc ~pool () : int))
   with
@@ -216,10 +220,12 @@ let stateful_step_count_forwarded_test () =
     let invariants = []
   end
   in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:20 ~seed:0 ()) (fun tc ->
-    steps_this_case := 0;
-    S.run tc (module M) ~init:() ~step_count:5;
-    max_steps := max !max_steps !steps_this_case);
+  Hegel.run_hegel_test
+    ~settings:(Hegel.Settings.create ~test_cases:20 ~seed:0 ())
+    (fun tc ->
+       steps_this_case := 0;
+       S.run tc (module M) ~init:() ~step_count:5;
+       max_steps := max !max_steps !steps_this_case);
   Alcotest.(check bool) "no case exceeded the configured cap" true (!max_steps <= 5)
 ;;
 
@@ -236,7 +242,7 @@ let stateful_step_count_below_one_test () =
   end
   in
   match
-    Hegel.run_hegel_test ~settings:(Hegel.settings ()) (fun tc ->
+    Hegel.run_hegel_test ~settings:(Hegel.Settings.default ()) (fun tc ->
       S.run tc (module M) ~init:() ~step_count:0)
   with
   | () -> Alcotest.fail "expected Usage_error"
@@ -265,7 +271,7 @@ let test_stateful_bounded_steps () =
   in
   let raised_msg = ref "" in
   (try
-     Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
+     Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
        step_count := 0;
        S.run tc (module M) ~init:() ~step_count:10)
    with
@@ -305,8 +311,9 @@ let test_always_check_invariant () =
     let invariants = [ always_check_invariant; sampled_invariant ]
   end
   in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ~seed:1 ()) (fun tc ->
-    S.run tc (module M) ~init:() ~step_count:stateful_step_count);
+  Hegel.run_hegel_test
+    ~settings:(Hegel.Settings.create ~test_cases:1 ~seed:1 ())
+    (fun tc -> S.run tc (module M) ~init:() ~step_count:stateful_step_count);
   Alcotest.(check int)
     "always exec count = executed steps plus endpoint checks"
     (stateful_step_count + 2)
@@ -341,13 +348,15 @@ let test_swarm_long_single_rule_run () =
     let invariants = []
   end
   in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:200 ~seed:0 ()) (fun tc ->
-    (* Reset per test case so a run can't bleed across cases. *)
-    last_rule := None;
-    current_run := 0;
-    case_longest := 0;
-    S.run tc (module M) ~init:();
-    if !case_longest >= 20 then incr long_run_cases);
+  Hegel.run_hegel_test
+    ~settings:(Hegel.Settings.create ~test_cases:200 ~seed:0 ())
+    (fun tc ->
+       (* Reset per test case so a run can't bleed across cases. *)
+       last_rule := None;
+       current_run := 0;
+       case_longest := 0;
+       S.run tc (module M) ~init:();
+       if !case_longest >= 20 then incr long_run_cases);
   Alcotest.(check bool)
     "swarm produces a recurring long single-rule chain"
     true
@@ -380,13 +389,53 @@ let stateful_hand_written_machine_test () =
     ;;
   end
   in
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
     S.run tc (module Counter) ~init:0 ~step_count:5);
   Alcotest.(check bool) "ran at least one step" true (!steps >= 1);
   Alcotest.(check int)
     "always-check runs per step plus both endpoints"
     (!steps + 2)
     !checks
+;;
+
+(* A pool created inside a rule body outlives that step. Regression test against
+   a previous use-after-free. *)
+let test_pool_created_inside_rule () =
+  let module S = Hegel.Stateful in
+  let module M = struct
+    type state = int S.Pool.t option
+
+    let rules =
+      [ S.Rule.create ~name:"open" ~step:(fun tc state ->
+          match state with
+          | Some _ -> state
+          | None ->
+            let pool = S.Pool.create tc in
+            S.Pool.add pool 1;
+            Some pool)
+      ; S.Rule.create ~name:"use" ~step:(fun tc state ->
+          match state with
+          | None ->
+            Hegel.assume tc false;
+            state
+          | Some pool ->
+            S.Pool.add pool 2;
+            let v = Hegel.draw_silent tc (S.Pool.values_reusable pool) in
+            assert (v = 1 || v = 2);
+            state)
+      ]
+    ;;
+
+    let invariants = []
+  end
+  in
+  let settings =
+    { (Hegel.Settings.create ~test_cases:5 ~seed:0 ()) with
+      verbosity = Hegel.Settings.Verbose
+    ; database = Hegel.Settings.Disabled
+    }
+  in
+  Hegel.run_hegel_test ~settings (fun tc -> S.run tc (module M) ~init:None ~step_count:20)
 ;;
 
 let tests =
@@ -433,5 +482,9 @@ let tests =
       "stateful: swarm yields a long single-rule chain"
       `Quick
       test_swarm_long_single_rule_run
+  ; Alcotest.test_case
+      "stateful: pool created inside a rule outlives the step"
+      `Quick
+      test_pool_created_inside_rule
   ]
 ;;

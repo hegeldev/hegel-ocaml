@@ -2,35 +2,79 @@ open Hegel
 open Generators
 open Generators.Ppx_internal
 
-(* ==== Unit tests (no engine needed) ==== *)
-
-let test_span_label_constants () =
-  let open Labels in
-  Alcotest.(check int) "LIST" 1 list;
-  Alcotest.(check int) "LIST_ELEMENT" 2 list_element;
-  Alcotest.(check int) "SET" 3 set;
-  Alcotest.(check int) "SET_ELEMENT" 4 set_element;
-  Alcotest.(check int) "MAP" 5 map;
-  Alcotest.(check int) "MAP_ENTRY" 6 map_entry;
-  Alcotest.(check int) "TUPLE" 7 tuple;
-  Alcotest.(check int) "ONE_OF" 8 one_of;
-  Alcotest.(check int) "OPTIONAL" 9 optional;
-  Alcotest.(check int) "FIXED_DICT" 10 fixed_dict;
-  Alcotest.(check int) "FLAT_MAP" 11 flat_map;
-  Alcotest.(check int) "FILTER" 12 filter;
-  Alcotest.(check int) "MAPPED" 13 mapped;
-  Alcotest.(check int) "SAMPLED_FROM" 14 sampled_from;
-  Alcotest.(check int) "ENUM_VARIANT" 15 enum_variant
+(* [Labels.from_name] / [Labels.combine] are the engine's own hashes. *)
+let test_labels_match_engine () =
+  let ctx = Hegel_ffi.Ffi.context_new () in
+  Fun.protect
+    ~finally:(fun () -> Hegel_ffi.Ffi.context_free ctx)
+    (fun () ->
+       List.iter
+         (fun name ->
+            Alcotest.(check int64)
+              name
+              (Hegel_ffi.Ffi.label_from_name ctx name)
+              (Labels.from_name name))
+         [ ""; "hegel_ocaml.list"; "hegel.integer"; "h\xc3\xa9llo" ];
+       List.iter
+         (fun labels ->
+            Alcotest.(check int64)
+              "combine"
+              (Hegel_ffi.Ffi.label_combine ctx labels)
+              (Labels.combine labels))
+         [ []
+         ; [ Labels.list ]
+         ; [ Labels.list; Labels.from_name "x"; 0L; -1L; Int64.max_int ]
+         ])
 ;;
 
 let test_max_filter_attempts () =
   Alcotest.(check int) "max attempts" 3 max_filter_attempts
 ;;
 
-(* [with_tc f] runs [f] with a real per-test-case handle from the native engine.
-   Used by the collection-record tests, which exercise the OCaml-side collection
-   bookkeeping. *)
-let with_tc f = Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) f
+(* [with_tc f] runs [f] with a real per-test-case handle from the native
+   engine. Used by the collection-record tests, which exercise the OCaml-side
+   collection bookkeeping. *)
+let with_tc f = Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) f
+
+(* A label reflects the generator's kind and its components'. *)
+let test_labels_structural () =
+  let same name a b = Alcotest.(check int64) name (label_of a) (label_of b) in
+  let differ name a b =
+    Alcotest.(check bool) name false (Int64.equal (label_of a) (label_of b))
+  in
+  same "same shape" (lists (integers ()) ()) (lists (integers ()) ());
+  differ "element kind" (lists (integers ()) ()) (lists (text ()) ());
+  differ "unique" (lists (integers ()) ()) (lists (integers ()) ~unique:true ());
+  differ "map on a leaf" (map succ (integers ())) (integers ());
+  differ
+    "map on a composite"
+    (map fst (tuples2 (integers ()) (text ())))
+    (tuples2 (integers ()) (text ()));
+  same
+    "printer is not part of the label"
+    (with_printer sexp_of_int (map succ (integers ())))
+    (map succ (integers ()));
+  differ "flat_map" (flat_map (fun _ -> integers ()) (integers ())) (integers ());
+  differ "filter" (filter (fun _ -> true) (integers ())) (integers ());
+  differ "tuple order" (tuples2 (integers ()) (text ())) (tuples2 (text ()) (integers ()));
+  differ "one_of alternatives" (one_of [ integers () ]) (one_of [ text () ]);
+  differ "optional" (optional (integers ())) (optional (text ()));
+  differ
+    "assoc_list vs hash_table"
+    (assoc_lists (integers ()) (text ()) ())
+    (hash_tables (integers ()) (text ()) ());
+  differ
+    "functions"
+    (functions ~returns:(integers ()) ())
+    (functions ~returns:(text ()) ());
+  Alcotest.(check int64) "just" (Labels.from_name "hegel_ocaml.just") (label_of (just 1));
+  with_tc (fun tc ->
+    let pool = Stateful.Pool.create tc in
+    Alcotest.(check int64)
+      "pool"
+      Labels.pool
+      (label_of (Stateful.Pool.values_reusable pool)))
+;;
 
 let test_collection_new () =
   with_tc (fun data ->
@@ -75,7 +119,7 @@ let test_discardable_group_exception () =
 
 (** Test: map doubles values correctly. *)
 let test_map_doubles_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let gen = integers ~min_value:1 ~max_value:5 () |> map (fun v -> v * 2) in
     let v = Hegel.draw_silent tc gen in
     assert (v >= 2 && v <= 10);
@@ -84,7 +128,7 @@ let test_map_doubles_e2e () =
 
 (** Test: double map composes correctly (Leaf draw-closure composition). *)
 let test_double_map_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let gen =
       integers ~min_value:1 ~max_value:5 ()
       |> map (fun v -> v * 2)
@@ -96,7 +140,7 @@ let test_double_map_e2e () =
 
 (** Test: map on non-basic (Mapped branch of do_draw). *)
 let test_map_on_filtered_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let gen =
       filter (fun v -> v > 5) (integers ~min_value:0 ~max_value:10 ())
       |> map (fun v -> v * 2)
@@ -107,7 +151,7 @@ let test_map_on_filtered_e2e () =
 
 (** Test: flat_map through engine. *)
 let test_flat_map_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let gen =
       flat_map
         (fun n -> integers ~min_value:0 ~max_value:(max 1 n) ())
@@ -119,7 +163,7 @@ let test_flat_map_e2e () =
 
 (** Test: filter through engine. *)
 let test_filter_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:10 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let gen = filter (fun v -> v mod 2 = 0) (integers ~min_value:0 ~max_value:100 ()) in
     let v = Hegel.draw tc gen in
     assert (v mod 2 = 0))
@@ -129,7 +173,9 @@ let test_filter_e2e () =
 let test_filter_exhaustion_e2e () =
   Hegel.run_hegel_test
     ~settings:
-      (Hegel.settings ~test_cases:10 () |> with_suppress_health_check [ Filter_too_much ])
+      { (Hegel.Settings.create ~test_cases:10 ()) with
+        suppress_health_check = [ Settings.Filter_too_much ]
+      }
     (fun tc ->
        let gen = filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ()) in
        ignore (Hegel.draw tc gen))
@@ -137,7 +183,7 @@ let test_filter_exhaustion_e2e () =
 
 (** Test: group helper through engine. *)
 let test_group_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:5 ()) (fun tc ->
     let n =
       group Labels.list tc (fun () ->
         Internal.generate_integer tc ~min_value:0 ~max_value:10)
@@ -147,7 +193,7 @@ let test_group_e2e () =
 
 (** Test: discardable_group through engine — success path. *)
 let test_discardable_group_e2e () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:5 ()) (fun tc ->
     let n =
       discardable_group Labels.tuple tc (fun () ->
         Internal.generate_integer tc ~min_value:0 ~max_value:10)
@@ -184,7 +230,7 @@ let test_with_printer () =
 (* [filter] over an unprintable generator stays unprintable; it can still be
    drawn via [draw_silent]. *)
 let test_filter_on_unprintable () =
-  Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:5 ()) (fun tc ->
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:5 ()) (fun tc ->
     let gen = filter (fun _ -> true) (sampled_from [ 1; 2; 3 ]) in
     let v = Hegel.draw_silent tc gen in
     assert (List.mem v [ 1; 2; 3 ]))
@@ -330,7 +376,8 @@ let test_resolve_draw () =
 
 let tests =
   [ Alcotest.test_case "stateful: resolve_draw" `Quick test_resolve_draw
-  ; Alcotest.test_case "span label constants" `Quick test_span_label_constants
+  ; Alcotest.test_case "labels match engine" `Quick test_labels_match_engine
+  ; Alcotest.test_case "labels structural" `Quick test_labels_structural
   ; Alcotest.test_case "max_filter_attempts" `Quick test_max_filter_attempts
   ; Alcotest.test_case "collection new" `Quick test_collection_new
   ; Alcotest.test_case "collection new no max" `Quick test_collection_new_no_max

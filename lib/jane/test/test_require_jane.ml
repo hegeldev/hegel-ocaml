@@ -1,5 +1,9 @@
 let sexp_of_int_list = Core.List.sexp_of_t Core.Int.sexp_of_t
-let settings () = Hegel.settings ~test_cases:10 () |> Hegel.with_database Disabled
+
+let settings () =
+  { (Hegel.Settings.create ~test_cases:10 ()) with database = Hegel.Settings.Disabled }
+;;
+
 let () = Hegel_jane.set_sexp_diff ()
 
 let%expect_test "require_equal prints a structural sexp_diff when installed" =

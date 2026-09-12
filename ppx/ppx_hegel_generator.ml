@@ -138,7 +138,25 @@ let generator_of_record ~loc (labels : label_declaration list) : expression =
   [%expr fun _hegel_tc -> [%e drawn_record ~loc ~wrap:Fun.id labels]]
 ;;
 
-let generator_of_data_variant ~loc (constrs : constructor_declaration list) : expression =
+(** [type_label ~loc ~type_name kind] is the label expression for the derived
+    generator of [type_name]: the structural [kind] label combined with one from
+    the type's name, so two derived types of the same shape stay distinct. *)
+let type_label ~loc ~type_name kind =
+  let labels =
+    Ldot (Ldot (Ldot (Lident "Hegel", "Generators"), "Ppx_internal"), "Labels")
+  in
+  let kind = Ast_builder.Default.pexp_ident ~loc { txt = Ldot (labels, kind); loc } in
+  [%expr
+    Hegel.Generators.Ppx_internal.Labels.combine
+      [ [%e kind]
+      ; Hegel.Generators.Ppx_internal.Labels.from_name
+          [%e Ast_builder.Default.estring ~loc type_name]
+      ]]
+;;
+
+let generator_of_data_variant ~loc ~type_name (constrs : constructor_declaration list)
+  : expression
+  =
   let n = List.length constrs in
   let index_options = List.init n (fun i -> Ast_builder.Default.eint ~loc i) in
   let match_arms =
@@ -200,7 +218,7 @@ let generator_of_data_variant ~loc (constrs : constructor_declaration list) : ex
   let match_expr = Ast_builder.Default.pexp_match ~loc [%expr _variant_idx] all_arms in
   [%expr
     Hegel.Generators.Ppx_internal.composite_with_label
-      ~label:Hegel.Generators.Ppx_internal.Labels.enum_variant
+      ~label:[%e type_label ~loc ~type_name "enum_variant"]
       (fun _hegel_tc ->
          let _variant_idx =
            Hegel.draw_silent
@@ -211,7 +229,9 @@ let generator_of_data_variant ~loc (constrs : constructor_declaration list) : ex
          [%e match_expr])]
 ;;
 
-let generator_of_variant ~loc (constrs : constructor_declaration list) : expression =
+let generator_of_variant ~loc ~type_name (constrs : constructor_declaration list)
+  : expression
+  =
   if constrs = []
   then Location.raise_errorf ~loc "ppx_hegel_generator: empty variant types not supported";
   let constrs =
@@ -242,7 +262,7 @@ let generator_of_variant ~loc (constrs : constructor_declaration list) : express
     in
     [%expr
       Hegel.Generators.sampled_from [%e Ast_builder.Default.elist ~loc constr_values]])
-  else generator_of_data_variant ~loc constrs
+  else generator_of_data_variant ~loc ~type_name constrs
 ;;
 
 (** [opaque_excluded_args td] adds [[@sexp.opaque]] to the argument types of
@@ -353,8 +373,13 @@ let generate_impl ~ctxt ((rec_flag, type_decls) : rec_flag * type_declaration li
          let generator_expr =
            match td.ptype_kind, td.ptype_manifest with
            | Ptype_record labels, _ ->
-             [%expr Hegel.Generators.composite [%e generator_of_record ~loc labels]]
-           | Ptype_variant constrs, _ -> generator_of_variant ~loc constrs
+             let type_name = td.ptype_name.txt in
+             [%expr
+               Hegel.Generators.Ppx_internal.composite_with_label
+                 ~label:[%e type_label ~loc ~type_name "fixed_dict"]
+                 [%e generator_of_record ~loc labels]]
+           | Ptype_variant constrs, _ ->
+             generator_of_variant ~loc ~type_name:td.ptype_name.txt constrs
            | Ptype_abstract, Some ct -> generator_expr_of_core_type ct
            | Ptype_abstract, None ->
              Location.raise_errorf

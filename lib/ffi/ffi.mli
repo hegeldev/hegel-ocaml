@@ -65,14 +65,11 @@ type time =
 
 (** Randomness backend ([hegel_backend_t]), selected via {!settings_backend}.
 
-    - [Auto]: choose automatically (the default). urandom under Antithesis,
-      otherwise the seeded PRNG.
     - [Default]: expand a single seeded PRNG; runs are reproducible and
       shrinking / replay work as usual.
     - [Urandom]: read fresh entropy on every draw (for running under
       Antithesis); you almost certainly don't want it otherwise. *)
 type backend =
-  | Auto
   | Default
   | Urandom
 
@@ -169,15 +166,36 @@ val context_free : context -> unit
 
 (** {2 Settings} *)
 
-(** [settings_new ctx] allocates a settings handle with libhegel's defaults.
-    Must be released with {!settings_free}. *)
+(** [settings_new ctx] allocates a settings handle resolved from the engine's
+    [default] settings profile (see {!settings_new_for_profile}). Must be
+    released with {!settings_free}. Raises {!Usage_error} when profile
+    resolution fails: a default-profile setting names an unknown profile, or
+    a [hegel.toml] is malformed. *)
 val settings_new : context -> settings
+
+(** [settings_new_for_profile ctx name] allocates a settings handle resolved
+    from the profile [name]: reserved ([base], [default]), shipped
+    ([development], [ci], [workload]), defined in a [hegel.toml], or registered
+    with {!settings_register_profile}. Raises {!Usage_error} for an unknown
+    profile or a malformed [hegel.toml]. *)
+val settings_new_for_profile : context -> string -> settings
+
+(** [settings_register_profile ctx name s] registers a snapshot of [s] as the
+    profile [name], process-wide, replacing an earlier registration. Raises
+    {!Usage_error} for an invalid or reserved name. *)
+val settings_register_profile : context -> string -> settings -> unit
+
+(** [set_default_profile ctx name] makes the [default] profile alias resolve to
+    [name] for the whole process ([None] clears an earlier call), taking
+    precedence over [HEGEL_DEFAULT_PROFILE], [hegel.toml], and environment
+    detection. Not retroactive. *)
+val set_default_profile : context -> string option -> unit
 
 (** [settings_free ctx s] frees a settings handle. *)
 val settings_free : context -> settings -> unit
 
-(** [settings_backend ctx s b] pins the engine's randomness backend. Pinning is
-    one-way: there is no way to return a handle to [Auto] once set. *)
+(** [settings_backend ctx s b] sets the engine's randomness backend, overriding
+    the profile's choice. *)
 val settings_backend : context -> settings -> backend -> unit
 
 val settings_test_cases : context -> settings -> int -> unit
@@ -208,6 +226,27 @@ val settings_phases : context -> settings -> int -> unit
 (** [settings_suppress_health_check ctx s mask] disables the health checks in
     the bitmask. *)
 val settings_suppress_health_check : context -> settings -> int -> unit
+
+(** [settings_print_blob ctx s b] records whether a failure's reproduction line
+    should be printed. *)
+val settings_print_blob : context -> settings -> bool -> unit
+
+(** {3 Reading a handle back}
+
+    The [settings_get_*] functions read a settings handle field by field, so a
+    profile-resolved handle can be materialized as a frontend record. *)
+
+val settings_get_test_cases : context -> settings -> int
+val settings_get_verbosity : context -> settings -> verbosity
+val settings_get_seed : context -> settings -> int option
+val settings_get_derandomize : context -> settings -> bool
+val settings_get_database : context -> settings -> string option
+val settings_get_phases : context -> settings -> int
+val settings_get_suppress_health_check : context -> settings -> int
+val settings_get_report_multiple_failures : context -> settings -> bool
+val settings_get_show_statistics : context -> settings -> bool
+val settings_get_print_blob : context -> settings -> bool
+val settings_get_backend : context -> settings -> backend
 
 (** {2 Run lifecycle} *)
 
@@ -370,8 +409,20 @@ val generate_ipv4 : context -> test_case -> string
 (** [generate_ipv6 ctx tc] draws an IPv6 address as its 16 network-order bytes. *)
 val generate_ipv6 : context -> test_case -> string
 
-val start_span : context -> test_case -> int -> unit
+(** [start_span ctx tc label] opens a span. [label] identifies the generator
+    that opened it (the engine's [uint64_t], as an [int64]): two spans with the
+    same label are treated as coming from the same generator when shrinking. *)
+val start_span : context -> test_case -> int64 -> unit
+
 val stop_span : context -> test_case -> bool -> unit
+
+(** [label_from_name ctx name] is the engine's label for a generator named
+    [name]: the 64-bit FNV-1a hash of its bytes. *)
+val label_from_name : context -> string -> int64
+
+(** [label_combine ctx labels] is the engine's label for a generator built from
+    others: a hash of [labels] in order (the generator's own label first). *)
+val label_combine : context -> int64 list -> int64
 
 (** [new_collection ctx tc ~min_size ~max_size] starts an engine-managed
     collection ([max_size = None] means unbounded). *)

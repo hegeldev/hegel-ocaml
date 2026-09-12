@@ -10,7 +10,11 @@ module Pool = struct
     ; values : 'a Int_table.t
     }
 
+  (* A rule body's [tc] is a block freed when the step ends,
+     and a pool created there must keep working in later steps. The clone is
+     owned by the test case and lives until it completes. *)
   let create tc =
+    let tc = Internal.clone tc in
     let pool = Internal.new_pool tc in
     { tc; pool; values = Int_table.create 16 }
   ;;
@@ -49,7 +53,11 @@ module Invariant = struct
   let name invariant = invariant.name
 end
 
-let indent_tc tc = if Internal.should_print tc then Internal.block tc ~indent:2 else tc
+(* [section tc f] runs a rule or invariant body. It keeps a block of [tc]
+   alive only for the step. *)
+let section tc f =
+  if Internal.should_print tc then Internal.with_block tc ~indent:2 f else f tc
+;;
 
 let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
   let rule_array = Array.of_list rules in
@@ -80,7 +88,7 @@ let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
                 ~state_machine
                 ~invariant_index:i
          then (
-           match invariant.Invariant.inv (indent_tc tc) state with
+           match section tc (fun tc -> invariant.Invariant.inv tc state) with
            | () -> ()
            | exception e ->
              Internal.note
@@ -106,7 +114,7 @@ let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
       let rule = rule_array.(rule_index) in
       let step_num = steps_attempted + 1 in
       Internal.note tc (Printf.sprintf "Step %d: %s" step_num rule.Rule.name);
-      (match rule.Rule.step (indent_tc tc) state with
+      (match section tc (fun tc -> rule.Rule.step tc state) with
        | new_state ->
          print_state new_state;
          exec_round ~state:new_state ~steps_attempted:step_num ~rejected

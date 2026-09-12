@@ -2,7 +2,7 @@ open! Core
 open Hegel
 module G = Hegel.Generators
 
-let one_case_settings () = Hegel.settings ~test_cases:1 ()
+let one_case_settings () = Hegel.Settings.create ~test_cases:1 ()
 let small_int = G.integers ~min_value:0 ~max_value:9 ()
 
 (* A clone can be drawn from within the test body, and the parent stays usable
@@ -44,7 +44,7 @@ let test_clone_reproducible () =
   let run () =
     let pair = ref (0, 0) in
     Hegel.run_hegel_test
-      ~settings:(one_case_settings () |> with_seed (Some 42))
+      ~settings:{ (one_case_settings ()) with seed = Some 42 }
       (fun tc ->
          let p = Hegel.draw_silent tc small_int in
          let c = Hegel.draw_silent (Hegel.clone tc) small_int in
@@ -67,16 +67,19 @@ let test_clone_of_clone () =
   Alcotest.(check bool) "nested clone value in range" true (!value >= 0 && !value <= 9)
 ;;
 
-(* Dropping a clone and forcing a collection runs its finaliser, which releases
-   the native handle and context. *)
-let test_clone_finalized () =
+let test_clones_owned_by_case () =
   Hegel.run_hegel_test ~settings:(one_case_settings ()) (fun tc ->
     for _ = 1 to 3 do
       let (_ : int) = Hegel.draw_silent (Hegel.clone tc) small_int in
       ()
     done;
-    Stdlib.Gc.full_major ());
-  Alcotest.(check pass) "dropped clones finalised without error" () ()
+    Stdlib.Gc.full_major ();
+    Alcotest.(check int)
+      "dropped clones still owned after a collection"
+      3
+      (Hegel.Internal.owned_clone_count tc);
+    let (_ : int) = Hegel.draw_silent tc small_int in
+    ())
 ;;
 
 let test_clone_shares_draw_names () =
@@ -141,7 +144,7 @@ let tests =
   ; Alcotest.test_case "clone concurrent" `Quick test_clone_concurrent
   ; Alcotest.test_case "clone reproducible" `Quick test_clone_reproducible
   ; Alcotest.test_case "clone of clone" `Quick test_clone_of_clone
-  ; Alcotest.test_case "clone finalised" `Quick test_clone_finalized
+  ; Alcotest.test_case "clones owned by case" `Quick test_clones_owned_by_case
   ; Alcotest.test_case "clone shares draw names" `Quick test_clone_shares_draw_names
   ; Alcotest.test_case "clone copies draw depth" `Quick test_clone_copies_draw_depth
   ; Alcotest.test_case "spawn/join returns value" `Quick test_spawn_join_returns_value
