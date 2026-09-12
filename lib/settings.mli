@@ -16,13 +16,13 @@
     {2:profiles Profiles}
 
     Defaults come from the named settings profiles. [base] and [default] are
-    reserved names. [base] is the immutable base settings (100 test cases, 
-    all phases, [Normal] verbosity, no seed, the on-disk database under 
+    reserved names. [base] is the immutable base settings (100 test cases,
+    all phases, [Normal] verbosity, no seed, the on-disk database under
     [.hegel/]). [default] is the profile when there is no named profile.
     The following profiles come with Hegel: [development] (the base settings,
-    what local runs get), [ci] (selected automatically on CI servers: 
-    [derandomize] on, the database disabled, the [Too_slow] health check 
-    suppressed), and [workload] (selected automatically inside Antithesis: 
+    what local runs get), [ci] (selected automatically on CI servers:
+    [derandomize] on, the database disabled, the [Too_slow] health check
+    suppressed), and [workload] (selected automatically inside Antithesis:
     the database disabled and every health check suppressed).
 
     Modify an included profile or define a custom one in a [hegel.toml] at your
@@ -39,9 +39,9 @@
     v}
 
     A custom profile overrides an automatically selected profile. Profiles can
-    also extend other profiles with [extends = ...]. Select a profile with 
+    also extend other profiles with [extends = ...]. Select a profile with
     {!from_profile}. The test-wide default profile can be set with the [default]
-     entry in [hegel.toml], the [HEGEL_DEFAULT_PROFILE] environment variable, or
+    entry in [hegel.toml], the [HEGEL_DEFAULT_PROFILE] environment variable, or
     {!set_default_profile}. Profiles can also be registered from code with
     {!register_profile}.
 
@@ -117,10 +117,11 @@ type t =
         from previous failed runs and records new failures as they occur.
         Disabled in the [ci] and [workload] profiles. *)
   ; suppress_health_check : health_check list
-  ; phases : phase list (** The phases to run. All phases are run with the [base] profile. *)
+  ; phases : phase list
+    (** The phases to run. All phases are run with the [base] profile. *)
   ; print_blob : bool
-    (** Print a [rerun with:] line whose base64 blob
-        encodes the choices that led to a failure. [true] by default. *)
+    (** Print a [rerun with:] line whose base64 blob encodes the choices that
+        led to a failure. [true] by default. *)
   ; report_multiple_failures : bool
     (** Report every distinct failure the run found rather than just the first.
         [false] by default. *)
@@ -160,9 +161,9 @@ val from_profile : string -> t
 val create : ?test_cases:int -> ?seed:int -> unit -> t
 
 (** [register_profile name t] registers a snapshot of [t] as the profile [name]
-    for the whole process, replacing any earlier registration of the named profile. 
-    Settings already created keep their values. [name] may contain ASCII letters, 
-    digits, [-] and [_]; [base] and [default] are reserved. Raises [Usage_error] 
+    for the whole process, replacing any earlier registration of the named profile.
+    Settings already created keep their values. [name] may contain ASCII letters,
+    digits, [-] and [_]; [base] and [default] are reserved. Raises [Usage_error]
     for an invalid or reserved name. *)
 val register_profile : string -> t -> unit
 

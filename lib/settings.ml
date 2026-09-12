@@ -110,7 +110,7 @@ let of_ffi ctx s =
         all_health_checks
         (Ffi.settings_get_suppress_health_check ctx s)
   ; phases = of_bitmask phase_bit all_phases (Ffi.settings_get_phases ctx s)
-  ; print_blob = true
+  ; print_blob = Ffi.settings_get_print_blob ctx s
   ; report_multiple_failures = Ffi.settings_get_report_multiple_failures ctx s
   ; show_statistics = Ffi.settings_get_show_statistics ctx s
   }
@@ -145,24 +145,31 @@ let to_ffi ctx t ~database_key =
 (* Profiles                                                            *)
 (* ------------------------------------------------------------------ *)
 
-let with_settings make f =
+let with_context f =
   let ctx = Ffi.context_new () in
-  let handle = ref None in
-  Fun.protect
-    ~finally:(fun () ->
-      Option.iter (Ffi.settings_free ctx) !handle;
-      Ffi.context_free ctx)
-    (fun () ->
-       let s = make ctx in
-       handle := Some s;
-       f ctx s)
+  Fun.protect ~finally:(fun () -> Ffi.context_free ctx) (fun () -> f ctx)
 ;;
 
-let default () = with_settings Ffi.settings_new of_ffi
+(* temp workaround b/c libhegel sets print_blob to false by default *)
+let development_registered =
+  lazy
+    (with_context (fun ctx ->
+       let s = Ffi.settings_new_for_profile ctx "base" in
+       Fun.protect
+         ~finally:(fun () -> Ffi.settings_free ctx s)
+         (fun () ->
+            Ffi.settings_print_blob ctx s true;
+            Ffi.settings_register_profile ctx "development" s)))
+;;
 
 let from_profile name =
-  with_settings (fun ctx -> Ffi.settings_new_for_profile ctx name) of_ffi
+  Lazy.force development_registered;
+  with_context (fun ctx ->
+    let s = Ffi.settings_new_for_profile ctx name in
+    Fun.protect ~finally:(fun () -> Ffi.settings_free ctx s) (fun () -> of_ffi ctx s))
 ;;
+
+let default () = from_profile "default"
 
 let create ?test_cases ?seed () =
   let s = default () in
@@ -173,14 +180,12 @@ let create ?test_cases ?seed () =
 ;;
 
 let register_profile name t =
-  with_settings
-    (fun ctx -> to_ffi ctx t ~database_key:None)
-    (fun ctx s -> Ffi.settings_register_profile ctx name s)
+  Lazy.force development_registered;
+  with_context (fun ctx ->
+    let s = to_ffi ctx t ~database_key:None in
+    Fun.protect
+      ~finally:(fun () -> Ffi.settings_free ctx s)
+      (fun () -> Ffi.settings_register_profile ctx name s))
 ;;
 
-let set_default_profile name =
-  let ctx = Ffi.context_new () in
-  Fun.protect
-    ~finally:(fun () -> Ffi.context_free ctx)
-    (fun () -> Ffi.set_default_profile ctx name)
-;;
+let set_default_profile name = with_context (fun ctx -> Ffi.set_default_profile ctx name)

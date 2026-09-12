@@ -50,9 +50,13 @@ let test_default_settings_not_ci () =
     Alcotest.(check bool) "report_multiple_failures off" false s.report_multiple_failures;
     Alcotest.(check bool) "show_statistics off" false s.show_statistics;
     Alcotest.(check bool)
-      "development is the base settings"
+      "development is the base settings with print_blob on"
       true
-      (Poly.equal s (Settings.from_profile "base")))
+      (Poly.equal s { (Settings.from_profile "base") with print_blob = true });
+    Alcotest.(check bool)
+      "same as from_profile development"
+      true
+      (Poly.equal s (Settings.from_profile "development")))
 ;;
 
 (* On a CI server the engine selects the shipped [ci] profile. *)
@@ -100,7 +104,7 @@ let test_register_profile_round_trip () =
         ; suppress_health_check =
             [ Settings.Filter_too_much; Settings.Large_initial_test_case ]
         ; phases = [ Settings.Generate; Settings.Shrink ]
-        ; print_blob = true
+        ; print_blob = i mod 2 = 0
         ; report_multiple_failures = true
         ; show_statistics = true
         }
@@ -133,7 +137,10 @@ let config_child () =
   let n = (Settings.from_profile "nightly").test_cases in
   if n <> 7 then failwithf "nightly: expected 7 test cases from hegel.toml, got %d" n ();
   let n = (Settings.from_profile "base").test_cases in
-  if n <> 100 then failwithf "base: expected the base 100 test cases, got %d" n ()
+  if n <> 100 then failwithf "base: expected the base 100 test cases, got %d" n ();
+  if not (Settings.default ()).print_blob then failwith "default: expected print_blob on";
+  if (Settings.from_profile "noblob").print_blob
+  then failwith "noblob: expected print_blob off from hegel.toml"
 ;;
 
 let test_hegel_toml_config () =
@@ -141,7 +148,12 @@ let test_hegel_toml_config () =
     let path = Filename.concat dir "hegel.toml" in
     Out_channel.write_all
       path
-      ~data:"default = \"nightly\"\n\n[profiles.nightly]\ntest_cases = 7\n";
+      ~data:
+        "default = \"nightly\"\n\n\
+         [profiles.nightly]\n\
+         test_cases = 7\n\n\
+         [profiles.noblob]\n\
+         print_blob = false\n";
     let pid =
       Unix.create_process_env
         ~prog:Stdlib.Sys.executable_name

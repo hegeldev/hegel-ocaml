@@ -500,8 +500,8 @@ pattern matches.
 
 Defaults are the engine's (libhegel 0.40.0 settings profiles): there is no
 OCaml-side CI detection any more. `Settings.default ()` /
-`Settings.from_profile name` call `hegel_settings_new` /
-`hegel_settings_new_for_profile` on a throwaway context and read the resolved
+`Settings.from_profile name` call `hegel_settings_new_for_profile` (with the
+reserved name `default` for the former) on a throwaway context and read the resolved
 handle back field by field through the `hegel_settings_get_*` getters
 (`Settings.of_ffi`), the way hegel-rust's `Settings::new` does; that is what
 makes `hegel.toml`, `HEGEL_DEFAULT_PROFILE`, `HEGEL_CONFIG`, and the shipped
@@ -512,9 +512,14 @@ field on a fresh handle — including `database` with `NULL` for `Unset` and the
 health-check mask even when empty — so the record, not the profile the fresh
 handle was resolved from, is authoritative for the run. The record has no
 `backend` field: nothing sets it, so the profile's choice (`urandom` under
-`workload`) applies. `print_blob` is always `true` in `of_ffi`, whatever the
-profile says (the engine's base has it off; hegel-ocaml keeps its old default
-until libhegel changes); the client does the printing
+`workload`) applies. `print_blob` is read back like every other field, but
+the engine's base has it off and hegel-ocaml's default is on: `Settings`
+registers `development` as the `base` settings with `print_blob = true`
+(`development_registered`, a `lazy` forced by `default`/`from_profile`/
+`register_profile` so it lands before the first resolution and before any
+user registration of the same name). A `hegel.toml` `[profiles.development]`
+section still merges over the snapshot but may not set `extends` on it;
+`base` and `workload` resolve with it off. The client does the printing
 (`print_failure_body` gates on `settings.print_blob`). `hegel_settings_new`
 can now fail (an unknown default profile, a malformed `hegel.toml`): it raises
 `Usage_error` with the engine's diagnostic. `hegel.toml` is loaded once per
