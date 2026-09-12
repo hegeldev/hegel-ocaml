@@ -559,18 +559,7 @@ val filter : ('a -> bool) -> ('a, 'p) generator -> ('a, 'p) generator
 
 (**/**)
 
-(** {3 Settings}
-
-    Create a {!Settings.t} with {!Settings.create} or {!Settings.default}.
-    Use record update syntax to add settings. Pass settings to a [let%hegel_test] 
-    with the [\[@@settings ...\]] attribute:
-
-    {[
-      let%hegel_test many_cases tc =
-        let n = draw tc (integers ~min_value:0 ~max_value:99 ()) in
-        assert (n < 100)
-      [@@settings { (Settings.create ~test_cases:500 ()) with verbosity = Settings.Verbose }]
-    ]} *)
+(** {3 Settings} *)
 
 module Settings = Settings
 

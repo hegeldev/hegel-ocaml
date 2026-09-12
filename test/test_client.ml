@@ -2,7 +2,7 @@ open! Core
 open Hegel
 module Unix = Core_unix
 
-(* ==== Pure configuration tests ==== *)
+(* ==== Settings and profiles ==== *)
 
 let all_ci_vars =
   [ "CI"
@@ -15,6 +15,8 @@ let all_ci_vars =
   ; "GITLAB_CI"
   ; "HEROKU_TEST_RUN_ID"
   ; "TEAMCITY_VERSION"
+  ; "bamboo.buildKey"
+  ; "HEGEL_DEFAULT_PROFILE"
   ]
 ;;
 
@@ -30,36 +32,30 @@ let with_ci_vars_cleared f =
     ~f
 ;;
 
-let test_is_in_ci_false () =
-  with_ci_vars_cleared (fun () ->
-    Alcotest.(check bool) "not in ci" false (Settings.is_in_ci ()))
-;;
-
-let test_is_in_ci_true_any () =
-  with_ci_vars_cleared (fun () ->
-    Unix.putenv ~key:"CODEBUILD_BUILD_ID" ~data:"anything";
-    Alcotest.(check bool) "in ci (any value)" true (Settings.is_in_ci ()))
-;;
-
-let test_is_in_ci_true_expected () =
-  with_ci_vars_cleared (fun () ->
-    Unix.putenv ~key:"GITHUB_ACTIONS" ~data:"true";
-    Alcotest.(check bool) "in ci (expected value)" true (Settings.is_in_ci ()))
-;;
-
-let test_is_in_ci_false_wrong_value () =
-  with_ci_vars_cleared (fun () ->
-    Unix.putenv ~key:"GITHUB_ACTIONS" ~data:"false";
-    Alcotest.(check bool) "not in ci (wrong value)" false (Settings.is_in_ci ()))
-;;
-
+(* Outside CI the default profile is [development]: the base settings. *)
 let test_default_settings_not_ci () =
   with_ci_vars_cleared (fun () ->
     let s = Settings.default () in
+    Alcotest.(check int) "test_cases" 100 s.test_cases;
+    Alcotest.(check bool) "verbosity normal" true (Poly.equal s.verbosity Settings.Normal);
+    Alcotest.(check (option int)) "no seed" None s.seed;
     Alcotest.(check bool) "derandomize off" false s.derandomize;
-    Alcotest.(check bool) "database unset" true (Poly.equal s.database Settings.Unset))
+    Alcotest.(check bool) "database unset" true (Poly.equal s.database Settings.Unset);
+    Alcotest.(check bool)
+      "no health checks suppressed"
+      true
+      (List.is_empty s.suppress_health_check);
+    Alcotest.(check int) "all phases" 5 (List.length s.phases);
+    Alcotest.(check bool) "print_blob on" true s.print_blob;
+    Alcotest.(check bool) "report_multiple_failures off" false s.report_multiple_failures;
+    Alcotest.(check bool) "show_statistics off" false s.show_statistics;
+    Alcotest.(check bool)
+      "development is the base settings"
+      true
+      (Poly.equal s (Settings.from_profile "base")))
 ;;
 
+(* On a CI server the engine selects the shipped [ci] profile. *)
 let test_default_settings_ci () =
   with_ci_vars_cleared (fun () ->
     Unix.putenv ~key:"CI" ~data:"1";
@@ -68,7 +64,97 @@ let test_default_settings_ci () =
     Alcotest.(check bool)
       "database disabled"
       true
-      (Poly.equal s.database Settings.Disabled))
+      (Poly.equal s.database Settings.Disabled);
+    Alcotest.(check bool)
+      "too_slow suppressed"
+      true
+      (Poly.equal s.suppress_health_check [ Settings.Too_slow ]);
+    Alcotest.(check bool) "print_blob on" true s.print_blob;
+    Alcotest.(check bool)
+      "same as from_profile ci"
+      true
+      (Poly.equal s (Settings.from_profile "ci")))
+;;
+
+let test_from_profile_unknown () =
+  match Settings.from_profile "hegel_ocaml_no_such_profile" with
+  | _ -> Alcotest.fail "expected Usage_error"
+  | exception Usage_error msg ->
+    Alcotest.(check bool)
+      "message names the profile"
+      true
+      (Test_helpers.contains_substring msg "hegel_ocaml_no_such_profile")
+;;
+
+let test_register_profile_round_trip () =
+  List.iteri
+    Settings.[ Quiet; Normal; Verbose; Debug ]
+    ~f:(fun i verbosity ->
+      let name = sprintf "hegel_ocaml_test_round_trip_%d" i in
+      let s =
+        { Settings.test_cases = 7 + i
+        ; verbosity
+        ; seed = Some (40 + i)
+        ; derandomize = true
+        ; database = Settings.Path "/tmp/hegel-ocaml-profile-db"
+        ; suppress_health_check =
+            [ Settings.Filter_too_much; Settings.Large_initial_test_case ]
+        ; phases = [ Settings.Generate; Settings.Shrink ]
+        ; print_blob = true
+        ; report_multiple_failures = true
+        ; show_statistics = true
+        }
+      in
+      Settings.register_profile name s;
+      Alcotest.(check bool) name true (Poly.equal s (Settings.from_profile name)))
+;;
+
+let test_set_default_profile () =
+  let name = "hegel_ocaml_test_default" in
+  Settings.register_profile name { (Settings.default ()) with test_cases = 7 };
+  Settings.set_default_profile (Some name);
+  Exn.protect
+    ~finally:(fun () -> Settings.set_default_profile None)
+    ~f:(fun () ->
+      Alcotest.(check int)
+        "default follows the override"
+        7
+        (Settings.default ()).test_cases);
+  Alcotest.(check int) "cleared" 100 (Settings.default ()).test_cases
+;;
+
+(* [hegel.toml] is loaded once per process, so it is exercised in a child: the
+   parent writes a config, points [HEGEL_CONFIG] at it, and re-executes this
+   binary with [HEGEL_TEST_CONFIG_CHILD] set, which makes the runner call
+   [config_child] and exit. *)
+let config_child () =
+  let n = (Settings.default ()).test_cases in
+  if n <> 7 then failwithf "default: expected 7 test cases from hegel.toml, got %d" n ();
+  let n = (Settings.from_profile "nightly").test_cases in
+  if n <> 7 then failwithf "nightly: expected 7 test cases from hegel.toml, got %d" n ();
+  let n = (Settings.from_profile "base").test_cases in
+  if n <> 100 then failwithf "base: expected the base 100 test cases, got %d" n ()
+;;
+
+let test_hegel_toml_config () =
+  Test_helpers.with_tempdir ~prefix:"hegel-toml" ~f:(fun dir ->
+    let path = Filename.concat dir "hegel.toml" in
+    Out_channel.write_all
+      path
+      ~data:"default = \"nightly\"\n\n[profiles.nightly]\ntest_cases = 7\n";
+    let pid =
+      Unix.create_process_env
+        ~prog:Stdlib.Sys.executable_name
+        ~args:[]
+        ~env:(`Extend [ "HEGEL_CONFIG", path; "HEGEL_TEST_CONFIG_CHILD", "1" ])
+        ()
+    in
+    match Unix.waitpid pid.pid with
+    | Ok () -> ()
+    | Error _ as status ->
+      Alcotest.failf
+        "child reading hegel.toml failed: %s"
+        (Unix.Exit_or_signal.to_string_hum status))
 ;;
 
 let test_settings_create () =
@@ -323,7 +409,7 @@ let test_run_database_unset () =
   run_hegel_test ~settings (fun tc -> ignore (Hegel.draw tc int_gen : int))
 ;;
 
-(** Exercise build_ffi_settings branches: phases, disabled database, suppressed
+(** Exercise Settings.to_ffi branches: phases, disabled database, suppressed
     health checks, derandomize, seed. *)
 let test_run_with_full_settings () =
   let settings =
@@ -566,12 +652,15 @@ let test_overrun_case_is_discarded () =
 ;;
 
 let tests =
-  [ Alcotest.test_case "is_in_ci false" `Quick test_is_in_ci_false
-  ; Alcotest.test_case "is_in_ci any-value" `Quick test_is_in_ci_true_any
-  ; Alcotest.test_case "is_in_ci expected-value" `Quick test_is_in_ci_true_expected
-  ; Alcotest.test_case "is_in_ci wrong-value" `Quick test_is_in_ci_false_wrong_value
-  ; Alcotest.test_case "default settings non-ci" `Quick test_default_settings_not_ci
+  [ Alcotest.test_case "default settings non-ci" `Quick test_default_settings_not_ci
   ; Alcotest.test_case "default settings ci" `Quick test_default_settings_ci
+  ; Alcotest.test_case "from_profile unknown" `Quick test_from_profile_unknown
+  ; Alcotest.test_case
+      "register_profile round trip"
+      `Quick
+      test_register_profile_round_trip
+  ; Alcotest.test_case "set_default_profile" `Quick test_set_default_profile
+  ; Alcotest.test_case "hegel.toml via HEGEL_CONFIG" `Quick test_hegel_toml_config
   ; Alcotest.test_case "Settings.create" `Quick test_settings_create
   ; Alcotest.test_case "health_check_to_string" `Quick test_health_check_to_string
   ; Alcotest.test_case "phase_to_string" `Quick test_phase_to_string

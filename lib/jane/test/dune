@@ -4,6 +4,11 @@
  (optional)
  (libraries hegel hegel_jane alcotest core sexp_diff))
 
+(env
+ (_
+  (env-vars
+   (HEGEL_DEFAULT_PROFILE development))))
+
 (library
  (name expect_tests_jane)
  (modules test_require_jane)

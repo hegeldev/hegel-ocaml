@@ -39,10 +39,9 @@ lib/                         # Library source
     loader.ml                # locate/download libhegel at runtime (env > site >
                              #   sibling ../hegel-rust build (libhegel_c.<ext>) > release)
   settings.ml / settings.mli # Hegel.Settings: the settings record (type t), its
-
                              #   verbosity/database/phase/health_check enums,
-
-                             #   CI-aware default () and create ?test_cases ?seed ()
+                             #   default ()/from_profile/create materialized from
+                             #   the engine's settings profiles (to_ffi/of_ffi)
   internal.ml.in             # Test runner + run lifecycle + typed-draw wrappers on
                              #   top of Hegel_ffi.Ffi; note/print_line/render_sexp +
                              #   flush_document (engine-side output, see Pretty
@@ -488,24 +487,50 @@ failing examples across runs, use `database` / `database_key`.
 ### Settings (lib/settings.ml)
 
 `Hegel.Settings` is a plain record (`Settings.t`) in the base_quickcheck
-`Test.Config.t` style: `Settings.default ()` builds the CI-aware defaults,
-`Settings.create ?test_cases ?seed ()` layers the two most common overrides
-(taking `seed` as an `int`), and every other field is set with OCaml's record
-update syntax — `{ (Settings.create ~seed:0 ()) with verbosity = Settings.Verbose }`.
+`Test.Config.t` style: `Settings.default ()` is the engine's resolved
+`default` settings profile, `Settings.create ?test_cases ?seed ()` layers the
+two most common overrides (taking `seed` as an `int`), and every other field
+is set with OCaml's record update syntax —
+`{ (Settings.create ~seed:0 ()) with verbosity = Settings.Verbose }`.
 There are deliberately no `with_*` builder functions. The enums (`verbosity`,
 `database`, `phase`, `health_check`) live in the same module, so their
 constructors are written qualified (`Settings.Disabled`) rather than relying on
 type-directed disambiguation. `Internal` does `open Settings` for its own
 pattern matches.
 
+Defaults are the engine's (libhegel 0.40.0 settings profiles): there is no
+OCaml-side CI detection any more. `Settings.default ()` /
+`Settings.from_profile name` call `hegel_settings_new` /
+`hegel_settings_new_for_profile` on a throwaway context and read the resolved
+handle back field by field through the `hegel_settings_get_*` getters
+(`Settings.of_ffi`), the way hegel-rust's `Settings::new` does; that is what
+makes `hegel.toml`, `HEGEL_DEFAULT_PROFILE`, `HEGEL_CONFIG`, and the shipped
+`ci`/`workload` profiles apply to OCaml runs. `Settings.register_profile` and
+`Settings.set_default_profile` wrap the matching engine calls. Going the other
+way, `Settings.to_ffi` (what `Internal.build_ffi_settings` calls) sets *every*
+field on a fresh handle — including `database` with `NULL` for `Unset` and the
+health-check mask even when empty — so the record, not the profile the fresh
+handle was resolved from, is authoritative for the run. The record has no
+`backend` field: nothing sets it, so the profile's choice (`urandom` under
+`workload`) applies. `print_blob` is always `true` in `of_ffi`, whatever the
+profile says (the engine's base has it off; hegel-ocaml keeps its old default
+until libhegel changes); the client does the printing
+(`print_failure_body` gates on `settings.print_blob`). `hegel_settings_new`
+can now fail (an unknown default profile, a malformed `hegel.toml`): it raises
+`Usage_error` with the engine's diagnostic. `hegel.toml` is loaded once per
+process, so `test_client.ml` exercises it in a child process
+(`HEGEL_TEST_CONFIG_CHILD`, dispatched at the top of `test_hegel.ml`).
+
 ### Test Runner (lib/internal.ml.in)
 
 `run_hegel_test` builds an `Ffi.settings` from the OCaml settings, calls
 `Ffi.run_start`, then loops on `Ffi.next_test_case` until it returns `None`. Each
 test case handle is wrapped in a `test_case` record and passed to the user's function.
-`build_ffi_settings` cannot fail: every `hegel_settings_set_*` returns `HEGEL_OK`
-(the step count, formerly the only setting the engine could reject, is now a
-`Stateful.run ?step_count` argument validated by `hegel_new_state_machine`).
+The setters in `build_ffi_settings` (`Settings.to_ffi`) cannot fail: every
+`hegel_settings_set_*` returns `HEGEL_OK` (the step count, formerly the only
+setting the engine could reject, is now a `Stateful.run ?step_count` argument
+validated by `hegel_new_state_machine`); only the initial `hegel_settings_new`
+can, on a bad profile configuration, raising `Usage_error`.
 The client controls when a final run occurs. Exceptions map to
 `Ffi.mark_complete` statuses: VALID, INVALID (`Assume_rejected`/`Flaky_strategy`),
 OVERRUN (`Data_exhausted` from a `Stop_test` during a primitive), INTERESTING

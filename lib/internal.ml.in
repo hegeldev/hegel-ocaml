@@ -703,50 +703,10 @@ let state_machine_free tc ~state_machine = Ffi.state_machine_free tc.context sta
 (* Settings translation                                                *)
 (* ------------------------------------------------------------------ *)
 
-let ffi_verbosity = function
-  | Quiet -> Ffi.Quiet
-  | Normal -> Ffi.Normal
-  | Verbose -> Ffi.Verbose
-  | Debug -> Ffi.Debug
-;;
-
-let phase_bit = function
-  | Explicit -> Ffi.phase_explicit
-  | Reuse -> Ffi.phase_reuse
-  | Generate -> Ffi.phase_generate
-  | Target -> Ffi.phase_target
-  | Shrink -> Ffi.phase_shrink
-;;
-
-let health_check_bit = function
-  | Filter_too_much -> Ffi.hc_filter_too_much
-  | Too_slow -> Ffi.hc_too_slow
-  | Test_cases_too_large -> Ffi.hc_test_cases_too_large
-  | Large_initial_test_case -> Ffi.hc_large_initial_test_case
-;;
-
-let bitmask bit_of items = List.fold_left (fun acc x -> acc lor bit_of x) 0 items
-
-(** [build_ffi_settings ctx settings ~database_key] allocates and populates a native
-    settings handle from the OCaml [settings]. The caller must free it. *)
+(** [build_ffi_settings ctx settings ~database_key] allocates the native
+    settings handle for a run: [Settings.to_ffi]. The caller must free it. *)
 let build_ffi_settings ctx (settings : Settings.t) ~database_key =
-  let s = Ffi.settings_new ctx in
-  Ffi.settings_test_cases ctx s settings.test_cases;
-  Ffi.settings_verbosity ctx s (ffi_verbosity settings.verbosity);
-  Ffi.settings_seed ctx s settings.seed;
-  Ffi.settings_derandomize ctx s settings.derandomize;
-  Ffi.settings_report_multiple_failures ctx s settings.report_multiple_failures;
-  Ffi.settings_show_statistics ctx s settings.show_statistics;
-  (match settings.database with
-   | Unset -> ()
-   | Disabled -> Ffi.settings_database ctx s (Some "")
-   | Path p -> Ffi.settings_database ctx s (Some p));
-  Option.iter (fun k -> Ffi.settings_database_key ctx s (Some k)) database_key;
-  Ffi.settings_phases ctx s (bitmask phase_bit settings.phases);
-  (match settings.suppress_health_check with
-   | [] -> ()
-   | checks -> Ffi.settings_suppress_health_check ctx s (bitmask health_check_bit checks));
-  s
+  Settings.to_ffi ctx settings ~database_key
 ;;
 
 type case_outcome =

@@ -75,6 +75,7 @@ let%expect_test "Debug notes on every case (not just the final replay)" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
+    no config file loaded
     Starting phase: Generate
     draw_1 = 0
     NOTE_MARKER

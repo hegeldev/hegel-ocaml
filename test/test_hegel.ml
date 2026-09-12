@@ -1,3 +1,14 @@
+(* [Test_client.test_hegel_toml_config] re-executes this binary with a
+   [hegel.toml] named by [HEGEL_CONFIG]; the child checks the settings it
+   resolves and exits. *)
+let () =
+  match Stdlib.Sys.getenv_opt "HEGEL_TEST_CONFIG_CHILD" with
+  | Some _ ->
+    Test_client.config_child ();
+    Stdlib.exit 0
+  | None -> ()
+;;
+
 let () =
   Alcotest.run
     "hegel"

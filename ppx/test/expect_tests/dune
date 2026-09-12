@@ -4,6 +4,11 @@
 ; library installs it (forcing ppx_expect into the hard deps), so these stay a
 ; dev/CI-only suite, disabled in release-profile (opam) builds.
 
+(env
+ (_
+  (env-vars
+   (HEGEL_DEFAULT_PROFILE development))))
+
 (library
  (name expect_tests)
  (enabled_if

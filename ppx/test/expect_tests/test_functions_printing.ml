@@ -304,6 +304,7 @@ let%expect_test "function call prints every time in verbose/debug verbosity" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
+    no config file loaded
     Starting phase: Generate
     function 10 = 315
     function 10 = 315

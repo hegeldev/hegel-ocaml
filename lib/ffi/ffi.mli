@@ -166,9 +166,30 @@ val context_free : context -> unit
 
 (** {2 Settings} *)
 
-(** [settings_new ctx] allocates a settings handle with libhegel's defaults.
-    Must be released with {!settings_free}. *)
+(** [settings_new ctx] allocates a settings handle resolved from the engine's
+    [default] settings profile (see {!settings_new_for_profile}). Must be
+    released with {!settings_free}. Raises {!Usage_error} when profile
+    resolution fails: a default-profile setting names an unknown profile, or
+    a [hegel.toml] is malformed. *)
 val settings_new : context -> settings
+
+(** [settings_new_for_profile ctx name] allocates a settings handle resolved
+    from the profile [name]: reserved ([base], [default]), shipped
+    ([development], [ci], [workload]), defined in a [hegel.toml], or registered
+    with {!settings_register_profile}. Raises {!Usage_error} for an unknown
+    profile or a malformed [hegel.toml]. *)
+val settings_new_for_profile : context -> string -> settings
+
+(** [settings_register_profile ctx name s] registers a snapshot of [s] as the
+    profile [name], process-wide, replacing an earlier registration. Raises
+    {!Usage_error} for an invalid or reserved name. *)
+val settings_register_profile : context -> string -> settings -> unit
+
+(** [set_default_profile ctx name] makes the [default] profile alias resolve to
+    [name] for the whole process ([None] clears an earlier call), taking
+    precedence over [HEGEL_DEFAULT_PROFILE], [hegel.toml], and environment
+    detection. Not retroactive. *)
+val set_default_profile : context -> string option -> unit
 
 (** [settings_free ctx s] frees a settings handle. *)
 val settings_free : context -> settings -> unit
@@ -205,6 +226,27 @@ val settings_phases : context -> settings -> int -> unit
 (** [settings_suppress_health_check ctx s mask] disables the health checks in
     the bitmask. *)
 val settings_suppress_health_check : context -> settings -> int -> unit
+
+(** [settings_print_blob ctx s b] records whether a failure's reproduction line
+    should be printed. *)
+val settings_print_blob : context -> settings -> bool -> unit
+
+(** {3 Reading a handle back}
+
+    The [settings_get_*] functions read a settings handle field by field, so a
+    profile-resolved handle can be materialized as a frontend record. *)
+
+val settings_get_test_cases : context -> settings -> int
+val settings_get_verbosity : context -> settings -> verbosity
+val settings_get_seed : context -> settings -> int option
+val settings_get_derandomize : context -> settings -> bool
+val settings_get_database : context -> settings -> string option
+val settings_get_phases : context -> settings -> int
+val settings_get_suppress_health_check : context -> settings -> int
+val settings_get_report_multiple_failures : context -> settings -> bool
+val settings_get_show_statistics : context -> settings -> bool
+val settings_get_print_blob : context -> settings -> bool
+val settings_get_backend : context -> settings -> backend
 
 (** {2 Run lifecycle} *)
 
