@@ -56,7 +56,12 @@ let test_default_settings_not_ci () =
     Alcotest.(check bool)
       "same as from_profile development"
       true
-      (Poly.equal s (Settings.from_profile "development")))
+      (Poly.equal s (Settings.from_profile "development"));
+    Alcotest.(check bool) "backend default" true (Poly.equal s.backend Settings.Default);
+    Alcotest.(check bool)
+      "workload backend urandom"
+      true
+      (Poly.equal (Settings.from_profile "workload").backend Settings.Urandom))
 ;;
 
 (* On a CI server the engine selects the shipped [ci] profile. *)
@@ -107,6 +112,7 @@ let test_register_profile_round_trip () =
         ; print_blob = i mod 2 = 0
         ; report_multiple_failures = true
         ; show_statistics = true
+        ; backend = (if i mod 2 = 0 then Settings.Default else Settings.Urandom)
         }
       in
       Settings.register_profile name s;

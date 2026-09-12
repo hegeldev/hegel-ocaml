@@ -2,28 +2,38 @@ RELEASE_TYPE: minor
 
 This release reworks how settings are created. Settings are now in the
 `Settings` submodule, so their fields and constructors no longer collide with
-top-level names. All `with_*` settings functions have been removed in favor of 
+top-level names. All `with_*` settings functions have been removed in favor of
 record update syntax.
 
+```ocaml
+(* before *)
+[@@settings settings ~test_cases:500 () |> with_verbosity Verbose]
+
+(* after *)
+[@@settings { (Settings.create ~test_cases:500 ()) with verbosity = Settings.Verbose }]
+```
+
 `Hegel.settings` is now `Hegel.Settings.create`, `Hegel.default_settings` is
-now `Hegel.Settings.default`.
+now `Hegel.Settings.default`. The `settings`, `verbosity`, `database`, `phase`,
+and `health_check` types are now in `Settings`. The `phases` field is now a
+`phase list`, and `Settings.t` gains a `backend` field (`Default` or
+`Urandom`).
 
-The `settings`, `verbosity`, `database`, `phase`, and `health_check` types 
-are now in `Settings`. The `phases` field is now a `phase list`.
+Settings now start from a named profile. The `development` (local runs), `ci` 
+(selected automatically on CI servers), and `workload` (selected automatically 
+inside Antithesis) profiles are built in.
 
-Settings can now also come from named profiles. There are three default profiles: 
-`development` (for local runs), `ci` (selected automatically on CI servers), and 
-`workload` (selected automatically inside Antithesis). 
-
-Custom profiles can be defined with a `hegel.toml` at the project root:
+Custom profiles can be defined in a `hegel.toml` at the project root. Every
+field of `Settings.t` is a key and `extends` sets the parent profile:
 
 ```toml
 default = "nightly"   # optional: the default profile for this project
 
-[profiles.ci]
+[profiles.ci]         # merges onto the built-in ci profile
 test_cases = 1000
 
 [profiles.nightly]
+extends = "ci"
 test_cases = 10000
 ```
 

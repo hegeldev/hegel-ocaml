@@ -270,7 +270,7 @@
         let a = draw tc (integers ()) in
         let b = draw tc (integers ()) in
         require_equal tc [%sexp_of: int] (a + b) (b + a)
-      [@@settings { (Settings.create ~test_cases:500) with verbosity = Settings.Verbose }]
+      [@@settings { (Settings.create ~test_cases:500 ()) with verbosity = Settings.Verbose }]
     ]}
 
     {3 Debugging failing test cases}

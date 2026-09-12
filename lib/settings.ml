@@ -24,6 +24,10 @@ type database =
   | Disabled
   | Path of string
 
+type backend =
+  | Default
+  | Urandom
+
 type phase =
   | Explicit
   | Reuse
@@ -50,6 +54,7 @@ type t =
   ; print_blob : bool
   ; report_multiple_failures : bool
   ; show_statistics : bool
+  ; backend : backend
   }
 
 (* ------------------------------------------------------------------ *)
@@ -61,6 +66,16 @@ let ffi_verbosity = function
   | Normal -> Ffi.Normal
   | Verbose -> Ffi.Verbose
   | Debug -> Ffi.Debug
+;;
+
+let ffi_backend = function
+  | Default -> Ffi.Default
+  | Urandom -> Ffi.Urandom
+;;
+
+let backend_of_ffi = function
+  | Ffi.Default -> Default
+  | Ffi.Urandom -> Urandom
 ;;
 
 let verbosity_of_ffi = function
@@ -113,6 +128,7 @@ let of_ffi ctx s =
   ; print_blob = Ffi.settings_get_print_blob ctx s
   ; report_multiple_failures = Ffi.settings_get_report_multiple_failures ctx s
   ; show_statistics = Ffi.settings_get_show_statistics ctx s
+  ; backend = backend_of_ffi (Ffi.settings_get_backend ctx s)
   }
 ;;
 
@@ -124,6 +140,7 @@ let to_ffi ctx t ~database_key =
   Ffi.settings_derandomize ctx s t.derandomize;
   Ffi.settings_report_multiple_failures ctx s t.report_multiple_failures;
   Ffi.settings_show_statistics ctx s t.show_statistics;
+  Ffi.settings_backend ctx s (ffi_backend t.backend);
   Ffi.settings_print_blob ctx s t.print_blob;
   Ffi.settings_database
     ctx

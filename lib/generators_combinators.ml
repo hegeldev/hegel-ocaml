@@ -38,9 +38,7 @@ let one_of (generators : ('a, printable) generator list) : ('a, printable) gener
     let drawn_printer = ref (printer first) in
     let core =
       Composite
-        { label =
-            Labels.combine
-              (Labels.one_of :: List.map (Fun.compose label_of_core core_of) generators)
+        { label = Labels.combine (Labels.one_of :: List.map label_of generators)
         ; generate_fn =
             (fun data ->
               let idx = Internal.generate_integer data ~min_value:0 ~max_value:(n - 1) in
