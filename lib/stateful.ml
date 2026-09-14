@@ -6,30 +6,49 @@ module Pool_gen = Generators.Make_pool (Int_table)
 module Pool = struct
   type 'a t =
     { tc : Internal.test_case
-    ; pool : Internal.pool
-    ; values : 'a Int_table.t
+    ; data : 'a Pool_gen.t
     }
 
   (* A rule body's [tc] is a block freed when the step ends,
      and a pool created there must keep working in later steps. The clone is
      owned by the test case and lives until it completes. *)
-  let create tc =
+  let create ?(clone = Fun.id) tc =
     let tc = Internal.clone tc in
     let pool = Internal.new_pool tc in
-    { tc; pool; values = Int_table.create 16 }
+    { tc; data = { pool; values = Int_table.create 16; clone; lock = None } }
   ;;
 
   let add t value =
-    let variable_id = Internal.pool_add t.tc ~pool:t.pool in
-    Int_table.replace t.values variable_id value
+    let variable_id = Internal.pool_add t.tc ~pool:t.data.pool in
+    Int_table.replace t.data.values variable_id value
   ;;
 
-  let size t = Int_table.length t.values
-  let values_consumed t = Pool_gen.pool_values ~pool:t.pool ~values:t.values ~consume:true
+  let size t = Int_table.length t.data.values
+  let values_reusable t = Pool_gen.pool_values t.data ~consume:false
+  let values_consumed t = Pool_gen.pool_values t.data ~consume:true
+end
 
-  let values_reusable t =
-    Pool_gen.pool_values ~pool:t.pool ~values:t.values ~consume:false
+module Concurrent_pool = struct
+  type 'a t = 'a Pool_gen.t
+
+  let create ?(clone = Fun.id) tc : _ t =
+    { pool = Internal.new_pool tc
+    ; values = Int_table.create 16
+    ; clone
+    ; lock = Some (Mutex.create ())
+    }
   ;;
+
+  let add (t : _ t) tc value =
+    Pool_gen.with_lock t (fun () ->
+      let variable_id = Internal.pool_add tc ~pool:t.pool in
+      Int_table.replace t.values variable_id value)
+  ;;
+
+  let is_empty (t : _ t) = Pool_gen.with_lock t (fun () -> Int_table.length t.values = 0)
+  let size (t : _ t) = Pool_gen.with_lock t (fun () -> Int_table.length t.values)
+  let values_reusable t = Pool_gen.pool_values t ~consume:false
+  let values_consumed t = Pool_gen.pool_values t ~consume:true
 end
 
 module Rule = struct
@@ -40,6 +59,18 @@ module Rule = struct
 
   let create ~name ~step = { name; step }
   let name t = t.name
+end
+
+module Concurrent_rule = struct
+  type 'state t =
+    { name : string
+    ; group : string
+    ; step : Internal.test_case -> 'state -> unit
+    }
+
+  let create ?(group = "<anonymous>") ~name ~step () = { name; group; step }
+  let name t = t.name
+  let group t = t.group
 end
 
 module Invariant = struct
@@ -124,7 +155,7 @@ let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
          exec_round ~state ~steps_attempted:step_num ~rejected:true)
   in
   let rec loop ~state ~steps_attempted =
-    Internal.start_span ~label:Generators.Ppx_internal.Labels.stateful_rule tc;
+    Internal.start_span ~label:Generators.Private.Labels.stateful_rule tc;
     if Internal.state_machine_next_round tc ~state_machine
     then (
       let state, steps_attempted, rejected =
