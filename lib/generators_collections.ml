@@ -54,7 +54,7 @@ let assoc_lists
   let sexp_of kvs = Sexp.List (List.map (fun (k, v) -> Sexp.List [ pk k; pv v ]) kvs) in
   let core =
     Composite
-      { label = Labels.map
+      { label = Labels.combine [ Labels.assoc_list; label_of keys; label_of values ]
       ; generate_fn = draw_association_pairs keys values ~min_size ~max_size
       }
   in
@@ -78,7 +78,7 @@ let make_hash_tables
   and pv = printer values in
   let core =
     Composite
-      { label = Labels.map
+      { label = Labels.combine [ Labels.hash_table; label_of keys; label_of values ]
       ; generate_fn =
           (fun data ->
             of_pairs (draw_association_pairs keys values ~min_size ~max_size data))
@@ -124,14 +124,20 @@ let lists
   let sexp_of xs = Sexp.List (List.map elt xs) in
   let core =
     if not unique
-    then CompositeList { elements = core_of elements; min_size; max_size }
+    then
+      CompositeList
+        { elements = core_of elements
+        ; min_size
+        ; max_size
+        ; label = Labels.combine [ Labels.list; label_of elements ]
+        }
     else
       (* With uniqueness, drive the collection protocol and reject duplicates.
          The engine's own rejection limit sends StopTest when too many
          duplicates occur, which [collection_reject] converts to
          [Data_exhausted]. *)
       Composite
-        { label = Labels.list
+        { label = Labels.combine [ Labels.set; label_of elements ]
         ; generate_fn =
             (fun data ->
               with_collection ~min_size ?max_size data (fun coll ->

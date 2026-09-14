@@ -190,8 +190,8 @@ the failure (`M` of them were rejected, for example by `assume`). The final line
 replays the exact case. Under `let%hegel_test` it is a `[@@failure_blobs [ "..." ]]` 
 attribute you paste onto the test, while a plain `run_hegel_test` caller gets a
 `~failure_blobs:[ "..." ]` argument to pass. On a terminal the header prints in 
-red. Set `HEGEL_COLOR=0` to disable color (or `1` to force it on). Add 
-`with_print_blob false` to your `[@@settings ...]` to omit the line.
+red. Set `HEGEL_COLOR=0` to disable color (or `1` to force it on). Set 
+`print_blob = false` in your `[@@settings ...]` to omit the line.
 
 A value that is shadowed or drawn inside a loop is numbered (`x_1`, `x_2`, …):
 
@@ -372,7 +372,7 @@ By default Hegel runs 100 test cases. To override this, attach a
 let%hegel_test integer_self_equality tc =
   let n = draw tc (integers ()) in
   assert (n = n)
-[@@settings settings ~test_cases:500 ()]
+[@@settings Settings.create ~test_cases:500 ()]
 ;;
 ```
 

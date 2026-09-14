@@ -1,7 +1,7 @@
 (** Snapshot tests for the [@@failure_blobs ...] recording and replay flows. *)
 
 let prop tc = if Hegel.draw tc (Hegel.booleans ()) then failwith "deliberate failure"
-let settings () = Hegel.settings ~test_cases:50 ~seed:0 ()
+let settings () = Hegel.Settings.create ~test_cases:50 ~seed:0 ()
 
 let contains ~needle s =
   let nl = String.length needle in
@@ -134,9 +134,10 @@ let%hegel_test multi_fail_test tc =
   if v >= 60 then raise A;
   if v <= 30 then raise B
 [@@settings
-  Hegel.settings ~test_cases:300 ~seed:9 ()
-  |> Hegel.with_print_blob true
-  |> Hegel.with_report_multiple_failures true]
+  { (Hegel.Settings.create ~test_cases:300 ~seed:9 ()) with
+    print_blob = true
+  ; report_multiple_failures = true
+  }]
 ;;
 
 let%expect_test "recording groups each failure's draws with its diagnostic" =
@@ -168,9 +169,10 @@ let%expect_test "recording groups each failure's draws with its diagnostic" =
    trailing blob line. *)
 let%expect_test "the multi-failure report omits blobs when print_blob is off" =
   let settings =
-    Hegel.settings ~test_cases:300 ~seed:9 ()
-    |> Hegel.with_report_multiple_failures true
-    |> Hegel.with_print_blob false
+    { (Hegel.Settings.create ~test_cases:300 ~seed:9 ()) with
+      report_multiple_failures = true
+    ; print_blob = false
+    }
   in
   (match Hegel.run_hegel_test ~settings multi_prop with
    | () -> assert false

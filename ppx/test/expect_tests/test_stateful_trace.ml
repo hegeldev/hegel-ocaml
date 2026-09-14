@@ -6,7 +6,10 @@ open Hegel
    the report. *)
 let run_failing body =
   let settings =
-    settings ~test_cases:20 ~seed:0 () |> with_verbosity Normal |> with_database Disabled
+    { (Settings.create ~test_cases:20 ~seed:0 ()) with
+      verbosity = Settings.Normal
+    ; database = Settings.Disabled
+    }
   in
   try Hegel.run_hegel_test ~settings body with
   | _ -> ()

@@ -28,7 +28,7 @@ let%hegel_test test_event_e2e tc =
       e.boundary
       ~low:Time_ns.Ofday.start_of_day
       ~high:Time_ns.Ofday.start_of_next_day)
-[@@settings Hegel.settings ~test_cases:20 ()]
+[@@settings Hegel.Settings.create ~test_cases:20 ()]
 ;;
 
 (** Test: the wrapper-module generators are ordinary values, drawable directly. *)
@@ -39,7 +39,7 @@ let%hegel_test test_wrapper_module_generators_e2e tc =
   assert (Date.year d >= 1 && Date.year d <= 9999);
   ignore (Time_ns.Span.to_int63_ns span : Int63.t);
   ignore (Time_ns.Ofday.to_string ofday : string)
-[@@settings Hegel.settings ~test_cases:20 ()]
+[@@settings Hegel.Settings.create ~test_cases:20 ()]
 ;;
 
 let () =

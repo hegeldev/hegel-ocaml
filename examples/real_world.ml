@@ -37,7 +37,7 @@ let%hegel_test test_merge_sorted_is_sorted tc =
   let b = sorted (draw tc list_gen) in
   let merged = merge_sorted a b in
   assert (is_sorted merged)
-[@@settings settings ~test_cases:200 ()]
+[@@settings Settings.create ~test_cases:200 ()]
 ;;
 
 (** Property: merging two sorted lists preserves all elements (multiset equality
@@ -49,7 +49,7 @@ let%hegel_test test_merge_preserves_elements tc =
   let b = sorted (draw tc list_gen) in
   let merged = merge_sorted a b in
   assert (multiset_equal merged (a @ b))
-[@@settings settings ~test_cases:200 ()]
+[@@settings Settings.create ~test_cases:200 ()]
 ;;
 
 (** Property: merging a list with itself preserves sorted order and doubles
@@ -61,7 +61,7 @@ let%hegel_test test_merge_with_self tc =
   let merged = merge_sorted a a in
   assert (is_sorted merged);
   assert (List.length merged = 2 * List.length a)
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 (** Property: merge is commutative up to element equality (same multiset). *)
@@ -76,7 +76,7 @@ let%hegel_test test_merge_commutative tc =
   assert (multiset_equal ab ba);
   assert (is_sorted ab);
   assert (is_sorted ba)
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 let () =

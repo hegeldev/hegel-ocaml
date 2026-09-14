@@ -1,25 +1,46 @@
 module Sexp = Sexplib0.Sexp
 
-(** Constants for span labels used in generation tracking. *)
+(** Span labels. A label identifies a generator to the engine, which treats
+    two spans with the same label as coming from the same generator when it
+    shrinks and mutates test cases, and does nothing else with it. [from_name]
+    and [combine] are the hashes [hegel_label_from_name] and
+    [hegel_label_combine] compute (64-bit FNV-1a over the name's bytes, or over
+    the labels' little-endian bytes in order), done in OCaml so a generator
+    definition doesn't load libhegel to compute the label.
+    A composite generator computes its label by combining the labels of its
+    component generators. *)
 module Labels = struct
-  let list = 1
-  let list_element = 2
-  let set = 3
-  let set_element = 4
-  let map = 5
-  let map_entry = 6
-  let tuple = 7
-  let one_of = 8
-  let optional = 9
-  let fixed_dict = 10
-  let flat_map = 11
-  let filter = 12
-  let mapped = 13
-  let sampled_from = 14
-  let enum_variant = 15
-  let _feature_flag = 16
-  let stateful_rule = 31
-  let function_result = 1001
+  let fnv_prime = 0x100000001b3L
+  let fnv_offset_basis = 0xcbf29ce484222325L
+  let step h c = Int64.mul (Int64.logxor h (Int64.of_int (Char.code c))) fnv_prime
+  let from_name name = String.fold_left step fnv_offset_basis name
+
+  let combine labels =
+    let b = Bytes.create 8 in
+    List.fold_left
+      (fun h l ->
+         Bytes.set_int64_le b 0 l;
+         Bytes.fold_left step h b)
+      fnv_offset_basis
+      labels
+  ;;
+
+  let list = from_name "hegel_ocaml.list"
+  let set = from_name "hegel_ocaml.set"
+  let assoc_list = from_name "hegel_ocaml.assoc_list"
+  let hash_table = from_name "hegel_ocaml.hash_table"
+  let tuple = from_name "hegel_ocaml.tuple"
+  let one_of = from_name "hegel_ocaml.one_of"
+  let optional = from_name "hegel_ocaml.optional"
+  let fixed_dict = from_name "hegel_ocaml.fixed_dict"
+  let flat_map = from_name "hegel_ocaml.flat_map"
+  let filter = from_name "hegel_ocaml.filter"
+  let mapped = from_name "hegel_ocaml.map"
+  let enum_variant = from_name "hegel_ocaml.enum_variant"
+  let pool = from_name "hegel_ocaml.pool"
+  let function_ = from_name "hegel_ocaml.function"
+  let function_result = from_name "hegel_ocaml.function_result"
+  let stateful_rule = from_name "hegel_ocaml.stateful.rule"
 end
 
 (** The pure generation structure of a generator, carrying no printer. A
@@ -36,32 +57,43 @@ end
     - [CompositeList] cores use the collection protocol to generate lists of
       non-basic elements, creating a fresh collection per generate call.
     - [Composite] cores wrap a [generate_fn] thunk inside a span with the given
-      [label]. Used for tuples and one_of with non-basic elements. *)
+      [label]. Used for tuples and one_of with non-basic elements.
+
+    Every core carries its span [label] (see {!Labels}), fixed at construction
+    from the core's own kind and its components' labels. *)
 type 'a core =
-  | Leaf : { draw : Internal.test_case -> 'a } -> 'a core
+  | Leaf :
+      { draw : Internal.test_case -> 'a
+      ; label : int64
+      }
+      -> 'a core
   | Mapped :
       { source : 'b core
       ; f : 'b -> 'a
+      ; label : int64
       }
       -> 'a core
   | FlatMapped :
       { source : 'b core
       ; f : 'b -> 'a core
+      ; label : int64
       }
       -> 'a core
   | Filtered :
       { source : 'a core
       ; predicate : 'a -> bool
+      ; label : int64
       }
       -> 'a core
   | CompositeList :
       { elements : 'a core
       ; min_size : int
       ; max_size : int option
+      ; label : int64
       }
       -> 'a list core
   | Composite :
-      { label : int
+      { label : int64
       ; generate_fn : Internal.test_case -> 'a
       }
       -> 'a core
@@ -73,7 +105,23 @@ type 'a core =
       ; consume : bool
       }
       -> 'a core
-  | Function : { build : name:string option -> Internal.test_case -> 'a } -> 'a core
+  | Function :
+      { build : name:string option -> Internal.test_case -> 'a
+      ; label : int64
+      }
+      -> 'a core
+
+(** [label_of_core core] is the span label of [core]. *)
+let label_of_core : type a. a core -> int64 = function
+  | Leaf { label; _ } -> label
+  | Mapped { label; _ } -> label
+  | FlatMapped { label; _ } -> label
+  | Filtered { label; _ } -> label
+  | CompositeList { label; _ } -> label
+  | Composite { label; _ } -> label
+  | Values _ -> Labels.pool
+  | Function { label; _ } -> label
+;;
 
 (** Phantom witness that a generator carries a printer and so may be drawn with
     {!draw}. Defined as a private polymorphic variant (not left abstract) so the
@@ -109,14 +157,26 @@ let core_of : type a p. (a, p) generator -> a core = function
   | Unprintable { core } -> core
 ;;
 
-(** [leaf ~draw ~sexp_of] builds a printable {!Leaf} generator. [draw] performs
-    a single engine draw and returns the typed value; [sexp_of] renders it on
-    the final replay. *)
-let leaf ~draw ~sexp_of = Printable { core = Leaf { draw }; sexp_of }
+(** [leaf_label name] is the label of the primitive named [name]. *)
+let leaf_label name = Labels.from_name ("hegel_ocaml." ^ name)
 
-(** [leaf_silent ~draw] builds an unprintable {!Leaf} generator, for leaves
-    whose output type has no known printer (e.g. {!just}). *)
-let leaf_silent ~draw = Unprintable { core = Leaf { draw } }
+(** [leaf ~name ~draw ~sexp_of] builds a printable {!Leaf} generator. [draw]
+    performs a single engine draw and returns the typed value; [sexp_of] renders
+    it on the final replay; [name] identifies the primitive for its label. *)
+let leaf ~name ~draw ~sexp_of =
+  Printable { core = Leaf { draw; label = leaf_label name }; sexp_of }
+;;
+
+(** [leaf_silent ~name ~draw] builds an unprintable {!Leaf} generator, for
+    leaves whose output type has no known printer (e.g. {!just}). *)
+let leaf_silent ~name ~draw =
+  Unprintable { core = Leaf { draw; label = leaf_label name } }
+;;
+
+(** [label_of gen] is the span label of [gen]'s core. *)
+let label_of : type a p. (a, p) generator -> int64 =
+  fun gen -> label_of_core (core_of gen)
+;;
 
 (** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding
     a printable generator that {!draw} accepts. This is the explicit way to make
@@ -314,22 +374,22 @@ end
 let rec do_draw : type a. a core -> Internal.test_case -> a =
   fun core data ->
   match core with
-  | Leaf { draw } -> draw data
-  | Mapped { source; f } ->
-    group Labels.mapped data (fun () ->
+  | Leaf { draw; _ } -> draw data
+  | Mapped { source; f; label } ->
+    group label data (fun () ->
       let value = do_draw source data in
       f value)
-  | FlatMapped { source; f } ->
-    discardable_group Labels.flat_map data (fun () ->
+  | FlatMapped { source; f; label } ->
+    discardable_group label data (fun () ->
       let first = do_draw source data in
       let second_core = f first in
       do_draw second_core data)
-  | Filtered { source; predicate } ->
+  | Filtered { source; predicate; label } ->
     let rec attempt i =
       if i > max_filter_attempts
       then raise Internal.Assume_rejected
       else (
-        Internal.start_span ~label:Labels.filter data;
+        Internal.start_span ~label data;
         let value = do_draw source data in
         if predicate value
         then (
@@ -340,8 +400,8 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
           attempt (i + 1)))
     in
     attempt 1
-  | CompositeList { elements; min_size; max_size } ->
-    group Labels.list data (fun () ->
+  | CompositeList { elements; min_size; max_size; label } ->
+    group label data (fun () ->
       with_collection ~min_size ?max_size data (fun coll ->
         let rec collect acc =
           if collection_more coll data
@@ -352,7 +412,7 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
   | Composite { label; generate_fn } -> group label data (fun () -> generate_fn data)
   | Values { pool; find; remove; is_empty; consume } ->
     pick data ~find ~remove ~is_empty pool ~consume
-  | Function { build } -> build ~name:None data
+  | Function { build; _ } -> build ~name:None data
 ;;
 
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
@@ -383,7 +443,7 @@ let draw_named
         loc
     in
     match gen with
-    | Printable { core = Function { build }; sexp_of } ->
+    | Printable { core = Function { build; _ }; sexp_of } ->
       let name = Internal.draw_display_name tc ~label ~repeatable in
       let value = build ~name:(Some name) tc in
       if Internal.draw_depth tc = 0
@@ -436,7 +496,7 @@ let draw_silent_named
   =
   fun ~name tc gen ->
   match core_of gen with
-  | Function { build } -> build ~name:(Some name) tc
+  | Function { build; _ } -> build ~name:(Some name) tc
   | core -> do_draw core tc
 ;;
 
@@ -449,8 +509,23 @@ let draw_silent_named
 let map : type a b p. (a -> b) -> (a, p) generator -> (b, unprintable) generator =
   fun f gen ->
   match core_of gen with
-  | Leaf { draw } -> Unprintable { core = Leaf { draw = (fun tc -> f (draw tc)) } }
-  | other -> Unprintable { core = Mapped { source = other; f } }
+  | Leaf { draw; label } ->
+    Unprintable
+      { core =
+          Leaf
+            { draw = (fun tc -> f (draw tc))
+            ; label = Labels.combine [ Labels.mapped; label ]
+            }
+      }
+  | other ->
+    Unprintable
+      { core =
+          Mapped
+            { source = other
+            ; f
+            ; label = Labels.combine [ Labels.mapped; label_of_core other ]
+            }
+      }
 ;;
 
 (** [flat_map f gen] creates a dependent generator. [f] receives the generated
@@ -461,7 +536,15 @@ let flat_map
     (a -> (b, q) generator) -> (a, p) generator -> (b, unprintable) generator
   =
   fun f gen ->
-  Unprintable { core = FlatMapped { source = core_of gen; f = (fun x -> core_of (f x)) } }
+  let source = core_of gen in
+  Unprintable
+    { core =
+        FlatMapped
+          { source
+          ; f = (fun x -> core_of (f x))
+          ; label = Labels.combine [ Labels.flat_map; label_of_core source ]
+          }
+    }
 ;;
 
 (** [filter predicate gen] filters values from [gen] using [predicate], keeping
@@ -469,8 +552,14 @@ let flat_map
     [assume false] if all attempts fail. *)
 let filter : type a p. (a -> bool) -> (a, p) generator -> (a, p) generator =
   fun predicate gen ->
+  let filtered core =
+    Filtered
+      { source = core
+      ; predicate
+      ; label = Labels.combine [ Labels.filter; label_of_core core ]
+      }
+  in
   match gen with
-  | Printable { core; sexp_of } ->
-    Printable { core = Filtered { source = core; predicate }; sexp_of }
-  | Unprintable { core } -> Unprintable { core = Filtered { source = core; predicate } }
+  | Printable { core; sexp_of } -> Printable { core = filtered core; sexp_of }
+  | Unprintable { core } -> Unprintable { core = filtered core }
 ;;

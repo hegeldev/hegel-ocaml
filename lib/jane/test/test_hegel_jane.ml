@@ -12,7 +12,7 @@ let check_printer name gen value expected =
     [Core.Char.sexp_of_t]. *)
 let test_chars_e2e () =
   let saw_above_ascii = ref false in
-  run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+  run_hegel_test ~settings:(Settings.create ~test_cases:100 ()) (fun tc ->
     let c = draw tc (Hegel_jane.chars ()) in
     if Core.Char.to_int c > 127 then saw_above_ascii := true);
   assert !saw_above_ascii;
@@ -21,7 +21,7 @@ let test_chars_e2e () =
 
 let expect_usage_error gen =
   match
-    run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+    run_hegel_test ~settings:(Settings.create ~test_cases:100 ()) (fun tc ->
       ignore (draw tc gen))
   with
   | exception Usage_error _ -> ()
@@ -36,13 +36,13 @@ let bounds_tests
   =
   let leq a b = compare a b <= 0 in
   [ Alcotest.test_case (name ^ " explicit bounds") `Quick (fun () ->
-      run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+      run_hegel_test ~settings:(Settings.create ~test_cases:100 ()) (fun tc ->
         let lo = draw tc gen in
         let hi = draw tc (bounded ~lo ()) in
         let v = draw tc (bounded ~lo ~hi ()) in
         assert (leq lo v && leq v hi)))
   ; Alcotest.test_case (name ^ " point bounds") `Quick (fun () ->
-      run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+      run_hegel_test ~settings:(Settings.create ~test_cases:100 ()) (fun tc ->
         let lo = draw tc gen in
         assert (compare (draw tc (bounded ~lo ~hi:lo ())) lo = 0)))
   ]
@@ -53,7 +53,7 @@ let bounds_tests
 let test_time_spans_default_bounds () =
   let module Span = Core.Time_ns.Span in
   let saw_negative = ref false in
-  run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+  run_hegel_test ~settings:(Settings.create ~test_cases:100 ()) (fun tc ->
     let span = draw tc (Hegel_jane.time_spans ()) in
     if Span.( < ) span Span.zero then saw_negative := true;
     assert (
@@ -70,7 +70,7 @@ let test_time_spans_invalid_bounds () =
 (** Test: times covers the representable range by default. *)
 let test_times_default_bounds () =
   let module Time_ns = Core.Time_ns in
-  run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+  run_hegel_test ~settings:(Settings.create ~test_cases:100 ()) (fun tc ->
     let t = draw tc (Hegel_jane.times ()) in
     assert (
       Time_ns.( >= ) t Time_ns.min_value_representable
@@ -88,7 +88,7 @@ let test_times_invalid_bounds () =
 
 (** Test: dates defaults to years 1 through 9999. *)
 let test_dates_default_bounds () =
-  run_hegel_test ~settings:(settings ~test_cases:100 ()) (fun tc ->
+  run_hegel_test ~settings:(Settings.create ~test_cases:100 ()) (fun tc ->
     let d = draw tc (Hegel_jane.dates ()) in
     assert (Core.Date.year d >= 1 && Core.Date.year d <= 9999))
 ;;
@@ -103,7 +103,7 @@ let test_ofdays_default_bounds () =
   let module Ofday = Core.Time_ns.Ofday in
   let saw_end_of_day = ref false in
   let saw_within_day = ref false in
-  run_hegel_test ~settings:(settings ~test_cases:100 ~seed:1 ()) (fun tc ->
+  run_hegel_test ~settings:(Settings.create ~test_cases:100 ~seed:1 ()) (fun tc ->
     let t = draw tc (Hegel_jane.ofdays ()) in
     assert (Ofday.( >= ) t Ofday.start_of_day && Ofday.( <= ) t Ofday.start_of_next_day);
     if Ofday.equal t Ofday.start_of_next_day
@@ -115,7 +115,7 @@ let test_ofdays_default_bounds () =
 (** Test: lower bound to end of day always generates it *)
 let test_ofdays_end_of_day_point () =
   let module Ofday = Core.Time_ns.Ofday in
-  run_hegel_test ~settings:(settings ~test_cases:10 ()) (fun tc ->
+  run_hegel_test ~settings:(Settings.create ~test_cases:10 ()) (fun tc ->
     let t = draw tc (Hegel_jane.ofdays ~min_ofday:Ofday.start_of_next_day ()) in
     assert (Ofday.equal t Ofday.start_of_next_day))
 ;;
@@ -169,7 +169,7 @@ let test_printer_times () =
 (** Test: hash_tables produces a [Core.Hashtbl.t] within the size bounds,
     holding the generated entries. *)
 let test_hash_tables_e2e () =
-  run_hegel_test ~settings:(settings ~test_cases:50 ()) (fun tc ->
+  run_hegel_test ~settings:(Settings.create ~test_cases:50 ()) (fun tc ->
     let gen =
       Hegel_jane.hash_tables
         (integers ~min_value:0 ~max_value:100 ())
@@ -223,7 +223,7 @@ let test_resolve_draw () =
 (* Draws through the engine's pool protocol against a Core.Hashtbl-backed pool,
    exercising [pool_values]' [is_empty] closure. *)
 let test_pool_values_e2e () =
-  run_hegel_test ~settings:(settings ~test_cases:5 ()) (fun tc ->
+  run_hegel_test ~settings:(Settings.create ~test_cases:5 ()) (fun tc ->
     let pool = Internal.new_pool tc in
     let tbl = Core.Hashtbl.create (module Core.Int) in
     let variable_id = Internal.pool_add tc ~pool in

@@ -41,14 +41,14 @@ let with_tempdir ~f =
 let%hegel_test simple_pass (tc : Hegel.test_case) =
   let _ = Hegel.draw tc (Hegel.booleans ()) in
   ()
-[@@settings Hegel.settings ~test_cases:3 ()]
+[@@settings Hegel.Settings.create ~test_cases:3 ()]
 ;;
 
 (** A failing test. The generated wrapper will raise. *)
 let%hegel_test simple_fail (tc : Hegel.test_case) =
   let _ = Hegel.draw tc (Hegel.booleans ()) in
   failwith "deliberate failure"
-[@@settings Hegel.settings ~test_cases:3 ()]
+[@@settings Hegel.Settings.create ~test_cases:3 ()]
 ;;
 
 (** A test without an explicit [@@settings] attribute — should fall back to
@@ -157,7 +157,7 @@ let%hegel_test runs_machine (tc : Hegel.test_case) =
   invariant_checks := 0;
   Counter.run tc ~init:0 ~step_count:5;
   assert (!invariant_checks > 2)
-[@@settings Hegel.settings ~test_cases:3 ()]
+[@@settings Hegel.Settings.create ~test_cases:3 ()]
 ;;
 
 let test_state_machine_collects_marked_bindings () =

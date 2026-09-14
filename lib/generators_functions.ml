@@ -37,6 +37,7 @@ let make
     | _ -> fun _ -> Sexp.Atom "<opaque>"
   in
   let ret = core_of returns in
+  let result_label = Labels.combine [ Labels.function_result; label_of_core ret ] in
   let build ~name tc =
     let display =
       match explicit_name with
@@ -49,7 +50,7 @@ let make
         match Stdlib.Hashtbl.find_opt table arg with
         | Some ret -> ret, false
         | None ->
-          let ret = group Labels.function_result tc (fun () -> do_draw ret tc) in
+          let ret = group result_label tc (fun () -> do_draw ret tc) in
           Stdlib.Hashtbl.replace table arg ret;
           ret, true
       in
@@ -68,7 +69,10 @@ let make
     in
     adapt base
   in
-  Unprintable { core = Function { build } }
+  Unprintable
+    { core =
+        Function { build; label = Labels.combine [ Labels.function_; label_of_core ret ] }
+    }
 ;;
 
 let sexp_or sexp_of_arg =

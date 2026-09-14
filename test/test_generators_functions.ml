@@ -5,7 +5,7 @@ open Generators
     it to the same argument twice yields the same result (the per-argument memo
     table makes it stable, which properties like [foldr f] rely on). *)
 let test_functions_deterministic_e2e () =
-  run_hegel_test ~settings:(settings ~test_cases:50 ()) (fun tc ->
+  run_hegel_test ~settings:(Settings.create ~test_cases:50 ()) (fun tc ->
     let f =
       draw_silent tc (functions ~sexp_of_arg:Core.sexp_of_int ~returns:(integers ()) ())
     in
@@ -20,7 +20,7 @@ let test_functions_deterministic_e2e () =
     once. Re-applying [f 0] also exercises the memo-hit path. *)
 let test_functions_independent_e2e () =
   let saw_differ = ref false in
-  run_hegel_test ~settings:(settings ~test_cases:100 ~seed:0 ()) (fun tc ->
+  run_hegel_test ~settings:(Settings.create ~test_cases:100 ~seed:0 ()) (fun tc ->
     let f =
       draw_silent
         tc
@@ -41,7 +41,7 @@ let test_functions_independent_e2e () =
 
 let test_functions_no_sexp_of_arg_e2e () =
   let saw_differ = ref false in
-  run_hegel_test ~settings:(settings ~test_cases:100 ~seed:0 ()) (fun tc ->
+  run_hegel_test ~settings:(Settings.create ~test_cases:100 ~seed:0 ()) (fun tc ->
     let f =
       draw_silent tc (functions ~returns:(integers ~min_value:0 ~max_value:5 ()) ())
     in
@@ -61,7 +61,7 @@ let test_functions_no_sexp_of_arg_e2e () =
     part of the key); every result respects the [returns] bounds. *)
 let test_functions2_e2e () =
   let saw_differ = ref false in
-  run_hegel_test ~settings:(settings ~test_cases:100 ~seed:0 ()) (fun tc ->
+  run_hegel_test ~settings:(Settings.create ~test_cases:100 ~seed:0 ()) (fun tc ->
     let f =
       draw_silent
         tc
@@ -87,7 +87,7 @@ let test_functions2_e2e () =
     respects the [returns] bounds. *)
 let test_functions3_e2e () =
   let saw_differ = ref false in
-  run_hegel_test ~settings:(settings ~test_cases:100 ~seed:0 ()) (fun tc ->
+  run_hegel_test ~settings:(Settings.create ~test_cases:100 ~seed:0 ()) (fun tc ->
     let f =
       draw_silent
         tc

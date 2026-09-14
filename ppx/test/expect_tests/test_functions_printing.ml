@@ -7,7 +7,8 @@ open Generators
 let run_failing body =
   try
     Hegel.run_hegel_test
-      ~settings:(settings ~test_cases:100 ~seed:0 () |> with_verbosity Normal)
+      ~settings:
+        { (Settings.create ~test_cases:100 ~seed:0 ()) with verbosity = Settings.Normal }
       body
   with
   | _ -> ()
@@ -22,7 +23,8 @@ let%hegel_test binding_name tc =
   in
   let f = draw_silent tc f_gen in
   assert (f 42 < 10)
-[@@settings settings ~test_cases:100 ~seed:0 () |> with_verbosity Normal]
+[@@settings
+  { (Settings.create ~test_cases:100 ~seed:0 ()) with verbosity = Settings.Normal }]
 ;;
 
 let%expect_test "a function is named from its binding" =
@@ -51,7 +53,8 @@ let%hegel_test binding_name_inline tc =
          ())
   in
   assert (f 42 < 10)
-[@@settings settings ~test_cases:100 ~seed:0 () |> with_verbosity Normal]
+[@@settings
+  { (Settings.create ~test_cases:100 ~seed:0 ()) with verbosity = Settings.Normal }]
 ;;
 
 let%expect_test "a function drawn inline is also named from its binding" =
@@ -81,7 +84,8 @@ let%hegel_test explicit_name_beats_binding tc =
          ())
   in
   assert (f 42 < 10)
-[@@settings settings ~test_cases:100 ~seed:0 () |> with_verbosity Normal]
+[@@settings
+  { (Settings.create ~test_cases:100 ~seed:0 ()) with verbosity = Settings.Normal }]
 ;;
 
 let%expect_test "an explicit ~name wins over the draw-site binding name" =
@@ -160,7 +164,8 @@ let%hegel_test functions2_binding tc =
          ())
   in
   assert (g 3 true < 10)
-[@@settings settings ~test_cases:100 ~seed:0 () |> with_verbosity Normal]
+[@@settings
+  { (Settings.create ~test_cases:100 ~seed:0 ()) with verbosity = Settings.Normal }]
 ;;
 
 let%expect_test "functions2 shows its table uncurried, named from its binding" =
@@ -191,7 +196,8 @@ let%hegel_test functions3_binding tc =
          ())
   in
   assert (h 1 true 2 < 10)
-[@@settings settings ~test_cases:100 ~seed:0 () |> with_verbosity Normal]
+[@@settings
+  { (Settings.create ~test_cases:100 ~seed:0 ()) with verbosity = Settings.Normal }]
 ;;
 
 let%expect_test "functions3 shows its table uncurried, named from its binding" =
@@ -216,7 +222,8 @@ let%hegel_test draw_silent_scalar_stays_silent tc =
   let n = draw_silent tc (integers ~min_value:5 ~max_value:5 ()) in
   ignore (n : int);
   assert false
-[@@settings settings ~test_cases:100 ~seed:0 () |> with_verbosity Normal]
+[@@settings
+  { (Settings.create ~test_cases:100 ~seed:0 ()) with verbosity = Settings.Normal }]
 ;;
 
 let%expect_test "a scalar drawn with draw_silent prints nothing even when named" =
@@ -235,9 +242,10 @@ let%expect_test "a scalar drawn with draw_silent prints nothing even when named"
 let func_call_loop verbosity =
   Hegel.run_hegel_test
     ~settings:
-      (settings ~test_cases:1 ~seed:0 ()
-       |> with_verbosity verbosity
-       |> with_phases [ Generate ])
+      { (Settings.create ~test_cases:1 ~seed:0 ()) with
+        verbosity
+      ; phases = [ Settings.Generate ]
+      }
     (fun tc ->
        let f =
          draw_silent
@@ -254,7 +262,7 @@ let func_call_loop verbosity =
 ;;
 
 let%expect_test "function call only prints the first time in normal verbosity" =
-  (try func_call_loop Normal with
+  (try func_call_loop Settings.Normal with
    | _ -> ());
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
@@ -270,7 +278,7 @@ let%expect_test "function call only prints the first time in normal verbosity" =
 ;;
 
 let%expect_test "function call prints every time in verbose/debug verbosity" =
-  (try func_call_loop Verbose with
+  (try func_call_loop Settings.Verbose with
    | _ -> ());
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
@@ -291,11 +299,12 @@ let%expect_test "function call prints every time in verbose/debug verbosity" =
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}];
-  (try func_call_loop Debug with
+  (try func_call_loop Settings.Debug with
    | _ -> ());
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
+    no config file loaded
     Starting phase: Generate
     function 10 = 315
     function 10 = 315
@@ -328,7 +337,8 @@ let%hegel_test printable_function_draw tc =
             ()))
   in
   assert (f 42 < 10)
-[@@settings settings ~test_cases:100 ~seed:0 () |> with_verbosity Normal]
+[@@settings
+  { (Settings.create ~test_cases:100 ~seed:0 ()) with verbosity = Settings.Normal }]
 ;;
 
 let%expect_test "a printable function generator prints with its sexp_of" =
@@ -366,7 +376,8 @@ let%hegel_test printable_function_drawn_nested tc =
               ())))
   in
   assert (f 42 < 10)
-[@@settings settings ~test_cases:100 ~seed:0 () |> with_verbosity Normal]
+[@@settings
+  { (Settings.create ~test_cases:100 ~seed:0 ()) with verbosity = Settings.Normal }]
 ;;
 
 let%expect_test "a function drawn nested keeps its label but suppresses its value line" =
@@ -400,7 +411,7 @@ let%hegel_test application_inside_span_is_suppressed tc =
   let r = Ppx_internal.group Ppx_internal.Labels.list tc (fun () -> f 42) in
   ignore (r : int);
   assert false
-[@@settings settings ~test_cases:100 ~seed:0 ()]
+[@@settings Settings.create ~test_cases:100 ~seed:0 ()]
 ;;
 
 let%expect_test "a function applied inside a span prints nothing" =
@@ -427,7 +438,7 @@ let%hegel_test partially_printable_args_and_ret tc =
   in
   let n = f 1 () in
   assert (n = 0)
-[@@settings settings ~test_cases:100 ~seed:0 ()]
+[@@settings Settings.create ~test_cases:100 ~seed:0 ()]
 ;;
 
 let%expect_test "partially printable applications" =
@@ -451,7 +462,7 @@ let%hegel_test unprintable_args_and_ret tc =
   let f = draw_silent tc (functions ~returns:(functions ~returns:(integers ()) ()) ()) in
   let n = f () () in
   assert (n = 0)
-[@@settings settings ~test_cases:100 ~seed:0 ()]
+[@@settings Settings.create ~test_cases:100 ~seed:0 ()]
 ;;
 
 let%expect_test "unprintable applications" =

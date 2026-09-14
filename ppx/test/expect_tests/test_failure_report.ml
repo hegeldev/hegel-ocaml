@@ -3,7 +3,10 @@ let int_gen = Hegel.integers ~min_value:0 ~max_value:100 ()
 let%expect_test "no-draw failure prints a bodyless singular report" =
   (try
      Hegel.run_hegel_test
-       ~settings:(Hegel.settings ~test_cases:10 () |> Hegel.with_database Disabled)
+       ~settings:
+         { (Hegel.Settings.create ~test_cases:10 ()) with
+           database = Hegel.Settings.Disabled
+         }
        (fun _tc -> failwith "boom")
    with
    | _ -> ());
@@ -21,7 +24,9 @@ let%expect_test "later falsification counts plural test cases" =
   (try
      Hegel.run_hegel_test
        ~settings:
-         (Hegel.settings ~test_cases:300 ~seed:9 () |> Hegel.with_database Disabled)
+         { (Hegel.Settings.create ~test_cases:300 ~seed:9 ()) with
+           database = Hegel.Settings.Disabled
+         }
        (fun tc ->
           let v = Hegel.draw tc int_gen in
           if v >= 60 then failwith "large values are broken")
@@ -46,7 +51,9 @@ let%expect_test "a multiline drawn value aligns under its name" =
   (try
      Hegel.run_hegel_test
        ~settings:
-         (Hegel.settings ~test_cases:100 ~seed:0 () |> Hegel.with_database Disabled)
+         { (Hegel.Settings.create ~test_cases:100 ~seed:0 ()) with
+           database = Hegel.Settings.Disabled
+         }
        (fun tc ->
           let l =
             Hegel.draw

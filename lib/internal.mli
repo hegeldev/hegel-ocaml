@@ -14,153 +14,6 @@ exception Data_exhausted
     client side pool diverges from the engine side pool. *)
 exception Flaky_strategy
 
-(** Health checks that can be suppressed during test execution.
-
-    @canonical Hegel.health_check *)
-type health_check =
-  | Filter_too_much
-  | Too_slow
-  | Test_cases_too_large
-  | Large_initial_test_case
-
-(**/**)
-
-(** [health_check_to_string hc] returns the canonical name for [hc]. *)
-val health_check_to_string : health_check -> string
-
-(**/**)
-
-(** Controls how much output Hegel produces during test runs.
-
-    @canonical Hegel.verbosity *)
-type verbosity =
-  | Quiet
-  | Normal
-  | Verbose
-  | Debug
-
-(** The database setting: unset, disabled, or a path.
-
-    @canonical Hegel.database *)
-type database =
-  | Unset
-  | Disabled
-  | Path of string
-
-(** Phases of the test that can be enabled or disabled.
-
-    @canonical Hegel.phase *)
-type phase =
-  | Explicit
-  (** Reserved for future use: hegel-ocaml has no explicit-examples facility
-      yet, so selecting this phase currently has no effect. *)
-  | Reuse
-  | Generate
-  | Target
-  | Shrink
-
-(**/**)
-
-(** [phase_to_string p] returns the lowercase name for [p] (the [Phase] value
-    name). *)
-val phase_to_string : phase -> string
-
-(**/**)
-
-(** Configuration for a Hegel test run.
-
-    {[
-    let%hegel_test example tc = ignore tc
-    [@@settings
-      Internal.default_settings ()
-      |> Internal.with_test_cases 500
-      |> Internal.with_verbosity Internal.Verbose
-      |> Internal.with_database (Internal.Path "_hegel_db")]
-    ;;
-    ]}
-
-    @canonical Hegel.settings *)
-type settings =
-  { test_cases : int
-  ; verbosity : verbosity
-  ; seed : int option
-  ; derandomize : bool
-  ; database : database
-    (** stores previous failures. when set, Hegel replays test cases from
-        previously failed runs and adds new failures when they occur. *)
-  ; suppress_health_check : health_check list
-  ; phases : phase list option
-    (** [None] uses the engine's default phase list (all phases); [Some xs]
-        restricts execution to [xs]. *)
-  ; print_blob : bool (** print a [rerun with:] line for a failure; [true] by default *)
-  ; report_multiple_failures : bool (** false by default *)
-  ; show_statistics : bool
-    (** print an end-of-run statistics block aggregating {!event} /
-        {!event_value} observations; [false] by default *)
-  }
-
-(** [default_settings ()] creates settings with defaults. Detects CI
-    environments automatically: in CI, [derandomize] is [true] and [database] is
-    [Disabled]. *)
-val default_settings : unit -> settings
-
-(** [settings ?test_cases ?seed ()] creates settings with the given overrides
-    applied to {!default_settings}. Convenience constructor for common cases.
-
-    {[
-    let s = Internal.settings ~test_cases:500 ~seed:42 ()
-    ]} *)
-val settings : ?test_cases:int -> ?seed:int -> unit -> settings
-
-(**/**)
-
-(** [is_in_ci ()] returns [true] if a CI environment is detected. *)
-val is_in_ci : unit -> bool
-
-(**/**)
-
-(** [with_test_cases n s] returns settings [s] with [test_cases] set to [n]. *)
-val with_test_cases : int -> settings -> settings
-
-(** [with_verbosity v s] returns settings [s] with [verbosity] set to [v]. *)
-val with_verbosity : verbosity -> settings -> settings
-
-(** [with_seed seed s] returns settings [s] with [seed] set. *)
-val with_seed : int option -> settings -> settings
-
-(** [with_derandomize b s] returns settings [s] with [derandomize] set to [b]. *)
-val with_derandomize : bool -> settings -> settings
-
-(** [with_database db s] returns settings [s] with [database] set to [db]. *)
-val with_database : database -> settings -> settings
-
-(** [with_suppress_health_check checks s] returns settings [s] with
-    [suppress_health_check] set to [checks], replacing any previously suppressed
-    list (like the other [with_*] builders). *)
-val with_suppress_health_check : health_check list -> settings -> settings
-
-(** [with_phases phases s] returns settings [s] with [phases] set to restrict
-    test execution to those phases.
-
-    {[
-    let s = Internal.with_phases [ Internal.Generate; Internal.Shrink ] s
-    ]} *)
-val with_phases : phase list -> settings -> settings
-
-(** [with_print_blob b s] returns settings [s] with [print_blob] set to [b].
-    When [true] (the default), a failing run's report ends with a copy-pasteable
-    [rerun with:] line encoding the failure. *)
-val with_print_blob : bool -> settings -> settings
-
-(** [with_report_multiple_failures b s] returns settings [s] with
-    [report_multiple_failures] set to [b]. When [true], a failing run reports
-    all the failures it found *)
-val with_report_multiple_failures : bool -> settings -> settings
-
-(** [with_show_statistics b s] returns settings [s] with [show_statistics] set
-    to [b]. *)
-val with_show_statistics : bool -> settings -> settings
-
 (** An opaque per-test-case handle, threaded to the test function and to the
     drawing primitives. Created and owned by the run loop.
 
@@ -177,15 +30,21 @@ val decr_draw_depth : test_case -> unit
 val set_test_aborted : test_case -> bool -> unit
 
 (** [clone tc] forks a fresh clone of [tc] on an independent choice stream (its
-    own native handle and context), freed by a GC finaliser once unreachable.
+    own native handle and context), owned and freed by the test case once it
+    completes.
     Re-exported as [Hegel.clone]. *)
 val clone : test_case -> test_case
 
-(** [block tc ~indent] opens a test case onto the same choice stream as [tc]
-    whose print region is a block nested in [tc]'s: every {!note}/draw line it
-    prints is indented [indent] columns further than [tc]'s lines. Freed by a GC
-    finalizer once unreachable. *)
-val block : test_case -> indent:int -> test_case
+(** [with_block tc ~indent f] runs [f] on a test case onto the same choice
+    stream as [tc] whose print region is a block nested in [tc]'s: every
+    {!note}/draw line it prints is indented [indent] columns further than [tc]'s
+    lines. The block is freed when [f] returns or raises, so it must not escape
+    [f]. *)
+val with_block : test_case -> indent:int -> (test_case -> 'a) -> 'a
+
+(** [owned_clone_count tc] is the number of clone handles the test case
+    currently owns; they are freed together once the case completes. *)
+val owned_clone_count : test_case -> int
 
 (** A running worker spawned by {!spawn}; joined with {!join}. Re-exported as
     [Hegel.worker]. *)
@@ -307,7 +166,7 @@ val generate_ipv6 : test_case -> string
 val assume : test_case -> bool -> unit
 
 (** [note tc message] prints [message] to stderr subject to the run's
-    {!type:verbosity}: never under [Quiet], only on the final (failing) replay
+    [Settings.verbosity]: never under [Quiet], only on the final (failing) replay
     under [Normal], and on every test case under [Verbose] or [Debug]. *)
 val note : test_case -> string -> unit
 
@@ -405,7 +264,7 @@ val event_value : test_case -> label:string -> value:float -> unit
 (**/**)
 
 (** [start_span ?label tc] starts a generation span for better shrinking. *)
-val start_span : ?label:int -> test_case -> unit
+val start_span : ?label:int64 -> test_case -> unit
 
 (** [stop_span ?discard tc] ends the current generation span. *)
 val stop_span : ?discard:bool -> test_case -> unit
@@ -532,7 +391,7 @@ val state_machine_free : test_case -> state_machine:state_machine -> unit
       first blob is decoded and run. The blob is only guaranteed to reproduce a
       failure within a specific version of Hegel *)
 val run_test
-  :  settings:settings
+  :  settings:Settings.t
   -> ?test_location:Antithesis.test_location
   -> ?from_ppx:bool
   -> ?database_key:string
@@ -542,16 +401,17 @@ val run_test
 
 (**/**)
 
-(** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn] runs a property test against the native engine, with [settings]
-    defaulting to {!default_settings}. This is the entry point the
-    [let%hegel_test] PPX targets; re-exported as [Hegel.run_hegel_test].
+(** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]
+    runs a property test against the native engine, with [settings] defaulting to
+    [Settings.default ()]. This is the entry point the [let%hegel_test] PPX targets;
+    re-exported as [Hegel.run_hegel_test].
 
     @param database_key
       overrides the per-test database key / [derandomize] seed. Defaults to the
       test's [test_location] so each [let%hegel_test] is scoped by its own
       identity. *)
 val run_hegel_test
-  :  ?settings:settings
+  :  ?settings:Settings.t
   -> ?test_location:Antithesis.test_location
   -> ?from_ppx:bool
   -> ?database_key:string

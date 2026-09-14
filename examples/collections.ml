@@ -11,7 +11,7 @@ let%hegel_test test_filtered_list tc =
   let non_neg = filter (fun v -> v >= 0) (integers ~min_value:(-100) ~max_value:100 ()) in
   let lst = draw tc (lists non_neg ~min_size:0 ~max_size:10 ()) in
   List.iter (fun x -> assert (x >= 0)) lst
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 (** Property: a list generated with [min_size] has at least that many elements. *)
@@ -22,7 +22,7 @@ let%hegel_test test_list_min_size tc =
       (lists (integers ~min_value:(-1000) ~max_value:1000 ()) ~min_size:3 ~max_size:10 ())
   in
   assert (List.length lst >= 3)
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 (** Property: [map] transforms every element. Here we map integers to their
@@ -35,7 +35,7 @@ let%hegel_test test_map_combinator tc =
   in
   let lst = draw tc (lists abs_gen ~min_size:1 ~max_size:10 ()) in
   List.iter (fun x -> assert (x >= 0)) lst
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 (** Property: [flat_map] can make a pair (n, list-of-n-integers). Generates an
@@ -52,7 +52,7 @@ let%hegel_test test_flat_map_combinator tc =
   in
   let n, lst = draw_silent tc pair_gen in
   assert (List.length lst = n)
-[@@settings settings ~test_cases:50 ()]
+[@@settings Settings.create ~test_cases:50 ()]
 ;;
 
 (** Property: [sampled_from] always returns one of the specified values. *)
@@ -68,7 +68,7 @@ let%hegel_test test_sampled_from tc =
          (sampled_from options))
   in
   assert (v = 10 || v = 20 || v = 30 || v = 40)
-[@@settings settings ~test_cases:100 ()]
+[@@settings Settings.create ~test_cases:100 ()]
 ;;
 
 (** Property: association lists generated with a min_size have at least that
@@ -85,7 +85,7 @@ let%hegel_test test_assoc_list_size tc =
          ())
   in
   assert (List.length pairs >= 2)
-[@@settings settings ~test_cases:50 ()]
+[@@settings Settings.create ~test_cases:50 ()]
 ;;
 
 (** Property: hash tables respect their size bounds and hold unique keys by
@@ -103,7 +103,7 @@ let%hegel_test test_hash_table_size tc =
   in
   let n = Hashtbl.length table in
   assert (n >= 2 && n <= 6)
-[@@settings settings ~test_cases:50 ()]
+[@@settings Settings.create ~test_cases:50 ()]
 ;;
 
 let () =

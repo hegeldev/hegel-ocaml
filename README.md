@@ -76,7 +76,7 @@ let%hegel_test commutative_addition tc =
   let a = draw tc (integers ()) in
   let b = draw tc (integers ()) in
   assert (a + b = b + a)
-[@@settings settings ~test_cases:500 ()]
+[@@settings Settings.create ~test_cases:500 ()]
 ;;
 ```
 
