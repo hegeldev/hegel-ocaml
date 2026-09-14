@@ -167,20 +167,7 @@ let with_context f =
   Fun.protect ~finally:(fun () -> Ffi.context_free ctx) (fun () -> f ctx)
 ;;
 
-(* temp workaround b/c libhegel sets print_blob to false by default *)
-let development_registered =
-  lazy
-    (with_context (fun ctx ->
-       let s = Ffi.settings_new_for_profile ctx "base" in
-       Fun.protect
-         ~finally:(fun () -> Ffi.settings_free ctx s)
-         (fun () ->
-            Ffi.settings_print_blob ctx s true;
-            Ffi.settings_register_profile ctx "development" s)))
-;;
-
 let from_profile name =
-  Lazy.force development_registered;
   with_context (fun ctx ->
     let s = Ffi.settings_new_for_profile ctx name in
     Fun.protect ~finally:(fun () -> Ffi.settings_free ctx s) (fun () -> of_ffi ctx s))
@@ -197,7 +184,6 @@ let create ?test_cases ?seed () =
 ;;
 
 let register_profile name t =
-  Lazy.force development_registered;
   with_context (fun ctx ->
     let s = to_ffi ctx t ~database_key:None in
     Fun.protect

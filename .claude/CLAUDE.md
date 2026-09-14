@@ -39,7 +39,7 @@ lib/                         # Library source
     loader.ml                # locate/download libhegel at runtime (env > site >
                              #   sibling ../hegel-rust build (libhegel_c.<ext>) > release)
   settings.ml / settings.mli # Hegel.Settings: the settings record (type t), its
-                             #   verbosity/database/phase/health_check enums,
+                             #   verbosity/database/phase/health_check/backend enums,
                              #   default ()/from_profile/create materialized from
                              #   the engine's settings profiles (to_ffi/of_ffi)
   internal.ml.in             # Test runner + run lifecycle + typed-draw wrappers on
@@ -511,17 +511,13 @@ makes `hegel.toml`, `HEGEL_DEFAULT_PROFILE`, `HEGEL_CONFIG`, and the shipped
 way, `Settings.to_ffi` (what `Internal.build_ffi_settings` calls) sets *every*
 field on a fresh handle — including `database` with `NULL` for `Unset` and the
 health-check mask even when empty — so the record, not the profile the fresh
-handle was resolved from, is authoritative for the run. The record has no
-`backend` field: nothing sets it, so the profile's choice (`urandom` under
-`workload`) applies. `print_blob` is read back like every other field, but
-the engine's base has it off and hegel-ocaml's default is on: `Settings`
-registers `development` as the `base` settings with `print_blob = true`
-(`development_registered`, a `lazy` forced by `default`/`from_profile`/
-`register_profile` so it lands before the first resolution and before any
-user registration of the same name). A `hegel.toml` `[profiles.development]`
-section still merges over the snapshot but may not set `extends` on it;
-`base` and `workload` resolve with it off. The client does the printing
-(`print_failure_body` gates on `settings.print_blob`). `hegel_settings_new`
+handle was resolved from, is authoritative for the run. That includes
+`backend` (`Default`/`Urandom`): `default ()` reports the profile's choice
+(`urandom` under `workload`) and `to_ffi` writes it back. `print_blob` is a
+plain field too: its base value is `true` since libhegel 0.42.0 (before that
+the engine's base had it off and hegel-ocaml forced it on client-side), and
+the client does the printing (`print_failure_body` gates on
+`settings.print_blob`). `hegel_settings_new`
 can now fail (an unknown default profile, a malformed `hegel.toml`): it raises
 `Usage_error` with the engine's diagnostic. `hegel.toml` is loaded once per
 process, so `test_client.ml` exercises it in a child process

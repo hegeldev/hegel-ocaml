@@ -49,16 +49,14 @@
 
     {3:builtin Built-in profiles}
 
-    Three profiles come with Hegel. [ci] and [workload] extend [base]
-    directly. [development] is registered by hegel-ocaml as the base settings
-    with [print_blob = true], so it has no parent.
+    Three profiles come with Hegel. Each extends [base] directly.
 
     {t
-      | Profile       | Overrides                                                                                                  | When it is the environment's profile                                |
-      |---------------|------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------|
-      | [development] | [print_blob = true]                                                                                        | Whenever neither of the others applies (usually local development). |
-      | [ci]          | [derandomize = true], [database = "disabled"], [suppress_health_check = ["too_slow"]], [print_blob = true] | On a CI server, detected from the variables common CI servers set.  |
-      | [workload]    | [backend = "urandom"], [database = "disabled"], [suppress_health_check = ["all"]]                          | Inside Antithesis, detected from [ANTITHESIS_OUTPUT_DIR].           |
+      | Profile       | Overrides                                                                             | When it is the environment's profile                                |
+      |---------------|---------------------------------------------------------------------------------------|---------------------------------------------------------------------|
+      | [development] | none: the base settings unchanged                                                     | Whenever neither of the others applies (usually local development). |
+      | [ci]          | [derandomize = true], [database = "disabled"], [suppress_health_check = ["too_slow"]] | On a CI server, detected from the variables common CI servers set.  |
+      | [workload]    | [backend = "urandom"], [database = "disabled"], [suppress_health_check = ["all"]]     | Inside Antithesis, detected from [ANTITHESIS_OUTPUT_DIR].           |
     }
 
     {3 Custom profiles and inheritance}
@@ -91,9 +89,8 @@
 
     A [hegel.toml] section for a built-in profile only overrides the set
     fields. For example, a [[profiles.ci]] with [print_blob = false] keeps
-    derandomization and the disabled database. [ci] and [workload] may
-    set [extends] to change its parent, but [development] may not. This
-    will be fixed in the near future.
+    derandomization and the disabled database. A built-in profile's
+    may also set [extends] to change its parent.
 
     {3:ascode Profiles as code}
 
@@ -272,8 +269,7 @@ type t =
     (** The phases to run. All phases are run with the [base] profile. *)
   ; print_blob : bool
     (** Print a [rerun with:] line whose base64 blob encodes the choices that
-        led to a failure. [true] in the [development] and [ci] profiles, [false]
-        in [base] and [workload]. *)
+        led to a failure. [true] in the [base] settings. *)
   ; report_multiple_failures : bool
     (** Report every distinct failure the run found rather than just the first.
         [false] by default. *)

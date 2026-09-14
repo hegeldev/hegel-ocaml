@@ -50,9 +50,9 @@ let test_default_settings_not_ci () =
     Alcotest.(check bool) "report_multiple_failures off" false s.report_multiple_failures;
     Alcotest.(check bool) "show_statistics off" false s.show_statistics;
     Alcotest.(check bool)
-      "development is the base settings with print_blob on"
+      "development is the base settings"
       true
-      (Poly.equal s { (Settings.from_profile "base") with print_blob = true });
+      (Poly.equal s (Settings.from_profile "base"));
     Alcotest.(check bool)
       "same as from_profile development"
       true
