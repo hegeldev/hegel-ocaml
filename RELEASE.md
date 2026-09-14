@@ -43,8 +43,4 @@ from code, and `Settings.set_default_profile` (or the `HEGEL_DEFAULT_PROFILE`
 environment variable, or the `default` entry in `hegel.toml`) sets the
 suite-wide default. `HEGEL_CONFIG` sets the `hegel.toml` path.
 
-`print_blob` is now an ordinary profile setting: the `rerun with:` line still
-prints by default, and `print_blob = false` under a profile in `hegel.toml`
-turns it off for that profile. This release targets libhegel 0.42.0.
-
 This release also fixes a use-after-free in stateful tests and `spawn`ed clones.
