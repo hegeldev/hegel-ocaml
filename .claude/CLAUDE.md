@@ -66,7 +66,6 @@ lib/                         # Library source
                              #   takes the lists directly and is what the run generated
                              #   by module%hegel_state_machine calls.
                              #   Rule and invariant bodies run on indent-2 block handles
-  antithesis.ml              # Antithesis integration (emits an always-typed assertion)
   jane/                      # Optional hegel.jane sublibrary ((optional) in dune).
     hegel_jane.ml/.mli       #   Core.Hashtbl hash_tables + pool helpers and the
     test/                    #   sexp_diff require_equal renderer (set_sexp_diff);
@@ -104,7 +103,6 @@ test/                        # hegel's own test suite (one executable: test_hege
   test_client.ml             # Internal config + run lifecycle tests (real engine)
   test_generators_*.ml       # Generator core / primitives / collections / combinators
   test_stateful.ml           # Stateful testing tests
-  test_antithesis.ml         # Antithesis integration tests
 
 docs/                        # Tutorial and guide documents
   getting-started.md         # Getting Started tutorial (OCaml translation)
@@ -164,7 +162,8 @@ typed-draw migrations.
 
 The `hegel` library depends on the stdlib plus `sexplib0` (printer type
 `'a -> Sexplib0.Sexp.t`, the same type as `Core.Sexp.t`), `unix` (isatty for
-color detection), `threads.posix`, ctypes/ipaddr/yojson/dune-site. `core`,
+color detection), `threads.posix`, ctypes/ipaddr/dune-site (`yojson` is a test-only dependency of
+the PPX test that parses the engine's `sdk.jsonl`). `core`,
 `core_unix`, and `sexp_diff` are NOT dependencies of the library: `core` and
 `sexp_diff` are opam depopts that gate the `(optional)` sublibrary
 `hegel.jane` (`lib/jane/`, module `Hegel_jane`). Anywhere the library needs a
@@ -485,6 +484,32 @@ print by default). `from_ppx` selects that line's syntax: a
 argument for a plain `run_hegel_test` caller. For persisting and replaying
 failing examples across runs, use `database` / `database_key`.
 
+### Test location and Antithesis reporting (libhegel 0.41.1)
+
+The Antithesis integration lives in libhegel, not in hegel-ocaml (the former
+`lib/antithesis.ml`, which wrote `sdk.jsonl` itself, was deleted when
+libhegel 0.41.1 centralized it). `Hegel.test_location` is
+`Internal.test_location` (`function_name`/`file`/`begin_line`, built by the
+`let%hegel_test` PPX from the binding's source location). `run_test` hands it
+to `build_ffi_settings`, which after `Settings.to_ffi` calls
+`Ffi.settings_test_location` (`hegel_settings_set_test_location(file,
+begin_line, class_name, function)`) on the handle. The engine's `class_name`
+is the "class, module or package enclosing the test"; hegel-ocaml passes
+the file path without its extension (`Filename.remove_extension loc.file`)
+(`tests/list_tests.ml` → `tests/list_tests`), since the PPX records the file,
+not the module path. The directory is kept because two stanzas may each
+define a `my_module.ml`, and the engine keys the assertion on this name. Inside Antithesis (`ANTITHESIS_OUTPUT_DIR`) the engine then
+appends the SDK-format declaration + verdict lines for every run started from
+that handle and for the final blob replay (so a failing run writes two
+failing verdicts), identified as `<path>::<function> passes properties`; a
+run-level error counts as a failure. Without a location, or outside
+Antithesis, nothing is written. The engine re-reads the environment per run,
+so `test_client.ml` exercises it in-process with a tempdir (no child process,
+unlike `hegel.toml`). Invalid UTF-8 in any string is `HEGEL_E_INVALID_ARG` →
+`Usage_error`. The location is per-test identity, not a setting:
+`Settings.register_profile` (`to_ffi ~database_key:None`) never sets one, and
+`Settings.t` has no field for it.
+
 ### Settings (lib/settings.ml)
 
 `Hegel.Settings` is a plain record (`Settings.t`) in the base_quickcheck
@@ -559,7 +584,7 @@ in an `Exn.protect ~finally`.
 - `test/` must build under `-p hegel` (opam-repo-ci runs it): plain Alcotest
   functions calling `Hegel.run_hegel_test`, no `let%hegel_test`, no PPX beyond
   the `ppx_js_style` linter. White-box tests use the doc-hidden `(**/**)`
-  re-exports `Hegel.{Internal,Antithesis}`. Only `Generators`,
+  re-export `Hegel.Internal`. Only `Generators`,
   `Stateful`, and the values/types directly under `Hegel` are documented API
 - PPX E2E tests live under `ppx/test/`, attributed via `(package ...)` to
   `ppx_hegel_generator` (`test_ppx_derive.ml`) and `ppx_hegel_test`

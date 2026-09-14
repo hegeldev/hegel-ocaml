@@ -20,6 +20,16 @@ exception Flaky_strategy
     @canonical Hegel.test_case *)
 type test_case
 
+(** A source location identifying a single test, passed to the engine with the
+    run's settings.
+
+    @canonical Hegel.test_location *)
+type test_location =
+  { function_name : string
+  ; file : string (** Full source path as captured by [__FILE__]. *)
+  ; begin_line : int (** 1-based line number of the test's [let] binding. *)
+  }
+
 (**/**)
 
 val is_high_verbosity : test_case -> bool
@@ -371,9 +381,10 @@ val state_machine_free : test_case -> state_machine:state_machine -> unit
     runs a property test using the given settings against the native engine.
 
     @param test_location
-      source location of the test, used by the Antithesis integration. Provided
-      automatically by the [let%hegel_test] PPX. When omitted, no Antithesis
-      assertion is emitted.
+      source location of the test. Passed to libhegel, which inside Antithesis
+      reports the run's result as an assertion at that location. It is also the
+      default database key. Provided automatically by the [let%hegel_test]
+      PPX. When omitted, nothing is reported.
     @param database_key
       optional key scoping persisted/replayed failing examples and, under
       [derandomize], the per-test seed. Defaults to the test's [test_location]
@@ -392,7 +403,7 @@ val state_machine_free : test_case -> state_machine:state_machine -> unit
       failure within a specific version of Hegel *)
 val run_test
   :  settings:Settings.t
-  -> ?test_location:Antithesis.test_location
+  -> ?test_location:test_location
   -> ?from_ppx:bool
   -> ?database_key:string
   -> ?failure_blobs:string list
@@ -412,7 +423,7 @@ val run_test
       identity. *)
 val run_hegel_test
   :  ?settings:Settings.t
-  -> ?test_location:Antithesis.test_location
+  -> ?test_location:test_location
   -> ?from_ppx:bool
   -> ?database_key:string
   -> ?failure_blobs:string list

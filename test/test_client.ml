@@ -471,6 +471,98 @@ let test_run_all_settings_branches () =
         ignore (Hegel.draw tc int_gen : int))))
 ;;
 
+(* ==== Test location (the engine's Antithesis reporting) ==== *)
+
+let antithesis_env = "ANTITHESIS_OUTPUT_DIR"
+
+(* Run [f] with [ANTITHESIS_OUTPUT_DIR] pointing at a fresh tempdir, restoring
+   the previous value afterwards. *)
+let with_antithesis_dir f =
+  Test_helpers.with_tempdir ~prefix:"hegel-antithesis" ~f:(fun dir ->
+    let prev = Sys.getenv antithesis_env in
+    Unix.putenv ~key:antithesis_env ~data:dir;
+    Exn.protect
+      ~finally:(fun () ->
+        match prev with
+        | Some v -> Unix.putenv ~key:antithesis_env ~data:v
+        | None -> Test_helpers.unsetenv antithesis_env)
+      ~f:(fun () -> f dir))
+;;
+
+let sample_location =
+  { function_name = "my_test"; file = "tests/test_basic.ml"; begin_line = 42 }
+;;
+
+(* Inside Antithesis the engine reports a run started with a [test_location] as
+   an [always] assertion in [sdk.jsonl], identified by module and function. *)
+let test_test_location_reports_result () =
+  with_antithesis_dir (fun dir ->
+    let settings = Hegel.Settings.create ~test_cases:3 () in
+    run_hegel_test ~settings ~test_location:sample_location (fun tc ->
+      ignore (Hegel.draw tc int_gen : int));
+    let lines () =
+      In_channel.read_all (Filename.concat dir "sdk.jsonl") |> String.split_lines
+    in
+    (* The SDK format: a declaration line ([hit:false]) then the result. *)
+    let passed = lines () in
+    Alcotest.(check int) "declaration + result" 2 (List.length passed);
+    let result = List.last_exn passed in
+    let has s = String.is_substring result ~substring:s in
+    Alcotest.(check bool)
+      "assertion id"
+      true
+      (has "\"id\":\"tests/test_basic::my_test passes properties\"");
+    Alcotest.(check bool) "always assertion" true (has "\"assert_type\":\"always\"");
+    Alcotest.(check bool) "hit" true (has "\"hit\":true");
+    Alcotest.(check bool) "passing result" true (has "\"condition\":true");
+    Alcotest.(check bool)
+      "location"
+      true
+      (has
+         "\"location\":{\"class\":\"tests/test_basic\",\"function\":\"my_test\",\"file\":\"tests/test_basic.ml\",\"begin_line\":42");
+    (match
+       run_hegel_test ~settings ~test_location:sample_location (fun _tc ->
+         failwith "deliberate failure")
+     with
+     | () -> Alcotest.fail "expected the failing run to raise"
+     | exception Failure _ -> ());
+    (* The failing run reports twice: the run's result and the final replay's
+       (a test case replayed from a blob). Every new result is a failure. *)
+    let results =
+      List.drop (lines ()) 2
+      |> List.filter ~f:(String.is_substring ~substring:"\"hit\":true")
+    in
+    Alcotest.(check bool) "at least one failing result" false (List.is_empty results);
+    List.iter results ~f:(fun v ->
+      Alcotest.(check bool)
+        "failing result"
+        true
+        (String.is_substring v ~substring:"\"condition\":false")))
+;;
+
+(* Without a location nothing is written *)
+let test_no_test_location_reports_nothing () =
+  with_antithesis_dir (fun dir ->
+    run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:3 ()) (fun tc ->
+      ignore (Hegel.draw tc int_gen : int));
+    Alcotest.(check bool)
+      "no sdk.jsonl"
+      false
+      (Stdlib.Sys.file_exists (Filename.concat dir "sdk.jsonl")))
+;;
+
+(* rejects a location string that is not valid UTF-8. *)
+let test_test_location_invalid_utf8 () =
+  match
+    run_hegel_test
+      ~settings:(Hegel.Settings.create ~test_cases:1 ())
+      ~test_location:{ sample_location with file = "\xff.ml" }
+      (fun _tc -> ())
+  with
+  | () -> Alcotest.fail "expected Usage_error"
+  | exception Usage_error _ -> ()
+;;
+
 (** [Flaky_strategy] raised from the body is treated as an invalid case. *)
 let test_run_flaky_strategy () =
   let settings =
@@ -697,6 +789,15 @@ let tests =
   ; Alcotest.test_case "stderr_color" `Quick test_stderr_color
   ; Alcotest.test_case "render_diff" `Quick test_render_diff
   ; Alcotest.test_case "run flaky on replay" `Quick test_run_flaky_on_replay
+  ; Alcotest.test_case
+      "test_location reports result"
+      `Quick
+      test_test_location_reports_result
+  ; Alcotest.test_case
+      "no test_location reports nothing"
+      `Quick
+      test_no_test_location_reports_nothing
+  ; Alcotest.test_case "test_location invalid utf8" `Quick test_test_location_invalid_utf8
   ; Alcotest.test_case "run passing" `Quick test_run_passing
   ; Alcotest.test_case "run failing re-raises" `Quick test_run_failing_reraises
   ; Alcotest.test_case "run assume rejects" `Quick test_run_assume_rejects

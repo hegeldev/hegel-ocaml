@@ -220,6 +220,23 @@ val settings_database : context -> settings -> string option -> unit
     clears it. *)
 val settings_database_key : context -> settings -> string option -> unit
 
+(** [settings_test_location ctx s ~file ~begin_line ~class_name ~function_name]
+    records where the test under [s] lives ([hegel_settings_set_test_location]).
+    Inside Antithesis (detected via [ANTITHESIS_OUTPUT_DIR]) the engine then
+    reports the verdict of every run started from [s], and of every test case
+    replayed from a blob with it, as one [always] assertion identified as
+    [<class_name>::<function_name> passes properties]; elsewhere, and without a
+    location, nothing is written. Each call replaces the previous location.
+    Raises {!Usage_error} if a string is not valid UTF-8. *)
+val settings_test_location
+  :  context
+  -> settings
+  -> file:string
+  -> begin_line:int
+  -> class_name:string
+  -> function_name:string
+  -> unit
+
 (** [settings_phases ctx s mask] enables exactly the phases in the bitmask. *)
 val settings_phases : context -> settings -> int -> unit
 

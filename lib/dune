@@ -1,7 +1,7 @@
 (library
  (name hegel)
  (public_name hegel)
- (libraries hegel_ffi ipaddr sexplib0 threads.posix unix yojson)
+ (libraries hegel_ffi ipaddr sexplib0 threads.posix unix)
  (private_modules
   generators_core
   generators_primitives

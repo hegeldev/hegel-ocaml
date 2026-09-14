@@ -14,7 +14,7 @@ let with_env_dir dir ~f =
     ~finally:(fun () ->
       match prev with
       | Some v -> Core_unix.putenv ~key:env_var ~data:v
-      | None -> Core_unix.putenv ~key:env_var ~data:"")
+      | None -> Core_unix.unsetenv env_var)
     ~f
 ;;
 
@@ -95,9 +95,9 @@ let test_passing_writes_sdk_jsonl () =
         Yojson.Safe.to_string (List.Assoc.find_exn eval_assoc ~equal:String.equal "id")
       in
       Alcotest.(check bool)
-        "id mentions test_ppx_hegel_test"
+        "id names the module and test"
         true
-        (String.is_substring id ~substring:"simple_pass in test_ppx_hegel_test");
+        (String.is_substring id ~substring:"test_ppx_hegel_test::simple_pass");
       (* location.file should mention the test file. *)
       let loc = List.Assoc.find_exn eval_assoc ~equal:String.equal "location" in
       let loc_assoc =

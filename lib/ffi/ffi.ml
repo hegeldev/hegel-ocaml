@@ -199,6 +199,18 @@ let c_settings_database_key =
     (ptr void @-> ptr void @-> string_opt @-> returning int)
 ;;
 
+let c_settings_test_location =
+  foreign
+    "hegel_settings_set_test_location"
+    (ptr void
+     @-> ptr void
+     @-> string (* file *)
+     @-> uint32_t (* begin_line *)
+     @-> string (* class_name *)
+     @-> string (* function *)
+     @-> returning int)
+;;
+
 let c_settings_new_for_profile =
   foreign
     "hegel_settings_new_for_profile"
@@ -960,6 +972,18 @@ let settings_report_multiple_failures ctx s b =
 let settings_show_statistics ctx s b = check_rc ctx (c_settings_show_statistics ctx s b)
 let settings_database ctx s d = check_rc ctx (c_settings_database ctx s d)
 let settings_database_key ctx s k = check_rc ctx (c_settings_database_key ctx s k)
+
+let settings_test_location ctx s ~file ~begin_line ~class_name ~function_name =
+  check_rc
+    ctx
+    (c_settings_test_location
+       ctx
+       s
+       file
+       (Unsigned.UInt32.of_int begin_line)
+       class_name
+       function_name)
+;;
 
 let settings_phases ctx s mask =
   check_rc ctx (c_settings_phases ctx s (Unsigned.UInt32.of_int mask))

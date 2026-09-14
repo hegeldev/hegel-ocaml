@@ -37,6 +37,13 @@ exception Flaky_strategy
 
 open Settings
 
+(** A source location identifying a single test. See [Hegel.test_location]. *)
+type test_location =
+  { function_name : string
+  ; file : string
+  ; begin_line : int
+  }
+
 (** Outcome of replaying a single failure blob. *)
 type replay =
   | Undecodable of string
@@ -703,10 +710,25 @@ let state_machine_free tc ~state_machine = Ffi.state_machine_free tc.context sta
 (* Settings translation                                                *)
 (* ------------------------------------------------------------------ *)
 
-(** [build_ffi_settings ctx settings ~database_key] allocates the native
-    settings handle for a run: [Settings.to_ffi]. The caller must free it. *)
-let build_ffi_settings ctx (settings : Settings.t) ~database_key =
-  Settings.to_ffi ctx settings ~database_key
+(** [build_ffi_settings ctx settings ~database_key ~test_location] allocates the
+    native settings handle for a run: [Settings.to_ffi], plus the test's
+    location when one is known. libhegel uses the location to report the
+    run's result as an Antithesis assertion (see [Ffi.settings_test_location]);
+    without one it reports nothing. The "class" is the file path without the .ml
+    extension. The caller must free the handle. *)
+let build_ffi_settings ctx (settings : Settings.t) ~database_key ~test_location =
+  let s = Settings.to_ffi ctx settings ~database_key in
+  Option.iter
+    (fun (loc : test_location) ->
+       Ffi.settings_test_location
+         ctx
+         s
+         ~file:loc.file
+         ~begin_line:loc.begin_line
+         ~class_name:(Filename.remove_extension loc.file)
+         ~function_name:loc.function_name)
+    test_location;
+  s
 ;;
 
 type case_outcome =
@@ -821,7 +843,7 @@ let print_failure_header ~cases_run ~cases_discarded test_location =
   let title =
     match test_location with
     | None -> "Failure"
-    | Some (loc : Antithesis.test_location) ->
+    | Some (loc : test_location) ->
       Printf.sprintf "Failure: %s (%s:%d)" loc.function_name loc.file loc.begin_line
   in
   let prefix = Printf.sprintf "--- %s " title in
@@ -855,20 +877,15 @@ let handle_result
       ctx
       result
   =
-  let emit ~passed =
-    Option.iter (fun loc -> Antithesis.emit_assertion loc ~passed) test_location
-  in
   match Ffi.result_status ctx result with
-  | Run_passed -> emit ~passed:true
+  | Run_passed -> ()
   | Run_error ->
-    emit ~passed:false;
     raise
       (Failure
          (Option.value
             (Ffi.result_error ctx result)
             ~default:"hegel: run error (no message)"))
   | Run_failed ->
-    emit ~passed:false;
     (* Failures are caller-owned snapshots, independent of the run result. *)
     let failures = Ffi.result_failures ctx result in
     Fun.protect
@@ -998,9 +1015,10 @@ let run_from_blob ctx ~(settings : Settings.t) ~ffi_settings ~test_fn blob =
     ignored); no engine worker, shrinking, or database is involved.
 
     @param test_location
-    source location of the test, used by the Antithesis integration.
-    Provided automatically by the [let%hegel_test] PPX. When omitted, no
-    Antithesis assertion is emitted.
+    source location of the test. Passed to libhegel, which inside Antithesis
+    reports the run's result as an assertion at that location. It is also the
+    default database key. Provided automatically by the [let%hegel_test]
+    PPX. When omitted, nothing is reported.
     @param from_ppx
     [true] when the run is driven by the [let%hegel_test] PPX; only set by the
     PPX. Selects the [[@@failure_blobs [...]]] attribute form of the [rerun with:]
@@ -1034,12 +1052,11 @@ let run_test
     | Some _ as k -> k
     | None ->
       Option.map
-        (fun (loc : Antithesis.test_location) ->
-           Printf.sprintf "%s:%s" loc.file loc.function_name)
+        (fun (loc : test_location) -> Printf.sprintf "%s:%s" loc.file loc.function_name)
         test_location
   in
   let ctx = Ffi.context_new () in
-  let ffi_settings = build_ffi_settings ctx settings ~database_key in
+  let ffi_settings = build_ffi_settings ctx settings ~database_key ~test_location in
   let run_body () =
     match failure_blobs with
     | [] -> run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location ~from_ppx

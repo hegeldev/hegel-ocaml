@@ -62,8 +62,6 @@
    (and
     :with-dev-setup
     (= 0.29.0)))
-  (yojson
-   (>= 1.7))
   (odoc :with-doc))
  (depopts
   (core
