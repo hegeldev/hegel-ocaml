@@ -77,6 +77,7 @@ type test_case =
   { handle : Ffi.test_case
   ; context : Ffi.context
   ; is_final : bool
+  ; is_nondeterministic : bool
   ; verbosity : Settings.verbosity
   ; mutable test_aborted : bool
   ; mutable draw_depth : int
@@ -145,6 +146,7 @@ let clone (tc : test_case) =
   { handle
   ; context
   ; is_final = tc.is_final
+  ; is_nondeterministic = tc.is_nondeterministic
   ; verbosity = tc.verbosity
   ; test_aborted = false
   ; draw_depth = tc.draw_depth
@@ -162,6 +164,7 @@ let with_block (tc : test_case) ~indent f =
     { handle
     ; context
     ; is_final = tc.is_final
+    ; is_nondeterministic = tc.is_nondeterministic
     ; verbosity = tc.verbosity
     ; test_aborted = false
     ; draw_depth = 0
@@ -200,6 +203,10 @@ let join (w : 'a worker) =
   match !(w.result) with
   | Ok v -> v
   | Error exn -> raise exn
+;;
+
+let set_worker_index tc worker_index =
+  Ffi.test_case_set_worker tc.context tc.handle ~worker_index
 ;;
 
 (** Domain-local flag to detect nested test cases. *)
@@ -604,6 +611,29 @@ type collection = Ffi.collection
 type pool = Ffi.pool
 type state_machine = Ffi.state_machine
 
+let new_state_machine_with_concurrency
+      tc
+      ~rule_names
+      ~rule_groups
+      ~invariant_names
+      ~invariants_always_check
+      ~step_count
+      ~min_concurrency
+      ~max_concurrency
+  =
+  with_stop_guard tc (fun () ->
+    Ffi.new_state_machine
+      tc.context
+      tc.handle
+      ~rule_names
+      ~rule_groups
+      ~invariant_names
+      ~invariants_always_check
+      ~step_count
+      ~min_concurrency
+      ~max_concurrency)
+;;
+
 (** [new_collection tc ~min_size ~max_size] starts an engine-managed collection.
     Release it with {!collection_free}. Raises {!Data_exhausted} on StopTest. *)
 let new_collection tc ~min_size ~max_size =
@@ -666,13 +696,22 @@ let new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check ~
          ~step_count))
 ;;
 
+let state_machine_next_group tc ~state_machine =
+  with_stop_guard tc (fun () ->
+    Ffi.state_machine_next_group tc.context tc.handle ~state_machine)
+;;
+
 (** [state_machine_next_round tc ~state_machine] asks the engine whether the
     machine should run another round: [false] once the step budget for the test
     case is exhausted. Call it before the first rule and after every round.
     Raises {!Data_exhausted} when the engine's choice budget is exhausted. *)
 let state_machine_next_round tc ~state_machine =
+  Option.is_some (state_machine_next_group tc ~state_machine)
+;;
+
+let state_machine_next_rule_for_worker tc ~state_machine ~worker_index =
   with_stop_guard tc (fun () ->
-    Option.is_some (Ffi.state_machine_next_group tc.context tc.handle ~state_machine))
+    Ffi.state_machine_next_rule tc.context tc.handle ~state_machine ~worker_index)
 ;;
 
 (** [state_machine_next_rule tc ~state_machine] draws the index of the next
@@ -680,16 +719,19 @@ let state_machine_next_round tc ~state_machine =
     should ask {!state_machine_next_round} again. Raises {!Data_exhausted} when
     the engine's choice budget is exhausted. *)
 let state_machine_next_rule tc ~state_machine =
+  state_machine_next_rule_for_worker tc ~state_machine ~worker_index:0
+;;
+
+let state_machine_rule_rejected_for_worker tc ~state_machine ~worker_index =
   with_stop_guard tc (fun () ->
-    Ffi.state_machine_next_rule tc.context tc.handle ~state_machine ~worker_index:0)
+    Ffi.state_machine_rule_rejected tc.context tc.handle ~state_machine ~worker_index)
 ;;
 
 (** [state_machine_rule_rejected tc ~state_machine] tells the engine the rule it
     last handed out did not complete, so it does not count against the step
     budget for this test case. *)
 let state_machine_rule_rejected tc ~state_machine =
-  with_stop_guard tc (fun () ->
-    Ffi.state_machine_rule_rejected tc.context tc.handle ~state_machine ~worker_index:0)
+  state_machine_rule_rejected_for_worker tc ~state_machine ~worker_index:0
 ;;
 
 (** [state_machine_should_check_invariant tc ~state_machine ~invariant_index]
