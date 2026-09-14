@@ -557,6 +557,53 @@ let concurrent_pool_add_reuse_consume_test () =
        Alcotest.(check bool) "ends empty" true (P.is_empty pool))
 ;;
 
+let pool_reusable_clones_test () =
+  let module P = Hegel.Stateful.Pool in
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
+    let original = ref 10 in
+    let shared_pool = P.create tc in
+    P.add shared_pool original;
+    let shared = Hegel.draw_silent tc (P.values_reusable shared_pool) in
+    Alcotest.(check bool) "default returns original" true (phys_equal shared original);
+    let pool = P.create ~clone:(fun value -> ref !value) tc in
+    P.add pool original;
+    let generator = P.values_reusable pool in
+    let first = Hegel.draw_silent tc generator in
+    first := 99;
+    let second = Hegel.draw_silent tc generator in
+    Alcotest.(check int) "second draw is independent" 10 !second;
+    Alcotest.(check int) "reuse preserves size" 1 (P.size pool);
+    let consumed = Hegel.draw_silent tc (P.values_consumed pool) in
+    Alcotest.(check bool) "consume returns original" true (phys_equal consumed original);
+    Alcotest.(check int) "consume empties pool" 0 (P.size pool))
+;;
+
+let concurrent_pool_reusable_clones_test () =
+  let module P = Hegel.Stateful.Concurrent_pool in
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
+    let original = ref 10 in
+    let clone_count = ref 0 in
+    let pool =
+      P.create
+        ~clone:(fun value ->
+          incr clone_count;
+          ref !value)
+        tc
+    in
+    P.add pool tc original;
+    let generator = P.values_reusable pool in
+    let first = Hegel.draw_silent tc generator in
+    first := 99;
+    let second = Hegel.draw_silent tc generator in
+    Alcotest.(check int) "each draw clones" 2 !clone_count;
+    Alcotest.(check int) "second draw is independent" 10 !second;
+    Alcotest.(check int) "reuse preserves size" 1 (P.size pool);
+    let consumed = Hegel.draw_silent tc (P.values_consumed pool) in
+    Alcotest.(check bool) "consume returns original" true (phys_equal consumed original);
+    Alcotest.(check int) "consume does not clone" 2 !clone_count;
+    Alcotest.(check bool) "consume empties pool" true (P.is_empty pool))
+;;
+
 let concurrent_pool_empty_draw_rejects_test () =
   let module P = Hegel.Stateful.Concurrent_pool in
   match
@@ -865,6 +912,14 @@ let tests =
       "stateful: concurrent pool add/reuse/consume"
       `Quick
       concurrent_pool_add_reuse_consume_test
+  ; Alcotest.test_case
+      "stateful: pool reusable draws clone"
+      `Quick
+      pool_reusable_clones_test
+  ; Alcotest.test_case
+      "stateful: concurrent pool reusable draws clone"
+      `Quick
+      concurrent_pool_reusable_clones_test
   ; Alcotest.test_case
       "stateful: concurrent pool empty draw rejects"
       `Quick
