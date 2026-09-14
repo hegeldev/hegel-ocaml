@@ -135,8 +135,7 @@ let%hegel_test multi_fail_test tc =
   if v <= 30 then raise B
 [@@settings
   { (Hegel.Settings.create ~test_cases:300 ~seed:9 ()) with
-    print_blob = true
-  ; report_multiple_failures = true
+    report_multiple_failures = true
   }]
 ;;
 

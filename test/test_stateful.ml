@@ -438,6 +438,8 @@ let test_pool_created_inside_rule () =
     }
   in
   Hegel.run_hegel_test ~settings (fun tc -> S.run tc (module M) ~init:None ~step_count:20)
+;;
+
 let concurrent_rule_accessors_test () =
   let module R = Hegel.Stateful.Concurrent_rule in
   let rule = R.create ~name:"read" ~group:"io" ~step:(fun _tc _state -> ()) () in
@@ -465,12 +467,13 @@ let concurrent_smoke_test () =
   in
   Hegel.run_hegel_test
     ~settings:
-      (Hegel.settings ~test_cases:5 ~seed:0 ()
-       |> Hegel.with_stateful_step_count 5
-       |> Hegel.with_database Disabled)
+      { (Hegel.Settings.create ~test_cases:5 ~seed:0 ()) with
+        database = Hegel.Settings.Disabled
+      }
     (fun tc ->
        let state = Atomic.make 0 in
        S.run_concurrent
+         ~step_count:5
          ~init:state
          ~rules:[ increment; decrement ]
          ~invariants:[ (fun value -> assert (Atomic.get value >= 0)) ]
@@ -515,11 +518,12 @@ let concurrent_groups_do_not_overlap_test () =
   in
   Hegel.run_hegel_test
     ~settings:
-      (Hegel.settings ~test_cases:25 ~seed:0 ()
-       |> Hegel.with_stateful_step_count 10
-       |> Hegel.with_database Disabled)
+      { (Hegel.Settings.create ~test_cases:25 ~seed:0 ()) with
+        database = Hegel.Settings.Disabled
+      }
     (fun tc ->
        S.run_concurrent
+         ~step_count:10
          ~init:()
          ~rules:[ alpha; beta; one; anonymous ]
          ~min_concurrency:8
@@ -535,7 +539,8 @@ let concurrent_groups_do_not_overlap_test () =
 let concurrent_pool_add_reuse_consume_test () =
   let module P = Hegel.Stateful.Concurrent_pool in
   Hegel.run_hegel_test
-    ~settings:(Hegel.settings ~seed:0 () |> Hegel.with_database Disabled)
+    ~settings:
+      { (Hegel.Settings.create ~seed:0 ()) with database = Hegel.Settings.Disabled }
     (fun tc ->
        let pool = P.create tc in
        Alcotest.(check bool) "starts empty" true (P.is_empty pool);
@@ -554,17 +559,17 @@ let concurrent_pool_add_reuse_consume_test () =
 
 let concurrent_pool_empty_draw_rejects_test () =
   let module P = Hegel.Stateful.Concurrent_pool in
-  let reached = ref false in
-  Hegel.run_hegel_test
-    ~settings:
-      (Hegel.settings ~test_cases:5 ~seed:0 ()
-       |> Hegel.with_database Disabled
-       |> Hegel.with_suppress_health_check [ Filter_too_much ])
-    (fun tc ->
-       let pool = P.create tc in
-       ignore (Hegel.draw_silent tc (P.values_consumed pool) : int);
-       reached := true);
-  Alcotest.(check bool) "empty draw rejects" false !reached
+  match
+    Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
+      let pool = P.create tc in
+      ignore (Hegel.draw_silent tc (P.values_consumed pool) : int))
+  with
+  | () -> Alcotest.fail "expected Unsatisfiable"
+  | exception Failure msg ->
+    Alcotest.(check bool)
+      "empty draw rejects"
+      true
+      (String.is_substring_at msg ~pos:0 ~substring:"Unsatisfiable")
 ;;
 
 let concurrent_pool_parallel_adds_test () =
@@ -579,13 +584,14 @@ let concurrent_pool_parallel_adds_test () =
   in
   Hegel.run_hegel_test
     ~settings:
-      (Hegel.settings ~test_cases:25 ~seed:0 ()
-       |> Hegel.with_stateful_step_count 20
-       |> Hegel.with_database Disabled)
+      { (Hegel.Settings.create ~test_cases:25 ~seed:0 ()) with
+        database = Hegel.Settings.Disabled
+      }
     (fun tc ->
        let pool = S.Concurrent_pool.create tc in
        let next = Atomic.make 0 in
        S.run_concurrent
+         ~step_count:20
          ~init:(pool, next)
          ~rules:[ add ]
          ~min_concurrency:8
@@ -620,15 +626,16 @@ let concurrent_pool_parallel_consumes_test () =
   in
   Hegel.run_hegel_test
     ~settings:
-      (Hegel.settings ~test_cases:25 ~seed:0 ()
-       |> Hegel.with_stateful_step_count 10
-       |> Hegel.with_database Disabled)
+      { (Hegel.Settings.create ~test_cases:25 ~seed:0 ()) with
+        database = Hegel.Settings.Disabled
+      }
     (fun tc ->
        let pool = S.Concurrent_pool.create tc in
        List.iter (List.range 0 initial_size) ~f:(S.Concurrent_pool.add pool tc);
        let consumed = ref [] in
        let consumed_lock = Mutex.create () in
        S.run_concurrent
+         ~step_count:10
          ~init:(pool, consumed_lock, consumed)
          ~rules:[ consume ]
          ~min_concurrency:4
@@ -671,15 +678,16 @@ let concurrent_pool_parallel_adds_and_consumes_test () =
   in
   Hegel.run_hegel_test
     ~settings:
-      (Hegel.settings ~test_cases:25 ~seed:0 ()
-       |> Hegel.with_stateful_step_count 10
-       |> Hegel.with_database Disabled)
+      { (Hegel.Settings.create ~test_cases:25 ~seed:0 ()) with
+        database = Hegel.Settings.Disabled
+      }
     (fun tc ->
        let pool = S.Concurrent_pool.create tc in
        let next = Atomic.make 0 in
        let consumed = ref [] in
        let consumed_lock = Mutex.create () in
        S.run_concurrent
+         ~step_count:10
          ~init:(pool, next, consumed_lock, consumed)
          ~rules:[ exchange ]
          ~min_concurrency:8
@@ -713,12 +721,13 @@ let concurrent_worker_exception_is_rethrown_test () =
   match
     Hegel.run_hegel_test
       ~settings:
-        (Hegel.settings ~test_cases:20 ~seed:0 ()
-         |> Hegel.with_stateful_step_count 5
-         |> Hegel.with_database Disabled
-         |> Hegel.with_verbosity Quiet)
+        { (Hegel.Settings.create ~test_cases:20 ~seed:0 ()) with
+          database = Hegel.Settings.Disabled
+        ; verbosity = Hegel.Settings.Quiet
+        }
       (fun tc ->
          S.run_concurrent
+           ~step_count:5
            ~init:()
            ~rules:[ boom ]
            ~min_concurrency:2
@@ -746,8 +755,10 @@ let concurrent_worker_usage_error_test () =
       ()
   in
   match
-    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:2 ~seed:0 ()) (fun tc ->
-      S.run_concurrent ~init:() ~rules:[ bad ] ~min_concurrency:1 ~max_concurrency:1 tc)
+    Hegel.run_hegel_test
+      ~settings:(Hegel.Settings.create ~test_cases:2 ~seed:0 ())
+      (fun tc ->
+         S.run_concurrent ~init:() ~rules:[ bad ] ~min_concurrency:1 ~max_concurrency:1 tc)
   with
   | () -> Alcotest.fail "expected Usage_error"
   | exception Hegel.Usage_error message ->
@@ -767,7 +778,7 @@ let concurrent_invalid_bounds_test () =
     ]
     ~f:(fun (min_concurrency, max_concurrency, expected) ->
       match
-        Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
+        Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
           S.run_concurrent ~init:() ~rules:[ noop ] ~min_concurrency ~max_concurrency tc)
       with
       | () -> Alcotest.fail "expected Usage_error"
@@ -777,7 +788,7 @@ let concurrent_invalid_bounds_test () =
 
 let concurrent_no_rules_test () =
   match
-    Hegel.run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun tc ->
+    Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
       Hegel.Stateful.run_concurrent
         ~init:()
         ~rules:[]

@@ -371,7 +371,7 @@ let test_run_failing_reraises () =
 
 let test_run_usage_error_propagates () =
   match
-    run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun _tc ->
+    run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun _tc ->
       raise (Usage_error "usage sentinel"))
   with
   | () -> Alcotest.fail "expected Usage_error"
@@ -382,7 +382,7 @@ let test_run_usage_error_propagates () =
 
 let test_run_backend_error_propagates () =
   match
-    run_hegel_test ~settings:(Hegel.settings ~test_cases:1 ()) (fun _tc ->
+    run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun _tc ->
       raise (Internal.Backend_error "backend sentinel"))
   with
   | () -> Alcotest.fail "expected Backend_error"
