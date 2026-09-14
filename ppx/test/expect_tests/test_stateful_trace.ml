@@ -155,12 +155,14 @@ let%expect_test "nondeterministic failure reports the discovering execution" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (1 discarded):
 
-    preamble
-    Concurrency level: 2
-    Initial invariant check.
-    [worker 0 +time] Rule: boom
-    [worker 0 +time]   draw_1 = 3881432
-    ---------------- Round 1: group "<anonymous>" ----------------
+      preamble
+      Concurrency level: 2
+      Initial invariant check.
+      ---------------- Round 1: group "<anonymous>" ----------------
+      [worker 0 +time] Rule: boom
+      [worker 0 +time]   draw_1 = 79891905220201248
+      [worker 1 +time] Rule: boom
+      [worker 1 +time]   draw_1 = 5297
 
     Exception: Failure("concurrent boom")
     |}]
@@ -194,9 +196,9 @@ let%expect_test "one concurrent worker remains deterministic" =
 
       Concurrency level: 1
       Initial invariant check.
-    [worker 0 +time]   Rule: boom
-    [worker 0 +time]     draw_1 = 0
       ---------------- Round 1: group "<anonymous>" ----------------
+      [worker 0 +time] Rule: boom
+      [worker 0 +time]   draw_1 = 0
 
     Exception: Failure("concurrent boom")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -228,4 +230,49 @@ let%expect_test "quiet nondeterministic failure stays quiet" =
   if not !raised then failwith "expected concurrent failure";
   print_string (Expect_scrub.scrub_concurrent_report output);
   [%expect {||}]
+;;
+
+let%expect_test "concurrent invariant failures retain their names" =
+  let rule =
+    Stateful.Concurrent_rule.create
+      ~name:"increment"
+      ~step:(fun _tc state -> Atomic.incr state)
+      ()
+  in
+  let invariant =
+    Stateful.Invariant.create
+      ~name:"stays_zero"
+      ~always_check:true
+      ~inv:(fun _tc state -> if Atomic.get state <> 0 then failwith "invariant boom")
+      ()
+  in
+  (try
+     Hegel.run_hegel_test
+       ~settings:
+         { (Settings.create ~test_cases:1 ~seed:0 ()) with database = Settings.Disabled }
+       (fun tc ->
+          Stateful.run_concurrent
+            ~init:(Atomic.make 0)
+            ~rules:[ rule ]
+            ~invariants:[ invariant ]
+            ~min_concurrency:1
+            ~max_concurrency:1
+            tc)
+   with
+   | Failure message when String.equal message "invariant boom" -> ());
+  print_string (Expect_scrub.scrub_concurrent_report [%expect.output]);
+  [%expect
+    {|
+    --- Failure ------------------------------------------------------------
+    Falsified after 1 test case (0 discarded):
+
+      Concurrency level: 1
+      Initial invariant check.
+      ---------------- Round 1: group "<anonymous>" ----------------
+      [worker 0 +time] Rule: increment
+      Invariant stays_zero violated after round 1.
+
+    Exception: Failure("invariant boom")
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
+    |}]
 ;;
