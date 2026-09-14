@@ -68,6 +68,9 @@ val spawn : test_case -> (test_case -> 'a) -> 'a worker
     worker raised. Re-exported as [Hegel.join]. *)
 val join : 'a worker -> 'a
 
+(** Tags subsequent output from [tc] with a concurrent worker index. *)
+val set_worker_index : test_case -> int -> unit
+
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available; derived from the assertion's location so
     the shrinker can group probes for the same bug. *)
@@ -331,6 +334,19 @@ val pool_generate : test_case -> pool:pool -> ?consume:bool -> unit -> int
     {!state_machine_free}. *)
 type state_machine = Hegel_ffi.Ffi.state_machine
 
+(** Registers a sequential or concurrent engine-owned state machine and
+    returns its handle with the concurrency level selected by libhegel. *)
+val new_state_machine_with_concurrency
+  :  test_case
+  -> rule_names:string list
+  -> rule_groups:int list
+  -> invariant_names:string list
+  -> invariants_always_check:bool list
+  -> step_count:int
+  -> min_concurrency:int
+  -> max_concurrency:int
+  -> state_machine * int
+
 (** [new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check ~step_count] registers a sequential engine-owned state machine with the
     named rules and invariants, running at most [step_count] rules per test
     case. Raises {!Usage_error} if [rule_names] is empty or [step_count] is
@@ -342,6 +358,10 @@ val new_state_machine
   -> invariants_always_check:bool list
   -> step_count:int
   -> state_machine
+
+(** Starts the next state-machine round and returns its group id, or [None]
+    when the state machine is complete. *)
+val state_machine_next_group : test_case -> state_machine:state_machine -> int option
 
 (** [state_machine_next_round tc ~state_machine] asks the engine whether the
     machine should run another round of rules: [false] once the step budget for
@@ -356,10 +376,25 @@ val state_machine_next_round : test_case -> state_machine:state_machine -> bool
     over. Raises {!Data_exhausted} when the engine's choice budget is exhausted. *)
 val state_machine_next_rule : test_case -> state_machine:state_machine -> int option
 
+(** Worker-indexed form of {!state_machine_next_rule} for concurrent stateful
+    execution. *)
+val state_machine_next_rule_for_worker
+  :  test_case
+  -> state_machine:state_machine
+  -> worker_index:int
+  -> int option
+
 (** [state_machine_rule_rejected tc ~state_machine] reports that the rule last
     returned by {!state_machine_next_rule} did not complete. A rejected rule
     does not count against the step budget. *)
 val state_machine_rule_rejected : test_case -> state_machine:state_machine -> unit
+
+(** Worker-indexed form of {!state_machine_rule_rejected}. *)
+val state_machine_rule_rejected_for_worker
+  :  test_case
+  -> state_machine:state_machine
+  -> worker_index:int
+  -> unit
 
 (** [state_machine_should_check_invariant tc ~state_machine ~invariant_index]
     decides whether to run invariant [invariant_index] after the current round.
