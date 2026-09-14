@@ -93,8 +93,11 @@ module Pool : sig
   type 'a t
 
   (** Creates an empty {!Pool.t}. Pools are tied to a test case. Do not reuse
-      one across test cases. *)
-  val create : Internal.test_case -> 'a t
+      one across test cases. Drawn mutable values are shared by default.
+      Pass a copying function for independent mutable values. Consumed draws
+      return the stored value directly. [clone] must not call back into the
+      same pool. *)
+  val create : ?clone:('a -> 'a) -> Internal.test_case -> 'a t
 
   (** Records [value] in [variables] for later draws.
 
@@ -111,8 +114,8 @@ module Pool : sig
       ]} *)
   val size : _ t -> int
 
-  (** Create an unprintable generator that returns a variable from the [pool]
-      without removing it. Calls [assume false] if the [pool] is empty.
+  (** Draws a value without removing it. [draw] on an empty pool rejects the current
+      rule.
 
       {[
       let existing = draw_silent tc (Stateful.Pool.values_reusable pool)
@@ -125,6 +128,33 @@ module Pool : sig
       {[
       let taken = draw_silent tc (Stateful.Pool.values_consumed pool)
       ]} *)
+  val values_consumed : 'a t -> ('a, Generators.unprintable) Generators.generator
+end
+
+module Concurrent_pool : sig
+  (** A thread-safe pool of values shared by concurrent stateful workers. *)
+  type 'a t
+
+  (** Creates an empty concurrent pool. Pools are tied to a test case. Do not reuse
+      one across test cases. Drawn mutable values are shared by default.
+      Pass a copying function for independent mutable values. Consumed draws
+      return the stored value directly. [clone] must not call back into the
+      same pool. *)
+  val create : ?clone:('a -> 'a) -> Internal.test_case -> 'a t
+
+  (** [add pool tc value] records [value] using the calling worker's test-case
+      clone. *)
+  val add : 'a t -> Internal.test_case -> 'a -> unit
+
+  val is_empty : _ t -> bool
+  val size : _ t -> int
+
+  (** Draws a value without removing it. [draw] on an empty pool rejects the current
+      rule. *)
+  val values_reusable : 'a t -> ('a, Generators.unprintable) Generators.generator
+
+  (** Draws and atomically removes a value. An empty-pool draw rejects the
+      current rule. *)
   val values_consumed : 'a t -> ('a, Generators.unprintable) Generators.generator
 end
 
@@ -189,6 +219,25 @@ module Invariant : sig
 
   (** Returns the name of the invariant. *)
   val name : _ t -> string
+end
+
+module Concurrent_rule : sig
+  (** A rule applied to shared state by concurrent worker threads. The caller is
+      responsible for synchronizing mutable state accessed by rule bodies. *)
+  type 'state t
+
+  (** [create ~name ?group ~step] declares a concurrent rule. Only rules with the
+      same [group] may run concurrently. Rules without an explicit group are in
+      one anonymous group. *)
+  val create
+    :  ?group:string
+    -> name:string
+    -> step:(Internal.test_case -> 'state -> unit)
+    -> unit
+    -> 'state t
+
+  val name : _ t -> string
+  val group : _ t -> string
 end
 
 (** {2 Running stateful tests} *)

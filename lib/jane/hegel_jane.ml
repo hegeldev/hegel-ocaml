@@ -114,7 +114,7 @@ let hash_tables keys values ?min_size ?max_size () =
 ;;
 
 let resolve_draw values ~consume variable_id =
-  G.Ppx_internal.resolve_pool_draw
+  G.Private.resolve_pool_draw
     ~find:(Hashtbl.find values)
     ~remove:(Hashtbl.remove values)
     ~consume
@@ -122,7 +122,8 @@ let resolve_draw values ~consume variable_id =
 ;;
 
 let pool_values ~pool ~values ~consume =
-  G.Ppx_internal.make_pool_values
+  G.Private.make_pool_values
+    ~lock:None
     ~pool
     ~find:(Hashtbl.find values)
     ~remove:(Hashtbl.remove values)

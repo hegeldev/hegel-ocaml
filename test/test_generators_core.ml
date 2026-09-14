@@ -1,6 +1,6 @@
 open Hegel
 open Generators
-open Generators.Ppx_internal
+open Generators.Private
 
 (* [Labels.from_name] / [Labels.combine] are the engine's own hashes. *)
 let test_labels_match_engine () =
