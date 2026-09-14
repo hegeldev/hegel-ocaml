@@ -326,6 +326,11 @@ val test_case_clone : context -> test_case -> test_case
     freed with {!test_case_free}. *)
 val test_case_block : context -> test_case -> indent:int -> test_case
 
+(** [test_case_set_worker ctx tc ~worker_index] attributes subsequent output
+    to the worker. The native printer places the worker prefix before indentation;
+    derived blocks and clones inherit the attribution. *)
+val test_case_set_worker : context -> test_case -> worker_index:int -> unit
+
 (** [test_case_is_nondeterministic ctx tc] reports whether [tc] belongs to a
     run already declared nondeterministic. *)
 val test_case_is_nondeterministic : context -> test_case -> bool

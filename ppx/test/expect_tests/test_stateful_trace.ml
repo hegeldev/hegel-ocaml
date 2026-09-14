@@ -131,14 +131,14 @@ let%expect_test "nondeterministic failure reports the discovering execution" =
   (try
      Hegel.run_hegel_test
        ~settings:
-         (settings ~test_cases:20 ~seed:0 ()
-          |> with_stateful_step_count 5
-          |> with_database Disabled
-          |> with_verbosity Normal
-          |> with_print_blob true)
+         { (Settings.create ~test_cases:20 ~seed:0 ()) with
+           database = Settings.Disabled
+         ; verbosity = Settings.Normal
+         }
        (fun tc ->
           Hegel.note tc "preamble";
           Stateful.run_concurrent
+            ~step_count:5
             ~init:()
             ~rules:[ concurrent_boom_rule () ]
             ~min_concurrency:2
@@ -158,9 +158,9 @@ let%expect_test "nondeterministic failure reports the discovering execution" =
     preamble
     Concurrency level: 2
     Initial invariant check.
-    ---------------- Round 1: group "<anonymous>" ----------------
     [worker 0 +time] Rule: boom
     [worker 0 +time]   draw_1 = 3881432
+    ---------------- Round 1: group "<anonymous>" ----------------
 
     Exception: Failure("concurrent boom")
     |}]
@@ -170,13 +170,13 @@ let%expect_test "one concurrent worker remains deterministic" =
   (try
      Hegel.run_hegel_test
        ~settings:
-         (settings ~test_cases:20 ~seed:0 ()
-          |> with_stateful_step_count 5
-          |> with_database Disabled
-          |> with_verbosity Normal
-          |> with_print_blob true)
+         { (Settings.create ~test_cases:20 ~seed:0 ()) with
+           database = Settings.Disabled
+         ; verbosity = Settings.Normal
+         }
        (fun tc ->
           Stateful.run_concurrent
+            ~step_count:5
             ~init:()
             ~rules:[ concurrent_boom_rule () ]
             ~min_concurrency:1
@@ -194,9 +194,9 @@ let%expect_test "one concurrent worker remains deterministic" =
 
       Concurrency level: 1
       Initial invariant check.
-      ---------------- Round 1: group "<anonymous>" ----------------
     [worker 0 +time]   Rule: boom
     [worker 0 +time]     draw_1 = 0
+      ---------------- Round 1: group "<anonymous>" ----------------
 
     Exception: Failure("concurrent boom")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -208,12 +208,13 @@ let%expect_test "quiet nondeterministic failure stays quiet" =
   (try
      Hegel.run_hegel_test
        ~settings:
-         (settings ~test_cases:20 ~seed:0 ()
-          |> with_stateful_step_count 5
-          |> with_database Disabled
-          |> with_verbosity Quiet)
+         { (Settings.create ~test_cases:20 ~seed:0 ()) with
+           database = Settings.Disabled
+         ; verbosity = Settings.Quiet
+         }
        (fun tc ->
           Stateful.run_concurrent
+            ~step_count:5
             ~init:()
             ~rules:[ concurrent_boom_rule () ]
             ~min_concurrency:2

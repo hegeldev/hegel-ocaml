@@ -342,10 +342,22 @@ let c_test_case_free =
   foreign "hegel_test_case_free" (ptr void @-> ptr void @-> returning int)
 ;;
 
+let c_test_case_is_nondeterministic =
+  foreign
+    "hegel_test_case_is_nondeterministic"
+    (ptr void @-> ptr void @-> ptr bool @-> returning int)
+;;
+
 let c_test_case_clone =
   foreign
     "hegel_test_case_clone"
     (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+;;
+
+let c_test_case_set_worker =
+  foreign
+    "hegel_test_case_set_worker"
+    (ptr void @-> ptr void @-> int64_t @-> returning int)
 ;;
 
 let c_test_case_block =
@@ -1102,6 +1114,16 @@ let test_case_free ctx tc = check_rc ctx (c_test_case_free ctx tc)
 let test_case_clone ctx tc =
   let out = allocate (ptr void) null in
   check_rc ctx (c_test_case_clone ctx tc out);
+  !@out
+;;
+
+let test_case_set_worker ctx tc ~worker_index =
+  check_rc ctx (c_test_case_set_worker ctx tc (Int64.of_int worker_index))
+;;
+
+let test_case_block ctx tc ~indent =
+  let out = allocate (ptr void) null in
+  check_rc ctx (c_test_case_block ctx tc (Unsigned.UInt64.of_int indent) out);
   !@out
 ;;
 
