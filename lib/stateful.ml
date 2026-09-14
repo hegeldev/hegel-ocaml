@@ -14,16 +14,11 @@ module Pool = struct
      owned by the test case and lives until it completes. *)
   let create ?(clone = Fun.id) tc =
     let tc = Internal.clone tc in
-    let pool = Internal.new_pool tc in
-    { tc; data = { pool; values = Int_table.create 16; clone; lock = None } }
+    { tc; data = Pool_gen.create tc ~clone ~lock:None }
   ;;
 
-  let add t value =
-    let variable_id = Internal.pool_add t.tc ~pool:t.data.pool in
-    Int_table.replace t.data.values variable_id value
-  ;;
-
-  let size t = Int_table.length t.data.values
+  let add t value = Pool_gen.add t.data t.tc value
+  let size t = Pool_gen.size t.data
   let values_reusable t = Pool_gen.pool_values t.data ~consume:false
   let values_consumed t = Pool_gen.pool_values t.data ~consume:true
 end
@@ -31,22 +26,13 @@ end
 module Concurrent_pool = struct
   type 'a t = 'a Pool_gen.t
 
-  let create ?(clone = Fun.id) tc : _ t =
-    { pool = Internal.new_pool tc
-    ; values = Int_table.create 16
-    ; clone
-    ; lock = Some (Mutex.create ())
-    }
+  let create ?(clone = Fun.id) tc =
+    Pool_gen.create tc ~clone ~lock:(Some (Mutex.create ()))
   ;;
 
-  let add (t : _ t) tc value =
-    Pool_gen.with_lock t (fun () ->
-      let variable_id = Internal.pool_add tc ~pool:t.pool in
-      Int_table.replace t.values variable_id value)
-  ;;
-
-  let is_empty (t : _ t) = Pool_gen.with_lock t (fun () -> Int_table.length t.values = 0)
-  let size (t : _ t) = Pool_gen.with_lock t (fun () -> Int_table.length t.values)
+  let add = Pool_gen.add
+  let is_empty = Pool_gen.is_empty
+  let size = Pool_gen.size
   let values_reusable t = Pool_gen.pool_values t ~consume:false
   let values_consumed t = Pool_gen.pool_values t ~consume:true
 end
@@ -90,6 +76,26 @@ let section tc f =
   if Internal.should_print tc then Internal.with_block tc ~indent:2 f else f tc
 ;;
 
+let check_invariants tc ~state_machine ~invariants ~where ~sample state =
+  List.iteri
+    (fun i invariant ->
+       if
+         (not sample)
+         || Internal.state_machine_should_check_invariant
+              tc
+              ~state_machine
+              ~invariant_index:i
+       then (
+         match section tc (fun tc -> invariant.Invariant.inv tc state) with
+         | () -> ()
+         | exception e ->
+           Internal.note
+             tc
+             (Printf.sprintf "Invariant %s violated %s." (Invariant.name invariant) where);
+           raise e))
+    invariants
+;;
+
 let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
   let rule_array = Array.of_list rules in
   let invariant_names = List.map (fun inv -> Invariant.name inv) invariants in
@@ -109,35 +115,11 @@ let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
       (fun sexp_of -> Internal.print_line tc [ Text "state = "; Value (sexp_of state) ])
       sexp_of_state
   in
-  let check_invariants ~where ~sample state =
-    List.iteri
-      (fun i invariant ->
-         if
-           (not sample)
-           || Internal.state_machine_should_check_invariant
-                tc
-                ~state_machine
-                ~invariant_index:i
-         then (
-           match section tc (fun tc -> invariant.Invariant.inv tc state) with
-           | () -> ()
-           | exception e ->
-             Internal.note
-               tc
-               (Printf.sprintf
-                  "Invariant %s violated %s."
-                  (Invariant.name invariant)
-                  where);
-             raise e))
-      invariants
-  in
+  let check_invariants = check_invariants tc ~state_machine ~invariants in
   let announce_checks which =
     if not (List.is_empty invariants)
     then Internal.note tc (Printf.sprintf "Checking invariants on the %s state." which)
   in
-  print_state init;
-  announce_checks "initial";
-  check_invariants ~where:"in the initial state" ~sample:false init;
   let rec exec_round ~state ~steps_attempted ~rejected =
     match Internal.state_machine_next_rule tc ~state_machine with
     | None -> state, steps_attempted, rejected
@@ -177,6 +159,9 @@ let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
   Fun.protect
     ~finally:(fun () -> Internal.state_machine_free tc ~state_machine)
     (fun () ->
+       print_state init;
+       announce_checks "initial";
+       check_invariants ~where:"in the initial state" ~sample:false init;
        let final_state = loop ~state:init ~steps_attempted:0 in
        announce_checks "final";
        check_invariants ~where:"in the final state" ~sample:false final_state)

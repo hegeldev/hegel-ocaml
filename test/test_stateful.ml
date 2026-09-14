@@ -476,7 +476,12 @@ let concurrent_smoke_test () =
          ~step_count:5
          ~init:state
          ~rules:[ increment; decrement ]
-         ~invariants:[ (fun value -> assert (Atomic.get value >= 0)) ]
+         ~invariants:
+           [ S.Invariant.create
+               ~name:"nonnegative"
+               ~inv:(fun _tc value -> assert (Atomic.get value >= 0))
+               ()
+           ]
          ~min_concurrency:1
          ~max_concurrency:1
          tc)
@@ -816,6 +821,88 @@ let concurrent_worker_usage_error_test () =
       message
 ;;
 
+let concurrent_always_check_invariant_test () =
+  let module S = Hegel.Stateful in
+  let step_count = 10 in
+  Hegel.run_hegel_test
+    ~settings:
+      { (Hegel.Settings.create ~test_cases:1 ~seed:0 ()) with
+        database = Hegel.Settings.Disabled
+      }
+    (fun tc ->
+       let invariants_checked = ref 0 in
+       let step = S.Concurrent_rule.create ~name:"step" ~step:(fun _tc () -> ()) () in
+       let invariant =
+         S.Invariant.create
+           ~name:"check_every_round"
+           ~always_check:true
+           ~inv:(fun _tc () -> incr invariants_checked)
+           ()
+       in
+       S.run_concurrent
+         ~step_count
+         ~init:()
+         ~rules:[ step ]
+         ~invariants:[ invariant ]
+         ~min_concurrency:1
+         ~max_concurrency:1
+         tc;
+       Alcotest.(check int)
+         "one check per round plus initial/final states"
+         (step_count + 2)
+         !invariants_checked)
+;;
+
+let concurrent_invariant_waits_for_workers_test () =
+  let module S = Hegel.Stateful in
+  Hegel.run_hegel_test
+    ~settings:
+      { (Hegel.Settings.create ~test_cases:10 ~seed:0 ()) with
+        database = Hegel.Settings.Disabled
+      }
+    (fun tc ->
+       let active = Atomic.make 0 in
+       let rule =
+         S.Concurrent_rule.create
+           ~name:"work"
+           ~step:(fun _tc () ->
+             Atomic.incr active;
+             Thread.yield ();
+             Atomic.decr active)
+           ()
+       in
+       let invariant =
+         S.Invariant.create
+           ~name:"workers_finished"
+           ~always_check:true
+           ~inv:(fun _tc () -> assert (Atomic.get active = 0))
+           ()
+       in
+       S.run_concurrent
+         ~init:()
+         ~rules:[ rule ]
+         ~invariants:[ invariant ]
+         ~min_concurrency:4
+         ~max_concurrency:4
+         tc)
+;;
+
+let concurrent_clone_exception_releases_lock_test () =
+  let module P = Hegel.Stateful.Concurrent_pool in
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
+    let pool = P.create ~clone:(fun _ -> failwith "clone failed") tc in
+    P.add pool tc 42;
+    (match Hegel.draw_silent tc (P.values_reusable pool) with
+     | _ -> Alcotest.fail "expected clone failure"
+     | exception Failure message ->
+       Alcotest.(check string) "clone error" "clone failed" message);
+    Alcotest.(check int) "failed clone leaves value in pool" 1 (P.size pool);
+    Alcotest.(check int)
+      "consume still works"
+      42
+      (Hegel.draw_silent tc (P.values_consumed pool)))
+;;
+
 let concurrent_invalid_bounds_test () =
   let module S = Hegel.Stateful in
   let noop = S.Concurrent_rule.create ~name:"noop" ~step:(fun _tc () -> ()) () in
@@ -852,7 +939,19 @@ let concurrent_no_rules_test () =
 ;;
 
 let tests =
-  [ Alcotest.test_case "stateful: failing property shrinks" `Quick stateful_failure_test
+  [ Alcotest.test_case
+      "stateful: concurrent always-check invariants"
+      `Quick
+      concurrent_always_check_invariant_test
+  ; Alcotest.test_case
+      "stateful: concurrent invariants wait for workers"
+      `Quick
+      concurrent_invariant_waits_for_workers_test
+  ; Alcotest.test_case
+      "stateful: clone failure releases pool lock"
+      `Quick
+      concurrent_clone_exception_releases_lock_test
+  ; Alcotest.test_case "stateful: failing property shrinks" `Quick stateful_failure_test
   ; Alcotest.test_case
       "stateful: run drives a hand-written State_machine"
       `Quick

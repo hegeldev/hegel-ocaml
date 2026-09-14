@@ -359,6 +359,19 @@ module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) = struct
     | Some lock -> Mutex.protect lock f
   ;;
 
+  let create tc ~clone ~lock =
+    { pool = Internal.new_pool tc; values = Tbl.create 16; clone; lock }
+  ;;
+
+  let add t tc value =
+    with_lock t (fun () ->
+      let variable_id = Internal.pool_add tc ~pool:t.pool in
+      Tbl.replace t.values variable_id value)
+  ;;
+
+  let size t = with_lock t (fun () -> Tbl.length t.values)
+  let is_empty t = size t = 0
+
   (** [resolve_draw values ~consume variable_id] resolves a drawn pool id
       against the local [values] table, removing it when [consume]. Raises
       [Internal.Flaky_strategy] on an unknown id (an engine-contract violation). *)

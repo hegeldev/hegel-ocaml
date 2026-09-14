@@ -858,24 +858,18 @@ module Int_table : Stdlib.Hashtbl.S with type key = int
 (** [Make_pool (Tbl)] specializes the pool-drawing machinery to the concrete
     int-keyed hashtable module [Tbl]. *)
 module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) : sig
-  type 'a t =
-    { pool : Internal.pool
-    ; values : 'a Tbl.t
-    ; clone : 'a -> 'a
-    ; lock : Mutex.t option
-    }
+  type 'a t
 
-  (** Runs [f] under the pool's lock, if present. *)
-  val with_lock : _ t -> (unit -> 'a) -> 'a
+  val create : Internal.test_case -> clone:('a -> 'a) -> lock:Mutex.t option -> 'a t
+  val add : 'a t -> Internal.test_case -> 'a -> unit
+  val size : _ t -> int
+  val is_empty : _ t -> bool
 
   val resolve_draw : 'a Tbl.t -> consume:bool -> int -> 'a
 
-  (** Reusable draws call [t.clone] under [t.lock] when provided. Consumed
-      draws return the stored value directly. *)
-  val pool_values
-    :  'a t
-    -> consume:bool
-    -> ('a, unprintable) generator
+  (** Reusable draws use the pool's clone function under its lock, if present.
+      Consumed draws return the stored value directly. *)
+  val pool_values : 'a t -> consume:bool -> ('a, unprintable) generator
 end
 
 (** Implementation helpers for library modules and white-box tests. Not for
