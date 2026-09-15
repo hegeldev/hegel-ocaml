@@ -682,18 +682,16 @@ let pool_generate tc ~pool ?(consume = false) () =
     {!state_machine_free}. *)
 let new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check ~step_count
   =
-  with_stop_guard tc (fun () ->
-    fst
-      (Ffi.new_state_machine
-         tc.context
-         tc.handle
-         ~rule_names
-         ~rule_groups:(List.map (fun _ -> 0) rule_names)
-         ~invariant_names
-         ~invariants_always_check
-         ~min_concurrency:1
-         ~max_concurrency:1
-         ~step_count))
+  fst
+    (new_state_machine_with_concurrency
+       tc
+       ~rule_names
+       ~rule_groups:(List.map (fun _ -> 0) rule_names)
+       ~invariant_names
+       ~invariants_always_check
+       ~min_concurrency:1
+       ~max_concurrency:1
+       ~step_count)
 ;;
 
 let state_machine_next_group tc ~state_machine =
@@ -903,9 +901,12 @@ let print_failure_body ~(settings : Settings.t) ~from_ppx ~blob ~exn ~printed_ou
   Printf.eprintf "Exception: %s\n%!" (Stdlib.Printexc.to_string exn);
   if settings.print_blob
   then
-    if from_ppx
-    then Printf.eprintf "rerun with: [@@failure_blobs [ \"%s\" ]]\n%!" blob
-    else Printf.eprintf "rerun with: ~failure_blobs:[ \"%s\" ]\n%!" blob
+    Option.iter
+      (fun blob ->
+         if from_ppx
+         then Printf.eprintf "rerun with: [@@failure_blobs [ \"%s\" ]]\n%!" blob
+         else Printf.eprintf "rerun with: ~failure_blobs:[ \"%s\" ]\n%!" blob)
+      blob
 ;;
 
 let handle_result
