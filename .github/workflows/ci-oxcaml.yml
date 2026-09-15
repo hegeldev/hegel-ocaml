@@ -83,8 +83,7 @@ jobs:
           OPAMSOLVERTIMEOUT: "600"
         run: |
           eval $(opam env)
-          opam install . --deps-only --yes --solver=builtin-0install
-          opam install alcotest ppx_expect core_unix --yes --solver=builtin-0install
+          opam install ./*.opam --deps-only --with-test --yes --solver=builtin-0install
 
       - name: Stage libhegel from the matching GitHub release
         id: libhegel
@@ -103,7 +102,7 @@ jobs:
         env:
           HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
           HEGEL_SKIP_EXPECT_TESTS: "1"
-          # core/sexp_diff (hegel.jane's deps) aren't installed on this
-          # switch; see the "Install OCaml dependencies" step above.
+          # hegel.jane's optional sexp_diff dependency isn't installed by
+          # --deps-only --with-test.
           HEGEL_SKIP_JANE_TESTS: "1"
         run: just check-tests-no-coverage
