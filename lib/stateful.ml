@@ -42,40 +42,6 @@ let check_invariants tc ~state_machine ~invariants ~where ~sample state =
     invariants
 ;;
 
-let run_round
-      ?(worker_index = 0)
-      ~concurrent
-      ?(print_state = fun _ -> ())
-      ?(steps_attempted = 0)
-      tc
-      ~state_machine
-      ~(rules : _ Rule.t array)
-      state
-  =
-  let rec loop state steps_attempted rejected =
-    match Internal.state_machine_next_rule_for_worker tc ~state_machine ~worker_index with
-    | None -> state, steps_attempted, rejected
-    | Some rule_index ->
-      let rule = rules.(rule_index) in
-      let step_num = steps_attempted + 1 in
-      let heading =
-        if concurrent
-        then Printf.sprintf "Rule: %s" rule.name
-        else Printf.sprintf "Step %d: %s" step_num rule.name
-      in
-      Internal.note tc heading;
-      (match section tc (fun tc -> rule.step tc state) with
-       | new_state ->
-         print_state new_state;
-         loop new_state step_num rejected
-       | exception Internal.Assume_rejected ->
-         Internal.state_machine_rule_rejected_for_worker tc ~state_machine ~worker_index;
-         Internal.note tc "Rule stopped early due to violated assumption.";
-         loop state step_num true)
-  in
-  loop state steps_attempted false
-;;
-
 let run_machine
       ~init
       ~rules
@@ -88,9 +54,11 @@ let run_machine
       tc
   =
   let rule_names = List.map Rule.name rules in
-  let rule_groups =
+  let rule_groups = List.map Concurrent_rule.group rules in
+  let group_names = Stateful_concurrent.group_names rule_groups in
+  let group_idxs =
     if concurrent
-    then Stateful_concurrent.group_ids (List.map Concurrent_rule.group rules)
+    then Stateful_concurrent.group_ids rule_groups group_names
     else List.map (fun _ -> 0) rules
   in
   let rule_array = Array.of_list rules in
@@ -98,7 +66,7 @@ let run_machine
     Internal.new_state_machine_with_concurrency
       tc
       ~rule_names
-      ~rule_groups
+      ~rule_groups:group_idxs
       ~invariant_names:(List.map Invariant.name invariants)
       ~invariants_always_check:
         (List.map (fun inv -> inv.Invariant.always_check) invariants)
@@ -110,6 +78,32 @@ let run_machine
     Option.iter
       (fun sexp_of -> Internal.print_line tc [ Text "state = "; Value (sexp_of state) ])
       sexp_of_state
+  in
+  let run_round ?(worker_index = 0) ?(steps_attempted = 0) state tc =
+    let rec loop state steps_attempted rejected =
+      match
+        Internal.state_machine_next_rule_for_worker tc ~state_machine ~worker_index
+      with
+      | None -> state, steps_attempted, rejected
+      | Some rule_index ->
+        let rule = rule_array.(rule_index) in
+        let step_num = steps_attempted + 1 in
+        let heading =
+          if concurrent
+          then Printf.sprintf "Rule: %s" rule.name
+          else Printf.sprintf "Step %d: %s" step_num rule.name
+        in
+        Internal.note tc heading;
+        (match section tc (fun tc -> rule.step tc state) with
+         | new_state ->
+           if not concurrent then print_state new_state;
+           loop new_state step_num rejected
+         | exception Internal.Assume_rejected ->
+           Internal.state_machine_rule_rejected_for_worker tc ~state_machine ~worker_index;
+           Internal.note tc "Rule stopped early due to violated assumption.";
+           loop state step_num true)
+    in
+    loop state steps_attempted false
   in
   let check_invariants = check_invariants tc ~state_machine ~invariants in
   let announce_checks which =
@@ -126,40 +120,23 @@ let run_machine
        check_invariants ~where:"in the initial state" ~sample:false init;
        let final_state =
          if concurrent
-         then (
-           let group_names =
-             Stateful_concurrent.group_names (List.map Concurrent_rule.group rules)
-           in
+         then
            Stateful_concurrent.run
              tc
              ~state_machine
              ~concurrency
              ~group_names
              ~init
-             ~run_round:(fun ~worker_index tc ->
-               run_round
-                 ~worker_index
-                 ~concurrent:true
-                 tc
-                 ~state_machine
-                 ~rules:rule_array
-                 init)
+             ~run_round:(fun ~worker_index tc -> run_round ~worker_index init tc)
              ~print_state
-             ~check_invariants)
+             ~check_invariants
          else
            Stateful_seq.run
              tc
              ~state_machine
              ~init
              ~run_round:(fun ~steps_attempted state ->
-               run_round
-                 ~concurrent:false
-                 tc
-                 ~state_machine
-                 ~rules:rule_array
-                 ~print_state
-                 ~steps_attempted
-                 state)
+               run_round ~steps_attempted state tc)
              ~check_invariants
        in
        announce_checks "final";
