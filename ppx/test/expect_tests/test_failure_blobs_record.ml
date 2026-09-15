@@ -150,13 +150,13 @@ let%expect_test "recording groups each failure's draws with its diagnostic" =
     Falsified after 1 test case (0 discarded):
 
     Failure 1 of 2:
-      v = 60
+    v = 60
 
     Exception: Expect_tests.Test_failure_blobs_record.A
     rerun with: [@@failure_blobs [ "<BLOB>" ]]
 
     Failure 2 of 2:
-      v = 0
+    v = 0
 
     Exception: Expect_tests.Test_failure_blobs_record.B
     rerun with: [@@failure_blobs [ "<BLOB>" ]]
@@ -183,12 +183,12 @@ let%expect_test "the multi-failure report omits blobs when print_blob is off" =
     Falsified after 1 test case (0 discarded):
 
     Failure 1 of 2:
-      draw_1 = 60
+    draw_1 = 60
 
     Exception: Expect_tests.Test_failure_blobs_record.A
 
     Failure 2 of 2:
-      draw_1 = 0
+    draw_1 = 0
 
     Exception: Expect_tests.Test_failure_blobs_record.B
     2 failures found!

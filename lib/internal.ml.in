@@ -687,7 +687,7 @@ let new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check ~
     (new_state_machine_with_concurrency
        tc
        ~rule_names
-       ~rule_groups:(List.map (fun _ -> 0) rule_names)
+       ~rule_groups:(Array.make (Array.length rule_names) 0)
        ~invariant_names
        ~invariants_always_check
        ~min_concurrency:1
@@ -772,10 +772,17 @@ let build_ffi_settings ctx (settings : Settings.t) ~database_key ~test_location 
   s
 ;;
 
+type interesting_case =
+  { origin : string
+  ; exn : exn
+  ; backtrace : Printexc.raw_backtrace
+  }
+
 type case_outcome =
   { status : Ffi.status
-  ; interesting : (string * exn) option
-  ; printed_output : bool
+  ; interesting : interesting_case option
+  ; output : string
+  ; is_nondeterministic : bool
   }
 
 (** [capture_document tc] renders the document of a test case, its clones,
@@ -799,9 +806,8 @@ let capture_document (tc : test_case) =
     {!Ffi.status}, and marks the case complete. A [Ffi.Usage_error] (an invalid
     generator argument the engine rejected) is not an outcome: it propagates
     unchanged, aborting the run instead of being shrunk as a counterexample.
-    A non-zero [indent] runs the body through a {!with_block} indented that
-    many columns. Shared by the engine-run and failure-blob replay paths. *)
-let run_test_case ~(settings : Settings.t) ~test_fn ?(indent = 0) ctx handle is_final =
+    Returns the captured document without report formatting. Shared by the
+    engine-run and failure-blob replay paths. *)
   let (tc : test_case) =
     { handle
     ; context = ctx
@@ -850,7 +856,7 @@ let flaky_diagnostic =
     itself, so the client reads the counterexample's reproduction blob and
     replays it as a standalone final test case — re-running the body so its
     notes and drawn values print for the minimal example. Returns the blob, the
-    test's own exception, and whether the replay printed any note/draw line.
+    test's own exception, and the rendered output.
     The engine just produced the blob, so it always decodes; a replay that no
     longer fails means the test is non-deterministic and raises
     {!flaky_diagnostic}. *)

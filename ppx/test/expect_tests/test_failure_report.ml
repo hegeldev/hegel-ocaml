@@ -38,7 +38,7 @@ let%expect_test "later falsification counts plural test cases" =
     --- Failure ------------------------------------------------------------
     Falsified after 4 test cases (0 discarded):
 
-      draw_1 = 60
+    draw_1 = 60
 
     Exception: Failure("large values are broken")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -72,21 +72,21 @@ let%expect_test "a multiline drawn value aligns under its name" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      l @ draw.ml:<LINE> = (00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000)
+    l @ draw.ml:<LINE> = (00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000)
 
     Exception: File "ppx/test/expect_tests/test_failure_report.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]

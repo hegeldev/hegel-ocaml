@@ -55,9 +55,9 @@ let%expect_test "require_equal prints a sexp diff of the two values" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      require_equal: values differ (- lhs / + rhs):
-      - (1 2 3)
-      + (1 9 3)
+    require_equal: values differ (- lhs / + rhs):
+    - (1 2 3)
+    + (1 9 3)
 
     Exception: Failure("require_equal: values differ")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -90,12 +90,12 @@ let%expect_test "require failures get caller-derived origins" =
     Falsified after 1 test case (0 discarded):
 
     Failure 1 of 2:
-      draw_1 = 60
+    draw_1 = 60
 
     Exception: Failure("too big")
 
     Failure 2 of 2:
-      draw_1 = 0
+    draw_1 = 0
 
     Exception: Failure("too small")
     |}]

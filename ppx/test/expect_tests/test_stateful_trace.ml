@@ -37,16 +37,16 @@ let%expect_test "state trace; invariant marks the failing step" =
     --- Failure ------------------------------------------------------------
     Falsified after 2 test cases (0 discarded):
 
-      state = 0
-      Checking invariants on the initial state.
-        checking n = 0
-      Step 1: inc
-      state = 1
-        checking n = 1
-      Step 2: inc
-      state = 2
-        checking n = 2
-      Invariant my_inv violated after step 2.
+    state = 0
+    Checking invariants on the initial state.
+      checking n = 0
+    Step 1: inc
+    state = 1
+      checking n = 1
+    Step 2: inc
+    state = 2
+      checking n = 2
+    Invariant my_inv violated after step 2.
 
     Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -71,8 +71,8 @@ let%expect_test "invariant violated in the initial state" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      Checking invariants on the initial state.
-      Invariant silly_inv violated in the initial state.
+    Checking invariants on the initial state.
+    Invariant silly_inv violated in the initial state.
 
     Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -107,11 +107,11 @@ let%expect_test "state trace across multiple rules" =
     --- Failure ------------------------------------------------------------
     Falsified after 3 test cases (0 discarded):
 
-      state = ()
-      Step 1: push
-        n = 50
-      state = (50)
-      Step 2: pop
+    state = ()
+    Step 1: push
+      n = 50
+    state = (50)
+    Step 2: pop
 
     Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -162,11 +162,11 @@ let%expect_test "nondeterministic failure reports the discovering execution" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (1 discarded):
 
-      preamble
-      Concurrency level: 2
-      ---------------- Round 1: group "<anonymous>" ----------------
-      [worker 0 +time] Rule: boom
-      [worker 0 +time]   draw_1 = 3881432
+    preamble
+    Concurrency level: 2
+    ---------------- Round 1: group "<anonymous>" ----------------
+    [worker 0 +time] Rule: boom
+    [worker 0 +time]   draw_1 = 3881432
 
     Exception: Failure("concurrent boom")
     |}]
@@ -198,9 +198,9 @@ let%expect_test "one concurrent worker remains deterministic" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      ---------------- Round 1: group "<anonymous>" ----------------
-      [worker 0 +time] Rule: boom
-      [worker 0 +time]   draw_1 = 0
+    ---------------- Round 1: group "<anonymous>" ----------------
+    [worker 0 +time] Rule: boom
+    [worker 0 +time]   draw_1 = 0
 
     Exception: Failure("concurrent boom")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -274,12 +274,12 @@ let%expect_test "concurrent invariant failures retain their names" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      state = 0
-      Checking invariants on the initial state.
-      ---------------- Round 1: group "<anonymous>" ----------------
-      [worker 0 +time] Rule: increment
-      state = 1
-      Invariant stays_zero violated after round 1.
+    state = 0
+    Checking invariants on the initial state.
+    ---------------- Round 1: group "<anonymous>" ----------------
+    [worker 0 +time] Rule: increment
+    state = 1
+    Invariant stays_zero violated after round 1.
 
     Exception: Failure("invariant boom")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
