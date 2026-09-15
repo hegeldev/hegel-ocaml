@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.21.1 - 2026-09-15
+
+This patch moves the Antithesis integration into libhegel. The assertion name is 
+now `<path>::<function> passes properties`, where `path` is the test's file
+name without `.ml`.
+
 ## 0.21.0 - 2026-09-14
 
 This release reworks how settings are created. Settings are now in the
