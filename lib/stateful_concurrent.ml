@@ -53,13 +53,14 @@ let group_names names =
 
 (* map the group of the ith rule to the index of the group in the group name array *)
 let group_ids names group_names_uniq =
-  List.map
+  Array.map
     (fun name -> Array.find_index (String.equal name) group_names_uniq |> Option.get)
     names
 ;;
 
 type round_control =
-  { mutex : Mutex.t
+  { num_workers : int
+  ; mutex : Mutex.t
   ; condition : Condition.t
   ; mutable curr_round : int
     (** the current round number. each worker remembers the last round it handled. *)
@@ -97,7 +98,7 @@ let worker_loop control ~worker_index ~run_round =
         control.results.(worker_index) <- result;
         control.num_completed <- control.num_completed + 1;
         (* final worker lets main thread know everyone is done *)
-        if control.num_completed = Array.length control.results
+        if control.num_completed = control.num_workers
         then Condition.broadcast control.condition);
       loop round
   in
@@ -105,20 +106,18 @@ let worker_loop control ~worker_index ~run_round =
 ;;
 
 let dispatch_round control tc =
-  (* Prepare every clone before waking workers. Setup exceptions propagate on
-     the coordinator, so they cannot strand a partially dispatched round. *)
-  let cases =
-    Array.init (Array.length control.results) (fun worker_index ->
+  let testcases =
+    Array.init control.num_workers (fun worker_index ->
       let worker_tc = Internal.clone tc in
       Internal.set_worker_index worker_tc worker_index;
       worker_tc)
   in
   Mutex.protect control.mutex (fun () ->
-    control.cases <- cases;
+    control.cases <- testcases;
     control.num_completed <- 0;
     control.curr_round <- control.curr_round + 1;
     Condition.broadcast control.condition;
-    while control.num_completed < Array.length control.results do
+    while control.num_completed < control.num_workers do
       (* wait on all workers to finish *)
       Condition.wait control.condition control.mutex
     done;
@@ -130,12 +129,17 @@ let stop_workers control workers =
   Mutex.protect control.mutex (fun () ->
     control.stop <- true;
     Condition.broadcast control.condition);
-  List.iter (fun worker -> Internal.join worker) workers
+  List.iter Thread.join workers
 ;;
 
 let reraise_worker_failure results =
-  let failures = Array.to_list results |> List.filter_map Fun.id in
-  let find predicate = List.find_opt (fun (exn, _) -> predicate exn) failures in
+  let find predicate =
+    Array.find_map
+      (function
+        | Some (exn, _) as failure when predicate exn -> failure
+        | _ -> None)
+      results
+  in
   let is_control_exception = function
     | Internal.Usage_error _ | Internal.Backend_error _ -> true
     | _ -> false
@@ -148,17 +152,18 @@ let reraise_worker_failure results =
     | Internal.Assume_rejected | Internal.Flaky_strategy -> true
     | _ -> false
   in
+  let is_test_failure = Fun.const true in
   (* invalidated or exhausted rules can cause in other workers.
      error precedence from greatest to least: usage/backend errors, overrun,
      invalidation, actual test failure. within each category, first worker raises. *)
-  let selected =
-    List.find_map
+  let failure =
+    Array.find_map
       find
-      [ is_control_exception; is_overrun; is_invalid; (fun _ -> true) ]
+      [| is_control_exception; is_overrun; is_invalid; is_test_failure |]
   in
   Option.iter
     (fun (exn, backtrace) -> Printexc.raise_with_backtrace exn backtrace)
-    selected
+    failure
 ;;
 
 let run
@@ -172,7 +177,8 @@ let run
       ~check_invariants
   =
   let control =
-    { mutex = Mutex.create ()
+    { num_workers
+    ; mutex = Mutex.create ()
     ; condition = Condition.create ()
     ; curr_round = 0
     ; num_completed = 0
@@ -185,7 +191,7 @@ let run
     if worker_index = num_workers
     then workers
     else (
-      match Internal.spawn tc (fun _ -> worker_loop control ~worker_index ~run_round) with
+      match Thread.create (fun () -> worker_loop control ~worker_index ~run_round) () with
       | worker -> start_workers (worker_index + 1) (worker :: workers)
       | exception exn ->
         stop_workers control workers;
