@@ -80,6 +80,8 @@ def main() -> int:
         for filename, line_numbers in sorted(uncovered_by_file.items()):
             print(f"  {filename}:", file=sys.stderr)
             source_path = ROOT / filename
+            if not source_path.is_file():
+                source_path = ROOT / "_build/default" / filename
             try:
                 source_lines = source_path.read_text().splitlines()
             except FileNotFoundError:

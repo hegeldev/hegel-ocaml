@@ -92,6 +92,8 @@ type status =
     - [Run_passed]: the property held across every generated test case.
     - [Run_failed]: the property failed; inspect each distinct counterexample
       via {!result_failures}.
+    - [Run_failed_nondeterministic]: the property failed during a run declared
+      nondeterministic. There is no replay blob.
     - [Run_error]: the run itself failed: a failed health check, a
       nondeterministic test, a run-scoped client mistake, or a violated internal
       engine invariant (a bug in hegel, reported with a bug-report diagnostic).
@@ -101,6 +103,7 @@ type run_status =
   | Run_passed
   | Run_failed
   | Run_error
+  | Run_failed_nondeterministic
 
 (** Raised when a primitive returns [HEGEL_E_STOP_TEST]. The engine has
     exhausted its choice budget for the current test case. *)
@@ -116,7 +119,7 @@ exception Assume_rejected
     [HEGEL_E_NOT_COMPLETE], [HEGEL_E_INTERNAL], [HEGEL_E_CONCURRENT_USE], or an
     unrecognized code). The payload is a static label identifying the code,
     followed by {!last_error_message} when the engine set one. *)
-exception Backend_error of string
+exception Internal_error of string
 
 (** Raised when a libhegel call returns [HEGEL_E_INVALID_ARG]: a caller-supplied
     argument (typically a generator bound or a setting) is semantically invalid.
@@ -268,11 +271,11 @@ val settings_get_backend : context -> settings -> backend
 (** {2 Run lifecycle} *)
 
 (** [run_start ctx s] starts a run with the given settings. Raises
-    {!Backend_error} on failure. The handle must be freed with {!run_free}. *)
+    {!Internal_error} on failure. The handle must be freed with {!run_free}. *)
 val run_start : context -> settings -> run
 
 (** [next_test_case ctx run] blocks until the engine produces the next test
-    case, or returns [None] when the run is finished. Raises {!Backend_error} on
+    case, or returns [None] when the run is finished. Raises {!Internal_error} on
     engine error or caller misuse. *)
 val next_test_case : context -> run -> test_case option
 
@@ -284,7 +287,7 @@ val next_test_case : context -> run -> test_case option
 val test_case_from_blob : context -> settings -> string option -> test_case
 
 (** [run_result ctx run] returns the aggregated result of a finished run. Raises
-    {!Backend_error} if the run has not finished. *)
+    {!Internal_error} if the run has not finished. *)
 val run_result : context -> run -> run_result
 
 (** [run_free ctx run] frees a run handle. If the run was abandoned mid-run, the
@@ -309,7 +312,7 @@ val test_case_free : context -> test_case -> unit
     choice sequence, so it may be driven from another thread concurrently with
     [tc]. Cloning occupies one choice position on [tc]'s stream. Drive the
     returned handle through a {e separate} context. The handle is caller-owned
-    and must be freed with {!test_case_free}. Raises {!Backend_error} on
+    and must be freed with {!test_case_free}. Raises {!Internal_error} on
     concurrent use of [tc]. *)
 val test_case_clone : context -> test_case -> test_case
 
@@ -322,6 +325,15 @@ val test_case_clone : context -> test_case -> test_case
     two must not be driven concurrently. The handle is caller-owned and must be
     freed with {!test_case_free}. *)
 val test_case_block : context -> test_case -> indent:int -> test_case
+
+(** [test_case_set_worker ctx tc ~worker_index] attributes subsequent output
+    to the worker. The native printer places the worker prefix before indentation;
+    derived blocks and clones inherit the attribution. *)
+val test_case_set_worker : context -> test_case -> worker_index:int -> unit
+
+(** [test_case_is_nondeterministic ctx tc] reports whether [tc] belongs to a
+    run already declared nondeterministic. *)
+val test_case_is_nondeterministic : context -> test_case -> bool
 
 (** {2 Per-test-case primitives} *)
 
@@ -359,7 +371,7 @@ val generate_bytes : context -> test_case -> min_size:int -> max_size:int option
 
 (** [string_generator_text ctx ...] builds a text string generator over the
     described alphabet. [max_size = None] means unbounded. Raises
-    {!Backend_error} on invalid parameters. The handle must be freed with
+    {!Internal_error} on invalid parameters. The handle must be freed with
     {!string_generator_free}. *)
 val string_generator_text
   :  context
@@ -375,7 +387,7 @@ val string_generator_text
   -> string_generator
 
 (** [string_generator_regex ctx ~pattern ~fullmatch] builds a regex string
-    generator (Python-[re] syntax). Raises {!Backend_error} on an invalid
+    generator (Python-[re] syntax). Raises {!Internal_error} on an invalid
     pattern. The handle must be freed with {!string_generator_free}. *)
 val string_generator_regex
   :  context
@@ -390,7 +402,7 @@ val string_generator_email : context -> string_generator
 val string_generator_url : context -> string_generator
 
 (** [string_generator_domain ctx ~max_length] builds an RFC 1035 domain-name
-    generator of total length at most [max_length]. Raises {!Backend_error} when
+    generator of total length at most [max_length]. Raises {!Internal_error} when
     [max_length] leaves no eligible TLDs. *)
 val string_generator_domain : context -> max_length:int -> string_generator
 
@@ -488,10 +500,10 @@ val pool_free : context -> pool -> unit
 val new_state_machine
   :  context
   -> test_case
-  -> rule_names:string list
-  -> rule_groups:int list
-  -> invariant_names:string list
-  -> invariants_always_check:bool list
+  -> rule_names:string array
+  -> rule_groups:int array
+  -> invariant_names:string array
+  -> invariants_always_check:bool array
   -> min_concurrency:int
   -> max_concurrency:int
   -> step_count:int

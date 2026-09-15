@@ -99,6 +99,7 @@ type 'a core =
       -> 'a core
   | Values :
       { pool : Internal.pool
+      ; lock : Mutex.t option
       ; find : int -> 'a option
       ; remove : int -> unit
       ; is_empty : unit -> bool
@@ -211,9 +212,10 @@ let composite generate_fn = composite_with_label ~label:Labels.fixed_dict genera
 (** [make_pool_values ~pool ~find ~remove ~is_empty ~consume] builds an
     unprintable generator that picks a value from the engine pool [pool],
     resolving the drawn id via [find]. When [consume], [remove] deletes the
-    picked value. [is_empty] reports whether the backing table is empty. *)
-let make_pool_values ~pool ~find ~remove ~is_empty ~consume =
-  Unprintable { core = Values { pool; find; remove; is_empty; consume } }
+    picked value. [is_empty] reports whether the backing table is empty.
+    [lock], when provided, protects the entire selection and removal operation. *)
+let make_pool_values ~lock ~pool ~find ~remove ~is_empty ~consume =
+  Unprintable { core = Values { pool; lock; find; remove; is_empty; consume } }
 ;;
 
 (** Maximum number of filter attempts before calling [assume false]. *)
@@ -266,7 +268,7 @@ type collection =
   }
 
 (** [get_collection coll data] initializes the engine-side collection and
-    returns its handle. Raises {!Internal.Data_exhausted} on StopTest. *)
+    returns its handle. Raises {!Internal.Stop_test} on StopTest. *)
 let get_collection coll data =
   match coll.handle with
   | Some h -> h
@@ -293,7 +295,7 @@ let with_collection ~min_size ?max_size data f =
 (** [collection_more coll data] returns [true] if more elements should be
     generated, [false] when the collection is complete. Once it returns [false],
     subsequent calls return [false] immediately. Raises
-    {!Internal.Data_exhausted} on StopTest. *)
+    {!Internal.Stop_test} on StopTest. *)
 let collection_more coll data =
   if coll.finished
   then false
@@ -306,7 +308,7 @@ let collection_more coll data =
 
 (** [collection_reject coll data] rejects the last element of the collection.
     No-op if the collection is already finished. Raises
-    {!Internal.Data_exhausted} on StopTest. *)
+    {!Internal.Stop_test} on StopTest. *)
 let collection_reject coll data =
   if not coll.finished
   then (
@@ -344,6 +346,32 @@ module Int_table = Stdlib.Hashtbl.Make (struct
     ({!make_pool_values}/{!resolve_pool_draw}) to a concrete int-keyed hashtable
     module [Tbl]. *)
 module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) = struct
+  type 'a t =
+    { pool : Internal.pool
+    ; values : 'a Tbl.t
+    ; clone : 'a -> 'a
+    ; lock : Mutex.t option
+    }
+
+  let with_lock t f =
+    match t.lock with
+    | None -> f ()
+    | Some lock -> Mutex.protect lock f
+  ;;
+
+  let create tc ~clone ~lock =
+    { pool = Internal.new_pool tc; values = Tbl.create 16; clone; lock }
+  ;;
+
+  let add t tc value =
+    with_lock t (fun () ->
+      let variable_id = Internal.pool_add tc ~pool:t.pool in
+      Tbl.replace t.values variable_id value)
+  ;;
+
+  let size t = with_lock t (fun () -> Tbl.length t.values)
+  let is_empty t = size t = 0
+
   (** [resolve_draw values ~consume variable_id] resolves a drawn pool id
       against the local [values] table, removing it when [consume]. Raises
       [Internal.Flaky_strategy] on an unknown id (an engine-contract violation). *)
@@ -355,14 +383,17 @@ module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) = struct
       variable_id
   ;;
 
-  (** [pool_values ~pool ~values ~consume] builds an unprintable generator that
+  (** [pool_values t ~consume] builds an unprintable generator that
       picks a value from the engine pool [pool], resolving the drawn id against
       the local [values] table. When [consume], the picked value is removed from
-      the pool. *)
-  let pool_values ~pool ~values ~consume =
+      the pool without cloning. Otherwise [t.clone] runs during lookup, under
+      [t.lock] when provided. *)
+  let pool_values { pool; values; clone; lock } ~consume =
+    let clone = if consume then Fun.id else clone in
     make_pool_values
+      ~lock
       ~pool
-      ~find:(fun id -> Tbl.find_opt values id)
+      ~find:(fun id -> Option.map clone (Tbl.find_opt values id))
       ~remove:(fun id -> Tbl.remove values id)
       ~is_empty:(fun () -> Tbl.length values = 0)
       ~consume
@@ -410,8 +441,11 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
         in
         collect []))
   | Composite { label; generate_fn } -> group label data (fun () -> generate_fn data)
-  | Values { pool; find; remove; is_empty; consume } ->
-    pick data ~find ~remove ~is_empty pool ~consume
+  | Values { pool; lock; find; remove; is_empty; consume } ->
+    let draw () = pick data ~find ~remove ~is_empty pool ~consume in
+    (match lock with
+     | None -> draw ()
+     | Some lock -> Mutex.protect lock draw)
   | Function { build; _ } -> build ~name:None data
 ;;
 

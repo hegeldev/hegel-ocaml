@@ -117,8 +117,10 @@ let test_passing_writes_sdk_jsonl () =
 let test_failing_writes_condition_false () =
   with_tempdir ~f:(fun dir ->
     with_env_dir dir ~f:(fun () ->
-      (try simple_fail () with
-       | _ -> ());
+      (match simple_fail () with
+       | () -> Alcotest.fail "expected the PPX wrapper to re-raise the failure"
+       | exception Failure msg ->
+         Alcotest.(check string) "original failure" "deliberate failure" msg);
       let path = Filename.concat dir "sdk.jsonl" in
       Alcotest.(check bool) "sdk.jsonl exists" true (Stdlib.Sys.file_exists path);
       let lines = In_channel.read_all path |> String.split_lines in

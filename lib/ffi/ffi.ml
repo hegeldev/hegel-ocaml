@@ -342,10 +342,22 @@ let c_test_case_free =
   foreign "hegel_test_case_free" (ptr void @-> ptr void @-> returning int)
 ;;
 
+let c_test_case_is_nondeterministic =
+  foreign
+    "hegel_test_case_is_nondeterministic"
+    (ptr void @-> ptr void @-> ptr bool @-> returning int)
+;;
+
 let c_test_case_clone =
   foreign
     "hegel_test_case_clone"
     (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+;;
+
+let c_test_case_set_worker =
+  foreign
+    "hegel_test_case_set_worker"
+    (ptr void @-> ptr void @-> int64_t @-> returning int)
 ;;
 
 let c_test_case_block =
@@ -805,10 +817,11 @@ type run_status =
   | Run_passed
   | Run_failed
   | Run_error
+  | Run_failed_nondeterministic
 
 exception Stop_test
 exception Assume_rejected
-exception Backend_error of string
+exception Internal_error of string
 exception Usage_error of string
 
 (* Status codes returned by the C primitives [HEGEL_OK] / [HEGEL_E_*]. *)
@@ -860,13 +873,13 @@ let verbosity_of_int = function
   | 1 -> Quiet
   | 2 -> Verbose
   | 3 -> Debug
-  | n -> raise (Backend_error (Printf.sprintf "hegel: unknown verbosity %d" n))
+  | n -> raise (Internal_error (Printf.sprintf "hegel: unknown verbosity %d" n))
 ;;
 
 let backend_of_int = function
   | 1 -> Default
   | 2 -> Urandom
-  | n -> raise (Backend_error (Printf.sprintf "hegel: unknown backend %d" n))
+  | n -> raise (Internal_error (Printf.sprintf "hegel: unknown backend %d" n))
 ;;
 
 let status_to_int = function
@@ -904,7 +917,7 @@ let check_rc ctx rc =
     in
     let msg = c_last_error_message ctx in
     let detail = if String.length msg = 0 then "" else ": " ^ msg in
-    raise (Backend_error (label ^ detail)))
+    raise (Internal_error (label ^ detail)))
 ;;
 
 (* ------------------------------------------------------------------ *)
@@ -1104,9 +1117,19 @@ let test_case_clone ctx tc =
   !@out
 ;;
 
+let test_case_set_worker ctx tc ~worker_index =
+  check_rc ctx (c_test_case_set_worker ctx tc (Int64.of_int worker_index))
+;;
+
 let test_case_block ctx tc ~indent =
   let out = allocate (ptr void) null in
   check_rc ctx (c_test_case_block ctx tc (Unsigned.UInt64.of_int indent) out);
+  !@out
+;;
+
+let test_case_is_nondeterministic ctx tc =
+  let out = allocate bool false in
+  check_rc ctx (c_test_case_is_nondeterministic ctx tc out);
   !@out
 ;;
 
@@ -1122,13 +1145,19 @@ let test_case_block ctx tc ~indent =
    The explicit root is necessary because [CArray.of_list string] stores only
    the raw [char *] pointers and leaves each name's buffer unrooted, so the GC
    may free the names out from under the engine and cause flaky tests *)
+let to_c_array typ values =
+  let array = CArray.make typ (Array.length values) in
+  Array.iteri (CArray.set array) values;
+  array
+;;
+
 let to_string_array names =
-  match names with
-  | [] -> from_voidp (ptr char) null, Root.create ()
-  | _ ->
-    let buffers = List.map CArray.of_string names in
-    let table = CArray.of_list (ptr char) (List.map CArray.start buffers) in
-    CArray.start table, Root.create (buffers, table)
+  if Array.length names = 0
+  then from_voidp (ptr char) null, Root.create ()
+  else (
+    let buffers = Array.map CArray.of_string names in
+    let table = to_c_array (ptr char) (Array.map CArray.start buffers) in
+    CArray.start table, Root.create (buffers, table))
 ;;
 
 let generate_boolean ctx tc p forced =
@@ -1216,7 +1245,7 @@ let optional_string_array = function
     let dummy = CArray.make (ptr char) 1 in
     CArray.start dummy, Root.create dummy, Unsigned.Size_t.of_int 0
   | Some names ->
-    let ptr, root = to_string_array names in
+    let ptr, root = to_string_array (Array.of_list names) in
     ptr, root, Unsigned.Size_t.of_int (List.length names)
 ;;
 
@@ -1474,8 +1503,8 @@ let new_state_machine
       ~step_count
   =
   let rules_ptr, rules_root = to_string_array rule_names in
-  let groups = CArray.of_list int64_t (List.map Int64.of_int rule_groups) in
-  let invariants_always_check = CArray.of_list bool invariants_always_check in
+  let groups = to_c_array int64_t (Array.map Int64.of_int rule_groups) in
+  let invariants_always_check = to_c_array bool invariants_always_check in
   let invs_ptr, invs_root = to_string_array invariant_names in
   let out = allocate (ptr void) null in
   let out_concurrency = allocate int64_t 0L in
@@ -1485,10 +1514,10 @@ let new_state_machine
       tc
       rules_ptr
       (CArray.start groups)
-      (Unsigned.Size_t.of_int (List.length rule_names))
+      (Unsigned.Size_t.of_int (Array.length rule_names))
       invs_ptr
       (CArray.start invariants_always_check)
-      (Unsigned.Size_t.of_int (List.length invariant_names))
+      (Unsigned.Size_t.of_int (Array.length invariant_names))
       (Int64.of_int min_concurrency)
       (Int64.of_int max_concurrency)
       (Int64.of_int step_count)
@@ -1659,6 +1688,7 @@ let result_status ctx r =
   match !@out with
   | 0 -> Run_passed
   | 1 -> Run_failed
+  | 3 -> Run_failed_nondeterministic
   | _ -> Run_error
 ;;
 
@@ -1685,7 +1715,7 @@ let result_failures ctx r =
   List.init n (fun i ->
     match result_failure ctx r i with
     | Some f -> f
-    | None -> raise (Backend_error "hegel: failure disappeared mid-iteration"))
+    | None -> raise (Internal_error "hegel: failure disappeared mid-iteration"))
 ;;
 
 let failure_origin ctx f =

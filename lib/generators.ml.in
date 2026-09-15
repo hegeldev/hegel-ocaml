@@ -19,7 +19,7 @@ let draw = Generators_core.draw
 let draw_named = Generators_core.draw_named
 #endif
 
-module Ppx_internal = struct
+module Private = struct
   module Labels = Generators_core.Labels
 
   type collection = Generators_core.collection =
@@ -36,7 +36,12 @@ module Ppx_internal = struct
   let with_collection = Generators_core.with_collection
   let collection_more = Generators_core.collection_more
   let collection_reject = Generators_core.collection_reject
-  let make_pool_values = Generators_core.make_pool_values
-  let composite_with_label = Generators_core.composite_with_label
   let label_of = Generators_core.label_of
+  let make_pool_values = Generators_core.make_pool_values
+end
+
+module Ppx_internal = struct
+  module Labels = Generators_core.Labels
+
+  let composite_with_label = Generators_core.composite_with_label
 end

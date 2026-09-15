@@ -1,19 +1,6 @@
 open Hegel
 open Generators
 
-(** Test: a drawn function is a genuine function within one test case — applying
-    it to the same argument twice yields the same result (the per-argument memo
-    table makes it stable, which properties like [foldr f] rely on). *)
-let test_functions_deterministic_e2e () =
-  run_hegel_test ~settings:(Settings.create ~test_cases:50 ()) (fun tc ->
-    let f =
-      draw_silent tc (functions ~sexp_of_arg:Core.sexp_of_int ~returns:(integers ()) ())
-    in
-    let a = f 7 in
-    let b = f 7 in
-    assert (a = b))
-;;
-
 (** Test: distinct arguments get independent results (never a pre-chosen domain,
     and results are not forced equal), and every result respects the [returns]
     generator's bounds. Over many cases, [f 0] and [f 1] must differ at least
@@ -110,10 +97,9 @@ let test_functions3_e2e () =
 
 let tests =
   [ Alcotest.test_case
-      "functions deterministic e2e"
+      "functions memoize per argument and draw independent results"
       `Quick
-      test_functions_deterministic_e2e
-  ; Alcotest.test_case "functions independent e2e" `Quick test_functions_independent_e2e
+      test_functions_independent_e2e
   ; Alcotest.test_case
       "functions no sexp_of_arg e2e"
       `Quick

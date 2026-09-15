@@ -135,7 +135,7 @@ let lists
       (* With uniqueness, drive the collection protocol and reject duplicates.
          The engine's own rejection limit sends StopTest when too many
          duplicates occur, which [collection_reject] converts to
-         [Data_exhausted]. *)
+         [Internal.Stop_test]. *)
       Composite
         { label = Labels.combine [ Labels.set; label_of elements ]
         ; generate_fn =
