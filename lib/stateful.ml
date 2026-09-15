@@ -62,7 +62,7 @@ let run_machine
     else List.map (fun _ -> 0) rules
   in
   let rule_array = Array.of_list rules in
-  let state_machine, concurrency =
+  let state_machine, num_workers =
     Internal.new_state_machine_with_concurrency
       tc
       ~rule_names
@@ -113,8 +113,8 @@ let run_machine
   Fun.protect
     ~finally:(fun () -> Internal.state_machine_free tc ~state_machine)
     (fun () ->
-       if concurrency > 1
-       then Internal.note tc (Printf.sprintf "Concurrency level: %d" concurrency);
+       if num_workers > 1
+       then Internal.note tc (Printf.sprintf "Concurrency level: %d" num_workers);
        print_state init;
        announce_checks "initial";
        check_invariants ~where:"in the initial state" ~sample:false init;
@@ -124,9 +124,9 @@ let run_machine
            Stateful_concurrent.run
              tc
              ~state_machine
-             ~concurrency
+             ~num_workers
              ~group_names
-             ~init
+             ~state:init
              ~run_round:(fun ~worker_index tc -> run_round ~worker_index init tc)
              ~print_state
              ~check_invariants

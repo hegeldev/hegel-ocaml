@@ -248,6 +248,7 @@ let extract_origin exn =
 ;;
 
 exception Usage_error = Ffi.Usage_error
+exception Backend_error = Ffi.Backend_error
 
 (** [with_stop_guard tc f] runs [f ()], translating the engine's per-case abort
     signals into the corresponding OCaml exceptions and marking the test case
@@ -457,13 +458,13 @@ let assume _tc condition = if not condition then raise Assume_rejected
 let should_print tc =
   match tc.verbosity with
   | Quiet -> false
-  | Normal -> tc.is_final
+  | Normal -> tc.is_final || tc.is_nondeterministic
   | Verbose | Debug -> true
 ;;
 
 (** [note tc message] appends [message] to the test case's
     print region of the engine's family document, subject to {!should_print};
-    the document is printed once the case completes (see [flush_document]). *)
+    the document is printed once the case completes (see [capture_document]). *)
 let note tc message = if should_print tc then Ffi.note tc.context tc.handle message
 
 (** [render_sexp ctx printer sexp] writes [sexp] to [printer] in s-expression
@@ -777,30 +778,20 @@ type case_outcome =
   ; printed_output : bool
   }
 
-(** [flush_document tc ~framed] prints the document corresponding to a test
-    case and its clones and blocks to stderr and returns whether anything
-    printed. [framed] separates a non-empty document from the failure frame's
-    header with a blank line. *)
-let flush_document (tc : test_case) ~framed =
+(** [capture_document tc] renders the document of a test case, its clones,
+    and blocks.. *)
+let capture_document (tc : test_case) =
   if not (should_print tc)
-  then false
+  then ""
   else (
     let printer = Ffi.test_case_printer tc.context tc.handle None in
-    let text =
-      Fun.protect
-        ~finally:(fun () -> Ffi.printer_free tc.context printer)
-        (fun () ->
-           (* resolve splices in from clone documents *)
-           match Ffi.printer_resolve tc.context printer with
-           | () -> Ffi.printer_value tc.context printer
-           | exception Ffi.Usage_error _ -> Ffi.printer_value tc.context printer)
-    in
-    if String.equal text ""
-    then false
-    else (
-      if framed then Printf.eprintf "\n%!";
-      Printf.eprintf "%s%!" text;
-      true))
+    Fun.protect
+      ~finally:(fun () -> Ffi.printer_free tc.context printer)
+      (fun () ->
+         (* Resolve splices from clone documents. *)
+         match Ffi.printer_resolve tc.context printer with
+         | () -> Ffi.printer_value tc.context printer
+         | exception Ffi.Usage_error _ -> Ffi.printer_value tc.context printer))
 ;;
 
 (** [run_test_case ~settings ~test_fn ?indent ctx handle is_final] runs
