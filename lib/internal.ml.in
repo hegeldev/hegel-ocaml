@@ -495,7 +495,7 @@ let print_line tc segments =
 (** [require tc ?msg condition] fails the current test case when [condition] is
     [false] by raising [Failure msg]. *)
 let require _tc ?(msg = "require: condition was false") condition =
-  if not condition then raise (Failure msg)
+  if not condition then failwith msg
 ;;
 
 (** sexp_diff can set itself as the renderer when it is a dependency *)
@@ -546,7 +546,7 @@ let require_equal tc ?(msg = "require_equal: values differ") sexp_of lhs rhs =
     then (
       let rendered = render_diff ~colored:(stderr_color_enabled ()) ~original ~updated in
       note tc (Printf.sprintf "%s (- lhs / + rhs):\n%s" msg rendered));
-    raise (Failure msg))
+    failwith msg)
 ;;
 
 (** [draw_display_name tc ~label ~repeatable] returns the display name to print
@@ -773,7 +773,6 @@ type result =
 type case_outcome =
   { result : result
   ; output : string
-  ; is_nondeterministic : bool
   }
 
 (** [capture_document tc] renders the document of a test case, its clones,
@@ -909,6 +908,140 @@ let run_test
         let backtrace = Printexc.get_raw_backtrace () in
         Failed { origin = extract_origin exn; exn; backtrace }
     in
+    DLS.set in_test_context true;
+    let result =
+      Fun.protect
+        ~finally:(fun () ->
+          DLS.set in_test_context false;
+          free_owned tc)
+        run_body
+    in
+    let status, origin =
+      match result with
+      | Valid -> Ffi.Valid, None
+      | Invalid -> Ffi.Invalid, None
+      | Overrun -> Ffi.Overrun, None
+      | Failed failure -> Ffi.Interesting, Some failure.origin
+    in
+    Ffi.mark_complete ctx handle status origin;
+    { result; output = capture_document tc }
+  in
+  let replay_blob blob =
+    match Ffi.test_case_from_blob ctx ffi_settings (Some blob) with
+    | exception Usage_error msg -> Error msg
+    | handle ->
+      Ok
+        (Fun.protect
+           ~finally:(fun () -> Ffi.test_case_free ctx handle)
+           (fun () -> run_case handle ~is_final:true))
+  in
+  (* Engine-discovered failures must still fail on their final replay. *)
+  let final_replay failure =
+    let blob = Option.get (Ffi.failure_blob ctx failure) in
+    match replay_blob blob with
+    | Error msg -> failwith ("libhegel generated an invalid failure blob: " ^ msg ^ "Please report this at https://github.com/hegeldev/hegel-rust/issues")
+    | Ok { result = Failed failure; output; _ } -> blob, failure, output
+    | Ok _ -> failwith flaky_diagnostic
+  in
+  let run_from_blob blob =
+    match replay_blob blob with
+    | Error msg -> raise (Usage_error msg)
+    | Ok outcome ->
+      Printf.eprintf "%s%!" outcome.output;
+      (match outcome.result with
+       | Valid | Invalid | Overrun ->
+         failwith "The failure blob did not reproduce an error"
+       | Failed failure ->
+         Printf.eprintf "The failure blob reproduced an error:\n%!";
+         reraise failure)
+  in
+  let handle_result failure_candidate result =
+    match Ffi.result_status ctx result with
+    | Run_passed -> ()
+    | Run_error ->
+      raise
+        (Failure
+           (Option.value
+              (Ffi.result_error ctx result)
+              ~default:"hegel: run error (no message)"))
+    | Run_failed_nondeterministic ->
+      let failure, output =
+        match failure_candidate with
+        | Some failure -> failure
+        | None -> failwith "hegel: nondeterministic failure has no captured exception"
+      in
+      if settings.verbosity <> Quiet
+      then (
+        print_failure_header test_location;
+        print_failure_body ~settings ~from_ppx ~blob:None ~exn:failure.exn ~output);
+      reraise failure
+    | Run_failed ->
+      let failures = Ffi.result_failures ctx result in
+      Fun.protect
+        ~finally:(fun () -> List.iter (fun f -> Ffi.failure_free ctx f) failures)
+        (fun () ->
+           match failures with
+           | [ failure ] ->
+             print_failure_header test_location;
+             let blob, failure, output = final_replay failure in
+             print_failure_body
+               ~settings
+               ~from_ppx
+               ~blob:(Some blob)
+               ~exn:failure.exn
+               ~output;
+             reraise failure
+           | failures ->
+             let count = List.length failures in
+             print_failure_header test_location;
+             List.iteri
+               (fun i failure ->
+                  Printf.eprintf
+                    "\n%s%!"
+                    (stderr_color
+                       ansi_red
+                       (Printf.sprintf "Failure %d of %d:" (i + 1) count));
+                  let blob, failure, output = final_replay failure in
+                  print_failure_body
+                    ~settings
+                    ~from_ppx
+                    ~blob:(Some blob)
+                    ~exn:failure.exn
+                    ~output)
+               failures;
+             failwith (Printf.sprintf "%d failures found!" count))
+  in
+  let run_from_engine () =
+    let run = Ffi.run_start ctx ffi_settings in
+    Fun.protect
+      ~finally:(fun () -> Ffi.run_free ctx run)
+      (fun () ->
+         let rec loop failure_candidate =
+           match Ffi.next_test_case ctx run with
+           | None -> failure_candidate
+           | Some handle ->
+             (* Free the case before moving on to the next one. *)
+             let outcome =
+               Fun.protect
+                 ~finally:(fun () -> Ffi.test_case_free ctx handle)
+                 (fun () -> run_case handle ~is_final:false)
+             in
+             (match settings.verbosity with
+              | Verbose | Debug -> Printf.eprintf "%s%!" outcome.output
+              | Quiet | Normal -> ());
+             (* save failure candidate *)
+             let failure_candidate =
+               match outcome.result with
+               | Failed failure -> Some (failure, outcome.output)
+               | Valid | Invalid | Overrun -> failure_candidate
+             in
+             loop failure_candidate
+         in
+         let failure_candidate = loop None in
+         let result = Ffi.run_result ctx run in
+         Fun.protect
+           ~finally:(fun () -> Ffi.run_result_free ctx result)
+           (fun () -> handle_result failure_candidate result))
   in
   let run_body () =
     match failure_blobs with

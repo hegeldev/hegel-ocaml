@@ -14,15 +14,6 @@ let expect_failure message f =
   | exception Failure actual -> assert (String.equal actual message)
 ;;
 
-let contains ~needle s =
-  let nl = String.length needle in
-  let sl = String.length s in
-  let rec go i =
-    i + nl <= sl && (String.equal (String.sub s i nl) needle || go (i + 1))
-  in
-  nl = 0 || go 0
-;;
-
 (* Pull the blob out of the report's [rerun with: ...] line: the substring
    between the first quote after [failure_blobs] and the next quote. Works for
    both the [[@@failure_blobs [ "..." ]]] and [~failure_blobs:[ "..." ]]
@@ -69,12 +60,25 @@ let%expect_test "recording then replay round-trips the failure blob" =
   expect_failure "deliberate failure" (fun () ->
     Hegel.run_hegel_test ~settings:(settings ()) ~failure_blobs:[] prop);
   let recorded = [%expect.output] in
-  assert (contains ~needle:{|rerun with: ~failure_blobs:[ "|} recorded);
   let blob = extract_blob recorded in
+  print_string (Expect_scrub.scrub_report recorded);
+  [%expect
+    {|
+    --- Failure --------------------------------------------------------------------
+
+    draw_1 = true
+
+    Exception: Failure("deliberate failure")
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
+    |}];
   expect_failure "deliberate failure" (fun () ->
     Hegel.run_hegel_test ~settings:(settings ()) ~failure_blobs:[ blob ] prop);
-  let replay_out = [%expect.output] in
-  assert (contains ~needle:"The failure blob reproduced an error" replay_out)
+  print_string (Expect_scrub.scrub_report [%expect.output]);
+  [%expect
+    {|
+    draw_1 = true
+    The failure blob reproduced an error:
+    |}]
 ;;
 
 let%expect_test "blob replay preserves the original failure backtrace" =
@@ -93,7 +97,15 @@ let%expect_test "blob replay preserves the original failure backtrace" =
        in
        expect_failure "replay backtrace" (fun () ->
          Hegel.run_hegel_test ~settings:(settings ()) replay_failure);
-       let blob = extract_blob [%expect.output] in
+       let recorded = [%expect.output] in
+       let blob = extract_blob recorded in
+       print_string (Expect_scrub.scrub_report recorded);
+       [%expect
+         {|
+         --- Failure --------------------------------------------------------------------
+         Exception: Failure("replay backtrace")
+         rerun with: ~failure_blobs:[ "<BLOB>" ]
+         |}];
        let backtrace =
          match
            Hegel.run_hegel_test
@@ -108,15 +120,26 @@ let%expect_test "blob replay preserves the original failure backtrace" =
            Printexc.raw_backtrace_to_string bt
        in
        assert (not (String.equal !original ""));
-       assert (contains ~needle:!original backtrace);
-       let output = [%expect.output] in
-       assert (contains ~needle:"The failure blob reproduced an error" output))
+       assert (String.starts_with backtrace ~prefix:!original);
+       print_string (Expect_scrub.scrub_report [%expect.output]);
+       [%expect {| The failure blob reproduced an error: |}])
 ;;
 
 let%expect_test "usage errors from a replayed body stay usage errors" =
   expect_failure "deliberate failure" (fun () ->
     Hegel.run_hegel_test ~settings:(settings ()) prop);
-  let blob = extract_blob [%expect.output] in
+  let recorded = [%expect.output] in
+  let blob = extract_blob recorded in
+  print_string (Expect_scrub.scrub_report recorded);
+  [%expect
+    {|
+    --- Failure --------------------------------------------------------------------
+
+    draw_1 = true
+
+    Exception: Failure("deliberate failure")
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
+    |}];
   (match
      Hegel.run_hegel_test ~settings:(settings ()) ~failure_blobs:[ blob ] (fun _tc ->
        raise (Hegel.Usage_error "invalid replay argument"))
@@ -133,25 +156,19 @@ let%expect_test "a stale blob does not reproduce an error" =
   match stale_blob () with
   | () -> failwith "expected stale blob failure"
   | exception Failure msg ->
-    assert (contains ~needle:"The failure blob did not reproduce an error" msg);
-    [%expect {||}]
+    print_endline msg;
+    [%expect {| The failure blob did not reproduce an error |}]
 ;;
 
 let%hegel_test invalid_blob = prop [@@failure_blobs [ "INVALID_BLOB" ]]
 
-let%expect_test
-    "an invalid blob does not reproduce an error and fails with a clear error message"
-  =
+let%expect_test "an invalid supplied blob raises a usage error" =
   match invalid_blob () with
   | () -> failwith "expected invalid blob failure"
-  | exception Failure msg ->
-    assert (
-      contains
-        ~needle:
-          "the supplied failure blob could not be decoded. It may be corrupt or from an \
-           incompatible Hegel version."
-        msg);
-    [%expect {||}]
+  | exception Hegel.Usage_error msg ->
+    print_endline msg;
+    [%expect
+      {| hegel_test_case_from_blob: the supplied failure blob could not be decoded. It may be corrupt or from an incompatible Hegel version. |}]
 ;;
 
 let%expect_test "only the first blob is actually replayed" =
@@ -159,13 +176,27 @@ let%expect_test "only the first blob is actually replayed" =
     Hegel.run_hegel_test ~settings:(settings ()) prop);
   let recorded = [%expect.output] in
   let blob = extract_blob recorded in
+  print_string (Expect_scrub.scrub_report recorded);
+  [%expect
+    {|
+    --- Failure --------------------------------------------------------------------
+
+    draw_1 = true
+
+    Exception: Failure("deliberate failure")
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
+    |}];
   expect_failure "deliberate failure" (fun () ->
     Hegel.run_hegel_test
       ~settings:(settings ())
       ~failure_blobs:[ blob; "INVALID_BLOB" ]
       prop);
-  let replay_out = [%expect.output] in
-  assert (contains ~needle:"The failure blob reproduced an error" replay_out)
+  print_string (Expect_scrub.scrub_report [%expect.output]);
+  [%expect
+    {|
+    draw_1 = true
+    The failure blob reproduced an error:
+    |}]
 ;;
 
 exception A
