@@ -3,6 +3,8 @@
  (public_name hegel)
  (libraries hegel_ffi ipaddr sexplib0 threads.posix unix)
  (private_modules
+  stateful_seq
+  stateful_concurrent
   generators_core
   generators_primitives
   generators_collections

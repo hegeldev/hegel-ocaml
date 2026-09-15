@@ -39,10 +39,9 @@ let group_names names =
   |> Array.of_list
 ;;
 
-let group_ids names =
-  let group_names = group_names names in
+let group_ids names group_names_uniq =
   List.map
-    (fun name -> Array.find_index (String.equal name) group_names |> Option.get)
+    (fun name -> Array.find_index (String.equal name) group_names_uniq |> Option.get)
     names
 ;;
 
