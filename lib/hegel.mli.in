@@ -360,7 +360,6 @@ include module type of Derive
 (* Excluded from the documentation, not for direct use *)
 
 module Internal = Internal
-module Antithesis = Antithesis
 
 type ('a, 'p) generator = ('a, 'p) Generators.generator
 type printable = Generators.printable
@@ -565,11 +564,14 @@ module Settings = Settings
 
 (** {3 Running tests} *)
 
-(** A source location identifying a single test, used to create the test's key 
-    in the {!type:Settings.database} and by the Antithesis integration to build its assertion. 
-    The [let%hegel_test] PPX builds one automatically. Construct one manually to 
-    pass [~test_location] to a direct {!run_hegel_test} call. *)
-type test_location = Antithesis.test_location =
+(** A source location identifying a single test. It creates the test's key in
+    the {!type:Settings.database}, and libhegel uses it inside Antithesis to
+    report the run's result as an assertion at that location. The assertion name
+    is [<path>::<function_name> passes properties], where [path] is [file]
+    without its extension. The [let%hegel_test] PPX builds one
+    automatically. Construct one manually to pass [~test_location] to a direct
+    {!run_hegel_test} call. *)
+type test_location = Internal.test_location =
   { function_name : string
   ; file : string (** Full source path as captured by [__FILE__]. *)
   ; begin_line : int (** 1-based line number of the test's [let] binding. *)
@@ -588,9 +590,10 @@ type test_location = Antithesis.test_location =
           assert (n >= 0 && n <= 9))
     ]}
     @param test_location
-    source location of the test, used by the Antithesis integration.
-    Provided automatically by the [let%hegel_test] PPX. When omitted, no
-    Antithesis assertion is emitted.
+    source location of the test. Passed to the engine, which inside Antithesis
+    reports the run's verdict as an assertion at that location; it also
+    defaults [database_key]. Provided automatically by the [let%hegel_test]
+    PPX. When omitted, nothing is reported.
     @param database_key
     optional key scoping persisted/replayed failing examples and, under [derandomize],
     the per-test seed. Defaults to the test's [test_location] (as

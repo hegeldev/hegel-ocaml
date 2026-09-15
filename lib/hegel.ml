@@ -19,9 +19,6 @@ include Derive
     tests, not for direct use. *)
 module Internal = Internal
 
-(** Antithesis integration; re-exported (doc-hidden) for white-box tests. *)
-module Antithesis = Antithesis
-
 type ('a, 'p) generator = ('a, 'p) Generators.generator
 type printable = Generators.printable
 type unprintable = Generators.unprintable
@@ -83,7 +80,7 @@ let filter = Generators.filter
 
 type test_case = Internal.test_case
 
-type test_location = Antithesis.test_location =
+type test_location = Internal.test_location =
   { function_name : string
   ; file : string
   ; begin_line : int
