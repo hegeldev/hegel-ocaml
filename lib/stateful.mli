@@ -317,3 +317,25 @@ val run_internal
   -> unit
 
 (**/**)
+
+(** [run_concurrent ?step_count ~init ~rules ~min_concurrency ~max_concurrency tc] 
+    executes a state machine using the number of worker threads selected by libhegel 
+    in the inclusive concurrency range. Each worker gets an independent clone of
+    [tc]. Each step of the test is called a round. In a round all workers receive 
+    rules from one concurrency group. Invariants run on the calling thread only 
+    after all workers complete.
+
+    [step_count] defaults to 50 and bounds the number of rules per test case.
+
+    A [max_concurrency] greater than one makes the run nondeterministic. libhegel
+    consequently reports a failure without replaying, shrinking or producing a failure
+    blob. *)
+val run_concurrent
+  :  ?step_count:int
+  -> init:'state
+  -> rules:'state Concurrent_rule.t list
+  -> ?invariants:'state Invariant.t list
+  -> min_concurrency:int
+  -> max_concurrency:int
+  -> Internal.test_case
+  -> unit

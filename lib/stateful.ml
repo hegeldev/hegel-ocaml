@@ -184,3 +184,27 @@ let run
   =
   run_internal ~init ~rules:M.rules ~invariants:M.invariants ?sexp_of_state ?step_count tc
 ;;
+
+let run_worker_round
+      ~worker_index
+      ~tc
+      ~state
+      ~(rules : _ Concurrent_rule.t array)
+      ~state_machine
+  =
+  let rec loop () =
+    match Internal.state_machine_next_rule_for_worker tc ~state_machine ~worker_index with
+    | None -> ()
+    | Some rule_index ->
+      let rule = rules.(rule_index) in
+      Internal.note tc (Printf.sprintf "Rule: %s" rule.Concurrent_rule.name);
+      (match section tc (fun tc -> rule.Concurrent_rule.step tc state) with
+       | () -> loop ()
+       | exception Internal.Assume_rejected ->
+         Internal.state_machine_rule_rejected_for_worker tc ~state_machine ~worker_index;
+         section tc (fun tc ->
+           Internal.note tc "Rule stopped early due to violated assumption.");
+         loop ())
+  in
+  loop ()
+;;

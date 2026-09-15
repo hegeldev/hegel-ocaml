@@ -492,14 +492,13 @@ let concurrent_groups_do_not_overlap_test () =
   let lock = Mutex.create () in
   let active_group = ref None in
   let active_workers = ref 0 in
-  let overlap_detected = ref false in
   let seen_groups = String.Hash_set.create () in
   let step group (_tc : Hegel.Internal.test_case) () =
     Mutex.protect lock (fun () ->
       (match !active_group with
        | None -> active_group := Some group
        | Some active when String.equal active group -> ()
-       | Some _ -> overlap_detected := true);
+       | Some _ -> Alcotest.fail "different groups overlapped");
       incr active_workers;
       Hash_set.add seen_groups group);
     Fun.protect
@@ -534,7 +533,6 @@ let concurrent_groups_do_not_overlap_test () =
          ~min_concurrency:8
          ~max_concurrency:8
          tc);
-  Alcotest.(check bool) "different groups never overlap" false !overlap_detected;
   Alcotest.(check (list string))
     "every group ran"
     [ "<anonymous>"; "letters"; "numbers" ]
