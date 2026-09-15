@@ -76,7 +76,7 @@ val set_worker_index : test_case -> int -> unit
 val extract_origin : exn -> string
 
 exception Usage_error of string
-exception Backend_error of string
+exception Internal_error of string
 
 (** [generate_boolean tc p forced] draws a boolean with probability [p] of
     [true]. If [forced] is [Some b] the value is forced to [b]. Raises
@@ -347,18 +347,6 @@ val new_state_machine_with_concurrency
   -> max_concurrency:int
   -> state_machine * int
 
-(** [new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check ~step_count] registers a sequential engine-owned state machine with the
-    named rules and invariants, running at most [step_count] rules per test
-    case. Raises {!Usage_error} if [rule_names] is empty or [step_count] is
-    below 1. *)
-val new_state_machine
-  :  test_case
-  -> rule_names:string array
-  -> invariant_names:string array
-  -> invariants_always_check:bool array
-  -> step_count:int
-  -> state_machine
-
 (** Starts the next state-machine round and returns its group id, or [None]
     when the state machine is complete. *)
 val state_machine_next_group : test_case -> state_machine:state_machine -> int option
@@ -370,26 +358,14 @@ val state_machine_next_group : test_case -> state_machine:state_machine -> int o
     exhausted. *)
 val state_machine_next_round : test_case -> state_machine:state_machine -> bool
 
-(** [state_machine_next_rule tc ~state_machine] draws the index (in
-    [\[0, num_rules)]) of the next rule to run this round, letting the engine
-    choose and shrink the rule sequence, or returns [None] when the round is
-    over. Raises {!Stop_test} when the engine's choice budget is exhausted. *)
-val state_machine_next_rule : test_case -> state_machine:state_machine -> int option
-
-(** Worker-indexed form of {!state_machine_next_rule} for concurrent stateful
-    execution. *)
+(** Draw the next rule for a worker, or [None] when its round ends. *)
 val state_machine_next_rule_for_worker
   :  test_case
   -> state_machine:state_machine
   -> worker_index:int
   -> int option
 
-(** [state_machine_rule_rejected tc ~state_machine] reports that the rule last
-    returned by {!state_machine_next_rule} did not complete. A rejected rule
-    does not count against the step budget. *)
-val state_machine_rule_rejected : test_case -> state_machine:state_machine -> unit
-
-(** Worker-indexed form of {!state_machine_rule_rejected}. *)
+(** Report that the worker's last rule was rejected. *)
 val state_machine_rule_rejected_for_worker
   :  test_case
   -> state_machine:state_machine

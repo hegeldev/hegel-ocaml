@@ -150,14 +150,27 @@ let%expect_test "usage errors from a replayed body stay usage errors" =
   [%expect {||}]
 ;;
 
-let%hegel_test stale_blob _ = () [@@failure_blobs [ "AAEAAAABAQ==" ]]
-
-let%expect_test "a stale blob does not reproduce an error" =
-  match stale_blob () with
-  | () -> failwith "expected stale blob failure"
-  | exception Failure msg ->
-    print_endline msg;
-    [%expect {| The failure blob did not reproduce an error |}]
+let%expect_test "stale blobs that pass, reject, or overrun do not reproduce an error" =
+  List.iter
+    (fun body ->
+       match
+         Hegel.run_hegel_test
+           ~settings:(settings ())
+           ~failure_blobs:[ "AAEAAAABAQ==" ]
+           body
+       with
+       | () -> failwith "expected stale blob failure"
+       | exception Failure msg -> print_endline msg)
+    [ (fun _ -> ())
+    ; (fun tc -> Hegel.assume tc false)
+    ; (fun _ -> raise Hegel.Internal.Stop_test)
+    ];
+  [%expect
+    {|
+    The failure blob did not reproduce an error
+    The failure blob did not reproduce an error
+    The failure blob did not reproduce an error
+    |}]
 ;;
 
 let%hegel_test invalid_blob = prop [@@failure_blobs [ "INVALID_BLOB" ]]

@@ -359,14 +359,14 @@ let test_run_usage_error_propagates () =
   | exception exn -> raise exn
 ;;
 
-let test_run_backend_error_propagates () =
+let test_run_internal_error_propagates () =
   match
     run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun _tc ->
-      raise (Internal.Backend_error "backend sentinel"))
+      raise (Internal.Internal_error "internal sentinel"))
   with
-  | () -> Alcotest.fail "expected Backend_error"
-  | exception Internal.Backend_error message ->
-    Alcotest.(check string) "backend error message" "backend sentinel" message
+  | () -> Alcotest.fail "expected Internal_error"
+  | exception Internal.Internal_error message ->
+    Alcotest.(check string) "internal error message" "internal sentinel" message
   | exception exn -> raise exn
 ;;
 
@@ -806,9 +806,9 @@ let tests =
   ; Alcotest.test_case "run failing re-raises" `Quick test_run_failing_reraises
   ; Alcotest.test_case "run Usage_error propagates" `Quick test_run_usage_error_propagates
   ; Alcotest.test_case
-      "run Backend_error propagates"
+      "run Internal_error propagates"
       `Quick
-      test_run_backend_error_propagates
+      test_run_internal_error_propagates
   ; Alcotest.test_case "run assume rejects" `Quick test_run_assume_rejects
   ; Alcotest.test_case "run nested guard" `Quick test_run_nested_guard
   ; Alcotest.test_case "render_sexp atoms" `Quick test_render_sexp_atoms

@@ -207,8 +207,8 @@ let%expect_test "quiet nondeterministic failure stays quiet" =
             tc
             ~step_count:5
             ~init:()
-            ~min_concurrency:2
-            ~max_concurrency:2)
+            ~min_concurrency:1
+            ~max_concurrency:4)
    with
    | Failure message as exn ->
      if String.equal message "concurrent boom" then raised := true else raise exn
