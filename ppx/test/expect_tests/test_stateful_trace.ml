@@ -264,6 +264,8 @@ let%expect_test "concurrent invariant failures retain their names" =
               let invariants = [ invariant ]
             end)
             ~init:(Atomic.make 0)
+            ~sexp_of_state:(fun state ->
+              Sexplib0.Sexp.Atom (Int.to_string (Atomic.get state)))
             ~min_concurrency:1
             ~max_concurrency:1)
    with
@@ -274,9 +276,11 @@ let%expect_test "concurrent invariant failures retain their names" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      Initial invariant check.
+      state = 0
+      Checking invariants on the initial state.
       ---------------- Round 1: group "<anonymous>" ----------------
       [worker 0 +time] Rule: increment
+      state = 1
       Invariant stays_zero violated after round 1.
 
     Exception: Failure("invariant boom")

@@ -330,8 +330,12 @@ end
     executes a state machine using the number of worker threads selected by libhegel
     in the inclusive concurrency range. Each worker gets an independent clone of
     [tc]. In a round all workers receive rules from one concurrency group.
+
     Invariants are checked on the initial and final state and sampled between
     rounds, unless they were created with [always_check:true].
+
+    If [sexp_of_state] is provided, the state is printed before the first round
+    and after each completed round.
 
     [step_count] defaults to 50 and bounds the number of rules per test case.
 
@@ -340,6 +344,7 @@ end
     blob. *)
 val run_concurrent
   :  ?step_count:int
+  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
   -> Internal.test_case
   -> (module Concurrent_state_machine with type state = 'state)
   -> init:'state
