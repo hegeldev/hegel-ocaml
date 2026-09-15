@@ -43,7 +43,7 @@ end
 
 (* get unique array of group names *)
 let group_names names =
-  List.fold_left
+  Array.fold_left
     (fun groups name -> if List.mem name groups then groups else name :: groups)
     []
     names
@@ -72,7 +72,7 @@ type round_control =
     (** each worker's result after a round. [None] means success. *)
   }
 
-let worker_loop control ~worker_index ~run_round =
+let worker_loop control worker_index work =
   let rec loop last_exec_round =
     let next_round =
       Mutex.protect control.mutex (fun () ->
@@ -89,7 +89,7 @@ let worker_loop control ~worker_index ~run_round =
     | Some (round, tc) ->
       let result =
         try
-          ignore (run_round ~worker_index tc : _ * int * bool);
+          ignore (work ~worker_index tc : _ * int * bool);
           None
         with
         | exn -> Some (exn, Printexc.get_raw_backtrace ())
@@ -187,17 +187,17 @@ let run
     ; results = Array.make num_workers None
     }
   in
-  let rec start_workers worker_index workers =
+  let rec create_workers worker_index workers =
     if worker_index = num_workers
     then workers
     else (
-      match Thread.create (fun () -> worker_loop control ~worker_index ~run_round) () with
-      | worker -> start_workers (worker_index + 1) (worker :: workers)
+      match Thread.create (fun () -> worker_loop control worker_index run_round) () with
+      | worker -> create_workers (worker_index + 1) (worker :: workers)
       | exception exn ->
         stop_workers control workers;
         raise exn)
   in
-  let workers = start_workers 0 [] in
+  let workers = create_workers 0 [] in
   Fun.protect
     ~finally:(fun () -> stop_workers control workers)
     (fun () ->
@@ -211,7 +211,8 @@ let run
                 "---------------- Round %d: group %S ----------------"
                 round
                 group_names.(group));
-           dispatch_round control tc |> reraise_worker_failure;
+           let round_result = dispatch_round control tc in
+           reraise_worker_failure round_result;
            print_state state;
            check_invariants
              ~where:(Printf.sprintf "after round %d" round)

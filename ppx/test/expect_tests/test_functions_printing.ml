@@ -36,7 +36,7 @@ let%expect_test "a function is named from its binding" =
     --- Failure: binding_name (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
     Falsified after 2 test cases (0 discarded):
 
-      f 42 = 10
+    f 42 = 10
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: [@@failure_blobs [ "<BLOB>" ]]
@@ -66,7 +66,7 @@ let%expect_test "a function drawn inline is also named from its binding" =
     --- Failure: binding_name_inline (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
     Falsified after 2 test cases (0 discarded):
 
-      f 42 = 10
+    f 42 = 10
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: [@@failure_blobs [ "<BLOB>" ]]
@@ -97,7 +97,7 @@ let%expect_test "an explicit ~name wins over the draw-site binding name" =
     --- Failure: explicit_name_beats_binding (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
     Falsified after 2 test cases (0 discarded):
 
-      chosen 42 = 10
+    chosen 42 = 10
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: [@@failure_blobs [ "<BLOB>" ]]
@@ -121,7 +121,7 @@ let%expect_test "without a binding the function falls back to its default name" 
     --- Failure ------------------------------------------------------------
     Falsified after 2 test cases (0 discarded):
 
-      function 42 = 10
+    function 42 = 10
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -146,7 +146,7 @@ let%expect_test "an explicit ~name is used when there is no binding name" =
     --- Failure ------------------------------------------------------------
     Falsified after 2 test cases (0 discarded):
 
-      myfun 42 = 10
+    myfun 42 = 10
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -177,7 +177,7 @@ let%expect_test "functions2 shows its table uncurried, named from its binding" =
     --- Failure: functions2_binding (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
     Falsified after 2 test cases (0 discarded):
 
-      g (3 true) = 10
+    g (3 true) = 10
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: [@@failure_blobs [ "<BLOB>" ]]
@@ -209,7 +209,7 @@ let%expect_test "functions3 shows its table uncurried, named from its binding" =
     --- Failure: functions3_binding (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
     Falsified after 2 test cases (0 discarded):
 
-      h (1 true 2) = 10
+    h (1 true 2) = 10
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: [@@failure_blobs [ "<BLOB>" ]]
@@ -270,7 +270,7 @@ let%expect_test "function call only prints the first time in normal verbosity" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      function 10 = 315
+    function 10 = 315
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -292,9 +292,9 @@ let%expect_test "function call prints every time in verbose/debug verbosity" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      function 10 = 315
-      function 10 = 315
-      function 10 = 315
+    function 10 = 315
+    function 10 = 315
+    function 10 = 315
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -316,9 +316,9 @@ let%expect_test "function call prints every time in verbose/debug verbosity" =
     Falsified after 1 test case (0 discarded):
     replaying failure blob: choices = 1
 
-      function 10 = 315
-      function 10 = 315
-      function 10 = 315
+    function 10 = 315
+    function 10 = 315
+    function 10 = 315
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -350,8 +350,8 @@ let%expect_test "a printable function generator prints with its sexp_of" =
     --- Failure: printable_function_draw (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
     Falsified after 2 test cases (0 discarded):
 
-      f = <fun>
-      f 42 = 10
+    f = <fun>
+    f 42 = 10
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: [@@failure_blobs [ "<BLOB>" ]]
@@ -389,7 +389,7 @@ let%expect_test "a function drawn nested keeps its label but suppresses its valu
     --- Failure: printable_function_drawn_nested (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
     Falsified after 2 test cases (0 discarded):
 
-      f 42 = 10
+    f 42 = 10
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: [@@failure_blobs [ "<BLOB>" ]]
@@ -450,8 +450,8 @@ let%expect_test "partially printable applications" =
     --- Failure: partially_printable_args_and_ret (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
     Falsified after 2 test cases (0 discarded):
 
-      f 1 = <opaque>
-      function <opaque> = 1
+    f 1 = <opaque>
+    function <opaque> = 1
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: [@@failure_blobs [ "<BLOB>" ]]
@@ -474,8 +474,8 @@ let%expect_test "unprintable applications" =
     --- Failure: unprintable_args_and_ret (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
     Falsified after 2 test cases (0 discarded):
 
-      f <opaque> = <opaque>
-      function <opaque> = 1
+    f <opaque> = <opaque>
+    function <opaque> = 1
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: [@@failure_blobs [ "<BLOB>" ]]

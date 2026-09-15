@@ -39,7 +39,7 @@ let%expect_test "Normal notes only on the final failing replay" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      NOTE_MARKER
+    NOTE_MARKER
 
     Exception: Failure("boom")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -117,9 +117,9 @@ let%expect_test "prints from clone interleave deterministically" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      before clone
-      from clone
-      after clone
+    before clone
+    from clone
+    after clone
 
     Exception: Failure("boom")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
