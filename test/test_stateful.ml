@@ -43,7 +43,7 @@ let stateful_failure_test () =
    a fresh integer id, deposits it in the variables, and records it in a "live"
    set; [free] consumes an id from the variables and removes it from the set.
    Variables size must match the size of the live set. Empty-variables draws are
-   rejected by [Pool.consume]'s internal [assume] call. *)
+   rejected by the pool generator. *)
 
 module Var_state = struct
   module S = Hegel.Stateful
@@ -77,9 +77,14 @@ let var_free_rule =
 let var_use_rule =
   let module S = Hegel.Stateful in
   S.Rule.create ~name:"use" ~step:(fun tc state ->
-    let var_gen = S.Pool.values_consumed state.Var_state.variables in
+    let var_gen = S.Pool.values_reusable state.Var_state.variables in
+    let size_before = S.Pool.size state.Var_state.variables in
     let id = Hegel.draw_silent tc var_gen in
     assert (Set.mem state.Var_state.live id);
+    Alcotest.(check int)
+      "reuse preserves pool size"
+      size_before
+      (S.Pool.size state.Var_state.variables);
     state)
 ;;
 
@@ -193,7 +198,7 @@ let stateful_no_rules_test () =
 
 (* Pins the engine-side contract documented on [Internal.pool_generate]: drawing
    from an empty pool rejects the test case with [Assume_rejected], not
-   [Data_exhausted]. *)
+   [Internal.Stop_test]. *)
 let empty_pool_draw_rejects_test () =
   match
     Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
@@ -228,6 +233,7 @@ let stateful_step_count_forwarded_test () =
        steps_this_case := 0;
        S.run tc (module M) ~init:() ~step_count:5;
        max_steps := max !max_steps !steps_this_case);
+  Alcotest.(check bool) "ran at least one step" true (!max_steps > 0);
   Alcotest.(check bool) "no case exceeded the configured cap" true (!max_steps <= 5)
 ;;
 
@@ -403,6 +409,7 @@ let stateful_hand_written_machine_test () =
 (* A pool created inside a rule body outlives that step. Regression test against
    a previous use-after-free. *)
 let test_pool_created_inside_rule () =
+  let used_pool = ref false in
   let module S = Hegel.Stateful in
   let module M = struct
     type state = int S.Pool.t option
@@ -423,6 +430,7 @@ let test_pool_created_inside_rule () =
           | Some pool ->
             S.Pool.add pool 2;
             let v = Hegel.draw_silent tc (S.Pool.values_reusable pool) in
+            used_pool := true;
             assert (v = 1 || v = 2);
             state)
       ]
@@ -437,7 +445,8 @@ let test_pool_created_inside_rule () =
     ; database = Hegel.Settings.Disabled
     }
   in
-  Hegel.run_hegel_test ~settings (fun tc -> S.run tc (module M) ~init:None ~step_count:20)
+  Hegel.run_hegel_test ~settings (fun tc -> S.run tc (module M) ~init:None ~step_count:20);
+  Alcotest.(check bool) "used a pool created by an earlier rule" true !used_pool
 ;;
 
 let concurrent_rule_accessors_test () =

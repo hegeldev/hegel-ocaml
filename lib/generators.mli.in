@@ -951,7 +951,7 @@ module Private : sig
   val collection_more : collection -> Internal.test_case -> bool
 
   (** [collection_reject coll data] rejects the last element of the collection.
-      Raises [Internal.Data_exhausted] on StopTest. *)
+      Raises [Internal.Stop_test] on StopTest. *)
   val collection_reject : collection -> Internal.test_case -> unit
 
   (** [make_pool_values ~pool ~find ~remove ~is_empty ~consume] is a

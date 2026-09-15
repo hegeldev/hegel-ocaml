@@ -15,8 +15,7 @@ let%expect_test "require_equal prints a structural sexp_diff when installed" =
   print_string (Expect_tests.Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     require_equal: values differ (- lhs / + rhs):
      (1    (1

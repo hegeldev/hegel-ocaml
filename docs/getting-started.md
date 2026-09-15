@@ -177,7 +177,6 @@ On failure this prints:
 
 ```
 --- Failure: reverse_is_identity (test/my_tests.ml:1) ------------------
-Falsified after 8 test cases (0 discarded):
 
   xs = (0 1)
 
@@ -185,9 +184,8 @@ Exception: File "test/my_tests.ml", line 3, characters 2-8: Assertion failed
 rerun with: [@@failure_blobs [ "AXic..." ]]
 ```
 
-`Falsified after N test cases (M discarded)` counts the cases that ran before
-the failure (`M` of them were rejected, for example by `assume`). The final line
-replays the exact case. Under `let%hegel_test` it is a `[@@failure_blobs [ "..." ]]` 
+The final line shows how to replay the exact case. Under `let%hegel_test` it is
+a `[@@failure_blobs [ "..." ]]`
 attribute you paste onto the test, while a plain `run_hegel_test` caller gets a
 `~failure_blobs:[ "..." ]` argument to pass. On a terminal the header prints in 
 red. Set `HEGEL_COLOR=0` to disable color (or `1` to force it on). Set 

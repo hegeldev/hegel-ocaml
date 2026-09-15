@@ -87,7 +87,7 @@ type test_location = Internal.test_location =
   }
 
 exception Assume_rejected = Internal.Assume_rejected
-exception Usage_error = Hegel_ffi.Ffi.Usage_error
+exception Usage_error = Internal.Usage_error
 
 (** {2 Convenience re-exports} *)
 

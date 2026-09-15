@@ -1,7 +1,18 @@
 (** Snapshot tests for the [@@failure_blobs ...] recording and replay flows. *)
 
 let prop tc = if Hegel.draw tc (Hegel.booleans ()) then failwith "deliberate failure"
-let settings () = Hegel.Settings.create ~test_cases:50 ~seed:0 ()
+
+let settings () =
+  { (Hegel.Settings.create ~test_cases:50 ~seed:0 ()) with
+    database = Hegel.Settings.Disabled
+  }
+;;
+
+let expect_failure message f =
+  match f () with
+  | () -> failwith "expected the run to raise Failure"
+  | exception Failure actual -> assert (String.equal actual message)
+;;
 
 let contains ~needle s =
   let nl = String.length needle in
@@ -27,19 +38,6 @@ let extract_blob out =
   let q1 = String.index_from out after '"' in
   let q2 = String.index_from out (q1 + 1) '"' in
   String.sub out (q1 + 1) (q2 - q1 - 1)
-;;
-
-let count ~needle s =
-  let nl = String.length needle in
-  let sl = String.length s in
-  let rec go i acc =
-    if i + nl > sl
-    then acc
-    else if String.equal (String.sub s i nl) needle
-    then go (i + nl) (acc + 1)
-    else go (i + 1) acc
-  in
-  if nl = 0 then 0 else go 0 0
 ;;
 
 let replace_all ~sub ~by s =
@@ -68,22 +66,73 @@ let normalize out = replace_all ~sub:"__" ~by:"." out
 (* Round-trip: recording mode prints a blob on failure; that exact blob, fed
    back through replay mode, must reproduce the original failure. *)
 let%expect_test "recording then replay round-trips the failure blob" =
-  (try Hegel.run_hegel_test ~settings:(settings ()) ~failure_blobs:[] prop with
-   | _ -> ());
+  expect_failure "deliberate failure" (fun () ->
+    Hegel.run_hegel_test ~settings:(settings ()) ~failure_blobs:[] prop);
   let recorded = [%expect.output] in
   assert (contains ~needle:{|rerun with: ~failure_blobs:[ "|} recorded);
   let blob = extract_blob recorded in
-  (try Hegel.run_hegel_test ~settings:(settings ()) ~failure_blobs:[ blob ] prop with
-   | _ -> ());
+  expect_failure "deliberate failure" (fun () ->
+    Hegel.run_hegel_test ~settings:(settings ()) ~failure_blobs:[ blob ] prop);
   let replay_out = [%expect.output] in
   assert (contains ~needle:"The failure blob reproduced an error" replay_out)
+;;
+
+let%expect_test "blob replay preserves the original failure backtrace" =
+  let recording = Printexc.backtrace_status () in
+  Printexc.record_backtrace true;
+  Fun.protect
+    ~finally:(fun () -> Printexc.record_backtrace recording)
+    (fun () ->
+       let original = ref "" in
+       let replay_failure _tc =
+         try failwith "replay backtrace" with
+         | exn ->
+           let bt = Printexc.get_raw_backtrace () in
+           original := Printexc.raw_backtrace_to_string bt;
+           Printexc.raise_with_backtrace exn bt
+       in
+       expect_failure "replay backtrace" (fun () ->
+         Hegel.run_hegel_test ~settings:(settings ()) replay_failure);
+       let blob = extract_blob [%expect.output] in
+       let backtrace =
+         match
+           Hegel.run_hegel_test
+             ~settings:(settings ())
+             ~failure_blobs:[ blob ]
+             replay_failure
+         with
+         | () -> assert false
+         | exception Failure msg ->
+           let bt = Printexc.get_raw_backtrace () in
+           assert (String.equal msg "replay backtrace");
+           Printexc.raw_backtrace_to_string bt
+       in
+       assert (not (String.equal !original ""));
+       assert (contains ~needle:!original backtrace);
+       let output = [%expect.output] in
+       assert (contains ~needle:"The failure blob reproduced an error" output))
+;;
+
+let%expect_test "usage errors from a replayed body stay usage errors" =
+  expect_failure "deliberate failure" (fun () ->
+    Hegel.run_hegel_test ~settings:(settings ()) prop);
+  let blob = extract_blob [%expect.output] in
+  (match
+     Hegel.run_hegel_test ~settings:(settings ()) ~failure_blobs:[ blob ] (fun _tc ->
+       raise (Hegel.Usage_error "invalid replay argument"))
+   with
+   | () -> assert false
+   | exception Hegel.Usage_error msg ->
+     assert (String.equal msg "invalid replay argument"));
+  [%expect {||}]
 ;;
 
 let%hegel_test stale_blob _ = () [@@failure_blobs [ "AAEAAAABAQ==" ]]
 
 let%expect_test "a stale blob does not reproduce an error" =
-  try stale_blob () with
-  | Failure msg ->
+  match stale_blob () with
+  | () -> failwith "expected stale blob failure"
+  | exception Failure msg ->
     assert (contains ~needle:"The failure blob did not reproduce an error" msg);
     [%expect {||}]
 ;;
@@ -93,8 +142,9 @@ let%hegel_test invalid_blob = prop [@@failure_blobs [ "INVALID_BLOB" ]]
 let%expect_test
     "an invalid blob does not reproduce an error and fails with a clear error message"
   =
-  try invalid_blob () with
-  | Failure msg ->
+  match invalid_blob () with
+  | () -> failwith "expected invalid blob failure"
+  | exception Failure msg ->
     assert (
       contains
         ~needle:
@@ -105,17 +155,15 @@ let%expect_test
 ;;
 
 let%expect_test "only the first blob is actually replayed" =
-  (try Hegel.run_hegel_test ~settings:(settings ()) prop with
-   | _ -> ());
+  expect_failure "deliberate failure" (fun () ->
+    Hegel.run_hegel_test ~settings:(settings ()) prop);
   let recorded = [%expect.output] in
   let blob = extract_blob recorded in
-  (try
-     Hegel.run_hegel_test
-       ~settings:(settings ())
-       ~failure_blobs:[ blob; "INVALID_BLOB" ]
-       prop
-   with
-   | _ -> ());
+  expect_failure "deliberate failure" (fun () ->
+    Hegel.run_hegel_test
+      ~settings:(settings ())
+      ~failure_blobs:[ blob; "INVALID_BLOB" ]
+      prop);
   let replay_out = [%expect.output] in
   assert (contains ~needle:"The failure blob reproduced an error" replay_out)
 ;;
@@ -147,7 +195,6 @@ let%expect_test "recording groups each failure's draws with its diagnostic" =
   [%expect
     {|
     --- Failure: multi_fail_test (ppx/test/expect_tests/test_failure_blobs_record.ml:<LINE>) ---
-    Falsified after 1 test case (0 discarded):
 
     Failure 1 of 2:
     v = 60
@@ -179,8 +226,7 @@ let%expect_test "the multi-failure report omits blobs when print_blob is off" =
   Printf.printf "%s" (Expect_scrub.scrub_report (normalize [%expect.output]));
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     Failure 1 of 2:
     draw_1 = 60
@@ -192,5 +238,20 @@ let%expect_test "the multi-failure report omits blobs when print_blob is off" =
 
     Exception: Expect_tests.Test_failure_blobs_record.B
     2 failures found!
+    |}]
+;;
+
+let%expect_test "blob scrubbing preserves quoted failure diagnostics" =
+  print_string
+    (Expect_scrub.scrub_blobs
+       {|--- Failure: test (test_failure_blobs_record.ml:1) ---
+Exception: Failure("failure_blobs should not hide this message")
+rerun with: ~failure_blobs:[ "encoded choices" ]
+|});
+  [%expect
+    {|
+    --- Failure: test (test_failure_blobs_record.ml:1) ---
+    Exception: Failure("failure_blobs should not hide this message")
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
