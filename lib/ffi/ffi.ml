@@ -821,7 +821,7 @@ type run_status =
 
 exception Stop_test
 exception Assume_rejected
-exception Backend_error of string
+exception Internal_error of string
 exception Usage_error of string
 
 (* Status codes returned by the C primitives [HEGEL_OK] / [HEGEL_E_*]. *)
@@ -873,13 +873,13 @@ let verbosity_of_int = function
   | 1 -> Quiet
   | 2 -> Verbose
   | 3 -> Debug
-  | n -> raise (Backend_error (Printf.sprintf "hegel: unknown verbosity %d" n))
+  | n -> raise (Internal_error (Printf.sprintf "hegel: unknown verbosity %d" n))
 ;;
 
 let backend_of_int = function
   | 1 -> Default
   | 2 -> Urandom
-  | n -> raise (Backend_error (Printf.sprintf "hegel: unknown backend %d" n))
+  | n -> raise (Internal_error (Printf.sprintf "hegel: unknown backend %d" n))
 ;;
 
 let status_to_int = function
@@ -917,7 +917,7 @@ let check_rc ctx rc =
     in
     let msg = c_last_error_message ctx in
     let detail = if String.length msg = 0 then "" else ": " ^ msg in
-    raise (Backend_error (label ^ detail)))
+    raise (Internal_error (label ^ detail)))
 ;;
 
 (* ------------------------------------------------------------------ *)
@@ -1715,7 +1715,7 @@ let result_failures ctx r =
   List.init n (fun i ->
     match result_failure ctx r i with
     | Some f -> f
-    | None -> raise (Backend_error "hegel: failure disappeared mid-iteration"))
+    | None -> raise (Internal_error "hegel: failure disappeared mid-iteration"))
 ;;
 
 let failure_origin ctx f =

@@ -171,18 +171,25 @@ let test_text_categories_surrogate_c () =
   | _ -> Alcotest.fail "expected Usage_error"
 ;;
 
-(** Test: text raises when alphabet is combined with codec. *)
-let test_text_alphabet_with_codec () =
-  match text ~alphabet:"abc" ~codec:"ascii" () with
-  | exception Hegel.Usage_error _ -> ()
-  | _ -> Alcotest.fail "expected Usage_error"
-;;
-
-(** Test: text raises when alphabet is combined with max_codepoint. *)
-let test_text_alphabet_with_max_codepoint () =
-  match text ~alphabet:"abc" ~max_codepoint:90 () with
-  | exception Hegel.Usage_error _ -> ()
-  | _ -> Alcotest.fail "expected Usage_error"
+(** The alphabet shortcut cannot be combined with any character filter. *)
+let test_text_alphabet_with_filters () =
+  List.iter
+    (fun make ->
+       match make () with
+       | exception Hegel.Usage_error message ->
+         Alcotest.(check string)
+           "conflicting character filters"
+           "alphabet is mutually exclusive with individual character filtering parameters"
+           message
+       | _ -> Alcotest.fail "expected Usage_error")
+    [ (fun () -> text ~alphabet:"abc" ~codec:"ascii" ())
+    ; (fun () -> text ~alphabet:"abc" ~min_codepoint:65 ())
+    ; (fun () -> text ~alphabet:"abc" ~max_codepoint:90 ())
+    ; (fun () -> text ~alphabet:"abc" ~categories:[ "Lu" ] ())
+    ; (fun () -> text ~alphabet:"abc" ~exclude_categories:[ "Lu" ] ())
+    ; (fun () -> text ~alphabet:"abc" ~include_characters:"x" ())
+    ; (fun () -> text ~alphabet:"abc" ~exclude_characters:"x" ())
+    ]
 ;;
 
 (* ==== E2E tests ==== *)
@@ -549,11 +556,7 @@ let tests =
       "text categories surrogate C"
       `Quick
       test_text_categories_surrogate_c
-  ; Alcotest.test_case "text alphabet with codec" `Quick test_text_alphabet_with_codec
-  ; Alcotest.test_case
-      "text alphabet with max_codepoint"
-      `Quick
-      test_text_alphabet_with_max_codepoint
+  ; Alcotest.test_case "text alphabet with filters" `Quick test_text_alphabet_with_filters
   ; Alcotest.test_case "floats default e2e" `Quick test_floats_default_e2e
   ; Alcotest.test_case "text default e2e" `Quick test_text_default_e2e
   ; Alcotest.test_case "binary default e2e" `Quick test_binary_default_e2e

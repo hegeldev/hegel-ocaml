@@ -322,8 +322,8 @@ val run_concurrent_internal
   -> invariants:'state Invariant.t list
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
   -> ?step_count:int
-  -> ?min_concurrency:int
-  -> ?max_concurrency:int
+  -> min_concurrency:int
+  -> max_concurrency:int
   -> Internal.test_case
   -> unit
 

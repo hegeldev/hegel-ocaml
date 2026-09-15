@@ -240,15 +240,19 @@ let extract_origin exn =
 ;;
 
 exception Usage_error = Ffi.Usage_error
-exception Backend_error = Ffi.Backend_error
+exception Internal_error = Ffi.Internal_error
 
 (** [with_stop_guard tc f] marks the test case aborted on engine control
     exceptions and propagates them unchanged. *)
 let with_stop_guard tc f =
   try f () with
-  | (Stop_test | Assume_rejected | Usage_error _ | Backend_error _) as exn ->
+  | (Stop_test | Assume_rejected | Usage_error _) as exn ->
     tc.test_aborted <- true;
     raise_notrace exn
+  | Internal_error _ as exn ->
+    (* requires an libhegel/binding fault *)
+    (tc.test_aborted <- true;
+     raise_notrace exn) [@coverage off]
 ;;
 
 (** [generate_boolean tc p forced] draws a boolean with probability [p] of
@@ -662,25 +666,6 @@ let pool_generate tc ~pool ?(consume = false) () =
   with_stop_guard tc (fun () -> Ffi.pool_generate tc.context tc.handle ~pool ~consume)
 ;;
 
-(** [new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check
-    ~step_count] registers a sequential engine-owned state machine: one
-    concurrency group, concurrency fixed at 1, every rule pulled by worker 0,
-    running at most [step_count] rules per test case. Release it with
-    {!state_machine_free}. *)
-let new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check ~step_count
-  =
-  fst
-    (new_state_machine_with_concurrency
-       tc
-       ~rule_names
-       ~rule_groups:(Array.make (Array.length rule_names) 0)
-       ~invariant_names
-       ~invariants_always_check
-       ~min_concurrency:1
-       ~max_concurrency:1
-       ~step_count)
-;;
-
 let state_machine_next_group tc ~state_machine =
   with_stop_guard tc (fun () ->
     Ffi.state_machine_next_group tc.context tc.handle ~state_machine)
@@ -699,24 +684,9 @@ let state_machine_next_rule_for_worker tc ~state_machine ~worker_index =
     Ffi.state_machine_next_rule tc.context tc.handle ~state_machine ~worker_index)
 ;;
 
-(** [state_machine_next_rule tc ~state_machine] draws the index of the next
-    rule to run this round, or [None] when the round is over and the caller
-    should ask {!state_machine_next_round} again. Raises {!Stop_test} when
-    the engine's choice budget is exhausted. *)
-let state_machine_next_rule tc ~state_machine =
-  state_machine_next_rule_for_worker tc ~state_machine ~worker_index:0
-;;
-
 let state_machine_rule_rejected_for_worker tc ~state_machine ~worker_index =
   with_stop_guard tc (fun () ->
     Ffi.state_machine_rule_rejected tc.context tc.handle ~state_machine ~worker_index)
-;;
-
-(** [state_machine_rule_rejected tc ~state_machine] tells the engine the rule it
-    last handed out did not complete, so it does not count against the step
-    budget for this test case. *)
-let state_machine_rule_rejected tc ~state_machine =
-  state_machine_rule_rejected_for_worker tc ~state_machine ~worker_index:0
 ;;
 
 (** [state_machine_should_check_invariant tc ~state_machine ~invariant_index]
@@ -903,7 +873,7 @@ let run_test
       | exception Assume_rejected -> Invalid
       | exception Stop_test -> Overrun
       | exception Flaky_strategy -> Invalid
-      | exception ((Usage_error _ | Backend_error _) as control) -> raise control
+      | exception ((Usage_error _ | Internal_error _) as control) -> raise control
       | exception exn ->
         let backtrace = Printexc.get_raw_backtrace () in
         Failed { origin = extract_origin exn; exn; backtrace }
@@ -939,7 +909,9 @@ let run_test
   let final_replay failure =
     let blob = Option.get (Ffi.failure_blob ctx failure) in
     match replay_blob blob with
-    | Error msg -> failwith ("libhegel generated an invalid failure blob: " ^ msg ^ "Please report this at https://github.com/hegeldev/hegel-rust/issues")
+    | Error msg ->
+      (* Requires libhegel to corrupt its own generated blob. *)
+      (failwith ("libhegel generated an invalid failure blob: " ^ msg ^ " Please report this at https://github.com/hegeldev/hegel-rust/issues")) [@coverage off]
     | Ok { result = Failed failure; output; _ } -> blob, failure, output
     | Ok _ -> failwith flaky_diagnostic
   in
@@ -968,7 +940,9 @@ let run_test
       let failure, output =
         match failure_candidate with
         | Some failure -> failure
-        | None -> failwith "hegel: nondeterministic failure has no captured exception"
+        | None ->
+          (* libhegel cannot accept a failure that the frontend never reported. *)
+          (failwith "hegel: nondeterministic failure has no captured exception") [@coverage off]
       in
       if settings.verbosity <> Quiet
       then (

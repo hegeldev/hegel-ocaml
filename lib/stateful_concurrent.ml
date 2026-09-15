@@ -141,7 +141,7 @@ let reraise_worker_failure results =
       results
   in
   let is_control_exception = function
-    | Internal.Usage_error _ | Internal.Backend_error _ -> true
+    | Internal.Usage_error _ | Internal.Internal_error _ -> true
     | _ -> false
   in
   let is_overrun = function
@@ -154,7 +154,7 @@ let reraise_worker_failure results =
   in
   let is_test_failure = Fun.const true in
   (* invalidated or exhausted rules can cause in other workers.
-     error precedence from greatest to least: usage/backend errors, overrun,
+     error precedence from greatest to least: usage/internal errors, overrun,
      invalidation, actual test failure. within each category, first worker raises. *)
   let failure =
     Array.find_map
@@ -194,8 +194,10 @@ let run
       match Thread.create (fun () -> worker_loop control worker_index run_round) () with
       | worker -> create_workers (worker_index + 1) (worker :: workers)
       | exception exn ->
-        stop_workers control workers;
-        raise exn)
+        (* requires OS thread creation to fail. *)
+        (stop_workers control workers;
+         raise exn)
+        [@coverage off])
   in
   let workers = create_workers 0 [] in
   Fun.protect

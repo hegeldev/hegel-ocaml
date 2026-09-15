@@ -183,8 +183,8 @@ let run_concurrent_internal
       ~invariants
       ?sexp_of_state
       ?step_count
-      ?(min_concurrency = 1)
-      ?(max_concurrency = 4)
+      ~min_concurrency
+      ~max_concurrency
       tc
   =
   run_machine

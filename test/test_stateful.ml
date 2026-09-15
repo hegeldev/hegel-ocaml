@@ -870,6 +870,64 @@ let concurrent_worker_usage_error_test () =
       message
 ;;
 
+let concurrent_worker_control_exceptions_test () =
+  let module S = Hegel.Stateful in
+  List.iter
+    [ Hegel.Internal.Internal_error "worker internal failure"
+    ; Hegel.Internal.Flaky_strategy
+    ; Hegel.Internal.Assume_rejected
+    ]
+    ~f:(fun error ->
+      let rule =
+        S.Concurrent_rule.create
+          ~name:"control"
+          ~step:(fun tc () ->
+            match error with
+            | Hegel.Internal.Assume_rejected ->
+              (* exceeding the libhegel nesting limit invalidates the tc *)
+              for _ = 1 to 1001 do
+                Hegel.Internal.start_span tc
+              done;
+              ignore (Hegel.draw tc (Hegel.booleans ()) : bool)
+            | _ -> raise error)
+          ()
+      in
+      match
+        Hegel.run_hegel_test
+          ~settings:
+            { (Hegel.Settings.create ~test_cases:2 ~seed:0 ()) with
+              database = Hegel.Settings.Disabled
+            ; verbosity = Hegel.Settings.Quiet
+            }
+          (fun tc ->
+             S.run_concurrent
+               tc
+               (module struct
+                 type state = unit
+
+                 let rules = [ rule ]
+                 let invariants = []
+               end)
+               ~init:()
+               ~min_concurrency:1
+               ~max_concurrency:4)
+      with
+      | () -> Alcotest.fail "expected worker control exception or health check"
+      | exception Hegel.Internal.Internal_error message ->
+        (match error with
+         | Hegel.Internal.Internal_error expected ->
+           Alcotest.(check string) "internal error propagated" expected message
+         | _ -> Alcotest.fail "unexpected internal error")
+      | exception Failure message ->
+        (match error with
+         | Hegel.Internal.Flaky_strategy | Hegel.Internal.Assume_rejected ->
+           Alcotest.(check bool)
+             "invalid worker cases are rejected instead of failing the property"
+             true
+             (String.is_substring message ~substring:"FilterTooMuch")
+         | _ -> Alcotest.fail "internal error was converted to a property failure"))
+;;
+
 let concurrent_always_check_invariant_test () =
   let module S = Hegel.Stateful in
   let step_count = 10 in
@@ -1117,6 +1175,10 @@ let tests =
       "stateful: concurrent worker usage error"
       `Quick
       concurrent_worker_usage_error_test
+  ; Alcotest.test_case
+      "stateful: concurrent worker control exceptions"
+      `Quick
+      concurrent_worker_control_exceptions_test
   ; Alcotest.test_case
       "stateful: concurrent invalid bounds"
       `Quick
