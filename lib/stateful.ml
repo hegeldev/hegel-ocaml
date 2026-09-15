@@ -96,35 +96,12 @@ let check_invariants tc ~state_machine ~invariants ~where ~sample state =
     invariants
 ;;
 
-let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
-  let rule_array = Array.of_list rules in
-  let invariant_names = List.map (fun inv -> Invariant.name inv) invariants in
-  let invariants_always_check =
-    List.map (fun inv -> inv.Invariant.always_check) invariants
-  in
-  let state_machine =
-    Internal.new_state_machine
-      tc
-      ~rule_names:(List.map Rule.name rules)
-      ~invariant_names
-      ~invariants_always_check
-      ~step_count
-  in
-  let print_state state =
-    Option.iter
-      (fun sexp_of -> Internal.print_line tc [ Text "state = "; Value (sexp_of state) ])
-      sexp_of_state
-  in
-  let check_invariants = check_invariants tc ~state_machine ~invariants in
-  let announce_checks which =
-    if not (List.is_empty invariants)
-    then Internal.note tc (Printf.sprintf "Checking invariants on the %s state." which)
-  in
+let run_sequential_steps tc ~state_machine ~rules ~init ~print_state ~check_invariants =
   let rec exec_round ~state ~steps_attempted ~rejected =
     match Internal.state_machine_next_rule tc ~state_machine with
     | None -> state, steps_attempted, rejected
     | Some rule_index ->
-      let rule = rule_array.(rule_index) in
+      let rule = rules.(rule_index) in
       let step_num = steps_attempted + 1 in
       Internal.note tc (Printf.sprintf "Step %d: %s" step_num rule.Rule.name);
       (match section tc (fun tc -> rule.Rule.step tc state) with
@@ -156,34 +133,7 @@ let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
       Internal.stop_span tc;
       state)
   in
-  Fun.protect
-    ~finally:(fun () -> Internal.state_machine_free tc ~state_machine)
-    (fun () ->
-       print_state init;
-       announce_checks "initial";
-       check_invariants ~where:"in the initial state" ~sample:false init;
-       let final_state = loop ~state:init ~steps_attempted:0 in
-       announce_checks "final";
-       check_invariants ~where:"in the final state" ~sample:false final_state)
-;;
-
-module type State_machine = sig
-  type state
-
-  val rules : state Rule.t list
-  val invariants : state Invariant.t list
-end
-
-let run
-      (type s)
-      ?step_count
-      ?sexp_of_state
-      tc
-      (module M : State_machine with type state = s)
-      ~(init : s)
-  =
-  run_internal ~init ~rules:M.rules ~invariants:M.invariants ?sexp_of_state ?step_count tc
-;;
+  loop ~state:init ~steps_attempted:0
 
 let run_worker_round
       ~worker_index
@@ -207,4 +157,133 @@ let run_worker_round
          loop ())
   in
   loop ()
+;;
+
+let run_machine
+      ~init
+      ~rule_names
+      ~rule_groups
+      ~min_concurrency
+      ~max_concurrency
+      ~invariants
+      ~invariant_message
+      ~run_steps
+      ?sexp_of_state
+      ?(step_count = 50)
+      tc
+  =
+  let state_machine, concurrency =
+    Internal.new_state_machine_with_concurrency
+      tc
+      ~rule_names
+      ~rule_groups
+      ~invariant_names:(List.map Invariant.name invariants)
+      ~invariants_always_check:
+        (List.map (fun inv -> inv.Invariant.always_check) invariants)
+      ~step_count
+      ~min_concurrency
+      ~max_concurrency
+  in
+  let print_state state =
+    Option.iter
+      (fun sexp_of -> Internal.print_line tc [ Text "state = "; Value (sexp_of state) ])
+      sexp_of_state
+  in
+  let check_invariants = check_invariants tc ~state_machine ~invariants in
+  let announce_checks which =
+    if not (List.is_empty invariants) then Internal.note tc (invariant_message which)
+  in
+  Fun.protect
+    ~finally:(fun () -> Internal.state_machine_free tc ~state_machine)
+    (fun () ->
+       if concurrency > 1
+       then Internal.note tc (Printf.sprintf "Concurrency level: %d" concurrency);
+       print_state init;
+       announce_checks "initial";
+       check_invariants ~where:"in the initial state" ~sample:false init;
+       let final_state =
+         run_steps ~state_machine ~concurrency ~print_state ~check_invariants
+       in
+       announce_checks "final";
+       check_invariants ~where:"in the final state" ~sample:false final_state)
+;;
+
+let run_internal ~init ~rules ~invariants ?sexp_of_state ?step_count tc =
+  run_machine
+    ~init
+    ~rule_names:(List.map Rule.name rules)
+    ~rule_groups:(List.map (fun _ -> 0) rules)
+    ~min_concurrency:1
+    ~max_concurrency:1
+    ~invariants
+    ~invariant_message:(Printf.sprintf "Checking invariants on the %s state.")
+    ~run_steps:(fun ~state_machine ~concurrency:_ ~print_state ~check_invariants ->
+      run_sequential_steps
+        tc
+        ~state_machine
+        ~rules:(Array.of_list rules)
+        ~init
+        ~print_state
+        ~check_invariants)
+    ?sexp_of_state
+    ?step_count
+    tc
+;;
+
+module type State_machine = sig
+  type state
+
+  val rules : state Rule.t list
+  val invariants : state Invariant.t list
+end
+
+let run
+      (type s)
+      ?step_count
+      ?sexp_of_state
+      tc
+      (module M : State_machine with type state = s)
+      ~(init : s)
+  =
+  run_internal ~init ~rules:M.rules ~invariants:M.invariants ?sexp_of_state ?step_count tc
+;;
+
+module type Concurrent_state_machine = sig
+  type state
+
+  val rules : state Concurrent_rule.t list
+  val invariants : state Invariant.t list
+end
+
+let run_concurrent
+      (type s)
+      ?step_count
+      tc
+      (module M : Concurrent_state_machine with type state = s)
+      ~(init : s)
+      ~min_concurrency
+      ~max_concurrency
+  =
+  let rules = Array.of_list M.rules in
+  let rule_groups, group_names = group_ids rules in
+  run_machine
+    ~init
+    ~rule_names:(Array.to_list (Array.map Concurrent_rule.name rules))
+    ~rule_groups
+    ~min_concurrency
+    ~max_concurrency
+    ~invariants:M.invariants
+    ~invariant_message:(fun which ->
+      Printf.sprintf "%s invariant check." (String.capitalize_ascii which))
+    ~run_steps:(fun ~state_machine ~concurrency ~print_state:_ ~check_invariants ->
+      run_concurrent_steps
+        tc
+        ~state_machine
+        ~concurrency
+        ~rules
+        ~group_names
+        ~init
+        ~check_invariants)
+    ?step_count
+    tc
 ;;

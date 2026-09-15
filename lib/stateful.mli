@@ -318,12 +318,20 @@ val run_internal
 
 (**/**)
 
-(** [run_concurrent ?step_count ~init ~rules ~min_concurrency ~max_concurrency tc] 
-    executes a state machine using the number of worker threads selected by libhegel 
+(** A state machine whose rules may run concurrently. *)
+module type Concurrent_state_machine = sig
+  type state
+
+  val rules : state Concurrent_rule.t list
+  val invariants : state Invariant.t list
+end
+
+(** [run_concurrent tc (module M) ~init ~min_concurrency ~max_concurrency]
+    executes a state machine using the number of worker threads selected by libhegel
     in the inclusive concurrency range. Each worker gets an independent clone of
-    [tc]. Each step of the test is called a round. In a round all workers receive 
-    rules from one concurrency group. Invariants run on the calling thread only 
-    after all workers complete.
+    [tc]. In a round all workers receive rules from one concurrency group.
+    Invariants are checked on the initial and final state and sampled between
+    rounds, unless they were created with [always_check:true].
 
     [step_count] defaults to 50 and bounds the number of rules per test case.
 
@@ -332,10 +340,9 @@ val run_internal
     blob. *)
 val run_concurrent
   :  ?step_count:int
+  -> Internal.test_case
+  -> (module Concurrent_state_machine with type state = 'state)
   -> init:'state
-  -> rules:'state Concurrent_rule.t list
-  -> ?invariants:'state Invariant.t list
   -> min_concurrency:int
   -> max_concurrency:int
-  -> Internal.test_case
   -> unit

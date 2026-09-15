@@ -118,14 +118,21 @@ let%expect_test "state trace across multiple rules" =
     |}]
 ;;
 
-let concurrent_boom_rule () =
-  Stateful.Concurrent_rule.create
-    ~name:"boom"
-    ~step:(fun tc () ->
-      ignore (Hegel.draw tc (integers ()) : int);
-      failwith "concurrent boom")
-    ()
-;;
+module Concurrent_boom = struct
+  type state = unit
+
+  let rules =
+    [ Stateful.Concurrent_rule.create
+        ~name:"boom"
+        ~step:(fun tc () ->
+          ignore (Hegel.draw tc (integers ()) : int);
+          failwith "concurrent boom")
+        ()
+    ]
+  ;;
+
+  let invariants = []
+end
 
 let%expect_test "nondeterministic failure reports the discovering execution" =
   (try
@@ -138,12 +145,12 @@ let%expect_test "nondeterministic failure reports the discovering execution" =
        (fun tc ->
           Hegel.note tc "preamble";
           Stateful.run_concurrent
+            tc
+            (module Concurrent_boom)
             ~step_count:5
             ~init:()
-            ~rules:[ concurrent_boom_rule () ]
             ~min_concurrency:2
-            ~max_concurrency:2
-            tc)
+            ~max_concurrency:2)
    with
    | Failure message as exn ->
      if String.equal message "concurrent boom" then () else raise exn
@@ -157,7 +164,6 @@ let%expect_test "nondeterministic failure reports the discovering execution" =
 
       preamble
       Concurrency level: 2
-      Initial invariant check.
       ---------------- Round 1: group "<anonymous>" ----------------
       [worker 0 +time] Rule: boom
       [worker 0 +time]   draw_1 = 79891905220201248
@@ -178,12 +184,12 @@ let%expect_test "one concurrent worker remains deterministic" =
          }
        (fun tc ->
           Stateful.run_concurrent
+            tc
+            (module Concurrent_boom)
             ~step_count:5
             ~init:()
-            ~rules:[ concurrent_boom_rule () ]
             ~min_concurrency:1
-            ~max_concurrency:1
-            tc)
+            ~max_concurrency:1)
    with
    | Failure message as exn ->
      if String.equal message "concurrent boom" then () else raise exn
@@ -194,8 +200,6 @@ let%expect_test "one concurrent worker remains deterministic" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      Concurrency level: 1
-      Initial invariant check.
       ---------------- Round 1: group "<anonymous>" ----------------
       [worker 0 +time] Rule: boom
       [worker 0 +time]   draw_1 = 0
@@ -216,12 +220,12 @@ let%expect_test "quiet nondeterministic failure stays quiet" =
          }
        (fun tc ->
           Stateful.run_concurrent
+            tc
+            (module Concurrent_boom)
             ~step_count:5
             ~init:()
-            ~rules:[ concurrent_boom_rule () ]
             ~min_concurrency:2
-            ~max_concurrency:2
-            tc)
+            ~max_concurrency:2)
    with
    | Failure message as exn ->
      if String.equal message "concurrent boom" then raised := true else raise exn
@@ -252,12 +256,16 @@ let%expect_test "concurrent invariant failures retain their names" =
          { (Settings.create ~test_cases:1 ~seed:0 ()) with database = Settings.Disabled }
        (fun tc ->
           Stateful.run_concurrent
+            tc
+            (module struct
+              type state = int Atomic.t
+
+              let rules = [ rule ]
+              let invariants = [ invariant ]
+            end)
             ~init:(Atomic.make 0)
-            ~rules:[ rule ]
-            ~invariants:[ invariant ]
             ~min_concurrency:1
-            ~max_concurrency:1
-            tc)
+            ~max_concurrency:1)
    with
    | Failure message when String.equal message "invariant boom" -> ());
   print_string (Expect_scrub.scrub_concurrent_report [%expect.output]);
@@ -266,7 +274,6 @@ let%expect_test "concurrent invariant failures retain their names" =
     --- Failure ------------------------------------------------------------
     Falsified after 1 test case (0 discarded):
 
-      Concurrency level: 1
       Initial invariant check.
       ---------------- Round 1: group "<anonymous>" ----------------
       [worker 0 +time] Rule: increment
