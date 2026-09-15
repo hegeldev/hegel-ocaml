@@ -145,7 +145,7 @@ let reraise_worker_failure results =
     | _ -> false
   in
   let is_overrun = function
-    | Internal.Data_exhausted -> true
+    | Internal.Stop_test -> true
     | _ -> false
   in
   let is_invalid = function

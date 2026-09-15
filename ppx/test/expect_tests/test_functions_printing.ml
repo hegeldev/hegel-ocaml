@@ -34,7 +34,6 @@ let%expect_test "a function is named from its binding" =
   [%expect
     {|
     --- Failure: binding_name (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
-    Falsified after 2 test cases (0 discarded):
 
     f 42 = 10
 
@@ -64,7 +63,6 @@ let%expect_test "a function drawn inline is also named from its binding" =
   [%expect
     {|
     --- Failure: binding_name_inline (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
-    Falsified after 2 test cases (0 discarded):
 
     f 42 = 10
 
@@ -95,7 +93,6 @@ let%expect_test "an explicit ~name wins over the draw-site binding name" =
   [%expect
     {|
     --- Failure: explicit_name_beats_binding (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
-    Falsified after 2 test cases (0 discarded):
 
     chosen 42 = 10
 
@@ -118,8 +115,7 @@ let%expect_test "without a binding the function falls back to its default name" 
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 2 test cases (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     function 42 = 10
 
@@ -143,8 +139,7 @@ let%expect_test "an explicit ~name is used when there is no binding name" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 2 test cases (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     myfun 42 = 10
 
@@ -175,7 +170,6 @@ let%expect_test "functions2 shows its table uncurried, named from its binding" =
   [%expect
     {|
     --- Failure: functions2_binding (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
-    Falsified after 2 test cases (0 discarded):
 
     g (3 true) = 10
 
@@ -207,7 +201,6 @@ let%expect_test "functions3 shows its table uncurried, named from its binding" =
   [%expect
     {|
     --- Failure: functions3_binding (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
-    Falsified after 2 test cases (0 discarded):
 
     h (1 true 2) = 10
 
@@ -233,7 +226,6 @@ let%expect_test "a scalar drawn with draw_silent prints nothing even when named"
   [%expect
     {|
     --- Failure: draw_silent_scalar_stays_silent (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
-    Falsified after 1 test case (0 discarded):
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: [@@failure_blobs [ "<BLOB>" ]]
     |}]
@@ -267,8 +259,7 @@ let%expect_test "function call only prints the first time in normal verbosity" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     function 10 = 315
 
@@ -289,8 +280,7 @@ let%expect_test "function call prints every time in verbose/debug verbosity" =
     function 10 = 315
     function 10 = 315
     Ending phase: Generate
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     function 10 = 315
     function 10 = 315
@@ -312,8 +302,7 @@ let%expect_test "function call prints every time in verbose/debug verbosity" =
     test case #1: status = Interesting, choices = 1
     Ending phase: Generate
     Test done. interesting_test_cases=1
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
     replaying failure blob: choices = 1
 
     function 10 = 315
@@ -348,7 +337,6 @@ let%expect_test "a printable function generator prints with its sexp_of" =
   [%expect
     {|
     --- Failure: printable_function_draw (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
-    Falsified after 2 test cases (0 discarded):
 
     f = <fun>
     f 42 = 10
@@ -359,8 +347,8 @@ let%expect_test "a printable function generator prints with its sexp_of" =
 ;;
 
 (* Drawn nested (inside a span, draw depth > 0) a function still gets its label
-   threaded into its pairs — here [inner], numbered because it is drawn inside a
-   thunk — but its [<fun>] value line is suppressed like any nested draw. It is
+   threaded into its pairs — here the explicit name [f] — but its [<fun>]
+   value line is suppressed like any nested draw. It is
    applied at the top level, so its pair still shows. *)
 let%hegel_test printable_function_drawn_nested tc =
   let f =
@@ -387,7 +375,6 @@ let%expect_test "a function drawn nested keeps its label but suppresses its valu
   [%expect
     {|
     --- Failure: printable_function_drawn_nested (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
-    Falsified after 2 test cases (0 discarded):
 
     f 42 = 10
 
@@ -421,7 +408,6 @@ let%expect_test "a function applied inside a span prints nothing" =
   [%expect
     {|
     --- Failure: application_inside_span_is_suppressed (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
-    Falsified after 1 test case (0 discarded):
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: [@@failure_blobs [ "<BLOB>" ]]
     |}]
@@ -448,7 +434,6 @@ let%expect_test "partially printable applications" =
   [%expect
     {|
     --- Failure: partially_printable_args_and_ret (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
-    Falsified after 2 test cases (0 discarded):
 
     f 1 = <opaque>
     function <opaque> = 1
@@ -472,7 +457,6 @@ let%expect_test "unprintable applications" =
   [%expect
     {|
     --- Failure: unprintable_args_and_ret (ppx/test/expect_tests/test_functions_printing.ml:<LINE>) ---
-    Falsified after 2 test cases (0 discarded):
 
     f <opaque> = <opaque>
     function <opaque> = 1

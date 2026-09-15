@@ -60,20 +60,3 @@ let contains_substring s sub =
     in
     check 0)
 ;;
-
-(** Helper: check where a given command is *)
-let find_cmd cmd =
-  let inp_stream = Core_unix.open_process_in ("which " ^ cmd) in
-  let output = String.strip (In_channel.input_all inp_stream) in
-  let exit_code = Core_unix.close_process_in inp_stream in
-  match exit_code with
-  | Ok () -> output
-  | Error err ->
-    raise
-      (Failure
-         (sprintf
-            "Command failed with status: %s"
-            (match err with
-             | `Exit_non_zero code -> Int.to_string code
-             | `Signal signal -> "signaled: " ^ Signal.to_string signal)))
-;;

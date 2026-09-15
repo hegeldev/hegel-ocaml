@@ -3,12 +3,11 @@
 
     Examples in this documentation assume [open Hegel]. *)
 
-(** Raised when {!assume} condition is [false]. *)
-exception Assume_rejected
+(** Engine signal to stop the current test case, including choice exhaustion. *)
+exception Stop_test
 
-(** Raised when the engine runs out of choice budget for the current test case
-    (StopTest). *)
-exception Data_exhausted
+(** Raised when an assumption or engine draw rejects the case. *)
+exception Assume_rejected
 
 (** Raised when the engine detects a flaky strategy definition or when the
     client side pool diverges from the engine side pool. *)
@@ -81,15 +80,15 @@ exception Backend_error of string
 
 (** [generate_boolean tc p forced] draws a boolean with probability [p] of
     [true]. If [forced] is [Some b] the value is forced to [b]. Raises
-    {!Data_exhausted} on StopTest. *)
+    {!Stop_test} on StopTest. *)
 val generate_boolean : test_case -> float -> bool option -> bool
 
 (** [generate_integer tc ~min_value ~max_value] draws an integer in the
-    inclusive range. Raises {!Data_exhausted} on StopTest. *)
+    inclusive range. Raises {!Stop_test} on StopTest. *)
 val generate_integer : test_case -> min_value:int -> max_value:int -> int
 
 (** [generate_float tc ...] draws a width-64 float under the given NaN /
-    infinity / exclusion policy. Raises {!Data_exhausted} on StopTest. *)
+    infinity / exclusion policy. Raises {!Stop_test} on StopTest. *)
 val generate_float
   :  test_case
   -> min_value:float
@@ -102,11 +101,11 @@ val generate_float
   -> float
 
 (** [generate_bytes tc ~min_size ~max_size] draws a byte string
-    ([max_size = None] means unbounded). Raises {!Data_exhausted} on StopTest. *)
+    ([max_size = None] means unbounded). Raises {!Stop_test} on StopTest. *)
 val generate_bytes : test_case -> min_size:int -> max_size:int option -> string
 
 (** [generate_text tc ...] draws a text string over the described alphabet.
-    Raises {!Data_exhausted} on StopTest. *)
+    Raises {!Stop_test} on StopTest. *)
 val generate_text
   :  test_case
   -> min_size:int
@@ -121,7 +120,7 @@ val generate_text
   -> string
 
 (** [generate_regex tc ~pattern ~fullmatch] draws a string matching [pattern]
-    (Python-[re] syntax). Raises {!Data_exhausted} on StopTest. *)
+    (Python-[re] syntax). Raises {!Stop_test} on StopTest. *)
 val generate_regex : test_case -> pattern:string -> fullmatch:bool -> string
 
 (** [generate_email tc] draws an RFC 5321/5322 email address. Raises
@@ -367,14 +366,14 @@ val state_machine_next_group : test_case -> state_machine:state_machine -> int o
 (** [state_machine_next_round tc ~state_machine] asks the engine whether the
     machine should run another round of rules: [false] once the step budget for
     the test case is exhausted. Call it before the first rule and after every
-    round. Raises {!Data_exhausted} when the engine's choice budget is
+    round. Raises {!Stop_test} when the engine's choice budget is
     exhausted. *)
 val state_machine_next_round : test_case -> state_machine:state_machine -> bool
 
 (** [state_machine_next_rule tc ~state_machine] draws the index (in
     [\[0, num_rules)]) of the next rule to run this round, letting the engine
     choose and shrink the rule sequence, or returns [None] when the round is
-    over. Raises {!Data_exhausted} when the engine's choice budget is exhausted. *)
+    over. Raises {!Stop_test} when the engine's choice budget is exhausted. *)
 val state_machine_next_rule : test_case -> state_machine:state_machine -> int option
 
 (** Worker-indexed form of {!state_machine_next_rule} for concurrent stateful

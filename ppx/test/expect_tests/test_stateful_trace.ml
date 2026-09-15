@@ -1,9 +1,8 @@
 open! Core
 open Hegel
 
-(* Deterministic, database-disabled run so the [Falsified after N] count and the
-   failure blob are stable; swallow the failure so the expect block only sees
-   the report. *)
+(* Deterministic, database-disabled run so the failure blob is stable; swallow
+   the failure so the expect block only sees the report. *)
 let run_failing body =
   let settings =
     { (Settings.create ~test_cases:20 ~seed:0 ()) with
@@ -34,8 +33,7 @@ let%expect_test "state trace; invariant marks the failing step" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 2 test cases (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     state = 0
     Checking invariants on the initial state.
@@ -68,8 +66,7 @@ let%expect_test "invariant violated in the initial state" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     Checking invariants on the initial state.
     Invariant silly_inv violated in the initial state.
@@ -104,8 +101,7 @@ let%expect_test "state trace across multiple rules" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 3 test cases (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     state = ()
     Step 1: push
@@ -159,8 +155,7 @@ let%expect_test "nondeterministic failure reports the discovering execution" =
   [%expect
     {|
     Concurrent state machine detected: this run is nondeterministic, so failures are reported from the execution that discovered them, without shrinking, replay, database persistence, or a reproduce blob.
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (1 discarded):
+    --- Failure --------------------------------------------------------------------
 
     preamble
     Concurrency level: 2
@@ -195,8 +190,7 @@ let%expect_test "one concurrent worker remains deterministic" =
   print_string (Expect_scrub.scrub_concurrent_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     ---------------- Round 1: group "<anonymous>" ----------------
     [worker 0 +time] Rule: boom
@@ -271,8 +265,7 @@ let%expect_test "concurrent invariant failures retain their names" =
   print_string (Expect_scrub.scrub_concurrent_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     state = 0
     Checking invariants on the initial state.

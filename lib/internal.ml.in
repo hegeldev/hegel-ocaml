@@ -24,12 +24,11 @@ module String_table = Stdlib.Hashtbl.Make (struct
     let hash = Stdlib.Hashtbl.hash
   end)
 
-(** Raised when {!assume} condition is [false]. *)
-exception Assume_rejected
+(** Engine signal to stop the current test case, including choice exhaustion. *)
+exception Stop_test = Ffi.Stop_test
 
-(** Raised when the engine runs out of choice budget for the current test case
-    (StopTest). *)
-exception Data_exhausted
+(** Raised when an assumption or engine draw rejects the case. *)
+exception Assume_rejected = Ffi.Assume_rejected
 
 (** Raised when the engine detects a flaky strategy definition or when 
 the client side pool diverges from the engine side pool. *)
@@ -43,13 +42,6 @@ type test_location =
   ; file : string
   ; begin_line : int
   }
-
-(** Outcome of replaying a single failure blob. *)
-type replay =
-  | Undecodable of string
-  (** the blob could not be decoded; carries the engine's diagnostic *)
-  | Did_not_reproduce (** the blob replayed cleanly — it is stale *)
-  | Reproduced of exn (** the blob re-triggered the original failure *)
 
 (** Draw-name bookkeeping: the per-name occurrence counter that numbers
     repeatable draws ([label_1], [label_2], …). Shared across every clone of a
@@ -250,37 +242,31 @@ let extract_origin exn =
 exception Usage_error = Ffi.Usage_error
 exception Backend_error = Ffi.Backend_error
 
-(** [with_stop_guard tc f] runs [f ()], translating the engine's per-case abort
-    signals into the corresponding OCaml exceptions and marking the test case
-    aborted: {!Ffi.Stop_test} becomes {!Data_exhausted} (choice budget exhausted)
-    and {!Ffi.Assume_rejected} becomes {!Assume_rejected} (the engine rejected
-    the case as invalid, e.g. an unsatisfiable uniqueness constraint). *)
+(** [with_stop_guard tc f] marks the test case aborted on engine control
+    exceptions and propagates them unchanged. *)
 let with_stop_guard tc f =
   try f () with
-  | Ffi.Stop_test ->
+  | (Stop_test | Assume_rejected | Usage_error _ | Backend_error _) as exn ->
     tc.test_aborted <- true;
-    raise Data_exhausted
-  | Ffi.Assume_rejected ->
-    tc.test_aborted <- true;
-    raise Assume_rejected
+    raise_notrace exn
 ;;
 
 (** [generate_boolean tc p forced] draws a boolean with probability [p] of
     [true]. If [forced] is [Some b] the value is forced to [b]. Raises
-    {!Data_exhausted} on StopTest. *)
+    {!Stop_test} on StopTest. *)
 let generate_boolean tc p forced =
   with_stop_guard tc (fun () -> Ffi.generate_boolean tc.context tc.handle p forced)
 ;;
 
 (** [generate_integer tc ~min_value ~max_value] draws an integer in the inclusive
-    range. Raises {!Data_exhausted} on StopTest. *)
+    range. Raises {!Stop_test} on StopTest. *)
 let generate_integer tc ~min_value ~max_value =
   with_stop_guard tc (fun () ->
     Ffi.generate_integer tc.context tc.handle ~min_value ~max_value)
 ;;
 
 (** [generate_float tc ...] draws a width-64 float under the given policy. Raises
-    {!Data_exhausted} on StopTest. *)
+    {!Stop_test} on StopTest. *)
 let generate_float
       tc
       ~min_value
@@ -305,7 +291,7 @@ let generate_float
 ;;
 
 (** [generate_bytes tc ~min_size ~max_size] draws a byte string. Raises
-    {!Data_exhausted} on StopTest. *)
+    {!Stop_test} on StopTest. *)
 let generate_bytes tc ~min_size ~max_size =
   with_stop_guard tc (fun () ->
     Ffi.generate_bytes tc.context tc.handle ~min_size ~max_size)
@@ -313,7 +299,7 @@ let generate_bytes tc ~min_size ~max_size =
 
 (** [with_string_generator tc make draw] builds a string-generator handle with
     [make tc.context], draws from it with [draw], and always frees the handle.
-    Raises {!Data_exhausted} on StopTest and {!Assume_rejected} when the draw
+    Raises {!Stop_test} on StopTest and {!Assume_rejected} when the draw
     rejects itself. *)
 let with_string_generator tc make =
   with_stop_guard tc (fun () ->
@@ -636,20 +622,20 @@ let new_state_machine_with_concurrency
 ;;
 
 (** [new_collection tc ~min_size ~max_size] starts an engine-managed collection.
-    Release it with {!collection_free}. Raises {!Data_exhausted} on StopTest. *)
+    Release it with {!collection_free}. Raises {!Stop_test} on StopTest. *)
 let new_collection tc ~min_size ~max_size =
   with_stop_guard tc (fun () ->
     Ffi.new_collection tc.context tc.handle ~min_size ~max_size)
 ;;
 
 (** [collection_more tc ~collection] returns whether the engine wants another
-    element. Raises {!Data_exhausted} on StopTest. *)
+    element. Raises {!Stop_test} on StopTest. *)
 let collection_more tc ~collection =
   with_stop_guard tc (fun () -> Ffi.collection_more tc.context tc.handle collection)
 ;;
 
 (** [collection_reject tc ~collection] rejects the collection's last element.
-    Raises {!Data_exhausted} on StopTest. *)
+    Raises {!Stop_test} on StopTest. *)
 let collection_reject tc ~collection =
   with_stop_guard tc (fun () ->
     Ffi.collection_reject tc.context tc.handle collection None)
@@ -703,7 +689,7 @@ let state_machine_next_group tc ~state_machine =
 (** [state_machine_next_round tc ~state_machine] asks the engine whether the
     machine should run another round: [false] once the step budget for the test
     case is exhausted. Call it before the first rule and after every round.
-    Raises {!Data_exhausted} when the engine's choice budget is exhausted. *)
+    Raises {!Stop_test} when the engine's choice budget is exhausted. *)
 let state_machine_next_round tc ~state_machine =
   Option.is_some (state_machine_next_group tc ~state_machine)
 ;;
@@ -715,7 +701,7 @@ let state_machine_next_rule_for_worker tc ~state_machine ~worker_index =
 
 (** [state_machine_next_rule tc ~state_machine] draws the index of the next
     rule to run this round, or [None] when the round is over and the caller
-    should ask {!state_machine_next_round} again. Raises {!Data_exhausted} when
+    should ask {!state_machine_next_round} again. Raises {!Stop_test} when
     the engine's choice budget is exhausted. *)
 let state_machine_next_rule tc ~state_machine =
   state_machine_next_rule_for_worker tc ~state_machine ~worker_index:0
@@ -735,7 +721,7 @@ let state_machine_rule_rejected tc ~state_machine =
 
 (** [state_machine_should_check_invariant tc ~state_machine ~invariant_index]
     decides whether to run invariant [invariant_index] after the current round.
-    Raises {!Data_exhausted} when the engine's choice budget is exhausted. *)
+    Raises {!Stop_test} when the engine's choice budget is exhausted. *)
 let state_machine_should_check_invariant tc ~state_machine ~invariant_index =
   with_stop_guard tc (fun () ->
     Ffi.state_machine_should_check_invariant
@@ -778,9 +764,14 @@ type interesting_case =
   ; backtrace : Printexc.raw_backtrace
   }
 
+type result =
+  | Valid
+  | Invalid
+  | Overrun
+  | Failed of interesting_case
+
 type case_outcome =
-  { status : Ffi.status
-  ; interesting : interesting_case option
+  { result : result
   ; output : string
   ; is_nondeterministic : bool
   }
@@ -798,46 +789,7 @@ let capture_document (tc : test_case) =
          (* Resolve splices from clone documents. *)
          match Ffi.printer_resolve tc.context printer with
          | () -> Ffi.printer_value tc.context printer
-         | exception Ffi.Usage_error _ -> Ffi.printer_value tc.context printer))
-;;
-
-(** [run_test_case ~settings ~test_fn ?indent ctx handle is_final] runs
-    [test_fn] over a single native test-case [handle], maps the outcome to a
-    {!Ffi.status}, and marks the case complete. A [Ffi.Usage_error] (an invalid
-    generator argument the engine rejected) is not an outcome: it propagates
-    unchanged, aborting the run instead of being shrunk as a counterexample.
-    Returns the captured document without report formatting. Shared by the
-    engine-run and failure-blob replay paths. *)
-  let (tc : test_case) =
-    { handle
-    ; context = ctx
-    ; is_final
-    ; verbosity = settings.verbosity
-    ; test_aborted = false
-    ; draw_depth = 0
-    ; draw_state = { counts = String_table.create 16; lock = Mutex.create () }
-    ; owned = { pools = []; clones = []; lock = Mutex.create () }
-    }
-  in
-  let run_body body_tc =
-    match test_fn body_tc with
-    | () -> Ffi.Valid, None
-    | exception Assume_rejected -> Ffi.Invalid, None
-    | exception Data_exhausted -> Ffi.Overrun, None
-    | exception Flaky_strategy -> Ffi.Invalid, None
-    | exception (Ffi.Usage_error _ as usage) -> raise usage
-    | exception exn -> Ffi.Interesting, Some (extract_origin exn, exn)
-  in
-  DLS.set in_test_context true;
-  let status, captured =
-    Fun.protect
-      ~finally:(fun () ->
-        DLS.set in_test_context false;
-        free_owned tc)
-      (fun () -> if indent = 0 then run_body tc else with_block tc ~indent run_body)
-  in
-  Ffi.mark_complete ctx handle status (Option.map fst captured);
-  { status; interesting = captured; printed_output = flush_document tc ~framed:(indent > 0) }
+         | exception Usage_error _ -> Ffi.printer_value tc.context printer))
 ;;
 
 (** Diagnostic raised when the engine's shrunk counterexample no longer fails on
@@ -850,33 +802,10 @@ let flaky_diagnostic =
    global variables, system time, or external random number generators."
 ;;
 
-(** [final_replay ~settings ~ffi_settings ~test_fn ctx failure] performs the
-    client-owned {e final replay} of one engine-discovered [failure]: a libhegel
-    run only explores (generation, shrinking) and never replays a counterexample
-    itself, so the client reads the counterexample's reproduction blob and
-    replays it as a standalone final test case — re-running the body so its
-    notes and drawn values print for the minimal example. Returns the blob, the
-    test's own exception, and the rendered output.
-    The engine just produced the blob, so it always decodes; a replay that no
-    longer fails means the test is non-deterministic and raises
-    {!flaky_diagnostic}. *)
-let final_replay ~(settings : Settings.t) ~ffi_settings ~test_fn ctx failure =
-  let blob = Option.get (Ffi.failure_blob ctx failure) in
-  let tc = Ffi.test_case_from_blob ctx ffi_settings (Some blob) in
-  let outcome =
-    Fun.protect
-      ~finally:(fun () -> Ffi.test_case_free ctx tc)
-      (fun () -> run_test_case ~settings ~test_fn ~indent:2 ctx tc true)
-  in
-  match outcome.interesting with
-  | Some (_origin, exn) -> blob, exn, outcome.printed_output
-  | None -> raise (Failure flaky_diagnostic)
-;;
-
 (** Width the framed failure report's header rule is padded to. *)
-let frame_width = 72
+let frame_width = 80
 
-let print_failure_header ~cases_run ~cases_discarded test_location =
+let print_failure_header test_location =
   let title =
     match test_location with
     | None -> "Failure"
@@ -885,16 +814,11 @@ let print_failure_header ~cases_run ~cases_discarded test_location =
   in
   let prefix = Printf.sprintf "--- %s " title in
   let rule = prefix ^ String.make (max 3 (frame_width - String.length prefix)) '-' in
-  Printf.eprintf
-    "%s\nFalsified after %d test case%s (%d discarded):\n%!"
-    (stderr_color ansi_red rule)
-    cases_run
-    (if cases_run = 1 then "" else "s")
-    cases_discarded
+  Printf.eprintf "%s\n%!" (stderr_color ansi_red rule)
 ;;
 
-let print_failure_body ~(settings : Settings.t) ~from_ppx ~blob ~exn ~printed_output =
-  if printed_output then Printf.eprintf "\n%!";
+let print_failure_body ~(settings : Settings.t) ~from_ppx ~blob ~exn ~output =
+  if not (String.equal output "") then Printf.eprintf "\n%s\n%!" output;
   Printf.eprintf "Exception: %s\n%!" (Stdlib.Printexc.to_string exn);
   if settings.print_blob
   then
@@ -906,144 +830,7 @@ let print_failure_body ~(settings : Settings.t) ~from_ppx ~blob ~exn ~printed_ou
       blob
 ;;
 
-let handle_result
-      ~(settings : Settings.t)
-      ~ffi_settings
-      ~test_fn
-      ~test_location
-      ~from_ppx
-      ~cases_run
-      ~cases_discarded
-      ctx
-      result
-  =
-  match Ffi.result_status ctx result with
-  | Run_passed -> ()
-  | Run_error ->
-    raise
-      (Failure
-         (Option.value
-            (Ffi.result_error ctx result)
-            ~default:"hegel: run error (no message)"))
-  | Run_failed ->
-    (* Failures are caller-owned snapshots, independent of the run result. *)
-    let failures = Ffi.result_failures ctx result in
-    Fun.protect
-      ~finally:(fun () -> List.iter (fun f -> Ffi.failure_free ctx f) failures)
-      (fun () ->
-         match failures with
-         | [ failure ] ->
-           print_failure_header ~cases_run ~cases_discarded test_location;
-           let blob, exn, printed_output =
-             final_replay ~settings ~ffi_settings ~test_fn ctx failure
-           in
-           print_failure_body ~settings ~from_ppx ~blob ~exn ~printed_output;
-           raise exn
-         | failures ->
-           let count = List.length failures in
-           print_failure_header ~cases_run ~cases_discarded test_location;
-           List.iteri
-             (fun i failure ->
-                Printf.eprintf
-                  "\n%s%!"
-                  (stderr_color
-                     ansi_red
-                     (Printf.sprintf "Failure %d of %d:" (i + 1) count));
-                let blob, exn, printed_output =
-                  final_replay ~settings ~ffi_settings ~test_fn ctx failure
-                in
-                print_failure_body ~settings ~from_ppx ~blob ~exn ~printed_output)
-             failures;
-           raise (Failure (Printf.sprintf "%d failures found!" count)))
-;;
-
-(** [run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location] drives a
-    full property run: it starts the engine worker and pulls every scheduled test
-    case. The engine only explores (generation, shrinking), so every pumped case
-    is non-final. Discovered counterexamples are replayed from their blobs by {!handle_result}.
-    The engine [run] handle is always freed. *)
-let run_from_engine
-      ctx
-      ~(settings : Settings.t)
-      ~ffi_settings
-      ~test_fn
-      ~test_location
-      ~from_ppx
-  =
-  let seen_interesting = ref false in
-  let cases_run = ref 0 in
-  let cases_discarded = ref 0 in
-  let run = Ffi.run_start ctx ffi_settings in
-  Fun.protect
-    ~finally:(fun () -> Ffi.run_free ctx run)
-    (fun () ->
-       let rec loop () =
-         match Ffi.next_test_case ctx run with
-         | None -> ()
-         | Some handle ->
-           (* Handles from [next_test_case] are caller-owned; free each once its
-             case has been marked complete by [run_test_case]. *)
-           Fun.protect
-             ~finally:(fun () -> Ffi.test_case_free ctx handle)
-             (fun () ->
-                let outcome = run_test_case ~settings ~test_fn ctx handle false in
-                if not !seen_interesting
-                then (
-                  match outcome.status with
-                  | Ffi.Interesting ->
-                    incr cases_run;
-                    seen_interesting := true
-                  | Ffi.Valid -> incr cases_run
-                  | Ffi.Invalid | Ffi.Overrun -> incr cases_discarded));
-           loop ()
-       in
-       loop ();
-       (* The run result is a caller-owned snapshot, independent of the run. *)
-       let result = Ffi.run_result ctx run in
-       Fun.protect
-         ~finally:(fun () -> Ffi.run_result_free ctx result)
-         (fun () ->
-            handle_result
-              ~settings
-              ~ffi_settings
-              ~test_fn
-              ~test_location
-              ~from_ppx
-              ~cases_run:!cases_run
-              ~cases_discarded:!cases_discarded
-              ctx
-              result))
-;;
-
-(** [replay_from_blob ~settings ~ffi_settings ~test_fn blob] replays a single failure
-    [blob] as a standalone, deterministic test case (no engine worker, no
-    shrinking). A corrupt or version-incompatible blob is reported as
-    {!Undecodable}. The standalone case is always freed. *)
-let replay_from_blob ~(settings : Settings.t) ~ffi_settings ~test_fn blob ctx =
-  match Ffi.test_case_from_blob ctx ffi_settings (Some blob) with
-  | exception Ffi.Usage_error msg -> Undecodable msg
-  | tc ->
-    Fun.protect
-      ~finally:(fun () -> Ffi.test_case_free ctx tc)
-      (fun () ->
-         let outcome = run_test_case ~settings ~test_fn ctx tc true in
-         match outcome.interesting with
-         | None -> Did_not_reproduce
-         | Some (_, exn) -> Reproduced exn)
-;;
-
-(** [run_from_blob ~settings ~ffi_settings ~test_fn blob] replays a failure
-    [blob] (only the first supplied blob is replayed). A reproducing blob re-raises
-    the original exception; a stale or undecodable blob raises a clear [Failure].
-*)
-let run_from_blob ctx ~(settings : Settings.t) ~ffi_settings ~test_fn blob =
-  match replay_from_blob ~settings ~ffi_settings ~test_fn blob ctx with
-  | Undecodable msg -> raise (Failure msg)
-  | Did_not_reproduce -> raise (Failure "The failure blob did not reproduce an error")
-  | Reproduced exn ->
-    Printf.eprintf "The failure blob reproduced an error:\n%!";
-    raise exn
-;;
+let reraise failure = Printexc.raise_with_backtrace failure.exn failure.backtrace
 
 (** [run_test ~settings ?test_location ?database_key ?failure_blobs test_fn] runs
     a property test using the given settings against the native engine.
@@ -1097,10 +884,36 @@ let run_test
   in
   let ctx = Ffi.context_new () in
   let ffi_settings = build_ffi_settings ctx settings ~database_key ~test_location in
+  let run_case handle ~is_final =
+    let is_nondeterministic = Ffi.test_case_is_nondeterministic ctx handle in
+    let (tc : test_case) =
+      { handle
+      ; context = ctx
+      ; is_final
+      ; is_nondeterministic
+      ; verbosity = settings.verbosity
+      ; test_aborted = false
+      ; draw_depth = 0
+      ; draw_state = { counts = String_table.create 16; lock = Mutex.create () }
+      ; owned = { pools = []; clones = []; lock = Mutex.create () }
+      }
+    in
+    let run_body () =
+      match test_fn tc with
+      | () -> Valid
+      | exception Assume_rejected -> Invalid
+      | exception Stop_test -> Overrun
+      | exception Flaky_strategy -> Invalid
+      | exception ((Usage_error _ | Backend_error _) as control) -> raise control
+      | exception exn ->
+        let backtrace = Printexc.get_raw_backtrace () in
+        Failed { origin = extract_origin exn; exn; backtrace }
+    in
+  in
   let run_body () =
     match failure_blobs with
-    | [] -> run_from_engine ctx ~settings ~ffi_settings ~test_fn ~test_location ~from_ppx
-    | blob :: _ -> run_from_blob ctx ~settings ~ffi_settings ~test_fn blob
+    | [] -> run_from_engine ()
+    | blob :: _ -> run_from_blob blob
   in
   Fun.protect
     ~finally:(fun () ->

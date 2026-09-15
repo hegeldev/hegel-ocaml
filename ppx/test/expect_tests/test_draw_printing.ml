@@ -12,7 +12,7 @@ open Generators
 
 (* ---- draw / draw_silent through the engine ---- *)
 
-(* Quiet, deterministic run; swallow the failure the property raises so the
+(* Seeded run at normal verbosity; swallow the failure the property raises so the
    expect block only sees what we printed. *)
 let run_failing
       ?(settings =
@@ -42,8 +42,7 @@ let%expect_test "explicit draw locations print on final replay" =
   print_string (Expect_scrub.scrub_report ~hide_draw_positions:false [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     x @ ppx/test/expect_tests/test_draw_printing.ml:<LINE> = 7
     draw_1 @ ppx/test/expect_tests/test_draw_printing.ml:<LINE> = 7
@@ -61,8 +60,7 @@ let%expect_test "labeled draw without explicit location prints on final replay" 
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     x = 7
 
@@ -78,8 +76,7 @@ let%expect_test "unlabeled draw is auto-named draw_N on final replay" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     draw_1 = 123456
 
@@ -98,8 +95,7 @@ let%expect_test "draw positions preserve explicit overrides" =
   print_string (Expect_scrub.scrub_blobs [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     explicit @ helper.ml:123 = 7
 
@@ -116,8 +112,7 @@ let%expect_test "successive unlabeled draws number draw_1, draw_2" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     draw_1 = 1
     draw_2 = 2
@@ -141,8 +136,7 @@ let%expect_test "with_printer supplies the printer draw renders with" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     h = 0xff
 
@@ -158,8 +152,7 @@ let%expect_test "with_printer makes an unprintable sampled_from drawable" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     c = 9
 
@@ -180,8 +173,7 @@ let%expect_test "draw nested in a span (depth > 0) is suppressed" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     ran
 
@@ -204,8 +196,7 @@ let%expect_test "a tuple draw prints as one sexp" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     pair = (7 8)
 
@@ -226,8 +217,7 @@ let%expect_test "a list draw prints as one sexp" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     xs = (7 7)
 
@@ -236,7 +226,7 @@ let%expect_test "a list draw prints as one sexp" =
     |}]
 ;;
 
-let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
+let%expect_test "a stateful rule's drawn arguments appear in its trace" =
   let rule =
     Stateful.Rule.create ~name:"push" ~step:(fun tc _state ->
       let _ = Hegel.draw ~label:"n" tc (integers ~min_value:7 ~max_value:7 ()) in
@@ -253,8 +243,7 @@ let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     Step 1: push
       n = 7
@@ -285,7 +274,7 @@ let%hegel_test stateful_print tc =
   }]
 ;;
 
-let%expect_test "stateful tests prints drawn data on passing test verbosity is verbose" =
+let%expect_test "verbose stateful tests print drawn values on passing runs" =
   stateful_print ();
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
@@ -314,8 +303,7 @@ let%expect_test "a derived value prints as one sexp via with_printer" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     draw_1 = Only
 
@@ -331,8 +319,7 @@ let%expect_test "a nested derived record prints as one sexp via with_printer" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     draw_1 = ((tag Only))
 
@@ -347,12 +334,11 @@ let%expect_test
   run_failing (fun tc ->
     let _ = Hegel.draw_silent tc hegel_generator_bare in
     assert false);
-  (* Header only — no [@@deriving sexp_of], so nothing to print. *)
+  (* [draw_silent] suppresses the value even though the derived generator is printable. *)
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
     Exception: File "ppx/test/expect_tests/test_draw_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
@@ -388,7 +374,6 @@ let%expect_test "ppx injects ~label from the binding name and preserves ~loc" =
   [%expect
     {|
     --- Failure: label_injection_from_binding (ppx/test/expect_tests/test_draw_printing.ml:<LINE>) ---
-    Falsified after 1 test case (0 discarded):
 
     x @ explicit_draw:123 = 7
     y = 7
@@ -417,7 +402,6 @@ let%expect_test "a Generators-qualified draw is labeled (prefix preserved)" =
   [%expect
     {|
     --- Failure: qualified_generators_draw (ppx/test/expect_tests/test_draw_printing.ml:<LINE>) ---
-    Falsified after 1 test case (0 discarded):
 
     g = 9
 
@@ -452,7 +436,6 @@ let%expect_test "a local non-Hegel draw (not on tc) is not rewritten" =
   [%expect
     {|
     --- Failure: local_draw_not_on_tc_untouched (ppx/test/expect_tests/test_draw_printing.ml:<LINE>) ---
-    Falsified after 1 test case (0 discarded):
 
     z = 1
 
@@ -484,7 +467,6 @@ let%expect_test "a reused binding name numbers x_1, x_2, x_3" =
   [%expect
     {|
     --- Failure: repeated_binding_numbers (ppx/test/expect_tests/test_draw_printing.ml:<LINE>) ---
-    Falsified after 1 test case (0 discarded):
 
     x_1 = 1
     x_2 = 2
@@ -515,7 +497,6 @@ let%expect_test "a draw inside a loop numbers x_1, x_2" =
   [%expect
     {|
     --- Failure: looped_binding_numbers (ppx/test/expect_tests/test_draw_printing.ml:<LINE>) ---
-    Falsified after 1 test case (0 discarded):
 
     x_1 = 1
     x_2 = 2

@@ -268,7 +268,7 @@ type collection =
   }
 
 (** [get_collection coll data] initializes the engine-side collection and
-    returns its handle. Raises {!Internal.Data_exhausted} on StopTest. *)
+    returns its handle. Raises {!Internal.Stop_test} on StopTest. *)
 let get_collection coll data =
   match coll.handle with
   | Some h -> h
@@ -295,7 +295,7 @@ let with_collection ~min_size ?max_size data f =
 (** [collection_more coll data] returns [true] if more elements should be
     generated, [false] when the collection is complete. Once it returns [false],
     subsequent calls return [false] immediately. Raises
-    {!Internal.Data_exhausted} on StopTest. *)
+    {!Internal.Stop_test} on StopTest. *)
 let collection_more coll data =
   if coll.finished
   then false
@@ -308,7 +308,7 @@ let collection_more coll data =
 
 (** [collection_reject coll data] rejects the last element of the collection.
     No-op if the collection is already finished. Raises
-    {!Internal.Data_exhausted} on StopTest. *)
+    {!Internal.Stop_test} on StopTest. *)
 let collection_reject coll data =
   if not coll.finished
   then (

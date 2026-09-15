@@ -94,7 +94,6 @@
 
     {v
       --- Failure: every_int_is_small (my_tests.ml:3) ------------------
-      Falsified after 1 test case (0 discarded):
 
         n = 50
 
@@ -303,7 +302,6 @@
 
     {v
       --- Failure: every_int_is_small (my_tests.ml:3) ------------------
-      Falsified after 2 test cases (0 discarded):
 
         n = 50
 
