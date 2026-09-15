@@ -114,20 +114,14 @@ let%expect_test "state trace across multiple rules" =
     |}]
 ;;
 
-module Concurrent_boom = struct
+module%hegel_concurrent_state_machine Concurrent_boom = struct
   type state = unit
 
-  let rules =
-    [ Stateful.Concurrent_rule.create
-        ~name:"boom"
-        ~step:(fun tc () ->
-          ignore (Hegel.draw tc (integers ()) : int);
-          failwith "concurrent boom")
-        ()
-    ]
+  let boom tc () =
+    ignore (Hegel.draw tc (integers ()) : int);
+    failwith "concurrent boom"
+  [@@rule]
   ;;
-
-  let invariants = []
 end
 
 let%expect_test "nondeterministic failure reports the discovering execution" =
@@ -140,9 +134,8 @@ let%expect_test "nondeterministic failure reports the discovering execution" =
          }
        (fun tc ->
           Hegel.note tc "preamble";
-          Stateful.run_concurrent
+          Concurrent_boom.run
             tc
-            (module Concurrent_boom)
             ~step_count:5
             ~init:()
             ~min_concurrency:2
@@ -176,9 +169,8 @@ let%expect_test "one concurrent worker remains deterministic" =
          ; verbosity = Settings.Normal
          }
        (fun tc ->
-          Stateful.run_concurrent
+          Concurrent_boom.run
             tc
-            (module Concurrent_boom)
             ~step_count:5
             ~init:()
             ~min_concurrency:1
@@ -211,9 +203,8 @@ let%expect_test "quiet nondeterministic failure stays quiet" =
          ; verbosity = Settings.Quiet
          }
        (fun tc ->
-          Stateful.run_concurrent
+          Concurrent_boom.run
             tc
-            (module Concurrent_boom)
             ~step_count:5
             ~init:()
             ~min_concurrency:2
@@ -228,36 +219,26 @@ let%expect_test "quiet nondeterministic failure stays quiet" =
   [%expect {||}]
 ;;
 
+module%hegel_concurrent_state_machine Concurrent_counter = struct
+  type state = int Atomic.t
+
+  let sexp_of_state state = Sexplib0.Sexp.Atom (Int.to_string (Atomic.get state))
+  let increment _tc state = Atomic.incr state [@@rule]
+
+  let stays_zero _tc state = if Atomic.get state <> 0 then failwith "invariant boom"
+  [@@invariant always_check]
+  ;;
+end
+
 let%expect_test "concurrent invariant failures retain their names" =
-  let rule =
-    Stateful.Concurrent_rule.create
-      ~name:"increment"
-      ~step:(fun _tc state -> Atomic.incr state)
-      ()
-  in
-  let invariant =
-    Stateful.Invariant.create
-      ~name:"stays_zero"
-      ~always_check:true
-      ~inv:(fun _tc state -> if Atomic.get state <> 0 then failwith "invariant boom")
-      ()
-  in
   (try
      Hegel.run_hegel_test
        ~settings:
          { (Settings.create ~test_cases:1 ~seed:0 ()) with database = Settings.Disabled }
        (fun tc ->
-          Stateful.run_concurrent
+          Concurrent_counter.run
             tc
-            (module struct
-              type state = int Atomic.t
-
-              let rules = [ rule ]
-              let invariants = [ invariant ]
-            end)
             ~init:(Atomic.make 0)
-            ~sexp_of_state:(fun state ->
-              Sexplib0.Sexp.Atom (Int.to_string (Atomic.get state)))
             ~min_concurrency:1
             ~max_concurrency:1)
    with
