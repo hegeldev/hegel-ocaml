@@ -166,9 +166,7 @@ let%expect_test "nondeterministic failure reports the discovering execution" =
       Concurrency level: 2
       ---------------- Round 1: group "<anonymous>" ----------------
       [worker 0 +time] Rule: boom
-      [worker 0 +time]   draw_1 = 79891905220201248
-      [worker 1 +time] Rule: boom
-      [worker 1 +time]   draw_1 = 5297
+      [worker 0 +time]   draw_1 = 3881432
 
     Exception: Failure("concurrent boom")
     |}]

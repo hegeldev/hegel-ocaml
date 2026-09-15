@@ -23,7 +23,7 @@ let section tc f =
 ;;
 
 let check_invariants tc ~state_machine ~invariants ~where ~sample state =
-  List.iteri
+  Array.iteri
     (fun i invariant ->
        if
          (not sample)
@@ -53,23 +53,24 @@ let run_machine
       ?(step_count = 50)
       tc
   =
-  let rule_names = List.map Rule.name rules in
-  let rule_groups = List.map Concurrent_rule.group rules in
+  let rules = Array.of_list rules in
+  let invariants = Array.of_list invariants in
+  let rule_names = Array.map Rule.name rules in
+  let rule_groups = Array.map Concurrent_rule.group rules in
   let group_names = Stateful_concurrent.group_names rule_groups in
   let group_idxs =
     if concurrent
     then Stateful_concurrent.group_ids rule_groups group_names
-    else List.map (fun _ -> 0) rules
+    else Array.map (fun _ -> 0) rules
   in
-  let rule_array = Array.of_list rules in
   let state_machine, num_workers =
     Internal.new_state_machine_with_concurrency
       tc
       ~rule_names
       ~rule_groups:group_idxs
-      ~invariant_names:(List.map Invariant.name invariants)
+      ~invariant_names:(Array.map Invariant.name invariants)
       ~invariants_always_check:
-        (List.map (fun inv -> inv.Invariant.always_check) invariants)
+        (Array.map (fun inv -> inv.Invariant.always_check) invariants)
       ~step_count
       ~min_concurrency
       ~max_concurrency
@@ -86,7 +87,7 @@ let run_machine
       with
       | None -> state, steps_attempted, rejected
       | Some rule_index ->
-        let rule = rule_array.(rule_index) in
+        let rule = rules.(rule_index) in
         let step_num = steps_attempted + 1 in
         let heading =
           if concurrent
@@ -107,7 +108,7 @@ let run_machine
   in
   let check_invariants = check_invariants tc ~state_machine ~invariants in
   let announce_checks which =
-    if not (List.is_empty invariants)
+    if Array.length invariants > 0
     then Internal.note tc (Printf.sprintf "Checking invariants on the %s state." which)
   in
   Fun.protect

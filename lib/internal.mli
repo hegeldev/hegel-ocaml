@@ -77,6 +77,7 @@ val set_worker_index : test_case -> int -> unit
 val extract_origin : exn -> string
 
 exception Usage_error of string
+exception Backend_error of string
 
 (** [generate_boolean tc p forced] draws a boolean with probability [p] of
     [true]. If [forced] is [Some b] the value is forced to [b]. Raises
@@ -338,10 +339,10 @@ type state_machine = Hegel_ffi.Ffi.state_machine
     returns its handle with the concurrency level selected by libhegel. *)
 val new_state_machine_with_concurrency
   :  test_case
-  -> rule_names:string list
-  -> rule_groups:int list
-  -> invariant_names:string list
-  -> invariants_always_check:bool list
+  -> rule_names:string array
+  -> rule_groups:int array
+  -> invariant_names:string array
+  -> invariants_always_check:bool array
   -> step_count:int
   -> min_concurrency:int
   -> max_concurrency:int
@@ -353,9 +354,9 @@ val new_state_machine_with_concurrency
     below 1. *)
 val new_state_machine
   :  test_case
-  -> rule_names:string list
-  -> invariant_names:string list
-  -> invariants_always_check:bool list
+  -> rule_names:string array
+  -> invariant_names:string array
+  -> invariants_always_check:bool array
   -> step_count:int
   -> state_machine
 

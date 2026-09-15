@@ -1145,13 +1145,19 @@ let test_case_is_nondeterministic ctx tc =
    The explicit root is necessary because [CArray.of_list string] stores only
    the raw [char *] pointers and leaves each name's buffer unrooted, so the GC
    may free the names out from under the engine and cause flaky tests *)
+let to_c_array typ values =
+  let array = CArray.make typ (Array.length values) in
+  Array.iteri (CArray.set array) values;
+  array
+;;
+
 let to_string_array names =
-  match names with
-  | [] -> from_voidp (ptr char) null, Root.create ()
-  | _ ->
-    let buffers = List.map CArray.of_string names in
-    let table = CArray.of_list (ptr char) (List.map CArray.start buffers) in
-    CArray.start table, Root.create (buffers, table)
+  if Array.length names = 0
+  then from_voidp (ptr char) null, Root.create ()
+  else (
+    let buffers = Array.map CArray.of_string names in
+    let table = to_c_array (ptr char) (Array.map CArray.start buffers) in
+    CArray.start table, Root.create (buffers, table))
 ;;
 
 let generate_boolean ctx tc p forced =
@@ -1239,7 +1245,7 @@ let optional_string_array = function
     let dummy = CArray.make (ptr char) 1 in
     CArray.start dummy, Root.create dummy, Unsigned.Size_t.of_int 0
   | Some names ->
-    let ptr, root = to_string_array names in
+    let ptr, root = to_string_array (Array.of_list names) in
     ptr, root, Unsigned.Size_t.of_int (List.length names)
 ;;
 
@@ -1497,8 +1503,8 @@ let new_state_machine
       ~step_count
   =
   let rules_ptr, rules_root = to_string_array rule_names in
-  let groups = CArray.of_list int64_t (List.map Int64.of_int rule_groups) in
-  let invariants_always_check = CArray.of_list bool invariants_always_check in
+  let groups = to_c_array int64_t (Array.map Int64.of_int rule_groups) in
+  let invariants_always_check = to_c_array bool invariants_always_check in
   let invs_ptr, invs_root = to_string_array invariant_names in
   let out = allocate (ptr void) null in
   let out_concurrency = allocate int64_t 0L in
@@ -1508,10 +1514,10 @@ let new_state_machine
       tc
       rules_ptr
       (CArray.start groups)
-      (Unsigned.Size_t.of_int (List.length rule_names))
+      (Unsigned.Size_t.of_int (Array.length rule_names))
       invs_ptr
       (CArray.start invariants_always_check)
-      (Unsigned.Size_t.of_int (List.length invariant_names))
+      (Unsigned.Size_t.of_int (Array.length invariant_names))
       (Int64.of_int min_concurrency)
       (Int64.of_int max_concurrency)
       (Int64.of_int step_count)
