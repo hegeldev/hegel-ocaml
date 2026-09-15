@@ -542,19 +542,20 @@ let has_sexp_of_state (items : structure_item list) : bool =
     items
 ;;
 
-(** Expander for [module%hegel_state_machine M = struct … end]. It keeps the
-    body's items, with the marker attributes removed and the draws in marked
-    bodies labelled, and appends [rules], [invariants], and
-    [run ?step_count ?sexp_of_state tc ~init]. At least one [[@@rule]] binding
-    is required. *)
-let expand_state_machine ~loc (mb : module_binding) : structure_item list =
+(** Expand sequential and concurrent state-machine modules, collecting marked
+    bindings and appending their rules, invariants, and runner. *)
+let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item list =
+  let extension_name =
+    if concurrent then "hegel_concurrent_state_machine" else "hegel_state_machine"
+  in
   let items =
     match mb.pmb_expr.pmod_desc with
     | Pmod_structure items -> items
     | _ ->
       Location.raise_errorf
         ~loc
-        "ppx_hegel_test: module%%hegel_state_machine expects a [struct … end] body"
+        "ppx_hegel_test: module%%%s expects a [struct … end] body"
+        extension_name
   in
   let items, marked = List.split (List.map expand_machine_item items) in
   let marked = List.concat marked in
@@ -571,15 +572,24 @@ let expand_state_machine ~loc (mb : module_binding) : structure_item list =
   then
     Location.raise_errorf
       ~loc
-      "ppx_hegel_test: a state machine needs at least one [@@@@rule] binding";
+      "ppx_hegel_test: module%%%s needs at least one [@@@@rule] binding"
+      extension_name;
   let open Ast_builder.Default in
   let rule_exprs =
     List.map
       (fun name ->
-         [%expr
-           Hegel.Stateful.Rule.create
-             ~name:[%e estring ~loc name]
-             ~step:[%e evar ~loc name]])
+         if concurrent
+         then
+           [%expr
+             Hegel.Stateful.Concurrent_rule.create
+               ~name:[%e estring ~loc name]
+               ~step:[%e evar ~loc name]
+               ()]
+         else
+           [%expr
+             Hegel.Stateful.Rule.create
+               ~name:[%e estring ~loc name]
+               ~step:[%e evar ~loc name]])
       rules
   in
   let invariant_exprs =
@@ -594,7 +604,43 @@ let expand_state_machine ~loc (mb : module_binding) : structure_item list =
       invariants
   in
   let run =
-    if has_sexp_of_state items
+    if concurrent
+    then
+      if has_sexp_of_state items
+      then
+        [%stri
+          let run
+                ?step_count
+                ?(sexp_of_state = sexp_of_state)
+                ?min_concurrency
+                ?max_concurrency
+                tc
+                ~init
+            =
+            Hegel.Stateful.run_concurrent_internal
+              ~init
+              ~rules
+              ~invariants
+              ~sexp_of_state
+              ?step_count
+              ?min_concurrency
+              ?max_concurrency
+              tc
+          ;;]
+      else
+        [%stri
+          let run ?step_count ?sexp_of_state ?min_concurrency ?max_concurrency tc ~init =
+            Hegel.Stateful.run_concurrent_internal
+              ~init
+              ~rules
+              ~invariants
+              ?sexp_of_state
+              ?step_count
+              ?min_concurrency
+              ?max_concurrency
+              tc
+          ;;]
+    else if has_sexp_of_state items
     then
       [%stri
         let run ?step_count ?(sexp_of_state = sexp_of_state) tc ~init =
@@ -641,7 +687,15 @@ let state_machine_extension =
     "hegel_state_machine"
     Extension.Context.structure_item
     Ast_pattern.(pstr (pstr_module __ ^:: nil))
-    (fun ~loc ~path:_ mb -> expand_state_machine ~loc mb)
+    (fun ~loc ~path:_ mb -> expand_state_machine ~concurrent:false ~loc mb)
+;;
+
+let concurrent_state_machine_extension =
+  Extension.declare_inline
+    "hegel_concurrent_state_machine"
+    Extension.Context.structure_item
+    Ast_pattern.(pstr (pstr_module __ ^:: nil))
+    (fun ~loc ~path:_ mb -> expand_state_machine ~concurrent:true ~loc mb)
 ;;
 
 let () =
@@ -650,5 +704,6 @@ let () =
     ~rules:
       [ Context_free.Rule.extension extension
       ; Context_free.Rule.extension state_machine_extension
+      ; Context_free.Rule.extension concurrent_state_machine_extension
       ]
 ;;

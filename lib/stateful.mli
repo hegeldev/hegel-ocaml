@@ -316,6 +316,17 @@ val run_internal
   -> Internal.test_case
   -> unit
 
+val run_concurrent_internal
+  :  init:'state
+  -> rules:'state Concurrent_rule.t list
+  -> invariants:'state Invariant.t list
+  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+  -> ?step_count:int
+  -> ?min_concurrency:int
+  -> ?max_concurrency:int
+  -> Internal.test_case
+  -> unit
+
 (**/**)
 
 (** A state machine whose rules may run concurrently. *)
@@ -326,10 +337,9 @@ module type Concurrent_state_machine = sig
   val invariants : state Invariant.t list
 end
 
-(** [run_concurrent tc (module M) ~init ~min_concurrency ~max_concurrency]
-    executes a state machine using the number of worker threads selected by libhegel
-    in the inclusive concurrency range. Each worker gets an independent clone of
-    [tc]. In a round all workers receive rules from one concurrency group.
+(** [run_concurrent ?step_count ?sexp_of_state tc (module M) ~init ~min_concurrency ~max_concurrency]
+    executes a state machine using N worker threads, where N is in [min_concurrent, max_concurrency].
+    Each worker gets an independent clone of [tc]. In a round all workers receive rules from one concurrency group.
 
     Invariants are checked on the initial and final state and sampled between
     rounds, unless they were created with [always_check:true].

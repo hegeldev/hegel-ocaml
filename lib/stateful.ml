@@ -177,6 +177,28 @@ let run
 
 module type Concurrent_state_machine = State_machine
 
+let run_concurrent_internal
+      ~init
+      ~rules
+      ~invariants
+      ?sexp_of_state
+      ?step_count
+      ?(min_concurrency = 1)
+      ?(max_concurrency = 4)
+      tc
+  =
+  run_machine
+    ~init
+    ~rules
+    ~concurrent:true
+    ~min_concurrency
+    ~max_concurrency
+    ~invariants
+    ?sexp_of_state
+    ?step_count
+    tc
+;;
+
 let run_concurrent
       (type s)
       ?step_count
@@ -187,10 +209,9 @@ let run_concurrent
       ~min_concurrency
       ~max_concurrency
   =
-  run_machine
+  run_concurrent_internal
     ~init
     ~rules:M.rules
-    ~concurrent:true
     ~min_concurrency
     ~max_concurrency
     ~invariants:M.invariants
