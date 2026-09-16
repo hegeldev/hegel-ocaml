@@ -33,7 +33,7 @@ def main() -> int:
     if not version_match:
         sys.exit(f'could not find `let version = "..."` in {LOADER}')
     version = version_match.group(1)
-    tag = f"v{version}"
+    tag = f"libhegel-v{version}"
     print(f"libhegel version: {version}")
 
     names = subprocess.run(

@@ -15,7 +15,7 @@
    filesystem/network branches are not subject to the coverage gate. *)
 
 (** The libhegel version these bindings target. *)
-let version = "0.42.0"
+let version = "0.43.0"
 
 (* Baked-in SHA-256 checksums of the published [libhegel-<os>-<arch>.<ext>]
    artifacts for {!version}, keyed by "<os>-<arch>". Platforms without an entry
@@ -23,15 +23,15 @@ let version = "0.42.0"
 
    Regenerate after bumping {!version} with: scripts/update-checksums.py *)
 let checksums =
-  [ "darwin-arm64", "e95ea6cd75ad41df59625ebbff20325364a33704ef6bbd9640c052149b2ef36a"
-  ; "linux-amd64", "f2aaa8a03ff6d6eaca5a9156ee04aeb7c4055e77770c8dda319d9812d274a1b5"
-  ; "linux-arm64", "e1a6fde3ce74a12aba7062da1596138d7a9b602c69724de9944f09688222fbdb"
-  ; "windows-amd64", "8fd6c9c2de69101cad0d4a024a8f60f2d352ba0b0952d0847a7a7750a5db4a58"
-  ; "windows-arm64", "e9fae703ddfcd5eb4599b2839e74fdf777b41dc8bcf5fbe213db7c7e0fbb9cdf"
+  [ "darwin-arm64", "b8d55c1f4c50f254d4e8b0ed488ef3bf1ff2e80fde9627d9faad14bd1a471c7c"
+  ; "linux-amd64", "80d3eed1589635c180baf71b41c27c93215e3835f2152822b5fc556855b26557"
+  ; "linux-arm64", "2f0200500622b54d2cf717597259dc02dfcb92d4fb3ace7a0caa8a5b00a82751"
+  ; "windows-amd64", "b98f0ff02a5611cc50e3e03cd11e91b2690f862ddceb3be1e72cd7f5b62c2341"
+  ; "windows-arm64", "8980f954ad406c91285d2e5cca7f12752625129b09bff27b7178feaa329f72fd"
   ]
 ;;
 
-let release_base = "https://github.com/hegeldev/hegel-rust/releases/download/v" ^ version
+let release_base = "https://github.com/hegeldev/hegel-rust/releases/download/libhegel-v" ^ version
 
 let getenv_nonempty name =
   match Sys.getenv_opt name with
