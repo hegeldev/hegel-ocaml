@@ -1,8 +1,8 @@
 (** {2 Introduction}
     A stateful test applies a random sequence of rules to a state. A rule is a
     [step] function that takes the test case and the current state, draws
-    whatever data it needs, and returns the new state. An invariant is a property
-    that must always hold after each step.
+    whatever data it needs, and returns the new state. Each step runs one rule.
+    An invariant is a property that must always hold after each step.
 
     With the [ppx_hegel_test] PPX, a state machine is a module written as
     [module%hegel_state_machine M = struct … end]. Mark rules with [[@@rule]]
@@ -47,6 +47,162 @@
 
     let%hegel_test integer_stack tc = Stack.run tc ~init:[]
     ]} *)
+
+(** {2 Concurrent stateful testing}
+
+    A [module%hegel_concurrent_state_machine] concurrently runs rules on worker
+    threads. Concurrent rules belong to a group. Only rules in the same group may run
+    concurrently. The number of workers is in [[min_concurrency, max_concurrency]]
+    (see {!run_concurrent}).
+
+    A round is a step of the concurrent test. Each round selects one rule group,
+    and each worker runs a sequence of rules from that group. Invariants run after
+    all workers finish the round.
+
+    The example store below has a bug. The store locks individual reads and writes,
+    but releases the lock between reading a counter and writing its incremented value.
+    Two workers can therefore overwrite each other's updates.
+
+    {[
+    module Store = struct
+      type t =
+        { lock : Mutex.t
+        ; values : (int, int) Hashtbl.t
+        }
+
+      let create () = { lock = Mutex.create (); values = Hashtbl.create 4 }
+
+      let get store key =
+        Mutex.protect store.lock (fun () -> Hashtbl.find_opt store.values key)
+      ;;
+
+      let put store key value =
+        Mutex.protect store.lock (fun () -> Hashtbl.replace store.values key value)
+      ;;
+
+      let put_if_absent store key =
+        Mutex.protect store.lock (fun () ->
+          if Hashtbl.mem store.values key
+          then false
+          else (
+            Hashtbl.add store.values key 0;
+            true))
+      ;;
+
+      let increment store key =
+        let value = Option.value (get store key) ~default:0 in
+        Thread.yield ();
+        (* Make the lost-update race easier to observe. *)
+        put store key (value + 1)
+      ;;
+
+      let snapshot store = Mutex.protect store.lock (fun () -> Hashtbl.copy store.values)
+    end
+
+    module%hegel_concurrent_state_machine Key_value_store = struct
+      type state =
+        { store : Store.t
+        ; keys : int Stateful.Concurrent_pool.t
+        ; increments : int Atomic.t
+        }
+
+      let register tc state =
+        let key = draw tc (integers ~min_value:0 ~max_value:3 ()) in
+        if Store.put_if_absent state.store key
+        then Stateful.Concurrent_pool.add state.keys tc key
+      [@@rule "operations"]
+      ;;
+
+      let increment tc state =
+        let key = draw_silent tc (Stateful.Concurrent_pool.values_reusable state.keys) in
+        Store.increment state.store key;
+        Atomic.incr state.increments
+      [@@rule "operations"]
+      ;;
+
+      let read tc state =
+        let key = draw_silent tc (Stateful.Concurrent_pool.values_reusable state.keys) in
+        match Store.get state.store key with
+        | Some value -> note tc (Printf.sprintf "read %d -> %d" key value)
+        | None -> note tc (Printf.sprintf "key %d is absent" key)
+      [@@rule "operations"]
+      ;;
+
+      let snapshot tc state =
+        let count = Hashtbl.length (Store.snapshot state.store) in
+        note tc (Printf.sprintf "snapshot holds %d keys" count)
+      [@@rule "snapshot"]
+      ;;
+
+      let no_lost_updates _tc state =
+        let stored =
+          Hashtbl.fold (fun _ value total -> total + value) (Store.snapshot state.store) 0
+        in
+        let performed = Atomic.get state.increments in
+        if stored <> performed
+        then
+          failwith
+            (Printf.sprintf
+               "increments were lost: store sums to %d after %d increments"
+               stored
+               performed)
+      [@@invariant always_check]
+      ;;
+    end
+
+    let%hegel_test concurrent_store tc =
+      let init : Key_value_store.state =
+        { store = Store.create ()
+        ; keys = Stateful.Concurrent_pool.create tc
+        ; increments = Atomic.make 0
+        }
+      in
+      Key_value_store.run tc ~init ~min_concurrency:1 ~max_concurrency:4
+    ;;
+    ]}
+
+    The [operations] group allows registration, increments, and reads to overlap.
+    The [snapshot] group runs separately. [Concurrent_pool] is the thread-safe
+    version of [Pool]. The invariant compares stored values with an atomic count of
+    completed increments.
+
+    With [max_concurrency > 1], failures are reported without shrinking, replay,
+    database persistence, or reproduction blobs.
+
+    In the failure output, each rule execution is labeled with its worker and the
+    time in milliseconds since the test case began to aid debugging.
+
+    {v
+    --- Failure: concurrent_store (...) -------------------------
+
+    Concurrency level: 4
+    Checking invariants on the initial state.
+    ---------------- Round 1: group "operations" ----------------
+    [worker 2 +0.238ms] Rule: register
+    [worker 2 +0.246ms]   key = 0
+    ...
+    [worker 2 +0.261ms] Rule: read
+    [worker 2 +0.263ms]   read 2 -> 0
+    ...
+    [worker 3 +0.223ms] Rule: increment
+    ...
+    ---------------- Round 2: group "snapshot" ------------------
+    [worker 0 +0.363ms] Rule: snapshot
+    [worker 0 +0.365ms]   snapshot holds 3 keys
+    ...
+    ---------------- Round 3: group "operations" ----------------
+    [worker 0 +0.486ms] Rule: increment
+    ...
+    [worker 1 +0.464ms] Rule: register
+    [worker 1 +0.468ms]   key = 1
+    ...
+    [worker 2 +0.509ms] Rule: increment
+    ...
+    [worker 3 +0.479ms] Rule: increment
+    Invariant no_lost_updates violated after round 3.
+
+    Exception: Failure("increments were lost: store sums to 11 after 12 increments")
+    v} *)
 
 (** {2 Submodules} *)
 
@@ -338,8 +494,8 @@ module type Concurrent_state_machine = sig
 end
 
 (** [run_concurrent ?step_count ?sexp_of_state tc (module M) ~init ~min_concurrency ~max_concurrency]
-    executes a state machine using N worker threads, where N is in [min_concurrent, max_concurrency].
-    Each worker gets an independent clone of [tc]. In a round all workers receive rules from one concurrency group.
+    executes a state machine using N worker threads, where N is in [[min_concurrency, max_concurrency]].
+    In a round, all workers receive zero or more rules from one concurrency group.
 
     Invariants are checked on the initial and final state and sampled between
     rounds, unless they were created with [always_check:true].
@@ -347,7 +503,8 @@ end
     If [sexp_of_state] is provided, the state is printed before the first round
     and after each completed round.
 
-    [step_count] defaults to 50 and bounds the number of rules per test case.
+    [step_count] defaults to 50 and bounds the number of rounds per test case.
+    Each worker may execute multiple rules in a round.
 
     A [max_concurrency] greater than one makes the run nondeterministic. libhegel
     consequently reports a failure without replaying, shrinking or producing a failure
