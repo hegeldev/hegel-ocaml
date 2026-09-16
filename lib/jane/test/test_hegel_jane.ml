@@ -200,39 +200,6 @@ let test_printer_hash_table () =
     "((1 2))"
 ;;
 
-let test_resolve_draw () =
-  let tbl = Core.Hashtbl.create (module Core.Int) in
-  Core.Hashtbl.set tbl ~key:7 ~data:"v";
-  (* consume:false keeps the entry *)
-  Alcotest.(check string) "draw" "v" (Hegel_jane.resolve_draw tbl ~consume:false 7);
-  Alcotest.(check int) "still present" 1 (Core.Hashtbl.length tbl);
-  (* consume:true removes it *)
-  Alcotest.(check string) "consume" "v" (Hegel_jane.resolve_draw tbl ~consume:true 7);
-  Alcotest.(check int) "removed" 0 (Core.Hashtbl.length tbl);
-  (* unknown id raises Flaky_strategy *)
-  let raised =
-    try
-      ignore (Hegel_jane.resolve_draw tbl ~consume:false 99 : string);
-      false
-    with
-    | Internal.Flaky_strategy -> true
-  in
-  Alcotest.(check bool) "unknown id raises Flaky_strategy" true raised
-;;
-
-(* Draws through the engine's pool protocol against a Core.Hashtbl-backed pool,
-   exercising [pool_values]' [is_empty] closure. *)
-let test_pool_values_e2e () =
-  run_hegel_test ~settings:(Settings.create ~test_cases:5 ()) (fun tc ->
-    let pool = Internal.new_pool tc in
-    let tbl = Core.Hashtbl.create (module Core.Int) in
-    let variable_id = Internal.pool_add tc ~pool in
-    Core.Hashtbl.set tbl ~key:variable_id ~data:"a";
-    let gen = Hegel_jane.pool_values ~pool ~values:tbl ~consume:false in
-    let v = draw_silent tc gen in
-    assert (String.equal v "a"))
-;;
-
 let test_sexp_diff_renderer_colored () =
   let original = Core.Sexp.of_string "(1 2 3)" in
   let updated = Core.Sexp.of_string "(1 9 3)" in
@@ -267,8 +234,6 @@ let () =
             `Quick
             test_hash_tables_min_greater_than_max
         ; Alcotest.test_case "printer hash table" `Quick test_printer_hash_table
-        ; Alcotest.test_case "resolve_draw" `Quick test_resolve_draw
-        ; Alcotest.test_case "pool_values e2e" `Quick test_pool_values_e2e
         ; Alcotest.test_case
             "sexp_diff_renderer colored"
             `Quick

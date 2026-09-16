@@ -118,7 +118,7 @@ exception Assume_rejected
     ([HEGEL_E_BACKEND], [HEGEL_E_INVALID_HANDLE], [HEGEL_E_ALREADY_COMPLETE],
     [HEGEL_E_NOT_COMPLETE], [HEGEL_E_INTERNAL], [HEGEL_E_CONCURRENT_USE], or an
     unrecognized code). The payload is a static label identifying the code,
-    followed by {!last_error_message} when the engine set one. *)
+    followed by the engine's diagnostic when it set one. *)
 exception Internal_error of string
 
 (** Raised when a libhegel call returns [HEGEL_E_INVALID_ARG]: a caller-supplied
@@ -136,10 +136,6 @@ val phase_generate : int
 val phase_target : int
 val phase_shrink : int
 
-(** [phase_all] ([HEGEL_PHASE_ALL]) is all five phases enabled, the engine
-    default. *)
-val phase_all : int
-
 (** {2 Health-check bitmask values}
 
     The [HEGEL_HC_*] constants. *)
@@ -153,10 +149,6 @@ val hc_large_initial_test_case : int
 
 (** [version ctx] returns libhegel's version string. *)
 val version : context -> string
-
-(** [last_error_message ctx] returns the most recent error on the calling
-    thread, or the empty string if the last call succeeded. *)
-val last_error_message : context -> string
 
 (** {2 Context} *)
 

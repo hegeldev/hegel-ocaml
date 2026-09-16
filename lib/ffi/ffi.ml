@@ -2,8 +2,8 @@
    engine exposed as a C library by hegel-rust (hegel-c/include/hegel.h).
 
    This module is a thin, mechanical 1:1 wrapper over the C ABI: it locates and
-   [dlopen]s the shared library, declares each exported function, and exposes
-   OCaml-native wrappers that copy borrowed C buffers into OCaml strings and
+   [dlopen]s the shared library and exposes the functions used by the OCaml
+   frontend. Wrappers copy borrowed C buffers into OCaml strings and
    translate negative status codes into exceptions. *)
 
 open Ctypes
@@ -843,9 +843,6 @@ let phase_generate = 1 lsl 2
 let phase_target = 1 lsl 3
 let phase_shrink = 1 lsl 4
 
-(* [HEGEL_PHASE_ALL]: all five phases enabled (the engine default). *)
-let phase_all = 31
-
 (* Health-check bitmask values [HEGEL_HC_*]. *)
 let hc_filter_too_much = 1
 let hc_too_slow = 1 lsl 1
@@ -929,8 +926,6 @@ let version ctx =
   check_rc ctx (c_version ctx out);
   coerce (ptr char) string !@out
 ;;
-
-let last_error_message ctx = c_last_error_message ctx
 
 (* ------------------------------------------------------------------ *)
 (* Test context                                                       *)
