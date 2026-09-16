@@ -39,7 +39,7 @@ module Rule = struct
     ; step : Internal.test_case -> 'state -> 'state
     }
 
-  let create ~name ~weight ~step = { name; weight; step }
+  let create ~name ?(weight = 1.0) ~step () = { name; weight; step }
   let name t = t.name
   let weight t = t.weight
 end

@@ -343,7 +343,7 @@ module Stack = struct
     n :: stack
 
   let stack_stays_small _tc stack = assert (List.length stack <= 2)
-  let rules = [ Stateful.Rule.create ~name:"push" ~step:push ]
+  let rules = [ Stateful.Rule.create ~name:"push" ~step:push () ]
 
   let invariants =
     [ Stateful.Invariant.create

@@ -76,18 +76,24 @@ module Pool : sig
         }
 
       let alloc =
-        Stateful.Rule.create ~name:"alloc" ~step:(fun _tc state ->
-          let h = fresh_handle () in
-          Stateful.Pool.add state.handles h;
-          { state with live = Set.add state.live h })
+        Stateful.Rule.create
+          ~name:"alloc"
+          ~step:(fun _tc state ->
+            let h = fresh_handle () in
+            Stateful.Pool.add state.handles h;
+            { state with live = Set.add state.live h })
+          ()
       ;;
 
       let free =
-        Stateful.Rule.create ~name:"free" ~step:(fun tc state ->
-          (* draws a handle a prior [alloc] put in the pool *)
-          let h = draw_silent tc (Stateful.Pool.values_consumed state.handles) in
-          release h;
-          { state with live = Set.remove state.live h })
+        Stateful.Rule.create
+          ~name:"free"
+          ~step:(fun tc state ->
+            (* draws a handle a prior [alloc] put in the pool *)
+            let h = draw_silent tc (Stateful.Pool.values_consumed state.handles) in
+            release h;
+            { state with live = Set.remove state.live h })
+          ()
       ;;
       ]} *)
   type 'a t
@@ -143,15 +149,19 @@ module Rule : sig
 
       {[
       let push =
-        Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
-          let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
-          n :: stack)
+        Stateful.Rule.create
+          ~name:"push"
+          ~step:(fun tc stack ->
+            let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
+            n :: stack)
+          ()
       ;;
       ]} *)
   val create
     :  name:string
-    -> weight:float
+    -> ?weight:float
     -> step:(Internal.test_case -> 'state -> 'state)
+    -> unit
     -> 'state t
 
   (** Returns the name of the rule.
@@ -207,7 +217,7 @@ end
       type state = int
 
       let add tc n = n + draw ~label:"by" tc (integers ~min_value:1 ~max_value:10 ())
-      let rules = [ Stateful.Rule.create ~name:"add" ~step:add ]
+      let rules = [ Stateful.Rule.create ~name:"add" ~step:add () ]
 
       let invariants =
         [ Stateful.Invariant.create ~name:"small" ~inv:(fun _tc n -> assert (n < 100)) ()
