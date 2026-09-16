@@ -33,7 +33,7 @@
     ]}
     The above is rewritten into the following:
     {[
-    let rules = [ Hegel.Stateful.Rule.create ~name:"add" ~step:add ]
+    let rules = [ Hegel.Stateful.Rule.create ~name:"add" ~step:add () ]
 
     let invariants =
       [ Hegel.Stateful.Invariant.create ~name:"small" ~inv:small ~always_check:false ()
@@ -534,7 +534,8 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
              Hegel.Stateful.Rule.create
                ~name:[%e estring ~loc name]
                ~weight:[%e efloat ~loc weight]
-               ~step:[%e evar ~loc name]])
+               ~step:[%e evar ~loc name]
+               ()])
       rules
   in
   let invariant_exprs =

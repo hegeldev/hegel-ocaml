@@ -257,8 +257,9 @@ rewriter also handles `module%hegel_state_machine M = struct … end`, the
 analogue of hegel-rust's `#[hegel::state_machine] impl`. At expansion time it
 collects the bindings marked `[@@rule]`, `[@@invariant]`, or
 `[@@invariant always_check]` into appended `rules` and `invariants` lists
-(`Rule.create ~name:"<binding>" ~step:<binding>` and the same for
-`Invariant.create`) plus a `run ?step_count ?sexp_of_state tc ~init`.
+(`Rule.create ~name:"<binding>" ?weight ~step:<binding> ()` — `?weight` only
+for a `[@@rule <float>]` payload, which the concurrent form rejects — and the
+same for `Invariant.create`) plus a `run ?step_count ?sexp_of_state tc ~init`.
 `module%hegel_concurrent_state_machine` does the same with
 `Concurrent_rule.create ?group ~name ~step ()` (a `[@@rule "group"]` payload,
 which the sequential form rejects) and a `run ?concurrency ?min_concurrency
