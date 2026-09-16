@@ -84,11 +84,12 @@ let rule_attribute =
     "hegel.rule"
     Attribute.Context.value_binding
     Ast_pattern.(
-      alt
-        (map0 (pstr nil) ~f:No_payload)
-        (alt
-           (map1 (single_expr_payload (estring __)) ~f:(fun group -> Group group))
-           (map1 (single_expr_payload (efloat __)) ~f:(fun weight -> Weight weight))))
+      map0 (pstr nil) ~f:No_payload
+      ||| map1 (single_expr_payload (estring __)) ~f:(fun group -> Group group)
+      ||| map1 (single_expr_payload (efloat __)) ~f:(fun weight -> Weight weight)
+      ||| map1
+            (single_expr_payload (eint __))
+            ~f:(fun weight -> Weight (string_of_int weight ^ ".")))
     (fun ~attr_loc payload -> attr_loc, payload)
 ;;
 
