@@ -223,7 +223,7 @@ module%hegel_concurrent_state_machine Concurrent_counter = struct
   type state = int Atomic.t
 
   let sexp_of_state state = Sexplib0.Sexp.Atom (Int.to_string (Atomic.get state))
-  let increment _tc state = Atomic.incr state [@@rule]
+  let increment _tc state = Atomic.incr state [@@rule "writes"]
 
   let stays_zero _tc state = if Atomic.get state <> 0 then failwith "invariant boom"
   [@@invariant always_check]
@@ -250,7 +250,7 @@ let%expect_test "concurrent invariant failures retain their names" =
 
     state = 0
     Checking invariants on the initial state.
-    ---------------- Round 1: group "<anonymous>" ----------------
+    ---------------- Round 1: group "writes" ----------------
     [worker 0 +time] Rule: increment
     state = 1
     Invariant stays_zero violated after round 1.

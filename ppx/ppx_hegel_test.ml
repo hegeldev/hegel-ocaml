@@ -441,14 +441,29 @@ let expand_value_binding ~loc (vb : value_binding) : structure_item list =
 
 (** A marker attribute on a binding inside a [module%hegel_state_machine]. *)
 type marker =
-  | Rule
+  | Rule of string option
   | Invariant of { always_check : bool }
 
-let marker_of_attr (attr : attribute) : marker option =
+let marker_of_attr ~concurrent (attr : attribute) : marker option =
   match attr.attr_name.txt, attr.attr_payload with
-  | "rule", PStr [] -> Some Rule
+  | "rule", PStr [] -> Some (Rule None)
+  | "rule", _ when not concurrent ->
+    Location.raise_errorf
+      ~loc:attr.attr_loc
+      "ppx_hegel_test: rule groups are only supported in \
+       module%%hegel_concurrent_state_machine"
+  | ( "rule"
+    , PStr
+        [ { pstr_desc =
+              Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_string (group, _, _)); _ }, _)
+          ; _
+          }
+        ] ) -> Some (Rule (Some group))
   | "rule", _ ->
-    Location.raise_errorf ~loc:attr.attr_loc "ppx_hegel_test: [@@@@rule] takes no payload"
+    Location.raise_errorf
+      ~loc:attr.attr_loc
+      "ppx_hegel_test: [@@@@rule] either takes no payload or only a string literal group \
+       name"
   | "invariant", PStr [] -> Some (Invariant { always_check = false })
   | ( "invariant"
     , PStr
@@ -472,11 +487,13 @@ let is_marker (attr : attribute) =
 (** [expand_machine_item item] returns [item] with its marker attributes
     removed and the draws in marked bodies labeled and the
     [(name, marker)] of every marked binding it held. *)
-let expand_machine_item (item : structure_item) : structure_item * (string * marker) list =
+let expand_machine_item ~concurrent (item : structure_item)
+  : structure_item * (string * marker) list
+  =
   match item.pstr_desc with
   | Pstr_value (rec_flag, vbs) ->
     let expand_binding (vb : value_binding) =
-      match List.filter_map marker_of_attr vb.pvb_attributes with
+      match List.filter_map (marker_of_attr ~concurrent) vb.pvb_attributes with
       | [] -> vb, None
       | _ :: _ :: _ ->
         Location.raise_errorf
@@ -486,7 +503,7 @@ let expand_machine_item (item : structure_item) : structure_item * (string * mar
       | [ marker ] ->
         let what =
           match marker with
-          | Rule -> "rule"
+          | Rule _ -> "rule"
           | Invariant _ -> "invariant"
         in
         let name = extract_function_name ~what vb.pvb_pat in
@@ -557,13 +574,13 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
         "ppx_hegel_test: module%%%s expects a [struct … end] body"
         extension_name
   in
-  let items, marked = List.split (List.map expand_machine_item items) in
+  let items, marked = List.split (List.map (expand_machine_item ~concurrent) items) in
   let marked = List.concat marked in
   let rules, invariants =
     List.fold_right
       (fun (name, marker) (rules, invariants) ->
          match marker with
-         | Rule -> name :: rules, invariants
+         | Rule group -> (name, group) :: rules, invariants
          | Invariant { always_check } -> rules, (name, always_check) :: invariants)
       marked
       ([], [])
@@ -577,11 +594,16 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
   let open Ast_builder.Default in
   let rule_exprs =
     List.map
-      (fun name ->
+      (fun (name, group) ->
          if concurrent
          then
            [%expr
              Hegel.Stateful.Concurrent_rule.create
+               ?group:
+                 [%e
+                   match group with
+                   | None -> [%expr None]
+                   | Some group -> [%expr Some [%e estring ~loc group]]]
                ~name:[%e estring ~loc name]
                ~step:[%e evar ~loc name]
                ()]
