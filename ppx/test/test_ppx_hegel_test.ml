@@ -150,6 +150,12 @@ module%hegel_state_machine Counter = struct
   [@@rule 2.5]
   ;;
 
+  let bump_thrice tc n =
+    let by = Hegel.draw tc (Hegel.integers ~min_value:1 ~max_value:3 ()) in
+    n + (3 * by)
+  [@@rule 3]
+  ;;
+
   let positive _tc n =
     incr invariant_checks;
     assert (n >= 0)
@@ -169,11 +175,11 @@ let%hegel_test runs_machine (tc : Hegel.test_case) =
 let test_state_machine_collects_marked_bindings () =
   Alcotest.(check (list string))
     "rule names"
-    [ "bump"; "bump_twice" ]
+    [ "bump"; "bump_twice"; "bump_thrice" ]
     (List.map Counter.rules ~f:Hegel.Stateful.Rule.name);
   Alcotest.(check (list (float 0.)))
     "rule weights"
-    [ 1.0; 2.5 ]
+    [ 1.0; 2.5; 3.0 ]
     (List.map Counter.rules ~f:Hegel.Stateful.Rule.weight);
   Alcotest.(check (list string))
     "invariant names"

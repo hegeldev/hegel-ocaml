@@ -444,20 +444,31 @@ type marker =
   | Rule of { weight : string }
   | Invariant of { always_check : bool }
 
+let weight_of_constant = function
+  | Pconst_float (num, None) -> Ok num
+  | Pconst_integer (num, None)
+    when String.for_all (fun c -> (c >= '0' && c <= '9') || Char.equal c '_') num ->
+    Ok (num ^ ".")
+  | _ -> Error ()
+;;
+
 let marker_of_attr (attr : attribute) : marker option =
   match attr.attr_name.txt, attr.attr_payload with
-  | "rule", PStr [] -> Some (Rule { weight = "1.0" })
-  | ( "rule"
-    , PStr
-        [ { pstr_desc =
-              Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_float (num, None)); _ }, _)
-          ; _
-          }
-        ] ) -> Some (Rule { weight = num })
-  | "rule", _ ->
-    Location.raise_errorf
-      ~loc:attr.attr_loc
-      "ppx_hegel_test: [@@@@rule] takes no payload, or a float weight"
+  | "rule", payload ->
+    let weight =
+      match payload with
+      | PStr [] -> Ok "1.0"
+      | PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_constant const; _ }, _); _ } ]
+        -> weight_of_constant const
+      | _ -> Error ()
+    in
+    (match weight with
+     | Ok weight -> Some (Rule { weight })
+     | Error () ->
+       Location.raise_errorf
+         ~loc:attr.attr_loc
+         "ppx_hegel_test: [@@@@rule] takes no payload, or a positive number as the \
+          rule's weight")
   | "invariant", PStr [] -> Some (Invariant { always_check = false })
   | ( "invariant"
     , PStr
