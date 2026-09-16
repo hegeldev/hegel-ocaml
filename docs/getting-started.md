@@ -289,11 +289,11 @@ require tc ~msg:"list must stay sorted" (is_sorted xs)
 `Stateful` applies a random sequence of rules to the SUT and checks invariants
 on it. First, create a state machine with `module%hegel_state_machine`. Mark
 rules with `[@@rule]` and invariants with `[@@invariant]`. A rule takes the
-test case and the state and updates the state in place. Every invariant is 
-checked on the initial and final states and sampled after intermediate steps, 
-or after every step when marked `[@@invariant always_check]`. Pass `?sexp_of_state` 
-to `Stateful.run` to trace the model state. Draws are also printed with their 
-`let`-bound name.
+test case and the state and updates the state in place. Rules may be weighted
+with `[@@rule <weight>]`. Every invariant is checked on the initial and final
+states and sampled after intermediate steps, or after every step when marked
+`[@@invariant always_check]`. Pass `?sexp_of_state` to `Stateful.run` to trace
+the model state. Draws are also printed with their `let`-bound name.
 
 ```ocaml
 module%hegel_state_machine Stack = struct

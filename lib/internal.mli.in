@@ -336,7 +336,8 @@ val pool_generate : test_case -> pool:pool -> ?consume:bool -> unit -> int
 type state_machine = Hegel_ffi.Ffi.state_machine
 
 (** Registers a sequential or concurrent engine-owned state machine and
-    returns its handle with the concurrency level selected by libhegel. *)
+    returns its handle with the concurrency level selected by libhegel. Raises
+    {!Usage_error} if [rule_weights] contains a non-positive float. *)
 val new_state_machine_with_concurrency
   :  test_case
   -> rule_names:string list
