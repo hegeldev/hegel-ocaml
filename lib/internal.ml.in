@@ -645,12 +645,12 @@ let pool_generate tc ~pool ?(consume = false) () =
   with_stop_guard tc (fun () -> Ffi.pool_generate tc.context tc.handle ~pool ~consume)
 ;;
 
-(** [new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check
+(** [new_state_machine tc ~rule_names ~rule_weights ~invariant_names ~invariants_always_check
     ~step_count] registers a sequential engine-owned state machine: one
     concurrency group, concurrency fixed at 1, every rule pulled by worker 0,
     running at most [step_count] rules per test case. Release it with
     {!state_machine_free}. *)
-let new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check ~step_count
+let new_state_machine tc ~rule_names ~rule_weights ~invariant_names ~invariants_always_check ~step_count
   =
   with_stop_guard tc (fun () ->
     fst
@@ -659,6 +659,7 @@ let new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check ~
          tc.handle
          ~rule_names
          ~rule_groups:(List.map (fun _ -> 0) rule_names)
+         ~rule_weights
          ~invariant_names
          ~invariants_always_check
          ~min_concurrency:1

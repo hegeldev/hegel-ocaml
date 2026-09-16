@@ -331,13 +331,14 @@ val pool_generate : test_case -> pool:pool -> ?consume:bool -> unit -> int
     {!state_machine_free}. *)
 type state_machine = Hegel_ffi.Ffi.state_machine
 
-(** [new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check ~step_count] registers a sequential engine-owned state machine with the
-    named rules and invariants, running at most [step_count] rules per test
-    case. Raises {!Usage_error} if [rule_names] is empty or [step_count] is
-    below 1. *)
+(** [new_state_machine tc ~rule_names ~rule_weights ~invariant_names ~invariants_always_check ~step_count]
+    registers a sequential engine-owned state machine with the named rules and invariants,
+    running at most [step_count] rules per test case. Raises {!Usage_error} if [rule_names]
+    is empty or [step_count] is below 1. *)
 val new_state_machine
   :  test_case
   -> rule_names:string list
+  -> rule_weights:float list
   -> invariant_names:string list
   -> invariants_always_check:bool list
   -> step_count:int

@@ -148,7 +148,11 @@ module Rule : sig
           n :: stack)
       ;;
       ]} *)
-  val create : name:string -> step:(Internal.test_case -> 'state -> 'state) -> 'state t
+  val create
+    :  name:string
+    -> weight:float
+    -> step:(Internal.test_case -> 'state -> 'state)
+    -> 'state t
 
   (** Returns the name of the rule.
 
@@ -156,6 +160,9 @@ module Rule : sig
       let label = Stateful.Rule.name push
       ]} *)
   val name : _ t -> string
+
+  (** Returns the weight of the rule *)
+  val weight : _ t -> float
 end
 
 module Invariant : sig

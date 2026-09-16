@@ -441,14 +441,18 @@ let expand_value_binding ~loc (vb : value_binding) : structure_item list =
 
 (** A marker attribute on a binding inside a [module%hegel_state_machine]. *)
 type marker =
-  | Rule
+  | Rule of { weight : label }
   | Invariant of { always_check : bool }
 
 let marker_of_attr (attr : attribute) : marker option =
   match attr.attr_name.txt, attr.attr_payload with
-  | "rule", PStr [] -> Some Rule
+  | "rule", PStr [] -> Some (Rule { weight = "1.0" })
+  | "rule", PPat (_, Some { pexp_desc = Pexp_constant (Pconst_float (num, _)); _ }) ->
+    Some (Rule { weight = num })
   | "rule", _ ->
-    Location.raise_errorf ~loc:attr.attr_loc "ppx_hegel_test: [@@@@rule] takes no payload"
+    Location.raise_errorf
+      ~loc:attr.attr_loc
+      "ppx_hegel_test: [@@@@rule] only takes weight as a float value"
   | "invariant", PStr [] -> Some (Invariant { always_check = false })
   | ( "invariant"
     , PStr
@@ -486,7 +490,7 @@ let expand_machine_item (item : structure_item) : structure_item * (string * mar
       | [ marker ] ->
         let what =
           match marker with
-          | Rule -> "rule"
+          | Rule _ -> "rule"
           | Invariant _ -> "invariant"
         in
         let name = extract_function_name ~what vb.pvb_pat in
@@ -562,7 +566,7 @@ let expand_state_machine ~loc (mb : module_binding) : structure_item list =
     List.fold_right
       (fun (name, marker) (rules, invariants) ->
          match marker with
-         | Rule -> name :: rules, invariants
+         | Rule { weight } -> (name, weight) :: rules, invariants
          | Invariant { always_check } -> rules, (name, always_check) :: invariants)
       marked
       ([], [])
@@ -575,10 +579,11 @@ let expand_state_machine ~loc (mb : module_binding) : structure_item list =
   let open Ast_builder.Default in
   let rule_exprs =
     List.map
-      (fun name ->
+      (fun (name, weight) ->
          [%expr
            Hegel.Stateful.Rule.create
              ~name:[%e estring ~loc name]
+             ~weight:[%e efloat ~loc weight]
              ~step:[%e evar ~loc name]])
       rules
   in

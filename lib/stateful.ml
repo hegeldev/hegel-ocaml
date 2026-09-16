@@ -35,11 +35,13 @@ end
 module Rule = struct
   type 'state t =
     { name : string
+    ; weight : float
     ; step : Internal.test_case -> 'state -> 'state
     }
 
-  let create ~name ~step = { name; step }
+  let create ~name ~weight ~step = { name; weight; step }
   let name t = t.name
+  let weight t = t.weight
 end
 
 module Invariant = struct
@@ -69,6 +71,7 @@ let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
     Internal.new_state_machine
       tc
       ~rule_names:(List.map Rule.name rules)
+      ~rule_weights:(List.map Rule.weight rules)
       ~invariant_names
       ~invariants_always_check
       ~step_count

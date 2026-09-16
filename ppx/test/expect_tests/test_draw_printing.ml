@@ -238,7 +238,7 @@ let%expect_test "a list draw prints as one sexp" =
 
 let%expect_test "a stateful rule's args print; the step-cap draw stays silent" =
   let rule =
-    Stateful.Rule.create ~name:"push" ~step:(fun tc _state ->
+    Stateful.Rule.create ~name:"push" ~weight:1.0 ~step:(fun tc _state ->
       let _ = Hegel.draw ~label:"n" tc (integers ~min_value:7 ~max_value:7 ()) in
       assert false)
   in

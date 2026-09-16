@@ -473,7 +473,7 @@ val pool_generate : context -> test_case -> pool:pool -> consume:bool -> int
 (** [pool_free ctx pool] releases [pool]. *)
 val pool_free : context -> pool -> unit
 
-(** [new_state_machine ctx tc ~rule_names ~rule_groups ~invariant_names ~invariants_always_check ~min_concurrency ~max_concurrency ~step_count]
+(** [new_state_machine ctx tc ~rule_names ~rule_groups ~rule_weights ~invariant_names ~invariants_always_check ~min_concurrency ~max_concurrency ~step_count]
     registers an engine-owned state machine with the named rules (each in the
     concurrency group given by the parallel [rule_groups]) and invariants.
     [step_count] is the target number of rounds per test case: every case runs
@@ -490,6 +490,7 @@ val new_state_machine
   -> test_case
   -> rule_names:string list
   -> rule_groups:int list
+  -> rule_weights:float list
   -> invariant_names:string list
   -> invariants_always_check:bool list
   -> min_concurrency:int

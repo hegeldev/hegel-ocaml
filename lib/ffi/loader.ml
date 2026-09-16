@@ -31,7 +31,9 @@ let checksums =
   ]
 ;;
 
-let release_base = "https://github.com/hegeldev/hegel-rust/releases/download/libhegel-v" ^ version
+let release_base =
+  "https://github.com/hegeldev/hegel-rust/releases/download/libhegel-v" ^ version
+;;
 
 let getenv_nonempty name =
   match Sys.getenv_opt name with

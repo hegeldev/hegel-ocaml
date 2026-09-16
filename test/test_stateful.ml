@@ -7,12 +7,12 @@ let stateful_failure_test () =
   let module S = Hegel.Stateful in
   let last_pop = ref None in
   let push_rule =
-    S.Rule.create ~name:"push" ~step:(fun tc stack ->
+    S.Rule.create ~name:"push" ~weight:1.0 ~step:(fun tc stack ->
       let n = Hegel.draw tc (Hegel.integers ~min_value:0 ~max_value:100 ()) in
       n :: stack)
   in
   let pop_rule =
-    S.Rule.create ~name:"pop" ~step:(fun tc stack ->
+    S.Rule.create ~name:"pop" ~weight:1.0 ~step:(fun tc stack ->
       Hegel.assume tc (not (List.is_empty stack));
       match stack with
       | [] -> assert false
@@ -56,7 +56,7 @@ let var_next_id = ref 0
 
 let var_alloc_rule =
   let module S = Hegel.Stateful in
-  S.Rule.create ~name:"alloc" ~step:(fun _tc state ->
+  S.Rule.create ~name:"alloc" ~weight:1.0 ~step:(fun _tc state ->
     let id = !var_next_id in
     incr var_next_id;
     S.Pool.add state.Var_state.variables id;
@@ -65,7 +65,7 @@ let var_alloc_rule =
 
 let var_free_rule =
   let module S = Hegel.Stateful in
-  S.Rule.create ~name:"free" ~step:(fun tc state ->
+  S.Rule.create ~name:"free" ~weight:1.0 ~step:(fun tc state ->
     let var_gen = S.Pool.values_consumed state.Var_state.variables in
     let id = Hegel.draw_silent tc var_gen in
     assert (Set.mem state.Var_state.live id);
@@ -74,7 +74,7 @@ let var_free_rule =
 
 let var_use_rule =
   let module S = Hegel.Stateful in
-  S.Rule.create ~name:"use" ~step:(fun tc state ->
+  S.Rule.create ~name:"use" ~weight:1.0 ~step:(fun tc state ->
     let var_gen = S.Pool.values_consumed state.Var_state.variables in
     let id = Hegel.draw_silent tc var_gen in
     assert (Set.mem state.Var_state.live id);
@@ -132,7 +132,7 @@ let stateful_usage_error_test () =
   let module S = Hegel.Stateful in
   let attempts = ref 0 in
   let bad_rule =
-    S.Rule.create ~name:"bad" ~step:(fun tc () ->
+    S.Rule.create ~name:"bad" ~weight:1.0 ~step:(fun tc () ->
       incr attempts;
       ignore
         (Hegel.draw
@@ -165,7 +165,7 @@ let stateful_usage_error_test () =
 
 let stateful_rule_name_test () =
   let module S = Hegel.Stateful in
-  let rule = S.Rule.create ~name:"my_rule" ~step:(fun _tc s -> s) in
+  let rule = S.Rule.create ~name:"my_rule" ~weight:1.0 ~step:(fun _tc s -> s) in
   Alcotest.(check string) "name" "my_rule" (S.Rule.name rule)
 ;;
 
@@ -211,7 +211,7 @@ let stateful_step_count_forwarded_test () =
   let steps_this_case = ref 0 in
   let max_steps = ref 0 in
   let count_rule =
-    S.Rule.create ~name:"count" ~step:(fun _tc () -> incr steps_this_case)
+    S.Rule.create ~name:"count" ~weight:1.0 ~step:(fun _tc () -> incr steps_this_case)
   in
   let module M = struct
     type state = unit
@@ -237,7 +237,7 @@ let stateful_step_count_below_one_test () =
   let module M = struct
     type state = unit
 
-    let rules = [ S.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) ]
+    let rules = [ S.Rule.create ~name:"noop" ~weight:1.0 ~step:(fun _tc () -> ()) ]
     let invariants = []
   end
   in
@@ -257,7 +257,7 @@ let test_stateful_bounded_steps () =
   let module S = Hegel.Stateful in
   let step_count = ref 0 in
   let step_rule =
-    S.Rule.create ~name:"step" ~step:(fun _tc state ->
+    S.Rule.create ~name:"step" ~weight:1.0 ~step:(fun _tc state ->
       incr step_count;
       if !step_count >= 10 then failwith "reached 10 steps";
       state)
@@ -290,7 +290,7 @@ let test_always_check_invariant () =
   let stateful_step_count = 10 in
   let always_inv_exec_count = ref 0 in
   let sampled_inv_exec_count = ref 0 in
-  let noop = S.Rule.create ~name:"noop" ~step:(fun _tc _state -> ()) in
+  let noop = S.Rule.create ~name:"noop" ~weight:1.0 ~step:(fun _tc _state -> ()) in
   let always_check_invariant =
     S.Invariant.create
       ~name:"always_check"
@@ -334,7 +334,7 @@ let test_swarm_long_single_rule_run () =
   let current_run = ref 0 in
   let long_run_cases = ref 0 in
   let make i =
-    S.Rule.create ~name:(Printf.sprintf "rule_%d" i) ~step:(fun _tc () ->
+    S.Rule.create ~name:(Printf.sprintf "rule_%d" i) ~weight:1.0 ~step:(fun _tc () ->
       (match !last_rule with
        | Some j when j = i -> incr current_run
        | _ -> current_run := 1);
@@ -371,7 +371,7 @@ let stateful_hand_written_machine_test () =
     type state = int
 
     let rules =
-      [ S.Rule.create ~name:"bump" ~step:(fun _tc n ->
+      [ S.Rule.create ~name:"bump" ~weight:1.0 ~step:(fun _tc n ->
           incr steps;
           n + 1)
       ]
@@ -406,14 +406,14 @@ let test_pool_created_inside_rule () =
     type state = int S.Pool.t option
 
     let rules =
-      [ S.Rule.create ~name:"open" ~step:(fun tc state ->
+      [ S.Rule.create ~name:"open" ~weight:1.0 ~step:(fun tc state ->
           match state with
           | Some _ -> state
           | None ->
             let pool = S.Pool.create tc in
             S.Pool.add pool 1;
             Some pool)
-      ; S.Rule.create ~name:"use" ~step:(fun tc state ->
+      ; S.Rule.create ~name:"use" ~weight:1.0 ~step:(fun tc state ->
           match state with
           | None ->
             Hegel.assume tc false;
