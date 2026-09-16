@@ -72,15 +72,24 @@ let failure_blobs_attribute =
     (fun ~attr_loc blobs -> attr_loc, blobs)
 ;;
 
+(** What a [[@@rule]] attribute carried: a concurrency group in a concurrent
+    machine, a weight in a sequential one, or nothing. *)
+type rule_payload =
+  | No_payload
+  | Group of string
+  | Weight of string
+
 let rule_attribute =
   Attribute.declare_with_attr_loc
     "hegel.rule"
     Attribute.Context.value_binding
     Ast_pattern.(
       alt
-        (map0 (pstr nil) ~f:None)
-        (map1 (single_expr_payload (estring __)) ~f:(fun group -> Some group)))
-    (fun ~attr_loc group -> attr_loc, group)
+        (map0 (pstr nil) ~f:No_payload)
+        (alt
+           (map1 (single_expr_payload (estring __)) ~f:(fun group -> Group group))
+           (map1 (single_expr_payload (efloat __)) ~f:(fun weight -> Weight weight))))
+    (fun ~attr_loc payload -> attr_loc, payload)
 ;;
 
 let invariant_attribute =
@@ -373,7 +382,10 @@ let expand_value_binding ~loc (vb : value_binding) : structure_item list =
 
 (** A marker attribute on a binding inside a [module%hegel_state_machine]. *)
 type marker =
-  | Rule of string option
+  | Rule of
+      { group : string option
+      ; weight : string
+      }
   | Invariant of { always_check : bool }
 
 (** [marker_of_binding ~concurrent vb] is [vb] with its marker attribute
@@ -386,12 +398,18 @@ let marker_of_binding ~concurrent (vb : value_binding) : value_binding * marker 
     Location.raise_errorf
       ~loc:vb.pvb_loc
       "ppx_hegel_test: a binding can be marked [@@@@rule] or [@@@@invariant], not both"
-  | Some (attr_loc, Some _), None when not concurrent ->
+  | Some (attr_loc, Group _), None when not concurrent ->
     Location.raise_errorf
       ~loc:attr_loc
       "ppx_hegel_test: rule groups are only supported in \
        module%%hegel_concurrent_state_machine"
-  | Some (_, group), None -> vb, Some (Rule group)
+  | Some (attr_loc, Weight _), None when concurrent ->
+    Location.raise_errorf
+      ~loc:attr_loc
+      "ppx_hegel_test: rule weights are only supported in module%%hegel_state_machine"
+  | Some (_, No_payload), None -> vb, Some (Rule { group = None; weight = "1.0" })
+  | Some (_, Group group), None -> vb, Some (Rule { group = Some group; weight = "1.0" })
+  | Some (_, Weight weight), None -> vb, Some (Rule { group = None; weight })
   | None, Some always_check -> vb, Some (Invariant { always_check })
   | None, None -> vb, None
 ;;
@@ -483,7 +501,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
     List.fold_right
       (fun (name, marker) (rules, invariants) ->
          match marker with
-         | Rule group -> (name, group) :: rules, invariants
+         | Rule { group; weight } -> (name, group, weight) :: rules, invariants
          | Invariant { always_check } -> rules, (name, always_check) :: invariants)
       marked
       ([], [])
@@ -498,7 +516,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
   let open Ast_builder.Default in
   let rule_exprs =
     List.map
-      (fun (name, group) ->
+      (fun (name, group, weight) ->
          if concurrent
          then
            [%expr
@@ -515,6 +533,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
            [%expr
              Hegel.Stateful.Rule.create
                ~name:[%e estring ~loc name]
+               ~weight:[%e efloat ~loc weight]
                ~step:[%e evar ~loc name]])
       rules
   in

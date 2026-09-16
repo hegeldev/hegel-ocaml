@@ -588,6 +588,7 @@ let new_state_machine_with_concurrency
       tc
       ~rule_names
       ~rule_groups
+      ~rule_weights
       ~invariant_names
       ~invariants_always_check
       ~step_count
@@ -600,6 +601,7 @@ let new_state_machine_with_concurrency
       tc.handle
       ~rule_names
       ~rule_groups
+      ~rule_weights
       ~invariant_names
       ~invariants_always_check
       ~step_count

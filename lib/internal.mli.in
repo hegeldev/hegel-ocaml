@@ -341,6 +341,7 @@ val new_state_machine_with_concurrency
   :  test_case
   -> rule_names:string list
   -> rule_groups:int list
+  -> rule_weights:float list
   -> invariant_names:string list
   -> invariants_always_check:bool list
   -> step_count:int
