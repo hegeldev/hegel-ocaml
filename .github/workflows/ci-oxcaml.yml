@@ -90,7 +90,7 @@ jobs:
         run: |
           VERSION=$(awk -F'"' '/let version =/{print $2}' lib/ffi/loader.ml)
           ASSET="libhegel-linux-amd64.so"
-          URL_BASE="https://github.com/hegeldev/hegel-rust/releases/download/v${VERSION}"
+          URL_BASE="https://github.com/hegeldev/hegel-rust/releases/download/libhegel-v${VERSION}"
           DEST="${RUNNER_TEMP}/libhegel.so"
           curl -fsSL -o "${DEST}" "${URL_BASE}/${ASSET}"
           curl -fsSL -o "${DEST}.sha256" "${URL_BASE}/${ASSET}.sha256"
