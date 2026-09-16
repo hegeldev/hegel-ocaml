@@ -6,10 +6,11 @@
 
     With the [ppx_hegel_test] PPX, a state machine is a module written as
     [module%hegel_state_machine M = struct … end]. Mark rules with [[@@rule]]
-    and invariants with [[@@invariant]] or [[@@invariant always_check]].
-    The PPX generates the [run] function for the state machine. If the module
-    defines [sexp_of_state] (e.g. [type state = … [@@deriving sexp_of]]) [run]
-    uses it to print the state after each step.
+    or [[@@rule <weight>]] and invariants with [[@@invariant]] or
+    [[@@invariant always_check]]. The PPX generates the [run] function for the
+    state machine. If the module defines [sexp_of_state] (e.g.
+    [type state = … [@@deriving sexp_of]]) [run] uses it to print the state
+    after each step.
 
     Without the PPX, create rules with {!Rule.create} and the invariants
     with {!Invariant.create}, put them in a module of type {!State_machine},
@@ -141,6 +142,9 @@ module Rule : sig
   (** Declares a rule.
 
       - [name] is printed in the final output when the rule is run
+      - [weight] is a hint of how frequently the rule should be run. The
+        default weight is 1.0, and weights must be finite and strictly
+        positive.
       - [step tc state] performs one application of the rule, drawing any
         arguments it needs from [tc] and returning the new state.
 

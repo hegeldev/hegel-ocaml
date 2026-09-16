@@ -334,7 +334,7 @@ type state_machine = Hegel_ffi.Ffi.state_machine
 (** [new_state_machine tc ~rule_names ~rule_weights ~invariant_names ~invariants_always_check ~step_count]
     registers a sequential engine-owned state machine with the named rules and invariants,
     running at most [step_count] rules per test case. Raises {!Usage_error} if [rule_names]
-    is empty or [step_count] is below 1. *)
+    is empty, [step_count] is below 1 or [rule_weights] contains a non-positive float. *)
 val new_state_machine
   :  test_case
   -> rule_names:string list
