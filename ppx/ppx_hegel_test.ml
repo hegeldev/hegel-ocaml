@@ -632,6 +632,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
       then
         [%stri
           let run
+                ?concurrency
                 ?step_count
                 ?(sexp_of_state = sexp_of_state)
                 ~min_concurrency
@@ -643,6 +644,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
               ~init
               ~rules
               ~invariants
+              ?concurrency
               ~sexp_of_state
               ?step_count
               ~min_concurrency
@@ -651,11 +653,20 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
           ;;]
       else
         [%stri
-          let run ?step_count ?sexp_of_state ~min_concurrency ~max_concurrency tc ~init =
+          let run
+                ?concurrency
+                ?step_count
+                ?sexp_of_state
+                ~min_concurrency
+                ~max_concurrency
+                tc
+                ~init
+            =
             Hegel.Stateful.run_concurrent_internal
               ~init
               ~rules
               ~invariants
+              ?concurrency
               ?sexp_of_state
               ?step_count
               ~min_concurrency

@@ -20,7 +20,10 @@ let () =
     ; "generators_collections", Test_generators_collections.tests
     ; "generators_combinators", Test_generators_combinators.tests
     ; "generators_functions", Test_generators_functions.tests
-    ; "stateful", Test_stateful.tests
+      (* loader forks child processes. Unix.fork fails for the rest of the
+         process once any domain has been spawned, and the stateful suite's
+         test-only parallel capability spawns domains, so loader must run first. *)
     ; "loader", Test_loader.tests
+    ; "stateful", Test_stateful.tests
     ]
 ;;

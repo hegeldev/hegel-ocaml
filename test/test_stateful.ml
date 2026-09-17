@@ -503,7 +503,7 @@ let concurrent_smoke_test () =
          ~max_concurrency:1)
 ;;
 
-let concurrent_groups_do_not_overlap_test () =
+let concurrent_groups_do_not_overlap_test ~concurrency () =
   let module S = Hegel.Stateful in
   let lock = Mutex.create () in
   let active_group = ref None in
@@ -543,6 +543,7 @@ let concurrent_groups_do_not_overlap_test () =
       }
     (fun tc ->
        S.run_concurrent
+         ~concurrency
          tc
          (module struct
            type state = unit
@@ -643,7 +644,7 @@ let concurrent_pool_empty_draw_rejects_test () =
       (String.is_substring_at msg ~pos:0 ~substring:"Unsatisfiable")
 ;;
 
-let concurrent_pool_parallel_adds_test () =
+let concurrent_pool_parallel_adds_test ~concurrency () =
   let module S = Hegel.Stateful in
   let add =
     S.Concurrent_rule.create
@@ -662,6 +663,7 @@ let concurrent_pool_parallel_adds_test () =
        let pool = S.Concurrent_pool.create tc in
        let next = Atomic.make 0 in
        S.run_concurrent
+         ~concurrency
          tc
          (module struct
            type state = int S.Concurrent_pool.t * int Atomic.t
@@ -689,7 +691,7 @@ let concurrent_pool_parallel_adds_test () =
          consumed)
 ;;
 
-let concurrent_pool_parallel_consumes_test () =
+let concurrent_pool_parallel_consumes_test ~concurrency () =
   let module S = Hegel.Stateful in
   let initial_size = 16 in
   let consume =
@@ -711,6 +713,7 @@ let concurrent_pool_parallel_consumes_test () =
        let consumed = ref [] in
        let consumed_lock = Mutex.create () in
        S.run_concurrent
+         ~concurrency
          tc
          (module struct
            type state = int S.Concurrent_pool.t * Mutex.t * int list ref
@@ -742,7 +745,7 @@ let concurrent_pool_parallel_consumes_test () =
          (List.sort (consumed @ remaining) ~compare:Int.compare))
 ;;
 
-let concurrent_pool_parallel_adds_and_consumes_test () =
+let concurrent_pool_parallel_adds_and_consumes_test ~concurrency () =
   let module S = Hegel.Stateful in
   let exchange =
     S.Concurrent_rule.create
@@ -768,6 +771,7 @@ let concurrent_pool_parallel_adds_and_consumes_test () =
        let consumed = ref [] in
        let consumed_lock = Mutex.create () in
        S.run_concurrent
+         ~concurrency
          tc
          (module struct
            type state = int S.Concurrent_pool.t * int Atomic.t * Mutex.t * int list ref
@@ -964,7 +968,7 @@ let concurrent_always_check_invariant_test () =
          !invariants_checked)
 ;;
 
-let concurrent_invariant_waits_for_workers_test () =
+let concurrent_invariant_waits_for_workers_test ~concurrency () =
   let module S = Hegel.Stateful in
   let module M = struct
     type state = int Atomic.t
@@ -997,6 +1001,7 @@ let concurrent_invariant_waits_for_workers_test () =
       }
     (fun tc ->
        S.run_concurrent
+         ~concurrency
          tc
          (module M)
          ~init:(Atomic.make 0)
@@ -1117,9 +1122,14 @@ let tests =
       `Quick
       concurrent_always_check_invariant_test
   ; Alcotest.test_case
-      "stateful: concurrent invariants wait for workers"
+      "stateful: concurrent invariants wait for workers (threads)"
       `Quick
-      concurrent_invariant_waits_for_workers_test
+      (concurrent_invariant_waits_for_workers_test ~concurrency:Hegel.Concurrency.threads)
+  ; Alcotest.test_case
+      "stateful: concurrent invariants wait for workers (parallel)"
+      `Quick
+      (concurrent_invariant_waits_for_workers_test
+         ~concurrency:Test_helpers.parallel_concurrency)
   ; Alcotest.test_case
       "stateful: clone failure releases pool lock"
       `Quick
@@ -1177,9 +1187,14 @@ let tests =
       concurrent_rule_accessors_test
   ; Alcotest.test_case "stateful: concurrent smoke test" `Quick concurrent_smoke_test
   ; Alcotest.test_case
-      "stateful: concurrent groups do not overlap"
+      "stateful: concurrent groups do not overlap (threads)"
       `Quick
-      concurrent_groups_do_not_overlap_test
+      (concurrent_groups_do_not_overlap_test ~concurrency:Hegel.Concurrency.threads)
+  ; Alcotest.test_case
+      "stateful: concurrent groups do not overlap (parallel)"
+      `Quick
+      (concurrent_groups_do_not_overlap_test
+         ~concurrency:Test_helpers.parallel_concurrency)
   ; Alcotest.test_case
       "stateful: concurrent pool add/reuse/consume"
       `Quick
@@ -1197,17 +1212,37 @@ let tests =
       `Quick
       concurrent_pool_empty_draw_rejects_test
   ; Alcotest.test_case
-      "stateful: concurrent pool retains parallel additions"
+      "stateful: concurrent pool retains parallel additions (threads)"
       `Quick
-      concurrent_pool_parallel_adds_test
+      (concurrent_pool_parallel_adds_test ~concurrency:Hegel.Concurrency.threads)
   ; Alcotest.test_case
-      "stateful: concurrent pool consumes each value once"
+      "stateful: concurrent pool retains parallel additions (parallel)"
       `Quick
-      concurrent_pool_parallel_consumes_test
+      (concurrent_pool_parallel_adds_test ~concurrency:Test_helpers.parallel_concurrency)
   ; Alcotest.test_case
-      "stateful: concurrent pool preserves parallel additions and consumes"
+      "stateful: concurrent pool retains parallel additions (sequential)"
       `Quick
-      concurrent_pool_parallel_adds_and_consumes_test
+      (concurrent_pool_parallel_adds_test
+         ~concurrency:Test_helpers.sequential_concurrency)
+  ; Alcotest.test_case
+      "stateful: concurrent pool consumes each value once (threads)"
+      `Quick
+      (concurrent_pool_parallel_consumes_test ~concurrency:Hegel.Concurrency.threads)
+  ; Alcotest.test_case
+      "stateful: concurrent pool consumes each value once (parallel)"
+      `Quick
+      (concurrent_pool_parallel_consumes_test
+         ~concurrency:Test_helpers.parallel_concurrency)
+  ; Alcotest.test_case
+      "stateful: concurrent pool preserves parallel additions and consumes (threads)"
+      `Quick
+      (concurrent_pool_parallel_adds_and_consumes_test
+         ~concurrency:Hegel.Concurrency.threads)
+  ; Alcotest.test_case
+      "stateful: concurrent pool preserves parallel additions and consumes (parallel)"
+      `Quick
+      (concurrent_pool_parallel_adds_and_consumes_test
+         ~concurrency:Test_helpers.parallel_concurrency)
   ; Alcotest.test_case
       "stateful: concurrent worker exception is rethrown"
       `Quick
