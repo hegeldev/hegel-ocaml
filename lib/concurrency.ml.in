@@ -32,16 +32,15 @@ module Domain_pool = struct
     ; mutable stop : bool
     }
 
-  let take w =
-    Mutex.protect w.lock (fun () ->
-      while Queue.is_empty w.jobs && not w.stop do
-        Condition.wait w.ready w.lock
-      done;
-      if w.stop then None else Some (Queue.pop w.jobs))
-  ;;
-
   let rec run w =
-    match take w with
+    let next =
+      Mutex.protect w.lock (fun () ->
+        while Queue.is_empty w.jobs && not w.stop do
+          Condition.wait w.ready w.lock
+        done;
+        if w.stop then None else Some (Queue.pop w.jobs))
+    in
+    match next with
     | None -> ()
     | Some job ->
       ignore (Thread.create job () : Thread.t);

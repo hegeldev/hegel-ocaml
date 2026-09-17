@@ -50,14 +50,18 @@
 
 (** {2 Concurrent stateful testing}
 
-    A [module%hegel_concurrent_state_machine] concurrently runs rules on worker
-    threads. Concurrent rules belong to a group. Only rules in the same group may run
+    A [module%hegel_concurrent_state_machine] runs rules on several workers at
+    once. Concurrent rules belong to a group. Only rules in the same group may run
     concurrently. The number of workers is in [[min_concurrency, max_concurrency]]
     (see {!run_concurrent}).
 
     A round is a step of the concurrent test. Each round selects one rule group,
     and each worker runs a sequence of rules from that group. Invariants run after
     all workers finish the round.
+
+    How the workers run is a {!Concurrency.t}. The default implementation is
+    {!Concurrency.threads}, which puts workers on systhreads. See {!Concurrency} 
+    for more details.
 
     The example store below has a bug. The store locks individual reads and writes,
     but releases the lock between reading a counter and writing its incremented value.
@@ -91,8 +95,6 @@
 
       let increment store key =
         let value = Option.value (get store key) ~default:0 in
-        Thread.yield ();
-        (* Make the lost-update race easier to observe. *)
         put store key (value + 1)
       ;;
 
@@ -162,9 +164,9 @@
     ]}
 
     The [operations] group allows registration, increments, and reads to overlap.
-    The [snapshot] group runs separately. [Concurrent_pool] is the thread-safe
-    version of [Pool]. The invariant compares stored values with an atomic count of
-    completed increments.
+    The [snapshot] group runs separately. [Concurrent_pool] is the version of
+    [Pool] that concurrent rules may share. The invariant compares stored values
+    with an atomic count of completed increments.
 
     With [max_concurrency > 1], failures are reported without shrinking, replay,
     database persistence, or reproduction blobs.
@@ -288,7 +290,8 @@ module Pool : sig
 end
 
 module Concurrent_pool : sig
-  (** A thread-safe pool of values shared by concurrent stateful workers. *)
+  (** A pool of values that concurrent rules may share. Every operation is safe
+      to call from several workers at once. *)
   type 'a t
 
   (** Creates an empty concurrent pool. Pools are tied to a test case. Do not reuse
@@ -378,7 +381,7 @@ module Invariant : sig
 end
 
 module Concurrent_rule : sig
-  (** A rule applied to shared state by concurrent worker threads. The caller is
+  (** A rule applied to shared state by concurrent workers. The caller is
       responsible for synchronizing mutable state accessed by rule bodies. *)
   type 'state t
 
@@ -494,8 +497,8 @@ module type Concurrent_state_machine = sig
   val invariants : state Invariant.t list
 end
 
-(** [run_concurrent ?step_count ?sexp_of_state tc (module M) ~init ~min_concurrency ~max_concurrency]
-    executes a state machine using N worker threads, where N is in [[min_concurrency, max_concurrency]].
+(** [run_concurrent ?concurrency ?step_count ?sexp_of_state tc (module M) ~init ~min_concurrency ~max_concurrency]
+    executes a state machine with N workers, where N is in [[min_concurrency, max_concurrency]].
     In a round, all workers receive zero or more rules from one concurrency group.
 
     Invariants are checked on the initial and final state and sampled between
@@ -511,8 +514,8 @@ end
     consequently reports a failure without replaying, shrinking or producing a failure
     blob.
 
-    [concurrency] is how each round's workers are run. See {!Concurrency}. It
-    defaults to {!Concurrency.threads}. *)
+    [concurrency] runs each round's workers. See {!Concurrency}. It defaults to
+    {!Concurrency.threads}, which puts workers on systhreads. *)
 val run_concurrent
   :  ?concurrency:Concurrency.t
   -> ?step_count:int

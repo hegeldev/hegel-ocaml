@@ -66,6 +66,14 @@ lib/                         # Library source
                              #   takes the lists directly and is what the run generated
                              #   by module%hegel_state_machine calls.
                              #   Rule and invariant bodies run on indent-2 block handles
+  stateful_seq.ml            # Sequential machines: Pool, Rule, the step loop
+  stateful_concurrent.ml     # Concurrent machines: per round, one clone per worker,
+                             #   one Concurrency.spawn_join_n, then
+                             #   reraise_worker_failure over the outcomes. Spawns
+                             #   nothing itself (see Concurrent stateful testing)
+  concurrency.ml.in/.mli.in  # Hegel.Concurrency: the capability record
+                             #   (spawn_join_n), threads (the default) and, upstream
+                             #   only (#ifndef OXCAML), the pooled domains
   jane/                      # Optional hegel.jane sublibrary ((optional) in dune).
     hegel_jane.ml/.mli       #   Core.Hashtbl hash_tables + pool helpers and the
     test/                    #   sexp_diff require_equal renderer (set_sexp_diff);
@@ -99,7 +107,10 @@ test/                        # hegel's own test suite (one executable: test_hege
   dune                       #   Alcotest, package hegel — runs under `-p hegel`;
                              #   no PPX preprocessing beyond the ppx_js_style linter)
   test_hegel.ml              # Top-level Alcotest runner
-  test_helpers.ml            # Shared test utilities
+  test_helpers.ml            # Shared test utilities (+ the test-only parallel and
+                             #   sequential Concurrency capabilities)
+  test_concurrency.ml.in     # Concurrency tests (cppo: the domains tests exist
+                             #   upstream only)
   test_client.ml             # Internal config + run lifecycle tests (real engine)
   test_generators_*.ml       # Generator core / primitives / collections / combinators
   test_stateful.ml           # Stateful testing tests
@@ -224,7 +235,11 @@ analogue of hegel-rust's `#[hegel::state_machine] impl`. At expansion time it
 collects the bindings marked `[@@rule]`, `[@@invariant]`, or
 `[@@invariant always_check]` into appended `rules` and `invariants` lists
 (`Rule.create ~name:"<binding>" ~step:<binding>` and the same for
-`Invariant.create`) plus a `run ?step_count ?sexp_of_state tc ~init`. There
+`Invariant.create`) plus a `run ?step_count ?sexp_of_state tc ~init`.
+`module%hegel_concurrent_state_machine` does the same with
+`Concurrent_rule.create ?group` (from `[@@rule "group"]`) and a
+`run ?concurrency ?step_count ?sexp_of_state ~min_concurrency ~max_concurrency
+tc ~init` that calls `Stateful.run_concurrent_internal`. There
 is no registry and no runtime discovery. The generated `run` calls the
 doc-hidden `Stateful.run_internal`, which takes the lists directly, because
 the expanded module need not declare `type state` and the public
@@ -462,8 +477,11 @@ fresh `draw_state` (a rule's draw names are scoped to that one invocation: a
 closure defined inside a `let%hegel_test` body — flagged repeatable by the
 PPX — as `n_1` in every step), while sharing `owned_pools`; a clone instead
 copies the span depth and shares the parent's `draw_state`.
-Unlike a clone, a block must not be driven concurrently with its parent. `hegel_test_case_set_worker` (worker attribution) is not bound:
-`Stateful.run` is sequential (concurrency fixed at 1).
+Unlike a clone, a block must not be driven concurrently with its parent.
+`Internal.set_worker_index` binds `hegel_test_case_set_worker`:
+`Stateful_concurrent` tags each worker's per-round clone so the engine stamps
+its lines `[worker N +X.XXXms]`. `Stateful.run` is sequential (concurrency
+fixed at 1).
 Flipping the `should_print` gate to always-append (so the engine sees every
 case's representation) is the intended future Tyche switch.
 
@@ -566,6 +584,30 @@ Interesting exceptions are captured by origin so the final-replay exception is
 re-raised; after the loop, `Ffi.run_result` failures are raised (single) or
 aggregated into a "Multiple failures" report. `run`/`settings` handles are freed
 in an `Exn.protect ~finally`.
+
+### Concurrent stateful testing (lib/stateful_concurrent.ml, lib/concurrency.ml.in)
+
+The runner spawns no threads or domains. Each round it clones the test case
+once per worker, tags the clone with `set_worker_index`, and makes one call to
+`concurrency.spawn_join_n ~n ~f`, where `f i` pulls rules for worker `i` from
+the engine and runs them on clone `i` until the engine ends the round,
+returning an `outcome` (`None`, or the exception with its backtrace; bodies
+never raise into the capability). `reraise_worker_failure` picks the
+highest-precedence failure (usage/internal error, then overrun, then
+invalidation, then a test failure; lowest worker index first), then the
+invariants run on the main thread. `Hegel.Concurrency.t` is a record with that
+one field; `run_concurrent` and the generated `run` take it as `?concurrency`,
+default `Concurrency.threads` (one systhread per body per round: interleaving,
+no parallelism). `Concurrency.domains` is upstream-only (`#ifndef OXCAML`): a
+pool of `recommended_domain_count - 1` domains created on first use and joined
+at exit, one job queue per domain, jobs dealt round-robin, each job on its own
+systhread inside its domain so bodies stay live however few domains there
+are. Results go back as an `outcome list`, not an array, because on OxCaml a
+contended array cannot be read. Once any domain has been spawned `Unix.fork`
+fails for the rest of the process, so `test_hegel.ml` runs the forking
+`loader` suite first. Jane Street's `Concurrent` library is OxCaml-only and
+depends on `core`; its adapter belongs in an optional sublibrary (Phase 3 in
+`plan.md`). See `plan.md` for the OxCaml portability phase.
 
 ## Key Patterns and Conventions
 
