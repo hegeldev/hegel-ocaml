@@ -64,3 +64,23 @@
    -o
    %{target}
    %{dep:internal.ml.in})))
+
+(rule
+ (target concurrency.mli)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:concurrency.mli.in})))
+
+(rule
+ (target concurrency.ml)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:concurrency.ml.in})))

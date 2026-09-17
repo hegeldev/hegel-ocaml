@@ -12,7 +12,11 @@ let () =
 let () =
   Alcotest.run
     "hegel"
-    [ "client", Test_client.tests
+    [ (* [loader] forks child processes. [Unix.fork] fails for the rest of the
+         process once any domain has been spawned, and the concurrency and
+         stateful suites spawn domains, so [loader] runs first. *)
+      "loader", Test_loader.tests
+    ; "client", Test_client.tests
     ; "clone", Test_clone.tests
     ; "concurrency", Test_concurrency.tests
     ; "generators_core", Test_generators_core.tests
@@ -20,10 +24,6 @@ let () =
     ; "generators_collections", Test_generators_collections.tests
     ; "generators_combinators", Test_generators_combinators.tests
     ; "generators_functions", Test_generators_functions.tests
-      (* loader forks child processes. Unix.fork fails for the rest of the
-         process once any domain has been spawned, and the stateful suite's
-         test-only parallel capability spawns domains, so loader must run first. *)
-    ; "loader", Test_loader.tests
     ; "stateful", Test_stateful.tests
     ]
 ;;

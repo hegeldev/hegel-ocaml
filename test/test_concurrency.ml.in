@@ -1,0 +1,78 @@
+module C = Hegel.Concurrency
+
+let preserves_order (cap : C.t) () =
+  let outcomes =
+    cap.spawn_join_n ~n:5 ~f:(fun i ->
+      Some (Failure (string_of_int i), Printexc.get_raw_backtrace ()))
+  in
+  Alcotest.(check int) "one outcome per body" 5 (List.length outcomes);
+  List.iteri
+    (fun i outcome ->
+       match outcome with
+       | Some (Failure msg, _) ->
+         Alcotest.(check string) "body failed with its own index" (string_of_int i) msg
+       | _ -> Alcotest.failf "unexpected or no exception")
+    outcomes
+;;
+
+let records_raising_body (cap : C.t) () =
+  let outcomes = cap.spawn_join_n ~n:2 ~f:(fun i -> if i = 1 then failwith "boom" else None) in
+  match outcomes with
+  | [ None; Some (Failure msg, _) ] -> Alcotest.(check string) "message" "boom" msg
+  | _ -> Alcotest.fail "expected the raising body's exception at index 1"
+;;
+
+let zero_bodies (cap : C.t) () =
+  Alcotest.(check int) "no outcomes" 0 (List.length (cap.spawn_join_n ~n:0 ~f:(fun _ -> None)))
+;;
+
+let tests_for name cap =
+  [ Alcotest.test_case (name ^ " preserves order") `Quick (preserves_order cap)
+  ; Alcotest.test_case (name ^ " records raising body") `Quick (records_raising_body cap)
+  ; Alcotest.test_case (name ^ " zero bodies") `Quick (zero_bodies cap)
+  ]
+;;
+
+#ifndef OXCAML
+(* More bodies than the pool has domains, all waiting for each other: this
+   finishes only if every body is live as soon as it is dequeued. The deadline
+   turns a hang into a failure. *)
+let domains_bodies_live_together () =
+  let n = Domain.recommended_domain_count () + 2 in
+  let arrived = Atomic.make 0 in
+  let deadline = Unix.gettimeofday () +. 5.0 in
+  let outcomes =
+    C.domains.spawn_join_n ~n ~f:(fun _ ->
+      Atomic.incr arrived;
+      while Atomic.get arrived < n && Unix.gettimeofday () < deadline do
+        Thread.yield ()
+      done;
+      if Atomic.get arrived = n
+      then None
+      else Some (Failure "not all bodies were live at once", Printexc.get_raw_backtrace ()))
+  in
+  List.iter (function None -> () | Some (exn, _) -> raise exn) outcomes
+;;
+
+let domains_run_off_the_main_domain () =
+  let main = Domain.self () in
+  let outcomes =
+    C.domains.spawn_join_n ~n:2 ~f:(fun _ ->
+      if Domain.self () = main
+      then Some (Failure "body ran on the main domain", Printexc.get_raw_backtrace ())
+      else None)
+  in
+  List.iter (function None -> () | Some (exn, _) -> raise exn) outcomes
+;;
+
+let domain_tests =
+  tests_for "domains" C.domains
+  @ [ Alcotest.test_case "domains bodies live together" `Quick domains_bodies_live_together
+    ; Alcotest.test_case "domains run off the main domain" `Quick domains_run_off_the_main_domain
+    ]
+;;
+#else
+let domain_tests = []
+#endif
+
+let tests = tests_for "threads" C.threads @ domain_tests
