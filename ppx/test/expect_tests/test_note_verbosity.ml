@@ -104,8 +104,7 @@ let%expect_test "prints from clone interleave deterministically" =
   (try
      Hegel.run_hegel_test ~settings (fun tc ->
        Hegel.note tc "before clone";
-       let w = Hegel.spawn tc (fun c -> Hegel.note c "from clone") in
-       Hegel.join w;
+       Hegel.note (Hegel.clone tc) "from clone";
        Hegel.note tc "after clone";
        failwith "boom")
    with

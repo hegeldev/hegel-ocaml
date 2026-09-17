@@ -55,18 +55,6 @@ val with_block : test_case -> indent:int -> (test_case -> 'a) -> 'a
     currently owns; they are freed together once the case completes. *)
 val owned_clone_count : test_case -> int
 
-(** A running worker spawned by {!spawn}; joined with {!join}. Re-exported as
-    [Hegel.worker]. *)
-type 'a worker
-
-(** [spawn tc f] runs [f] on a fresh clone of [tc] on a new thread, capturing
-    its result or exception. Re-exported as [Hegel.spawn]. *)
-val spawn : test_case -> (test_case -> 'a) -> 'a worker
-
-(** [join w] waits for [w] and returns its result — re-raising any exception the
-    worker raised. Re-exported as [Hegel.join]. *)
-val join : 'a worker -> 'a
-
 (** Tags subsequent output from [tc] with a concurrent worker index. *)
 val set_worker_index : test_case -> int -> unit
 

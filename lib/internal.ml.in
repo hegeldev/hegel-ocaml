@@ -171,32 +171,6 @@ let with_block (tc : test_case) ~indent f =
     (fun () -> f b)
 ;;
 
-type 'a worker =
-  { thread : Thread.t
-  ; result : ('a, exn) result ref
-  }
-
-let spawn (tc : test_case) f =
-  let c = clone tc in
-  let result = ref (Error (Failure "hegel: worker thread did not complete")) in
-  let thread =
-    Thread.create
-      (fun () ->
-         result
-         := try Ok (f c) with
-            | exn -> Error exn)
-      ()
-  in
-  { thread; result }
-;;
-
-let join (w : 'a worker) =
-  Thread.join w.thread;
-  match !(w.result) with
-  | Ok v -> v
-  | Error exn -> raise exn
-;;
-
 let set_worker_index tc worker_index =
   Ffi.test_case_set_worker tc.context tc.handle ~worker_index
 ;;
