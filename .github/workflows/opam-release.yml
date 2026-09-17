@@ -90,7 +90,7 @@ jobs:
           # Download + checksum-verify each platform's libhegel into prebuilt/,
           # then drop in the dune rules that select & install the matching one.
           mkdir -p "$STAGE/prebuilt"
-          URL_BASE="https://github.com/hegeldev/hegel-rust/releases/download/v${LIBHEGEL_VERSION}"
+          URL_BASE="https://github.com/hegeldev/hegel-rust/releases/download/libhegel-v${LIBHEGEL_VERSION}"
           for asset in $PREBUILT_ASSETS; do
             curl -fsSL -o "$STAGE/prebuilt/$asset" "$URL_BASE/$asset"
             curl -fsSL -o "${RUNNER_TEMP}/$asset.sha256" "$URL_BASE/$asset.sha256"

@@ -7,7 +7,7 @@
    [../hegel-rust/target/release/] (then [.../debug/]) checkout relative to the
    current working directory, under the name cargo gives the cdylib
    ([libhegel_c.<ext>]). 4. A SHA-256-verified copy downloaded from the
-   hegel-rust GitHub release, cached under
+   hegel-rust GitHub release tagged [libhegel-v<version>], cached under
    [$XDG_CACHE_HOME|~/.cache]/hegel-ocaml/libhegel/<version>/. Set
    [HEGEL_LIBHEGEL_NO_DOWNLOAD=1] to opt out of the download fallback.
 
@@ -15,7 +15,7 @@
    filesystem/network branches are not subject to the coverage gate. *)
 
 (** The libhegel version these bindings target. *)
-let version = "0.42.0"
+let version = "0.42.4"
 
 (* Baked-in SHA-256 checksums of the published [libhegel-<os>-<arch>.<ext>]
    artifacts for {!version}, keyed by "<os>-<arch>". Platforms without an entry
@@ -23,15 +23,23 @@ let version = "0.42.0"
 
    Regenerate after bumping {!version} with: scripts/update-checksums.py *)
 let checksums =
-  [ "darwin-arm64", "e95ea6cd75ad41df59625ebbff20325364a33704ef6bbd9640c052149b2ef36a"
-  ; "linux-amd64", "f2aaa8a03ff6d6eaca5a9156ee04aeb7c4055e77770c8dda319d9812d274a1b5"
-  ; "linux-arm64", "e1a6fde3ce74a12aba7062da1596138d7a9b602c69724de9944f09688222fbdb"
-  ; "windows-amd64", "8fd6c9c2de69101cad0d4a024a8f60f2d352ba0b0952d0847a7a7750a5db4a58"
-  ; "windows-arm64", "e9fae703ddfcd5eb4599b2839e74fdf777b41dc8bcf5fbe213db7c7e0fbb9cdf"
+  [ "darwin-arm64", "560b6f2b5e724fa6c7300ee52c6c37a2a7ce94cd2d225d6a3ae7ca0adc0e23e8"
+  ; "linux-amd64", "60fa1b48f83def125d0d6904bf4351c0022572b52be252ded756aab9e0990682"
+  ; "linux-arm64", "b3a8f8041dff28c3657329bb6ecc01d506b1333f76e349efedf18ab555cf4042"
+  ; "windows-amd64", "e7bfda312322fb765a1962dff963645ec13aa1f137ff3805aec23b36b92a9785"
+  ; "windows-arm64", "86062cca72575334e30f39119946903b03dc438fcf6451ed4751e1aab4ab2655"
   ]
 ;;
 
-let release_base = "https://github.com/hegeldev/hegel-rust/releases/download/v" ^ version
+(* hegel-rust tags a libhegel release [libhegel-v<hegel-c version>] and hangs
+   the GitHub release (and its binaries) off that tag; the repository's plain
+   [v<version>] tags belong to the [hegeltest] crate, whose version differs.
+   Every libhegel release back to 0.24.0 carries a [libhegel-v] tag. *)
+let release_tag = "libhegel-v" ^ version
+
+let release_base =
+  "https://github.com/hegeldev/hegel-rust/releases/download/" ^ release_tag
+;;
 
 let getenv_nonempty name =
   match Sys.getenv_opt name with
@@ -248,10 +256,10 @@ let from_cache_or_download os_id ext =
       failwith
         (Printf.sprintf
            "hegel: no baked-in libhegel checksum for platform %s (not published upstream \
-            for v%s). Build hegel-rust and set HEGEL_LIBHEGEL_PATH to the resulting \
+            for %s). Build hegel-rust and set HEGEL_LIBHEGEL_PATH to the resulting \
             libhegel.%s."
            key
-           version
+           release_tag
            ext)
   in
   let cache_path = Filename.concat (cache_dir ()) (local_basename ext) in
