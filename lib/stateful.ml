@@ -46,6 +46,7 @@ let run_machine
       ~init
       ~rules
       ~concurrent
+      ~concurrency
       ~min_concurrency
       ~max_concurrency
       ~invariants
@@ -124,6 +125,7 @@ let run_machine
          then
            Stateful_concurrent.run
              tc
+             ~concurrency
              ~state_machine
              ~num_workers
              ~group_names
@@ -149,6 +151,7 @@ let run_internal ~init ~rules ~invariants ?sexp_of_state ?step_count tc =
     ~init
     ~rules
     ~concurrent:false
+    ~concurrency:Concurrency.threads
     ~min_concurrency:1
     ~max_concurrency:1
     ~invariants
@@ -181,6 +184,7 @@ let run_concurrent_internal
       ~init
       ~rules
       ~invariants
+      ?(concurrency = Concurrency.threads)
       ?sexp_of_state
       ?step_count
       ~min_concurrency
@@ -191,6 +195,7 @@ let run_concurrent_internal
     ~init
     ~rules
     ~concurrent:true
+    ~concurrency
     ~min_concurrency
     ~max_concurrency
     ~invariants
@@ -201,6 +206,7 @@ let run_concurrent_internal
 
 let run_concurrent
       (type s)
+      ?concurrency
       ?step_count
       ?sexp_of_state
       tc
@@ -212,6 +218,7 @@ let run_concurrent
   run_concurrent_internal
     ~init
     ~rules:M.rules
+    ?concurrency
     ~min_concurrency
     ~max_concurrency
     ~invariants:M.invariants

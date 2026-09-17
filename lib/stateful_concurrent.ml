@@ -1,13 +1,13 @@
 (** Concurrent state-machine execution.
 
-    This module starts [num_workers] threads and distributes rules to them
+    Each round:
 
-    - Ask libhegel for the next group.
-    - Give each worker a clone of the current test case and wake all workers.
-    - Each worker pulls and executes rules until libhegel ends its round,
-      then records their result.
-    - The main thread waits for every worker, propagates failures, and
-      runs invariants after the workers complete a round. *)
+    - ask libhegel for the next rule group
+    - clone the test case once per worker and run one body per worker through
+      the concurrency capability's [spawn_join_n]. Each body gets rules for
+      its worker from libhegel and runs them on its clone until libhegel ends
+      the round, then reports its outcome.
+    - re-raise the highest-precedence worker failure, then check invariants. *)
 
 module Pool_gen = Generators.Make_pool (Generators.Int_table)
 
@@ -58,87 +58,29 @@ let group_ids names group_names_uniq =
     names
 ;;
 
-type round_control =
-  { num_workers : int
-  ; mutex : Mutex.t
-  ; condition : Condition.t
-  ; mutable curr_round : int
-    (** the current round number. each worker remembers the last round it handled. *)
-  ; mutable num_completed : int
-    (** number of workers that have published a result for the current round. *)
-  ; mutable stop : bool (** shutdown signal. *)
-  ; mutable cases : Internal.test_case array (** one test case clone per worker. *)
-  ; results : (exn * Printexc.raw_backtrace) option array
-    (** each worker's result after a round. [None] means success. *)
-  }
-
-let worker_loop control worker_index work =
-  let rec loop last_exec_round =
-    let next_round =
-      Mutex.protect control.mutex (fun () ->
-        while (not control.stop) && control.curr_round = last_exec_round do
-          (* wait on main thread to finish preparing all workers *)
-          Condition.wait control.condition control.mutex
-        done;
-        if control.stop
-        then None
-        else Some (control.curr_round, control.cases.(worker_index)))
-    in
-    match next_round with
-    | None -> ()
-    | Some (round, tc) ->
-      let result =
-        try
-          ignore (work ~worker_index tc : _ * int * bool);
-          None
-        with
-        | exn -> Some (exn, Printexc.get_raw_backtrace ())
-      in
-      Mutex.protect control.mutex (fun () ->
-        control.results.(worker_index) <- result;
-        control.num_completed <- control.num_completed + 1;
-        (* final worker lets main thread know everyone is done *)
-        if control.num_completed = control.num_workers
-        then Condition.broadcast control.condition);
-      loop round
-  in
-  loop 0
-;;
-
-let dispatch_round control tc =
-  let testcases =
-    Array.init control.num_workers (fun worker_index ->
+(** [dispatch_round concurrency tc ~num_workers ~work] clones [tc] once per
+    worker and runs [work] for every worker at once. Each body's exception is
+    captured as its outcome. *)
+let dispatch_round (concurrency : Concurrency.t) tc ~num_workers ~work =
+  let cases =
+    Array.init num_workers (fun worker_index ->
       let worker_tc = Internal.clone tc in
       Internal.set_worker_index worker_tc worker_index;
       worker_tc)
   in
-  Mutex.protect control.mutex (fun () ->
-    control.cases <- testcases;
-    control.num_completed <- 0;
-    control.curr_round <- control.curr_round + 1;
-    Condition.broadcast control.condition;
-    while control.num_completed < control.num_workers do
-      (* wait on all workers to finish *)
-      Condition.wait control.condition control.mutex
-    done;
-    Array.copy control.results)
+  concurrency.spawn_join_n ~n:num_workers ~f:(fun worker_index ->
+    match work ~worker_index cases.(worker_index) with
+    | (_ : _ * int * bool) -> None
+    | exception exn -> Some (exn, Printexc.get_raw_backtrace ()))
 ;;
 
-(** shut down workers before joining *)
-let stop_workers control workers =
-  Mutex.protect control.mutex (fun () ->
-    control.stop <- true;
-    Condition.broadcast control.condition);
-  List.iter Thread.join workers
-;;
-
-let reraise_worker_failure results =
+let reraise_worker_failure (outcomes : Concurrency.outcome list) =
   let find predicate =
-    Array.find_map
+    List.find_map
       (function
         | Some (exn, _) as failure when predicate exn -> failure
         | _ -> None)
-      results
+      outcomes
   in
   let is_control_exception = function
     | Internal.Usage_error _ | Internal.Internal_error _ -> true
@@ -168,6 +110,7 @@ let reraise_worker_failure results =
 
 let run
       tc
+      ~concurrency
       ~state_machine
       ~num_workers
       ~run_round
@@ -176,51 +119,20 @@ let run
       ~print_state
       ~check_invariants
   =
-  let control =
-    { num_workers
-    ; mutex = Mutex.create ()
-    ; condition = Condition.create ()
-    ; curr_round = 0
-    ; num_completed = 0
-    ; stop = false
-    ; cases = [||]
-    ; results = Array.make num_workers None
-    }
+  let rec loop round =
+    match Internal.state_machine_next_group tc ~state_machine with
+    | None -> state
+    | Some group ->
+      Internal.note
+        tc
+        (Printf.sprintf
+           "---------------- Round %d: group %S ----------------"
+           round
+           group_names.(group));
+      reraise_worker_failure (dispatch_round concurrency tc ~num_workers ~work:run_round);
+      print_state state;
+      check_invariants ~where:(Printf.sprintf "after round %d" round) ~sample:true state;
+      loop (round + 1)
   in
-  let rec create_workers worker_index workers =
-    if worker_index = num_workers
-    then workers
-    else (
-      match Thread.create (fun () -> worker_loop control worker_index run_round) () with
-      | worker -> create_workers (worker_index + 1) (worker :: workers)
-      | exception exn ->
-        (* requires OS thread creation to fail. *)
-        (stop_workers control workers;
-         raise exn)
-        [@coverage off])
-  in
-  let workers = create_workers 0 [] in
-  Fun.protect
-    ~finally:(fun () -> stop_workers control workers)
-    (fun () ->
-       let rec loop round =
-         match Internal.state_machine_next_group tc ~state_machine with
-         | None -> state
-         | Some group ->
-           Internal.note
-             tc
-             (Printf.sprintf
-                "---------------- Round %d: group %S ----------------"
-                round
-                group_names.(group));
-           let round_result = dispatch_round control tc in
-           reraise_worker_failure round_result;
-           print_state state;
-           check_invariants
-             ~where:(Printf.sprintf "after round %d" round)
-             ~sample:true
-             state;
-           loop (round + 1)
-       in
-       loop 1)
+  loop 1
 ;;

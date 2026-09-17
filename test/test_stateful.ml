@@ -1070,6 +1070,47 @@ let concurrent_no_rules_test () =
       msg
 ;;
 
+let concurrent_custom_concurrency_test () =
+  let module S = Hegel.Stateful in
+  let calls = ref [] in
+  let sequential : Hegel.Concurrency.t =
+    { spawn_join_n =
+        (fun ~n ~f ->
+          calls := n :: !calls;
+          List.init n ~f)
+    }
+  in
+  let ran = Atomic.make 0 in
+  let step =
+    S.Concurrent_rule.create ~name:"step" ~step:(fun _tc () -> Atomic.incr ran) ()
+  in
+  Hegel.run_hegel_test
+    ~settings:
+      { (Hegel.Settings.create ~test_cases:3 ~seed:0 ()) with
+        database = Hegel.Settings.Disabled
+      }
+    (fun tc ->
+       S.run_concurrent
+         ~concurrency:sequential
+         tc
+         (module struct
+           type state = unit
+
+           let rules = [ step ]
+           let invariants = []
+         end)
+         ~step_count:4
+         ~init:()
+         ~min_concurrency:3
+         ~max_concurrency:3);
+  Alcotest.(check bool) "capability was used" true (not (List.is_empty !calls));
+  Alcotest.(check bool)
+    "asked for the drawn concurrency"
+    true
+    (List.for_all !calls ~f:(fun n -> n = 3));
+  Alcotest.(check bool) "rules ran" true (Atomic.get ran > 0)
+;;
+
 let tests =
   [ Alcotest.test_case
       "stateful: concurrent always-check invariants"
@@ -1184,5 +1225,9 @@ let tests =
       `Quick
       concurrent_invalid_bounds_test
   ; Alcotest.test_case "stateful: concurrent empty rules" `Quick concurrent_no_rules_test
+  ; Alcotest.test_case
+      "stateful: concurrent custom concurrency"
+      `Quick
+      concurrent_custom_concurrency_test
   ]
 ;;

@@ -12,9 +12,9 @@ type outcome = (exn * Printexc.raw_backtrace) option
 (** A concurrency capability. *)
 type t =
   { spawn_join_n : n:int -> f:(int -> outcome) -> outcome list
-    (** [spawn_join_n ~n ~f] runs [f 0] … [f (n - 1)] as concurrent tasks and 
-        returns their outcomes once all of them have finished. A worker may block 
-        until another worker runs. If [f i] raises, the exception is recorded 
+    (** [spawn_join_n ~n ~f] runs [f 0] … [f (n - 1)] as concurrent tasks and
+        returns their outcomes once all of them have finished. A worker may block
+        until another worker runs. If [f i] raises, the exception is recorded
         as task [i]'s outcome. *)
   }
 

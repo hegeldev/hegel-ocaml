@@ -476,6 +476,7 @@ val run_concurrent_internal
   :  init:'state
   -> rules:'state Concurrent_rule.t list
   -> invariants:'state Invariant.t list
+  -> ?concurrency:Concurrency.t
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
   -> ?step_count:int
   -> min_concurrency:int
@@ -508,9 +509,13 @@ end
 
     A [max_concurrency] greater than one makes the run nondeterministic. libhegel
     consequently reports a failure without replaying, shrinking or producing a failure
-    blob. *)
+    blob.
+
+    [concurrency] is how each round's workers are run. See {!Concurrency}. It
+    defaults to {!Concurrency.threads}. *)
 val run_concurrent
-  :  ?step_count:int
+  :  ?concurrency:Concurrency.t
+  -> ?step_count:int
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
   -> Internal.test_case
   -> (module Concurrent_state_machine with type state = 'state)

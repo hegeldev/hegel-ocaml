@@ -11,8 +11,7 @@ let threads_preserves_order () =
        match outcome with
        | Some (Failure msg, _) ->
          Alcotest.(check string) "odd index failed with its index" (string_of_int i) msg
-       | _ ->
-         Alcotest.failf "unexpected or no exception")
+       | _ -> Alcotest.failf "unexpected or no exception")
     outcomes
 ;;
 
