@@ -348,6 +348,9 @@ module Generators = Generators
 (** Stateful property-based testing. *)
 module Stateful = Stateful
 
+(** How a concurrent stateful test runs its workers. *)
+module Concurrency = Concurrency
+
 (** Auxiliary submodule for [@@deriving hegel_generator]. *)
 module Derive = Derive
 

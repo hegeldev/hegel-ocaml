@@ -14,6 +14,7 @@ let () =
     "hegel"
     [ "client", Test_client.tests
     ; "clone", Test_clone.tests
+    ; "concurrency", Test_concurrency.tests
     ; "generators_core", Test_generators_core.tests
     ; "generators_primitives", Test_generators_primitives.tests
     ; "generators_collections", Test_generators_collections.tests
