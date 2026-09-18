@@ -59,6 +59,26 @@ let foreign ?(release_runtime_lock = false) name typ =
 let foreign_blocking name typ = foreign ~release_runtime_lock:true name typ
 
 (* ------------------------------------------------------------------ *)
+(* Handles                                                            *)
+(* ------------------------------------------------------------------ *)
+
+(* In OxCaml they cross portability and contention since libhegel's threading
+   contract says a handle may move between threads and belongs to one thread at a 
+   time. ptr doesn't have a kind, but libhegel handles are captured in many places
+   so we need to wrap it in a type with the kind value mod portable contended to keep
+   portability and contention. *)
+#ifdef OXCAML
+type handle : value mod portable contended = H of unit ptr
+[@@unboxed] [@@unsafe_allow_any_mode_crossing]
+#else
+type handle = H of unit ptr [@@unboxed]
+#endif
+
+let raw (H p) = p
+let handle_t : handle typ = view ~read:(fun p -> H p) ~write:raw (ptr void)
+let null_handle = H null
+
+(* ------------------------------------------------------------------ *)
 (* C structs returned by the typed draws                              *)
 (* ------------------------------------------------------------------ *)
 
@@ -134,76 +154,76 @@ end
 (* Test context                                                        *)
 (* ------------------------------------------------------------------ *)
 
-let c_context_new = foreign "hegel_context_new" (void @-> returning (ptr void))
-let c_context_free = foreign "hegel_context_free" (ptr void @-> returning int)
+let c_context_new = foreign "hegel_context_new" (void @-> returning (handle_t))
+let c_context_free = foreign "hegel_context_free" (handle_t @-> returning int)
 
 (* ------------------------------------------------------------------ *)
 (* Raw bindings                                                        *)
 (* ------------------------------------------------------------------ *)
 
 let c_settings_new =
-  foreign "hegel_settings_new" (ptr void @-> ptr (ptr void) @-> returning int)
+  foreign "hegel_settings_new" (handle_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_settings_free =
-  foreign "hegel_settings_free" (ptr void @-> ptr void @-> returning int)
+  foreign "hegel_settings_free" (handle_t @-> handle_t @-> returning int)
 ;;
 
 let c_settings_backend =
-  foreign "hegel_settings_set_backend" (ptr void @-> ptr void @-> int @-> returning int)
+  foreign "hegel_settings_set_backend" (handle_t @-> handle_t @-> int @-> returning int)
 ;;
 
 let c_settings_test_cases =
   foreign
     "hegel_settings_set_test_cases"
-    (ptr void @-> ptr void @-> uint64_t @-> returning int)
+    (handle_t @-> handle_t @-> uint64_t @-> returning int)
 ;;
 
 let c_settings_verbosity =
-  foreign "hegel_settings_set_verbosity" (ptr void @-> ptr void @-> int @-> returning int)
+  foreign "hegel_settings_set_verbosity" (handle_t @-> handle_t @-> int @-> returning int)
 ;;
 
 let c_settings_seed =
   foreign
     "hegel_settings_set_seed"
-    (ptr void @-> ptr void @-> uint64_t @-> bool @-> returning int)
+    (handle_t @-> handle_t @-> uint64_t @-> bool @-> returning int)
 ;;
 
 let c_settings_derandomize =
   foreign
     "hegel_settings_set_derandomize"
-    (ptr void @-> ptr void @-> bool @-> returning int)
+    (handle_t @-> handle_t @-> bool @-> returning int)
 ;;
 
 let c_settings_report_multiple_failures =
   foreign
     "hegel_settings_set_report_multiple_failures"
-    (ptr void @-> ptr void @-> bool @-> returning int)
+    (handle_t @-> handle_t @-> bool @-> returning int)
 ;;
 
 let c_settings_show_statistics =
   foreign
     "hegel_settings_set_show_statistics"
-    (ptr void @-> ptr void @-> bool @-> returning int)
+    (handle_t @-> handle_t @-> bool @-> returning int)
 ;;
 
 let c_settings_database =
   foreign
     "hegel_settings_set_database"
-    (ptr void @-> ptr void @-> string_opt @-> returning int)
+    (handle_t @-> handle_t @-> string_opt @-> returning int)
 ;;
 
 let c_settings_database_key =
   foreign
     "hegel_settings_set_database_key"
-    (ptr void @-> ptr void @-> string_opt @-> returning int)
+    (handle_t @-> handle_t @-> string_opt @-> returning int)
 ;;
 
 let c_settings_test_location =
   foreign
     "hegel_settings_set_test_location"
-    (ptr void
-     @-> ptr void
+    (handle_t
+     @-> handle_t
      @-> string (* file *)
      @-> uint32_t (* begin_line *)
      @-> string (* class_name *)
@@ -214,101 +234,101 @@ let c_settings_test_location =
 let c_settings_new_for_profile =
   foreign
     "hegel_settings_new_for_profile"
-    (ptr void @-> string @-> ptr (ptr void) @-> returning int)
+    (handle_t @-> string @-> ptr handle_t @-> returning int)
 ;;
 
 let c_settings_print_blob =
   foreign
     "hegel_settings_set_print_blob"
-    (ptr void @-> ptr void @-> bool @-> returning int)
+    (handle_t @-> handle_t @-> bool @-> returning int)
 ;;
 
 let c_settings_register_profile =
   foreign
     "hegel_settings_register_profile"
-    (ptr void @-> string @-> ptr void @-> returning int)
+    (handle_t @-> string @-> handle_t @-> returning int)
 ;;
 
 let c_set_default_profile =
-  foreign "hegel_set_default_profile" (ptr void @-> string_opt @-> returning int)
+  foreign "hegel_set_default_profile" (handle_t @-> string_opt @-> returning int)
 ;;
 
 let c_settings_get_test_cases =
   foreign
     "hegel_settings_get_test_cases"
-    (ptr void @-> ptr void @-> ptr uint64_t @-> returning int)
+    (handle_t @-> handle_t @-> ptr uint64_t @-> returning int)
 ;;
 
 let c_settings_get_verbosity =
   foreign
     "hegel_settings_get_verbosity"
-    (ptr void @-> ptr void @-> ptr int @-> returning int)
+    (handle_t @-> handle_t @-> ptr int @-> returning int)
 ;;
 
 let c_settings_get_seed =
   foreign
     "hegel_settings_get_seed"
-    (ptr void @-> ptr void @-> ptr uint64_t @-> ptr bool @-> returning int)
+    (handle_t @-> handle_t @-> ptr uint64_t @-> ptr bool @-> returning int)
 ;;
 
 let c_settings_get_derandomize =
   foreign
     "hegel_settings_get_derandomize"
-    (ptr void @-> ptr void @-> ptr bool @-> returning int)
+    (handle_t @-> handle_t @-> ptr bool @-> returning int)
 ;;
 
 let c_settings_get_database =
   foreign
     "hegel_settings_get_database"
-    (ptr void @-> ptr void @-> ptr string_opt @-> returning int)
+    (handle_t @-> handle_t @-> ptr string_opt @-> returning int)
 ;;
 
 let c_settings_get_phases =
   foreign
     "hegel_settings_get_phases"
-    (ptr void @-> ptr void @-> ptr uint32_t @-> returning int)
+    (handle_t @-> handle_t @-> ptr uint32_t @-> returning int)
 ;;
 
 let c_settings_get_suppress_health_check =
   foreign
     "hegel_settings_get_suppress_health_check"
-    (ptr void @-> ptr void @-> ptr uint32_t @-> returning int)
+    (handle_t @-> handle_t @-> ptr uint32_t @-> returning int)
 ;;
 
 let c_settings_get_report_multiple_failures =
   foreign
     "hegel_settings_get_report_multiple_failures"
-    (ptr void @-> ptr void @-> ptr bool @-> returning int)
+    (handle_t @-> handle_t @-> ptr bool @-> returning int)
 ;;
 
 let c_settings_get_show_statistics =
   foreign
     "hegel_settings_get_show_statistics"
-    (ptr void @-> ptr void @-> ptr bool @-> returning int)
+    (handle_t @-> handle_t @-> ptr bool @-> returning int)
 ;;
 
 let c_settings_get_print_blob =
   foreign
     "hegel_settings_get_print_blob"
-    (ptr void @-> ptr void @-> ptr bool @-> returning int)
+    (handle_t @-> handle_t @-> ptr bool @-> returning int)
 ;;
 
 let c_settings_get_backend =
   foreign
     "hegel_settings_get_backend"
-    (ptr void @-> ptr void @-> ptr int @-> returning int)
+    (handle_t @-> handle_t @-> ptr int @-> returning int)
 ;;
 
 let c_settings_phases =
   foreign
     "hegel_settings_set_phases"
-    (ptr void @-> ptr void @-> uint32_t @-> returning int)
+    (handle_t @-> handle_t @-> uint32_t @-> returning int)
 ;;
 
 let c_settings_suppress_health_check =
   foreign
     "hegel_settings_set_suppress_health_check"
-    (ptr void @-> ptr void @-> uint32_t @-> returning int)
+    (handle_t @-> handle_t @-> uint32_t @-> returning int)
 ;;
 
 (* [hegel_run_start]'s [callback]/[user_data] (the third and fourth arguments)
@@ -317,72 +337,72 @@ let c_settings_suppress_health_check =
 let c_run_start =
   foreign
     "hegel_run_start"
-    (ptr void @-> ptr void @-> ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+    (handle_t @-> handle_t @-> handle_t @-> handle_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_next_test_case =
   foreign_blocking
     "hegel_next_test_case"
-    (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+    (handle_t @-> handle_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_run_result =
-  foreign "hegel_run_result" (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+  foreign "hegel_run_result" (handle_t @-> handle_t @-> ptr handle_t @-> returning int)
 ;;
 
-let c_run_free = foreign "hegel_run_free" (ptr void @-> ptr void @-> returning int)
+let c_run_free = foreign "hegel_run_free" (handle_t @-> handle_t @-> returning int)
 
 let c_run_result_free =
-  foreign "hegel_run_result_free" (ptr void @-> ptr void @-> returning int)
+  foreign "hegel_run_result_free" (handle_t @-> handle_t @-> returning int)
 ;;
 
-let c_failure_free = foreign "hegel_failure_free" (ptr void @-> ptr void @-> returning int)
+let c_failure_free = foreign "hegel_failure_free" (handle_t @-> handle_t @-> returning int)
 
 let c_test_case_free =
-  foreign "hegel_test_case_free" (ptr void @-> ptr void @-> returning int)
+  foreign "hegel_test_case_free" (handle_t @-> handle_t @-> returning int)
 ;;
 
 let c_test_case_is_nondeterministic =
   foreign
     "hegel_test_case_is_nondeterministic"
-    (ptr void @-> ptr void @-> ptr bool @-> returning int)
+    (handle_t @-> handle_t @-> ptr bool @-> returning int)
 ;;
 
 let c_test_case_clone =
   foreign
     "hegel_test_case_clone"
-    (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+    (handle_t @-> handle_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_test_case_set_worker =
   foreign
     "hegel_test_case_set_worker"
-    (ptr void @-> ptr void @-> int64_t @-> returning int)
+    (handle_t @-> handle_t @-> int64_t @-> returning int)
 ;;
 
 let c_test_case_block =
   foreign
     "hegel_test_case_block"
-    (ptr void @-> ptr void @-> uint64_t @-> ptr (ptr void) @-> returning int)
+    (handle_t @-> handle_t @-> uint64_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_generate_boolean =
   foreign
     "hegel_generate_boolean"
-    (ptr void @-> ptr void @-> double @-> bool @-> bool @-> ptr bool @-> returning int)
+    (handle_t @-> handle_t @-> double @-> bool @-> bool @-> ptr bool @-> returning int)
 ;;
 
 let c_generate_integer =
   foreign
     "hegel_generate_integer"
-    (ptr void @-> ptr void @-> int64_t @-> int64_t @-> ptr int64_t @-> returning int)
+    (handle_t @-> handle_t @-> int64_t @-> int64_t @-> ptr int64_t @-> returning int)
 ;;
 
 let c_generate_float =
   foreign
     "hegel_generate_float"
-    (ptr void
-     @-> ptr void
+    (handle_t
+     @-> handle_t
      @-> uint32_t
      @-> double
      @-> double
@@ -398,8 +418,8 @@ let c_generate_float =
 let c_generate_bytes =
   foreign
     "hegel_generate_bytes"
-    (ptr void
-     @-> ptr void
+    (handle_t
+     @-> handle_t
      @-> uint64_t
      @-> uint64_t
      @-> ptr Bytes_result.t
@@ -409,13 +429,13 @@ let c_generate_bytes =
 let c_generate_bytes_result_free =
   foreign
     "hegel_generate_bytes_result_free"
-    (ptr void @-> ptr Bytes_result.t @-> returning int)
+    (handle_t @-> ptr Bytes_result.t @-> returning int)
 ;;
 
 let c_string_generator_text =
   foreign
     "hegel_string_generator_text"
-    (ptr void
+    (handle_t
      @-> uint64_t
      (* min_size *) @-> uint64_t (* max_size *)
      @-> string_opt
@@ -429,56 +449,56 @@ let c_string_generator_text =
      @-> size_t
      @-> ptr char (* exclude_characters *)
      @-> size_t
-     @-> ptr (ptr void) (* out_generator *)
+     @-> ptr handle_t (* out_generator *)
      @-> returning int)
 ;;
 
 let c_string_generator_regex =
   foreign
     "hegel_string_generator_regex"
-    (ptr void
+    (handle_t
      @-> string
      (* pattern *) @-> bool (* fullmatch *)
-     @-> ptr void (* alphabet (nullable) *)
-     @-> ptr (ptr void)
+     @-> handle_t (* alphabet (nullable) *)
+     @-> ptr handle_t
      @-> returning int)
 ;;
 
 let c_string_generator_email =
-  foreign "hegel_string_generator_email" (ptr void @-> ptr (ptr void) @-> returning int)
+  foreign "hegel_string_generator_email" (handle_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_string_generator_url =
-  foreign "hegel_string_generator_url" (ptr void @-> ptr (ptr void) @-> returning int)
+  foreign "hegel_string_generator_url" (handle_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_string_generator_domain =
   foreign
     "hegel_string_generator_domain"
-    (ptr void @-> uint64_t @-> ptr (ptr void) @-> returning int)
+    (handle_t @-> uint64_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_string_generator_free =
-  foreign "hegel_string_generator_free" (ptr void @-> ptr void @-> returning int)
+  foreign "hegel_string_generator_free" (handle_t @-> handle_t @-> returning int)
 ;;
 
 let c_generate_string =
   foreign
     "hegel_generate_string"
-    (ptr void @-> ptr void @-> ptr void @-> ptr String_result.t @-> returning int)
+    (handle_t @-> handle_t @-> handle_t @-> ptr String_result.t @-> returning int)
 ;;
 
 let c_generate_string_result_free =
   foreign
     "hegel_generate_string_result_free"
-    (ptr void @-> ptr String_result.t @-> returning int)
+    (handle_t @-> ptr String_result.t @-> returning int)
 ;;
 
 let c_generate_date =
   foreign
     "hegel_generate_date"
-    (ptr void
-     @-> ptr void
+    (handle_t
+     @-> handle_t
      @-> Date_struct.t
      @-> Date_struct.t
      @-> ptr Date_struct.t
@@ -488,8 +508,8 @@ let c_generate_date =
 let c_generate_time =
   foreign
     "hegel_generate_time"
-    (ptr void
-     @-> ptr void
+    (handle_t
+     @-> handle_t
      @-> Time_struct.t
      @-> Time_struct.t
      @-> ptr Time_struct.t
@@ -499,8 +519,8 @@ let c_generate_time =
 let c_generate_datetime =
   foreign
     "hegel_generate_datetime"
-    (ptr void
-     @-> ptr void
+    (handle_t
+     @-> handle_t
      @-> Datetime_struct.t
      @-> Datetime_struct.t
      @-> ptr Datetime_struct.t
@@ -508,88 +528,88 @@ let c_generate_datetime =
 ;;
 
 let c_generate_ipv4 =
-  foreign "hegel_generate_ipv4" (ptr void @-> ptr void @-> ptr uint8_t @-> returning int)
+  foreign "hegel_generate_ipv4" (handle_t @-> handle_t @-> ptr uint8_t @-> returning int)
 ;;
 
 let c_generate_ipv6 =
-  foreign "hegel_generate_ipv6" (ptr void @-> ptr void @-> ptr uint8_t @-> returning int)
+  foreign "hegel_generate_ipv6" (handle_t @-> handle_t @-> ptr uint8_t @-> returning int)
 ;;
 
 let c_test_case_from_blob =
   foreign
     "hegel_test_case_from_blob"
-    (ptr void
-     @-> ptr void
+    (handle_t
+     @-> handle_t
      @-> string_opt
-     @-> ptr void
-     @-> ptr void
-     @-> ptr (ptr void)
+     @-> handle_t
+     @-> handle_t
+     @-> ptr handle_t
      @-> returning int)
 ;;
 
 let c_start_span =
-  foreign "hegel_start_span" (ptr void @-> ptr void @-> uint64_t @-> returning int)
+  foreign "hegel_start_span" (handle_t @-> handle_t @-> uint64_t @-> returning int)
 ;;
 
 let c_label_from_name =
-  foreign "hegel_label_from_name" (ptr void @-> string @-> ptr uint64_t @-> returning int)
+  foreign "hegel_label_from_name" (handle_t @-> string @-> ptr uint64_t @-> returning int)
 ;;
 
 let c_label_combine =
   foreign
     "hegel_label_combine"
-    (ptr void @-> ptr uint64_t @-> size_t @-> ptr uint64_t @-> returning int)
+    (handle_t @-> ptr uint64_t @-> size_t @-> ptr uint64_t @-> returning int)
 ;;
 
 let c_stop_span =
-  foreign "hegel_stop_span" (ptr void @-> ptr void @-> bool @-> returning int)
+  foreign "hegel_stop_span" (handle_t @-> handle_t @-> bool @-> returning int)
 ;;
 
 let c_new_collection =
   foreign
     "hegel_new_collection"
-    (ptr void @-> ptr void @-> uint64_t @-> uint64_t @-> ptr (ptr void) @-> returning int)
+    (handle_t @-> handle_t @-> uint64_t @-> uint64_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_collection_more =
   foreign
     "hegel_collection_more"
-    (ptr void @-> ptr void @-> ptr void @-> ptr bool @-> returning int)
+    (handle_t @-> handle_t @-> handle_t @-> ptr bool @-> returning int)
 ;;
 
 let c_collection_reject =
   foreign
     "hegel_collection_reject"
-    (ptr void @-> ptr void @-> ptr void @-> string_opt @-> returning int)
+    (handle_t @-> handle_t @-> handle_t @-> string_opt @-> returning int)
 ;;
 
 let c_collection_free =
-  foreign "hegel_collection_free" (ptr void @-> ptr void @-> returning int)
+  foreign "hegel_collection_free" (handle_t @-> handle_t @-> returning int)
 ;;
 
 let c_new_pool =
-  foreign "hegel_new_pool" (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+  foreign "hegel_new_pool" (handle_t @-> handle_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_pool_add =
   foreign
     "hegel_pool_add"
-    (ptr void @-> ptr void @-> ptr void @-> ptr int64_t @-> returning int)
+    (handle_t @-> handle_t @-> handle_t @-> ptr int64_t @-> returning int)
 ;;
 
 let c_pool_generate =
   foreign
     "hegel_pool_generate"
-    (ptr void @-> ptr void @-> ptr void @-> bool @-> ptr int64_t @-> returning int)
+    (handle_t @-> handle_t @-> handle_t @-> bool @-> ptr int64_t @-> returning int)
 ;;
 
-let c_pool_free = foreign "hegel_pool_free" (ptr void @-> ptr void @-> returning int)
+let c_pool_free = foreign "hegel_pool_free" (handle_t @-> handle_t @-> returning int)
 
 let c_new_state_machine =
   foreign
     "hegel_new_state_machine"
-    (ptr void
-     @-> ptr void
+    (handle_t
+     @-> handle_t
      @-> ptr (ptr char)
      @-> ptr int64_t
      @-> size_t
@@ -599,7 +619,7 @@ let c_new_state_machine =
      @-> int64_t
      @-> int64_t
      @-> int64_t
-     @-> ptr (ptr void)
+     @-> ptr handle_t
      @-> ptr int64_t
      @-> returning int)
 ;;
@@ -607,77 +627,77 @@ let c_new_state_machine =
 let c_state_machine_next_group =
   foreign
     "hegel_state_machine_next_group"
-    (ptr void @-> ptr void @-> ptr void @-> ptr int64_t @-> returning int)
+    (handle_t @-> handle_t @-> handle_t @-> ptr int64_t @-> returning int)
 ;;
 
 let c_state_machine_next_rule =
   foreign
     "hegel_state_machine_next_rule"
-    (ptr void @-> ptr void @-> ptr void @-> int64_t @-> ptr int64_t @-> returning int)
+    (handle_t @-> handle_t @-> handle_t @-> int64_t @-> ptr int64_t @-> returning int)
 ;;
 
 let c_state_machine_rule_rejected =
   foreign
     "hegel_state_machine_rule_rejected"
-    (ptr void @-> ptr void @-> ptr void @-> int64_t @-> returning int)
+    (handle_t @-> handle_t @-> handle_t @-> int64_t @-> returning int)
 ;;
 
 let c_state_machine_should_check_invariant =
   foreign
     "hegel_state_machine_should_check_invariant"
-    (ptr void @-> ptr void @-> ptr void @-> int64_t @-> ptr bool @-> returning int)
+    (handle_t @-> handle_t @-> handle_t @-> int64_t @-> ptr bool @-> returning int)
 ;;
 
 let c_state_machine_free =
-  foreign "hegel_state_machine_free" (ptr void @-> ptr void @-> returning int)
+  foreign "hegel_state_machine_free" (handle_t @-> handle_t @-> returning int)
 ;;
 
 let c_target =
-  foreign "hegel_target" (ptr void @-> ptr void @-> double @-> string @-> returning int)
+  foreign "hegel_target" (handle_t @-> handle_t @-> double @-> string @-> returning int)
 ;;
 
-let c_event = foreign "hegel_event" (ptr void @-> ptr void @-> string @-> returning int)
+let c_event = foreign "hegel_event" (handle_t @-> handle_t @-> string @-> returning int)
 
 let c_event_value =
   foreign
     "hegel_event_value"
-    (ptr void @-> ptr void @-> double @-> string @-> returning int)
+    (handle_t @-> handle_t @-> double @-> string @-> returning int)
 ;;
 
-let text_len_typ = ptr void @-> ptr void @-> string @-> size_t @-> returning int
+let text_len_typ = handle_t @-> handle_t @-> string @-> size_t @-> returning int
 
 let c_printer_options_new =
-  foreign "hegel_printer_options_new" (ptr void @-> ptr (ptr void) @-> returning int)
+  foreign "hegel_printer_options_new" (handle_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_printer_options_free =
-  foreign "hegel_printer_options_free" (ptr void @-> ptr void @-> returning int)
+  foreign "hegel_printer_options_free" (handle_t @-> handle_t @-> returning int)
 ;;
 
 let c_printer_options_set_max_width =
   foreign
     "hegel_printer_options_set_max_width"
-    (ptr void @-> ptr void @-> uint64_t @-> returning int)
+    (handle_t @-> handle_t @-> uint64_t @-> returning int)
 ;;
 
 let c_printer_new =
-  foreign "hegel_printer_new" (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+  foreign "hegel_printer_new" (handle_t @-> handle_t @-> ptr handle_t @-> returning int)
 ;;
 
-let c_printer_free = foreign "hegel_printer_free" (ptr void @-> ptr void @-> returning int)
+let c_printer_free = foreign "hegel_printer_free" (handle_t @-> handle_t @-> returning int)
 let c_printer_text = foreign "hegel_printer_text" text_len_typ
 let c_printer_breakable = foreign "hegel_printer_breakable" text_len_typ
 let c_printer_if_break = foreign "hegel_printer_if_break" text_len_typ
 let c_printer_comment = foreign "hegel_printer_comment" text_len_typ
 
 let c_printer_hard_break =
-  foreign "hegel_printer_hard_break" (ptr void @-> ptr void @-> returning int)
+  foreign "hegel_printer_hard_break" (handle_t @-> handle_t @-> returning int)
 ;;
 
 let c_printer_begin_group =
   foreign
     "hegel_printer_begin_group"
-    (ptr void @-> ptr void @-> uint64_t @-> string @-> size_t @-> returning int)
+    (handle_t @-> handle_t @-> uint64_t @-> string @-> size_t @-> returning int)
 ;;
 
 let c_printer_end_group = foreign "hegel_printer_end_group" text_len_typ
@@ -685,51 +705,51 @@ let c_printer_end_group = foreign "hegel_printer_end_group" text_len_typ
 let c_printer_shift_indent =
   foreign
     "hegel_printer_shift_indent"
-    (ptr void @-> ptr void @-> int64_t @-> returning int)
+    (handle_t @-> handle_t @-> int64_t @-> returning int)
 ;;
 
 let c_printer_deferred =
   foreign
     "hegel_printer_deferred"
-    (ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+    (handle_t @-> handle_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_printer_begin_speculative =
-  foreign "hegel_printer_begin_speculative" (ptr void @-> ptr void @-> returning int)
+  foreign "hegel_printer_begin_speculative" (handle_t @-> handle_t @-> returning int)
 ;;
 
 let c_printer_commit_speculative =
-  foreign "hegel_printer_commit_speculative" (ptr void @-> ptr void @-> returning int)
+  foreign "hegel_printer_commit_speculative" (handle_t @-> handle_t @-> returning int)
 ;;
 
 let c_printer_abort_speculative =
-  foreign "hegel_printer_abort_speculative" (ptr void @-> ptr void @-> returning int)
+  foreign "hegel_printer_abort_speculative" (handle_t @-> handle_t @-> returning int)
 ;;
 
 let c_printer_resolve =
-  foreign "hegel_printer_resolve" (ptr void @-> ptr void @-> returning int)
+  foreign "hegel_printer_resolve" (handle_t @-> handle_t @-> returning int)
 ;;
 
 let c_printer_is_live =
-  foreign "hegel_printer_is_live" (ptr void @-> ptr void @-> ptr bool @-> returning int)
+  foreign "hegel_printer_is_live" (handle_t @-> handle_t @-> ptr bool @-> returning int)
 ;;
 
 let c_printer_value =
   foreign
     "hegel_printer_value"
-    (ptr void @-> ptr void @-> ptr Printer_value_result.t @-> returning int)
+    (handle_t @-> handle_t @-> ptr Printer_value_result.t @-> returning int)
 ;;
 
 let c_printer_value_result_free =
   foreign
     "hegel_printer_value_result_free"
-    (ptr void @-> ptr Printer_value_result.t @-> returning int)
+    (handle_t @-> ptr Printer_value_result.t @-> returning int)
 ;;
 
 let c_test_case_printer =
   foreign
     "hegel_test_case_printer"
-    (ptr void @-> ptr void @-> ptr void @-> ptr (ptr void) @-> returning int)
+    (handle_t @-> handle_t @-> handle_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_note = foreign "hegel_note" text_len_typ
@@ -737,65 +757,65 @@ let c_note = foreign "hegel_note" text_len_typ
 let c_mark_complete =
   foreign
     "hegel_mark_complete"
-    (ptr void @-> ptr void @-> int @-> string_opt @-> returning int)
+    (handle_t @-> handle_t @-> int @-> string_opt @-> returning int)
 ;;
 
 let c_result_status =
-  foreign "hegel_run_result_status" (ptr void @-> ptr void @-> ptr int @-> returning int)
+  foreign "hegel_run_result_status" (handle_t @-> handle_t @-> ptr int @-> returning int)
 ;;
 
 let c_result_error =
   foreign
     "hegel_run_result_error"
-    (ptr void @-> ptr void @-> ptr (ptr char) @-> returning int)
+    (handle_t @-> handle_t @-> ptr (ptr char) @-> returning int)
 ;;
 
 let c_result_failure_count =
   foreign
     "hegel_run_result_failure_count"
-    (ptr void @-> ptr void @-> ptr size_t @-> returning int)
+    (handle_t @-> handle_t @-> ptr size_t @-> returning int)
 ;;
 
 let c_result_failure =
   foreign
     "hegel_run_result_failure"
-    (ptr void @-> ptr void @-> size_t @-> ptr (ptr void) @-> returning int)
+    (handle_t @-> handle_t @-> size_t @-> ptr handle_t @-> returning int)
 ;;
 
 let c_failure_blob =
   foreign
     "hegel_failure_reproduction_blob"
-    (ptr void @-> ptr void @-> ptr (ptr char) @-> returning int)
+    (handle_t @-> handle_t @-> ptr (ptr char) @-> returning int)
 ;;
 
 let c_failure_origin =
   foreign
     "hegel_failure_origin"
-    (ptr void @-> ptr void @-> ptr (ptr char) @-> returning int)
+    (handle_t @-> handle_t @-> ptr (ptr char) @-> returning int)
 ;;
 
 let c_last_error_message =
-  foreign "hegel_context_last_error" (ptr void @-> returning string)
+  foreign "hegel_context_last_error" (handle_t @-> returning string)
 ;;
 
-let c_version = foreign "hegel_version" (ptr void @-> ptr (ptr char) @-> returning int)
+let c_version = foreign "hegel_version" (handle_t @-> ptr (ptr char) @-> returning int)
 
 (* ------------------------------------------------------------------ *)
 (* Public types                                                        *)
 (* ------------------------------------------------------------------ *)
 
-type context = unit Ctypes.ptr
-type settings = unit Ctypes.ptr
-type run = unit Ctypes.ptr
-type test_case = unit Ctypes.ptr
-type run_result = unit Ctypes.ptr
-type failure = unit Ctypes.ptr
-type string_generator = unit Ctypes.ptr
-type collection = unit Ctypes.ptr
-type pool = unit Ctypes.ptr
-type state_machine = unit Ctypes.ptr
-type printer = unit Ctypes.ptr
-type printer_options = unit Ctypes.ptr
+type context = handle
+type settings = handle
+type run = handle
+type test_case = handle
+type run_result = handle
+type failure = handle
+type string_generator = handle
+type collection = handle
+type pool = handle
+type state_machine = handle
+type printer = handle
+type printer_options = handle
 
 type backend =
   | Default
@@ -950,7 +970,7 @@ let context_new () =
 (* ------------------------------------------------------------------ *)
 
 let settings_new ctx =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_settings_new ctx out);
   !@out
 ;;
@@ -1004,7 +1024,7 @@ let settings_suppress_health_check ctx s mask =
 let settings_print_blob ctx s b = check_rc ctx (c_settings_print_blob ctx s b)
 
 let settings_new_for_profile ctx name =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_settings_new_for_profile ctx name out);
   !@out
 ;;
@@ -1078,25 +1098,25 @@ let settings_get_backend ctx s =
 (* ------------------------------------------------------------------ *)
 
 let run_start ctx s =
-  let out = allocate (ptr void) null in
-  check_rc ctx (c_run_start ctx s null null out);
+  let out = allocate handle_t null_handle in
+  check_rc ctx (c_run_start ctx s null_handle null_handle out);
   !@out
 ;;
 
 let next_test_case ctx run =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_next_test_case ctx run out);
-  if is_null !@out then None else Some !@out
+  if is_null (raw !@out) then None else Some !@out
 ;;
 
 let test_case_from_blob ctx s b =
-  let out = allocate (ptr void) null in
-  check_rc ctx (c_test_case_from_blob ctx s b null null out);
+  let out = allocate handle_t null_handle in
+  check_rc ctx (c_test_case_from_blob ctx s b null_handle null_handle out);
   !@out
 ;;
 
 let run_result ctx run =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_run_result ctx run out);
   !@out
 ;;
@@ -1107,7 +1127,7 @@ let failure_free ctx f = check_rc ctx (c_failure_free ctx f)
 let test_case_free ctx tc = check_rc ctx (c_test_case_free ctx tc)
 
 let test_case_clone ctx tc =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_test_case_clone ctx tc out);
   !@out
 ;;
@@ -1117,7 +1137,7 @@ let test_case_set_worker ctx tc ~worker_index =
 ;;
 
 let test_case_block ctx tc ~indent =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_test_case_block ctx tc (Unsigned.UInt64.of_int indent) out);
   !@out
 ;;
@@ -1265,7 +1285,7 @@ let string_generator_text
   let excats_ptr, excats_root, excats_len = optional_string_array exclude_categories in
   let inc_ptr, inc_len = optional_bytes_arg include_characters in
   let exc_ptr, exc_len = optional_bytes_arg exclude_characters in
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   let rc =
     c_string_generator_text
       ctx
@@ -1291,25 +1311,25 @@ let string_generator_text
 ;;
 
 let string_generator_regex ctx ~pattern ~fullmatch =
-  let out = allocate (ptr void) null in
-  check_rc ctx (c_string_generator_regex ctx pattern fullmatch null out);
+  let out = allocate handle_t null_handle in
+  check_rc ctx (c_string_generator_regex ctx pattern fullmatch null_handle out);
   !@out
 ;;
 
 let string_generator_email ctx =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_string_generator_email ctx out);
   !@out
 ;;
 
 let string_generator_url ctx =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_string_generator_url ctx out);
   !@out
 ;;
 
 let string_generator_domain ctx ~max_length =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_string_generator_domain ctx (Unsigned.UInt64.of_int max_length) out);
   !@out
 ;;
@@ -1444,7 +1464,7 @@ let label_combine ctx labels =
 let stop_span ctx tc discard = check_rc ctx (c_stop_span ctx tc discard)
 
 let new_collection ctx tc ~min_size ~max_size =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   let max_u =
     match max_size with
     | Some m -> Unsigned.UInt64.of_int m
@@ -1467,7 +1487,7 @@ let collection_reject ctx tc collection why =
 let collection_free ctx collection = check_rc ctx (c_collection_free ctx collection)
 
 let new_pool ctx tc =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_new_pool ctx tc out);
   !@out
 ;;
@@ -1501,7 +1521,7 @@ let new_state_machine
   let groups = to_c_array int64_t (Array.map Int64.of_int rule_groups) in
   let invariants_always_check = to_c_array bool invariants_always_check in
   let invs_ptr, invs_root = to_string_array invariant_names in
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   let out_concurrency = allocate int64_t 0L in
   let rc =
     c_new_state_machine
@@ -1584,11 +1604,11 @@ let byte_len s = Unsigned.Size_t.of_int (String.length s)
 
 let opt_handle = function
   | Some p -> p
-  | None -> null
+  | None -> null_handle
 ;;
 
 let printer_options_new ctx =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_printer_options_new ctx out);
   !@out
 ;;
@@ -1602,7 +1622,7 @@ let printer_options_set_max_width ctx options max_width =
 ;;
 
 let printer_new ctx options =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_printer_new ctx (opt_handle options) out);
   !@out
 ;;
@@ -1633,7 +1653,7 @@ let printer_shift_indent ctx p delta =
 ;;
 
 let printer_deferred ctx p =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_printer_deferred ctx p out);
   !@out
 ;;
@@ -1660,7 +1680,7 @@ let printer_value ctx p =
 ;;
 
 let test_case_printer ctx tc options =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_test_case_printer ctx tc (opt_handle options) out);
   !@out
 ;;
@@ -1700,9 +1720,9 @@ let result_failure_count ctx r =
 ;;
 
 let result_failure ctx r i =
-  let out = allocate (ptr void) null in
+  let out = allocate handle_t null_handle in
   check_rc ctx (c_result_failure ctx r (Unsigned.Size_t.of_int i) out);
-  if is_null !@out then None else Some !@out
+  if is_null (raw !@out) then None else Some !@out
 ;;
 
 let result_failures ctx r =
