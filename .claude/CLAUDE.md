@@ -81,8 +81,9 @@ lib/                         # Library source
                              #   (spawn_join_n), threads (the default) and, upstream
                              #   only (#ifndef OXCAML), the pooled domains
   jane/                      # Optional hegel.jane sublibrary ((optional) in dune).
-    hegel_jane.ml/.mli       #   Core.Hashtbl hash_tables + pool helpers and the
+    hegel_jane.ml/.mli.in    #   Core.Hashtbl hash_tables + pool helpers and the
     test/                    #   sexp_diff require_equal renderer (set_sexp_diff);
+                             #   (.mli.in: cppo, the OxCaml portable default)
                              #   instrumented + coverage-gated like lib/ (its own
                              #   test/ dir, gated behind HEGEL_SKIP_JANE_TESTS in
                              #   check-tests-no-coverage since it needs the core/
@@ -637,9 +638,12 @@ stripped; every file carrying mode syntax is a cppo `.in`. Macros:
 parameter or return mode), `CROSSING` = `: value mod portable contended`.
 
 - **Interfaces.** `hegel.mli.in`, `generators.mli.in`, `internal.mli.in`,
-  `settings.mli.in`, `derive.mli.in`, `ffi.mli.in` start with a module-level
-  `@@ portable` default: every `val` is portable and the compiler checks each
-  implementation. `stateful.mli.in` instead puts `sig @@ portable` on the
+  `settings.mli.in`, `derive.mli.in`, `ffi.mli.in`, and
+  `jane/hegel_jane.mli.in` start with a module-level `@@ portable` default:
+  every `val` is portable and the compiler checks each implementation. Core's
+  own functions are portable in the `5.2.0+ox` switch, so `hegel_jane.ml`
+  needs no annotations of its own, and a type derived under
+  `Hegel_jane.Derive` gets a portable printer. `stateful.mli.in` instead puts `sig @@ portable` on the
   `Pool`/`Rule`/`Invariant` submodules (`PORTABLE`); the runners (`run`,
   `run_internal`) stay nonportable since they reference
   `Concurrency.threads`, which uses `Thread.create`.

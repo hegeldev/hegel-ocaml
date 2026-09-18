@@ -220,7 +220,7 @@ let%expect_test "quiet nondeterministic failure stays quiet" =
   [%expect {||}]
 ;;
 
-module%hegel_state_machine Concurrent_counter = struct
+module%hegel_concurrent_state_machine Concurrent_counter = struct
   type state = int Atomic.t
 
   let sexp_of_state state = Sexplib0.Sexp.Atom (Int.to_string (Atomic.get state))
@@ -241,21 +241,28 @@ let%expect_test "concurrent invariant failures retain their names" =
             tc
             ~init:(Atomic.make 0)
             ~min_concurrency:1
-            ~max_concurrency:1)
+            ~max_concurrency:3)
    with
    | Failure message when String.equal message "invariant boom" -> ());
   print_string (Expect_scrub.scrub_concurrent_report [%expect.output]);
   [%expect
     {|
+    Concurrent state machine detected: this run is nondeterministic, so failures are reported from the execution that discovered them, without shrinking, replay, database persistence, or a reproduce blob.
     --- Failure --------------------------------------------------------------------
 
+    Concurrency level: 3
     state = 0
     Checking invariants on the initial state.
-    Step 1: increment
-    state = 1
-    Invariant stays_zero violated after step 1.
+    ---------------- Round 1: group "writes" ----------------
+    [worker 1 +time] Rule: increment
+    [worker 1 +time] Rule: increment
+    [worker 1 +time] Rule: increment
+    [worker 1 +time] Rule: increment
+    [worker 1 +time] Rule: increment
+    [worker 2 +time] Rule: increment
+    state = 6
+    Invariant stays_zero violated after round 1.
 
     Exception: Failure("invariant boom")
-    rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
