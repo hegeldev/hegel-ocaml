@@ -23,23 +23,17 @@
     A state machine is a module whose rules and invariants are marked:
     {[
     module%hegel_state_machine Counter = struct
-      type state = int Atomic.t
+      type state = int ref
 
-      let sexp_of_state n = sexp_of_int (Atomic.get n)
-
-      let add tc n =
-        let by = draw tc (integers ~min_value:1 ~max_value:10 ()) in
-        ignore (Atomic.fetch_and_add n by : int)
-      [@@rule]
-      ;;
-
-      let small _tc n = assert (Atomic.get n < 100) [@@invariant]
-      let positive _tc n = assert (Atomic.get n >= 0) [@@invariant always_check]
+      let sexp_of_state n = sexp_of_int !n
+      let add tc n = n := !n + draw tc (integers ~min_value:1 ~max_value:10 ()) [@@rule]
+      let small _tc n = assert (!n < 100) [@@invariant]
+      let positive _tc n = assert (!n >= 0) [@@invariant always_check]
     end
     ]}
     The above is rewritten into the following:
     {[
-    let rules = [ Hegel.Stateful.Rule.create ?group:None ~name:"add" ~step:add () ]
+    let rules = [ Hegel.Stateful.Rule.create ~name:"add" ~step:add ]
 
     let invariants =
       [ Hegel.Stateful.Invariant.create ~name:"small" ~inv:small ~always_check:false ()
@@ -51,29 +45,16 @@
       ]
     ;;
 
-    let run
-          ?concurrency
-          ?min_concurrency
-          ?max_concurrency
-          ?step_count
-          ?(sexp_of_state = sexp_of_state)
-          tc
-          ~init
-      =
-      Hegel.Stateful.run_internal
-        ~init
-        ~rules
-        ~invariants
-        ?concurrency
-        ?min_concurrency
-        ?max_concurrency
-        ~sexp_of_state
-        ?step_count
-        tc
+    let run ?step_count ?(sexp_of_state = sexp_of_state) tc ~init =
+      Hegel.Stateful.run_internal ~init ~rules ~invariants ~sexp_of_state ?step_count tc
     ;;
     ]}
 
-    A [[@@rule "group"]] payload names the rule's concurrency group.
+    A [module%hegel_concurrent_state_machine] is expanded the same way with
+    [Hegel.Stateful.Concurrent_rule.create ?group ~name ~step ()], where a
+    [[@@rule "group"]] payload names the rule's concurrency group, and a
+    [run ?concurrency ?min_concurrency ?max_concurrency ?step_count
+    ?sexp_of_state tc ~init] that calls [Hegel.Stateful.run_concurrent_internal].
 
     In a test body and in a marked rule or invariant body, a
     [let x = draw tc gen] binding has its name injected so the drawn value
@@ -621,16 +602,23 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
   let rule_exprs =
     List.map
       (fun (name, group) ->
-         [%expr
-           Hegel.Stateful.Rule.create
-             ?group:
-               [%e
-                 match group with
-                 | None -> [%expr None]
-                 | Some group -> [%expr Some [%e estring ~loc group]]]
-             ~name:[%e estring ~loc name]
-             ~step:[%e evar ~loc name]
-             ()])
+         if concurrent
+         then
+           [%expr
+             Hegel.Stateful.Concurrent_rule.create
+               ?group:
+                 [%e
+                   match group with
+                   | None -> [%expr None]
+                   | Some group -> [%expr Some [%e estring ~loc group]]]
+               ~name:[%e estring ~loc name]
+               ~step:[%e evar ~loc name]
+               ()]
+         else
+           [%expr
+             Hegel.Stateful.Rule.create
+               ~name:[%e estring ~loc name]
+               ~step:[%e evar ~loc name]])
       rules
   in
   let invariant_exprs =
@@ -645,47 +633,72 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
       invariants
   in
   let run =
-    if has_sexp_of_state items
+    if concurrent
     then
-      [%stri
-        let run
+      if has_sexp_of_state items
+      then
+        [%stri
+          let run
+                ?concurrency
+                ?min_concurrency
+                ?max_concurrency
+                ?step_count
+                ?(sexp_of_state = sexp_of_state)
+                tc
+                ~init
+            =
+            Hegel.Stateful.run_concurrent_internal
+              ~init
+              ~rules
+              ~invariants
               ?concurrency
               ?min_concurrency
               ?max_concurrency
+              ~sexp_of_state
               ?step_count
-              ?(sexp_of_state = sexp_of_state)
               tc
+          ;;]
+      else
+        [%stri
+          let run
+                ?concurrency
+                ?min_concurrency
+                ?max_concurrency
+                ?step_count
+                ?sexp_of_state
+                tc
+                ~init
+            =
+            Hegel.Stateful.run_concurrent_internal
               ~init
-          =
+              ~rules
+              ~invariants
+              ?concurrency
+              ?min_concurrency
+              ?max_concurrency
+              ?sexp_of_state
+              ?step_count
+              tc
+          ;;]
+    else if has_sexp_of_state items
+    then
+      [%stri
+        let run ?step_count ?(sexp_of_state = sexp_of_state) tc ~init =
           Hegel.Stateful.run_internal
             ~init
             ~rules
             ~invariants
-            ?concurrency
-            ?min_concurrency
-            ?max_concurrency
             ~sexp_of_state
             ?step_count
             tc
         ;;]
     else
       [%stri
-        let run
-              ?concurrency
-              ?min_concurrency
-              ?max_concurrency
-              ?step_count
-              ?sexp_of_state
-              tc
-              ~init
-          =
+        let run ?step_count ?sexp_of_state tc ~init =
           Hegel.Stateful.run_internal
             ~init
             ~rules
             ~invariants
-            ?concurrency
-            ?min_concurrency
-            ?max_concurrency
             ?sexp_of_state
             ?step_count
             tc

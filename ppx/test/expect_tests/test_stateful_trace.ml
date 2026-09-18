@@ -17,20 +17,20 @@ let run_failing body =
 (* A state machine module: [inc] and [my_inv] are collected into its [rules]
    and [invariants], and the derived [sexp_of_state] traces the state. *)
 module%hegel_state_machine Counter = struct
-  type state = int Atomic.t
+  type state = int ref
 
-  let sexp_of_state n = sexp_of_int (Atomic.get n)
-  let inc _tc (n : int Atomic.t) = Atomic.incr n [@@rule]
+  let sexp_of_state n = sexp_of_int !n
+  let inc _tc n = incr n [@@rule]
 
-  let my_inv tc (n : int Atomic.t) =
-    Hegel.note tc (sprintf "checking n = %d" (Atomic.get n));
-    assert (Atomic.get n <= 1)
+  let my_inv tc n =
+    Hegel.note tc (sprintf "checking n = %d" !n);
+    assert (!n <= 1)
   [@@invariant always_check]
   ;;
 end
 
 let%expect_test "state trace; invariant marks the failing step" =
-  run_failing (fun tc -> Counter.run tc ~init:(Atomic.make 0));
+  run_failing (fun tc -> Counter.run tc ~init:(ref 0));
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
@@ -56,7 +56,7 @@ let%expect_test "invariant violated in the initial state" =
   let module M = struct
     type state = unit
 
-    let rules = [ Stateful.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) () ]
+    let rules = [ Stateful.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) ]
 
     let invariants =
       [ Stateful.Invariant.create ~name:"silly_inv" ~inv:(fun _tc () -> assert false) () ]
@@ -78,28 +78,28 @@ let%expect_test "invariant violated in the initial state" =
 ;;
 
 module%hegel_state_machine Stack = struct
-  type state = int list Atomic.t
+  type state = int list ref
 
-  let sexp_of_state stack = [%sexp_of: int list] (Atomic.get stack)
+  let sexp_of_state stack = [%sexp_of: int list] !stack
 
-  let push tc (stack : int list Atomic.t) =
+  let push tc stack =
     let n = Hegel.draw tc (integers ~min_value:0 ~max_value:100 ()) in
-    Atomic.set stack (n :: Atomic.get stack)
+    stack := n :: !stack
   [@@rule]
   ;;
 
-  let pop tc (stack : int list Atomic.t) =
-    match Atomic.get stack with
+  let pop tc stack =
+    match !stack with
     | [] -> Hegel.assume tc false
     | top :: rest ->
       assert (top < 50);
-      Atomic.set stack rest
+      stack := rest
   [@@rule]
   ;;
 end
 
 let%expect_test "state trace across multiple rules" =
-  run_failing (fun tc -> Stack.run tc ~init:(Atomic.make []));
+  run_failing (fun tc -> Stack.run tc ~init:(ref []));
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
@@ -116,7 +116,7 @@ let%expect_test "state trace across multiple rules" =
     |}]
 ;;
 
-module%hegel_state_machine Concurrent_boom = struct
+module%hegel_concurrent_state_machine Concurrent_boom = struct
   type state = unit
 
   let boom tc () =

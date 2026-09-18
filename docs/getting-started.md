@@ -297,20 +297,20 @@ to `Stateful.run` to trace the model state. Draws are also printed with their
 
 ```ocaml
 module%hegel_state_machine Stack = struct
-  type state = int list Atomic.t
+  type state = int list ref
 
-  let sexp_of_state stack = sexp_of_list sexp_of_int (Atomic.get stack)
+  let sexp_of_state stack = sexp_of_list sexp_of_int !stack
 
   let push tc stack =
     let n = draw tc (integers ~min_value:0 ~max_value:9 ()) in
-    Atomic.set stack (n :: Atomic.get stack)
+    stack := n :: !stack
   [@@rule]
 
-  let stack_stays_small _tc stack = assert (List.length (Atomic.get stack) <= 2)
+  let stack_stays_small _tc stack = assert (List.length !stack <= 2)
   [@@invariant always_check]
 end
 
-let%hegel_test stack_model tc = Stack.run tc ~init:(Atomic.make [])
+let%hegel_test stack_model tc = Stack.run tc ~init:(ref [])
 ```
 
 When a sequence fails, the report shows each step, the draws it made, the state
@@ -338,14 +338,14 @@ them in a module of type `Stateful.State_machine`, and pass it to
 
 ```ocaml
 module Stack = struct
-  type state = int list Atomic.t
+  type state = int list ref
 
   let push tc stack =
     let n = draw ~label:"n" tc (integers ~min_value:0 ~max_value:9 ()) in
-    Atomic.set stack (n :: Atomic.get stack)
+    stack := n :: !stack
 
-  let stack_stays_small _tc stack = assert (List.length (Atomic.get stack) <= 2)
-  let rules = [ Stateful.Rule.create ~name:"push" ~step:push () ]
+  let stack_stays_small _tc stack = assert (List.length !stack <= 2)
+  let rules = [ Stateful.Rule.create ~name:"push" ~step:push ]
 
   let invariants =
     [ Stateful.Invariant.create
@@ -360,15 +360,16 @@ let%hegel_test stack_model tc =
   Stateful.run
     tc
     (module Stack)
-    ~init:(Atomic.make [])
-    ~sexp_of_state:(fun stack -> [%sexp_of: int list] (Atomic.get stack))
+    ~init:(ref [])
+    ~sexp_of_state:(fun stack -> [%sexp_of: int list] !stack)
 ```
 
 In state machines not written with the PPX, draws print as `draw_1`, `draw_2`, ... unless given a `~label`.
 
-By default one rule runs at a time. Pass `~max_concurrency:n` to `run` to let
-up to `n` workers run rules at once. Rules marked `[@@rule "group"]` may
-run concurrently only with rules in the same group.
+One rule runs at a time. To run rules on several workers at once, write a
+`module%hegel_concurrent_state_machine` and pass `~max_concurrency:n` to its
+`run`. Rules marked `[@@rule "group"]` run concurrently only with rules in 
+the same group.
 
 See the `Hegel.Stateful` API docs for concurrent testing, for invariants across
 multiple rules, and for value pools that let one rule act on data an earlier
