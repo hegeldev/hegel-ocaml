@@ -223,9 +223,10 @@ rewriter also handles `module%hegel_state_machine M = struct … end`, the
 analogue of hegel-rust's `#[hegel::state_machine] impl`. At expansion time it
 collects the bindings marked `[@@rule]`, `[@@invariant]`, or
 `[@@invariant always_check]` into appended `rules` and `invariants` lists
-(`Rule.create ~name:"<binding>" ~step:<binding>` and the same for
-`Invariant.create`) plus a `run ?step_count ?sexp_of_state tc ~init`. There
-is no registry and no runtime discovery. The generated `run` calls the
+(`Rule.create ~name:"<binding>" ?weight ~step:<binding> ()` — `?weight` only
+for a `[@@rule <float>]` payload — and the same for `Invariant.create`) plus
+a `run ?step_count ?sexp_of_state tc ~init`. There is no registry and no
+runtime discovery. The generated `run` calls the
 doc-hidden `Stateful.run_internal`, which takes the lists directly, because
 the expanded module need not declare `type state` and the public
 `Stateful.run` takes a `State_machine` module. `sexp_of_state` defaults to

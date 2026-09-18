@@ -6,10 +6,11 @@
 
     With the [ppx_hegel_test] PPX, a state machine is a module written as
     [module%hegel_state_machine M = struct … end]. Mark rules with [[@@rule]]
-    and invariants with [[@@invariant]] or [[@@invariant always_check]].
-    The PPX generates the [run] function for the state machine. If the module
-    defines [sexp_of_state] (e.g. [type state = … [@@deriving sexp_of]]) [run]
-    uses it to print the state after each step.
+    or [[@@rule <weight>]] and invariants with [[@@invariant]] or
+    [[@@invariant always_check]]. The PPX generates the [run] function for the
+    state machine. If the module defines [sexp_of_state] (e.g.
+    [type state = … [@@deriving sexp_of]]) [run] uses it to print the state
+    after each step.
 
     Without the PPX, create rules with {!Rule.create} and the invariants
     with {!Invariant.create}, put them in a module of type {!State_machine},
@@ -76,18 +77,24 @@ module Pool : sig
         }
 
       let alloc =
-        Stateful.Rule.create ~name:"alloc" ~step:(fun _tc state ->
-          let h = fresh_handle () in
-          Stateful.Pool.add state.handles h;
-          { state with live = Set.add state.live h })
+        Stateful.Rule.create
+          ~name:"alloc"
+          ~step:(fun _tc state ->
+            let h = fresh_handle () in
+            Stateful.Pool.add state.handles h;
+            { state with live = Set.add state.live h })
+          ()
       ;;
 
       let free =
-        Stateful.Rule.create ~name:"free" ~step:(fun tc state ->
-          (* draws a handle a prior [alloc] put in the pool *)
-          let h = draw_silent tc (Stateful.Pool.values_consumed state.handles) in
-          release h;
-          { state with live = Set.remove state.live h })
+        Stateful.Rule.create
+          ~name:"free"
+          ~step:(fun tc state ->
+            (* draws a handle a prior [alloc] put in the pool *)
+            let h = draw_silent tc (Stateful.Pool.values_consumed state.handles) in
+            release h;
+            { state with live = Set.remove state.live h })
+          ()
       ;;
       ]} *)
   type 'a t
@@ -135,6 +142,9 @@ module Rule : sig
   (** Declares a rule.
 
       - [name] is printed in the final output when the rule is run
+      - [weight] is a hint of how frequently the rule should be run. The
+        default weight is 1.0, and weights must be finite and strictly
+        positive.
       - [step tc state] performs one application of the rule, drawing any
         arguments it needs from [tc] and returning the new state.
 
@@ -143,12 +153,20 @@ module Rule : sig
 
       {[
       let push =
-        Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
-          let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
-          n :: stack)
+        Stateful.Rule.create
+          ~name:"push"
+          ~step:(fun tc stack ->
+            let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
+            n :: stack)
+          ()
       ;;
       ]} *)
-  val create : name:string -> step:(Internal.test_case -> 'state -> 'state) -> 'state t
+  val create
+    :  name:string
+    -> ?weight:float
+    -> step:(Internal.test_case -> 'state -> 'state)
+    -> unit
+    -> 'state t
 
   (** Returns the name of the rule.
 
@@ -156,6 +174,9 @@ module Rule : sig
       let label = Stateful.Rule.name push
       ]} *)
   val name : _ t -> string
+
+  (** Returns the weight of the rule *)
+  val weight : _ t -> float
 end
 
 module Invariant : sig
@@ -200,7 +221,7 @@ end
       type state = int
 
       let add tc n = n + draw ~label:"by" tc (integers ~min_value:1 ~max_value:10 ())
-      let rules = [ Stateful.Rule.create ~name:"add" ~step:add ]
+      let rules = [ Stateful.Rule.create ~name:"add" ~step:add () ]
 
       let invariants =
         [ Stateful.Invariant.create ~name:"small" ~inv:(fun _tc n -> assert (n < 100)) ()

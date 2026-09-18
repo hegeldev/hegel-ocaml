@@ -57,7 +57,7 @@ let%expect_test "invariant violated in the initial state" =
   let module M = struct
     type state = unit
 
-    let rules = [ Stateful.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) ]
+    let rules = [ Stateful.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) () ]
 
     let invariants =
       [ Stateful.Invariant.create ~name:"silly_inv" ~inv:(fun _tc () -> assert false) () ]
