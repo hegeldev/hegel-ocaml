@@ -50,12 +50,6 @@
     ;;
     ]}
 
-    A [module%hegel_concurrent_state_machine] is expanded the same way with
-    [Hegel.Stateful.Concurrent_rule.create ?group ~name ~step ()], where a
-    [[@@rule "group"]] payload names the rule's concurrency group, and a
-    [run ?concurrency ?min_concurrency ?max_concurrency ?step_count
-    ?sexp_of_state tc ~init] that calls [Hegel.Stateful.run_concurrent_internal].
-
     In a test body and in a marked rule or invariant body, a
     [let x = draw tc gen] binding has its name injected so the drawn value
     prints as [x = value]. *)

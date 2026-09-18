@@ -37,7 +37,6 @@ let%expect_test "state trace; invariant marks the failing step" =
     --- Failure --------------------------------------------------------------------
 
     state = 0
-    Checking invariants on the initial state.
       checking n = 0
     Step 1: inc
     state = 1
@@ -69,7 +68,6 @@ let%expect_test "invariant violated in the initial state" =
     {|
     --- Failure --------------------------------------------------------------------
 
-    Checking invariants on the initial state.
     Invariant silly_inv violated in the initial state.
 
     Exception: File "ppx/test/expect_tests/test_stateful_trace.ml", line LINE, characters C1-C2: Assertion failed
@@ -186,8 +184,9 @@ let%expect_test "one concurrent worker remains deterministic" =
     {|
     --- Failure --------------------------------------------------------------------
 
-    Step 1: boom
-      draw_1 = 0
+    ---------------- Round 1: group "<anonymous>" ----------------
+    [worker 0 +time] Rule: boom
+    [worker 0 +time]   draw_1 = 0
 
     Exception: Failure("concurrent boom")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -252,7 +251,6 @@ let%expect_test "concurrent invariant failures retain their names" =
 
     Concurrency level: 3
     state = 0
-    Checking invariants on the initial state.
     ---------------- Round 1: group "writes" ----------------
     [worker 1 +time] Rule: increment
     [worker 1 +time] Rule: increment

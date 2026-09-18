@@ -4,32 +4,27 @@ module Mutex = Caml_threads.Mutex
 
 (* Stateful failure test: the [push] rule pushes an int in [0, 100] onto a
    stack; the [pop] rule fails when the popped value is >= 50. Should shrink to
-   [push 50; pop]. *)
+   [push 50; pop]. Sequential rule bodies are ordinary functions, so the state
+   and the bookkeeping are plain references. *)
 let stateful_failure_test () =
   let module S = Hegel.Stateful in
-  let last_pop : int option Atomic.t = Atomic.make None in
+  let last_pop = ref None in
   let push_rule =
-    S.Rule.create
-      ~name:"push"
-      ~step:(fun tc (stack : int list Atomic.t) ->
-        let n = Hegel.draw tc (Hegel.integers ~min_value:0 ~max_value:100 ()) in
-        Atomic.set stack (n :: Atomic.get stack))
-      ()
+    S.Rule.create ~name:"push" ~step:(fun tc stack ->
+      let n = Hegel.draw tc (Hegel.integers ~min_value:0 ~max_value:100 ()) in
+      stack := n :: !stack)
   in
   let pop_rule =
-    S.Rule.create
-      ~name:"pop"
-      ~step:(fun tc (stack : int list Atomic.t) ->
-        match Atomic.get stack with
-        | [] -> Hegel.assume tc false
-        | top :: rest ->
-          Atomic.set stack rest;
-          Atomic.set last_pop (Some top);
-          assert (top < 50))
-      ()
+    S.Rule.create ~name:"pop" ~step:(fun tc stack ->
+      match !stack with
+      | [] -> Hegel.assume tc false
+      | top :: rest ->
+        stack := rest;
+        last_pop := Some top;
+        assert (top < 50))
   in
   let module Stack = struct
-    type state = int list Atomic.t
+    type state = int list ref
 
     let rules = [ push_rule; pop_rule ]
     let invariants = []
@@ -37,64 +32,57 @@ let stateful_failure_test () =
   in
   (try
      Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~seed:0 ()) (fun tc ->
-       S.run tc (module Stack) ~init:(Atomic.make []));
+       S.run tc (module Stack) ~init:(ref []));
      failwith "expected property to fail"
    with
    | Assert_failure _ -> ());
-  Alcotest.(check (option int)) "last pop value" (Some 50) (Atomic.get last_pop)
+  Alcotest.(check (option int)) "last pop value" (Some 50) !last_pop
 ;;
 
 (* Stateful variables test: an [alloc]/[free] register allocator. [alloc] draws
    a fresh integer id, deposits it in the variables, and records it in a "live"
-   list; [free] consumes an id from the variables and removes it from the list.
-   Variables size must match the size of the live list. Empty-variables draws
-   are rejected by the pool generator. *)
+   set; [free] consumes an id from the variables and removes it from the set.
+   Variables size must match the size of the live set. Empty-variables draws are
+   rejected by the pool generator. *)
 
 module Var_state = struct
   module S = Hegel.Stateful
 
   type t =
-    { live : int list Atomic.t
+    { mutable live : Int.Set.t
     ; variables : int S.Pool.t
     }
 end
 
-let var_next_id = Atomic.make 0
+let var_next_id = ref 0
 
 let var_alloc_rule =
   let module S = Hegel.Stateful in
-  S.Rule.create
-    ~name:"alloc"
-    ~step:(fun tc (state : Var_state.t) ->
-      let id = Atomic.fetch_and_add var_next_id 1 in
-      S.Pool.add state.variables tc id;
-      Atomic.set state.live (id :: Atomic.get state.live))
-    ()
+  S.Rule.create ~name:"alloc" ~step:(fun tc (state : Var_state.t) ->
+    let id = !var_next_id in
+    incr var_next_id;
+    S.Pool.add state.variables tc id;
+    state.live <- Set.add state.live id)
 ;;
 
 let var_free_rule =
   let module S = Hegel.Stateful in
-  S.Rule.create
-    ~name:"free"
-    ~step:(fun tc (state : Var_state.t) ->
-      let id = Hegel.draw_silent tc (S.Pool.values_consumed state.variables) in
-      let live = Atomic.get state.live in
-      assert (List.mem live id ~equal:Int.equal);
-      Atomic.set state.live (List.filter live ~f:(fun x -> x <> id)))
-    ()
+  S.Rule.create ~name:"free" ~step:(fun tc (state : Var_state.t) ->
+    let id = Hegel.draw_silent tc (S.Pool.values_consumed state.variables) in
+    assert (Set.mem state.live id);
+    state.live <- Set.remove state.live id)
 ;;
 
 let var_use_rule =
   let module S = Hegel.Stateful in
-  S.Rule.create
-    ~name:"use"
-    ~step:(fun tc (state : Var_state.t) ->
-      let size_before = S.Pool.size state.variables in
-      let id = Hegel.draw_silent tc (S.Pool.values_reusable state.variables) in
-      assert (List.mem (Atomic.get state.live) id ~equal:Int.equal);
-      if S.Pool.size state.variables <> size_before
-      then failwith "reuse changed the pool size")
-    ()
+  S.Rule.create ~name:"use" ~step:(fun tc (state : Var_state.t) ->
+    let size_before = S.Pool.size state.variables in
+    let id = Hegel.draw_silent tc (S.Pool.values_reusable state.variables) in
+    assert (Set.mem state.live id);
+    Alcotest.(check int)
+      "reuse preserves pool size"
+      size_before
+      (S.Pool.size state.variables))
 ;;
 
 let stateful_variables_test () =
@@ -102,7 +90,7 @@ let stateful_variables_test () =
     ~settings:(Hegel.Settings.create ~test_cases:10 ~seed:0 ())
     (fun tc ->
        let module S = Hegel.Stateful in
-       Atomic.set var_next_id 0;
+       var_next_id := 0;
        let module Allocator = struct
          type state = Var_state.t
 
@@ -112,7 +100,7 @@ let stateful_variables_test () =
            [ S.Invariant.create
                ~name:"pool_sz"
                ~inv:(fun _tc (state : Var_state.t) ->
-                 assert (S.Pool.size state.variables = List.length (Atomic.get state.live)))
+                 assert (S.Pool.size state.variables = Set.length state.live))
                ()
            ]
          ;;
@@ -121,7 +109,7 @@ let stateful_variables_test () =
        S.run
          tc
          (module Allocator)
-         ~init:{ Var_state.live = Atomic.make []; variables = S.Pool.create tc })
+         ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc })
 ;;
 
 let stateful_variables_draw_test () =
@@ -129,7 +117,7 @@ let stateful_variables_draw_test () =
     ~settings:(Hegel.Settings.create ~test_cases:5 ~seed:0 ())
     (fun tc ->
        let module S = Hegel.Stateful in
-       Atomic.set var_next_id 0;
+       var_next_id := 0;
        let module Allocator = struct
          type state = Var_state.t
 
@@ -140,26 +128,23 @@ let stateful_variables_draw_test () =
        S.run
          tc
          (module Allocator)
-         ~init:{ Var_state.live = Atomic.make []; variables = S.Pool.create tc })
+         ~init:{ Var_state.live = Int.Set.empty; variables = S.Pool.create tc })
 ;;
 
 let stateful_usage_error_test () =
   let module S = Hegel.Stateful in
-  let attempts = Atomic.make 0 in
+  let attempts = ref 0 in
   let bad_rule =
-    S.Rule.create
-      ~name:"bad"
-      ~step:(fun tc () ->
-        Atomic.incr attempts;
-        ignore
-          (Hegel.draw
-             tc
-             (Hegel.dates
-                ~min_date:{ year = 2024; month = 1; day = 2 }
-                ~max_date:{ year = 2024; month = 1; day = 1 }
-                ())
-           : string))
-      ()
+    S.Rule.create ~name:"bad" ~step:(fun tc () ->
+      incr attempts;
+      ignore
+        (Hegel.draw
+           tc
+           (Hegel.dates
+              ~min_date:{ year = 2024; month = 1; day = 2 }
+              ~max_date:{ year = 2024; month = 1; day = 1 }
+              ())
+         : string))
   in
   let module M = struct
     type state = unit
@@ -178,16 +163,13 @@ let stateful_usage_error_test () =
       "engine diagnostic"
       true
       (String.is_substring msg ~substring:"generate_date requires min_value <= max_value");
-    Alcotest.(check int) "rule attempted once" 1 (Atomic.get attempts)
+    Alcotest.(check int) "rule attempted once" 1 !attempts
 ;;
 
-let stateful_rule_accessors_test () =
-  let module R = Hegel.Stateful.Rule in
-  let rule = R.create ~name:"read" ~group:"io" ~step:(fun _tc _state -> ()) () in
-  Alcotest.(check string) "name" "read" (R.name rule);
-  Alcotest.(check string) "group" "io" (R.group rule);
-  let anonymous = R.create ~name:"write" ~step:(fun _tc _state -> ()) () in
-  Alcotest.(check string) "anonymous group" "<anonymous>" (R.group anonymous)
+let stateful_rule_name_test () =
+  let module S = Hegel.Stateful in
+  let rule = S.Rule.create ~name:"my_rule" ~step:(fun _tc _state -> ()) in
+  Alcotest.(check string) "name" "my_rule" (S.Rule.name rule)
 ;;
 
 let stateful_no_rules_test () =
@@ -229,10 +211,10 @@ let empty_pool_draw_rejects_test () =
 
 let stateful_step_count_forwarded_test () =
   let module S = Hegel.Stateful in
-  let steps_this_case = Atomic.make 0 in
+  let steps_this_case = ref 0 in
   let max_steps = ref 0 in
   let count_rule =
-    S.Rule.create ~name:"count" ~step:(fun _tc () -> Atomic.incr steps_this_case) ()
+    S.Rule.create ~name:"count" ~step:(fun _tc () -> incr steps_this_case)
   in
   let module M = struct
     type state = unit
@@ -244,9 +226,9 @@ let stateful_step_count_forwarded_test () =
   Hegel.run_hegel_test
     ~settings:(Hegel.Settings.create ~test_cases:20 ~seed:0 ())
     (fun tc ->
-       Atomic.set steps_this_case 0;
+       steps_this_case := 0;
        S.run tc (module M) ~init:() ~step_count:5;
-       max_steps := max !max_steps (Atomic.get steps_this_case));
+       max_steps := max !max_steps !steps_this_case);
   Alcotest.(check bool) "ran at least one step" true (!max_steps > 0);
   Alcotest.(check bool) "no case exceeded the configured cap" true (!max_steps <= 5)
 ;;
@@ -259,7 +241,7 @@ let stateful_step_count_below_one_test () =
   let module M = struct
     type state = unit
 
-    let rules = [ S.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) () ]
+    let rules = [ S.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) ]
     let invariants = []
   end
   in
@@ -277,14 +259,11 @@ let stateful_step_count_below_one_test () =
 
 let test_stateful_bounded_steps () =
   let module S = Hegel.Stateful in
-  let step_count = Atomic.make 0 in
+  let step_count = ref 0 in
   let step_rule =
-    S.Rule.create
-      ~name:"step"
-      ~step:(fun _tc () ->
-        let n = Atomic.fetch_and_add step_count 1 + 1 in
-        if n >= 10 then failwith "reached 10 steps")
-      ()
+    S.Rule.create ~name:"step" ~step:(fun _tc () ->
+      incr step_count;
+      if !step_count >= 10 then failwith "reached 10 steps")
   in
   let module M = struct
     type state = unit
@@ -296,7 +275,7 @@ let test_stateful_bounded_steps () =
   let raised_msg = ref "" in
   (try
      Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
-       Atomic.set step_count 0;
+       step_count := 0;
        S.run tc (module M) ~init:() ~step_count:10)
    with
    | e ->
@@ -306,7 +285,7 @@ let test_stateful_bounded_steps () =
     "exception carries the original message"
     true
     (String.is_substring !raised_msg ~substring:"reached 10 steps");
-  Alcotest.(check int) "ran exactly 10 steps" 10 (Atomic.get step_count)
+  Alcotest.(check int) "ran exactly 10 steps" 10 !step_count
 ;;
 
 let test_always_check_invariant () =
@@ -314,7 +293,7 @@ let test_always_check_invariant () =
   let stateful_step_count = 10 in
   let always_inv_exec_count = ref 0 in
   let sampled_inv_exec_count = ref 0 in
-  let noop = S.Rule.create ~name:"noop" ~step:(fun _tc _state -> ()) () in
+  let noop = S.Rule.create ~name:"noop" ~step:(fun _tc _state -> ()) in
   let always_check_invariant =
     S.Invariant.create
       ~name:"always_check"
@@ -353,21 +332,17 @@ let test_swarm_long_single_rule_run () =
   let module S = Hegel.Stateful in
   (* Per-test-case state: the longest run of one identical rule choice in the
      current case. *)
-  let case_longest = Atomic.make 0 in
-  let last_rule : int option Atomic.t = Atomic.make None in
-  let current_run = Atomic.make 0 in
+  let case_longest = ref 0 in
+  let last_rule = ref None in
+  let current_run = ref 0 in
   let long_run_cases = ref 0 in
   let make i =
-    S.Rule.create
-      ~name:(Printf.sprintf "rule_%d" i)
-      ~step:(fun _tc () ->
-        (match Atomic.get last_rule with
-         | Some j when j = i -> Atomic.incr current_run
-         | _ -> Atomic.set current_run 1);
-        Atomic.set last_rule (Some i);
-        if Atomic.get current_run > Atomic.get case_longest
-        then Atomic.set case_longest (Atomic.get current_run))
-      ()
+    S.Rule.create ~name:(Printf.sprintf "rule_%d" i) ~step:(fun _tc () ->
+      (match !last_rule with
+       | Some j when j = i -> incr current_run
+       | _ -> current_run := 1);
+      last_rule := Some i;
+      if !current_run > !case_longest then case_longest := !current_run)
   in
   let module M = struct
     type state = unit
@@ -380,11 +355,11 @@ let test_swarm_long_single_rule_run () =
     ~settings:(Hegel.Settings.create ~test_cases:200 ~seed:0 ())
     (fun tc ->
        (* Reset per test case so a run can't bleed across cases. *)
-       Atomic.set last_rule None;
-       Atomic.set current_run 0;
-       Atomic.set case_longest 0;
+       last_rule := None;
+       current_run := 0;
+       case_longest := 0;
        S.run tc (module M) ~init:();
-       if Atomic.get case_longest >= 20 then incr long_run_cases);
+       if !case_longest >= 20 then incr long_run_cases);
   Alcotest.(check bool)
     "swarm produces a recurring long single-rule chain"
     true
@@ -393,18 +368,15 @@ let test_swarm_long_single_rule_run () =
 
 let stateful_hand_written_machine_test () =
   let module S = Hegel.Stateful in
-  let steps = Atomic.make 0 in
+  let steps = ref 0 in
   let checks = ref 0 in
   let module Counter = struct
-    type state = int Atomic.t
+    type state = int ref
 
     let rules =
-      [ S.Rule.create
-          ~name:"bump"
-          ~step:(fun _tc (n : int Atomic.t) ->
-            Atomic.incr steps;
-            Atomic.incr n)
-          ()
+      [ S.Rule.create ~name:"bump" ~step:(fun _tc n ->
+          incr steps;
+          incr n)
       ]
     ;;
 
@@ -413,7 +385,7 @@ let stateful_hand_written_machine_test () =
           ~name:"non_negative"
           ~inv:(fun _tc n ->
             incr checks;
-            assert (Atomic.get n >= 0))
+            assert (!n >= 0))
           ~always_check:true
           ()
       ]
@@ -421,44 +393,38 @@ let stateful_hand_written_machine_test () =
   end
   in
   Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
-    S.run tc (module Counter) ~init:(Atomic.make 0) ~step_count:5);
-  Alcotest.(check bool) "ran at least one step" true (Atomic.get steps >= 1);
+    S.run tc (module Counter) ~init:(ref 0) ~step_count:5);
+  Alcotest.(check bool) "ran at least one step" true (!steps >= 1);
   Alcotest.(check int)
     "always-check runs per step plus both endpoints"
-    (Atomic.get steps + 2)
+    (!steps + 2)
     !checks
 ;;
 
 (* A pool created inside a rule body outlives that step. Regression test against
    a previous use-after-free. *)
 let test_pool_created_inside_rule () =
-  let used_pool = Atomic.make false in
+  let used_pool = ref false in
   let module S = Hegel.Stateful in
   let module M = struct
-    type state = int S.Pool.t option Atomic.t
+    type state = int S.Pool.t option ref
 
     let rules =
-      [ S.Rule.create
-          ~name:"open"
-          ~step:(fun tc (state : int S.Pool.t option Atomic.t) ->
-            match Atomic.get state with
-            | Some _ -> ()
-            | None ->
-              let pool = S.Pool.create tc in
-              S.Pool.add pool tc 1;
-              Atomic.set state (Some pool))
-          ()
-      ; S.Rule.create
-          ~name:"use"
-          ~step:(fun tc (state : int S.Pool.t option Atomic.t) ->
-            match Atomic.get state with
-            | None -> Hegel.assume tc false
-            | Some pool ->
-              S.Pool.add pool tc 2;
-              let v = Hegel.draw_silent tc (S.Pool.values_reusable pool) in
-              Atomic.set used_pool true;
-              assert (v = 1 || v = 2))
-          ()
+      [ S.Rule.create ~name:"open" ~step:(fun tc state ->
+          match !state with
+          | Some _ -> ()
+          | None ->
+            let pool = S.Pool.create tc in
+            S.Pool.add pool tc 1;
+            state := Some pool)
+      ; S.Rule.create ~name:"use" ~step:(fun tc state ->
+          match !state with
+          | None -> Hegel.assume tc false
+          | Some pool ->
+            S.Pool.add pool tc 2;
+            let v = Hegel.draw_silent tc (S.Pool.values_reusable pool) in
+            used_pool := true;
+            assert (v = 1 || v = 2))
       ]
     ;;
 
@@ -472,23 +438,29 @@ let test_pool_created_inside_rule () =
     }
   in
   Hegel.run_hegel_test ~settings (fun tc ->
-    S.run tc (module M) ~init:(Atomic.make None) ~step_count:20);
-  Alcotest.(check bool)
-    "used a pool created by an earlier rule"
-    true
-    (Atomic.get used_pool)
+    S.run tc (module M) ~init:(ref None) ~step_count:20);
+  Alcotest.(check bool) "used a pool created by an earlier rule" true !used_pool
+;;
+
+let concurrent_rule_accessors_test () =
+  let module R = Hegel.Stateful.Concurrent_rule in
+  let rule = R.create ~name:"read" ~group:"io" ~step:(fun _tc _state -> ()) () in
+  Alcotest.(check string) "name" "read" (R.name rule);
+  Alcotest.(check string) "group" "io" (R.group rule);
+  let anonymous = R.create ~name:"write" ~step:(fun _tc _state -> ()) () in
+  Alcotest.(check string) "anonymous group" "<anonymous>" (R.group anonymous)
 ;;
 
 let concurrent_smoke_test () =
   let module S = Hegel.Stateful in
   let increment =
-    S.Rule.create
+    S.Concurrent_rule.create
       ~name:"increment"
       ~step:(fun _tc (value : int Atomic.t) -> Atomic.incr value)
       ()
   in
   let decrement =
-    S.Rule.create
+    S.Concurrent_rule.create
       ~name:"decrement"
       ~step:(fun tc (value : int Atomic.t) ->
         Hegel.assume tc (Atomic.get value > 0);
@@ -515,7 +487,7 @@ let concurrent_smoke_test () =
         database = Hegel.Settings.Disabled
       }
     (fun tc ->
-       S.run
+       S.run_concurrent
          tc
          (module M)
          ~step_count:5
@@ -547,17 +519,25 @@ let concurrent_groups_do_not_overlap_test ~concurrency () =
           if Atomic.get active_workers = 0 then Atomic.set active_group None))
       (fun () -> Caml_unix.sleepf 0.001)
   in
-  let alpha = S.Rule.create ~name:"alpha" ~group:"letters" ~step:(step "letters") () in
-  let beta = S.Rule.create ~name:"beta" ~group:"letters" ~step:(step "letters") () in
-  let one = S.Rule.create ~name:"one" ~group:"numbers" ~step:(step "numbers") () in
-  let anonymous = S.Rule.create ~name:"anonymous" ~step:(step "<anonymous>") () in
+  let alpha =
+    S.Concurrent_rule.create ~name:"alpha" ~group:"letters" ~step:(step "letters") ()
+  in
+  let beta =
+    S.Concurrent_rule.create ~name:"beta" ~group:"letters" ~step:(step "letters") ()
+  in
+  let one =
+    S.Concurrent_rule.create ~name:"one" ~group:"numbers" ~step:(step "numbers") ()
+  in
+  let anonymous =
+    S.Concurrent_rule.create ~name:"anonymous" ~step:(step "<anonymous>") ()
+  in
   Hegel.run_hegel_test
     ~settings:
       { (Hegel.Settings.create ~test_cases:25 ~seed:0 ()) with
         database = Hegel.Settings.Disabled
       }
     (fun tc ->
-       S.run
+       S.run_concurrent
          ~concurrency
          tc
          (module struct
@@ -664,7 +644,7 @@ let pool_empty_draw_rejects_test () =
 let pool_parallel_adds_test ~concurrency () =
   let module S = Hegel.Stateful in
   let add =
-    S.Rule.create
+    S.Concurrent_rule.create
       ~name:"add"
       ~step:(fun tc ((pool, next) : int S.Pool.t * int Atomic.t) ->
         let value = Atomic.fetch_and_add next 1 in
@@ -679,7 +659,7 @@ let pool_parallel_adds_test ~concurrency () =
     (fun tc ->
        let pool = S.Pool.create tc in
        let next = Atomic.make 0 in
-       S.run
+       S.run_concurrent
          ~concurrency
          tc
          (module struct
@@ -705,8 +685,8 @@ let pool_parallel_adds_test ~concurrency () =
          consumed)
 ;;
 
-(* [atomic_push cell v] prepends [v] to the list in [cell]. Rule bodies are
-   portable, so shared results go through atomics rather than refs. *)
+(* [atomic_push cell v] prepends [v] to the list in [cell]. Concurrent rule
+   bodies are portable, so shared results go through atomics rather than refs. *)
 let rec atomic_push cell v =
   let old = Stdlib.Atomic.get cell in
   if not (Stdlib.Atomic.compare_and_set cell old (v :: old)) then atomic_push cell v
@@ -716,7 +696,7 @@ let pool_parallel_consumes_test ~concurrency () =
   let module S = Hegel.Stateful in
   let initial_size = 16 in
   let consume =
-    S.Rule.create
+    S.Concurrent_rule.create
       ~name:"consume"
       ~step:(fun tc ((pool, consumed) : int S.Pool.t * int list Atomic.t) ->
         let value = Hegel.draw_silent tc (S.Pool.values_consumed pool) in
@@ -732,7 +712,7 @@ let pool_parallel_consumes_test ~concurrency () =
        let pool = S.Pool.create tc in
        List.iter (List.range 0 initial_size) ~f:(S.Pool.add pool tc);
        let consumed : int list Atomic.t = Atomic.make [] in
-       S.run
+       S.run_concurrent
          ~concurrency
          tc
          (module struct
@@ -768,7 +748,7 @@ let pool_parallel_consumes_test ~concurrency () =
 let pool_parallel_adds_and_consumes_test ~concurrency () =
   let module S = Hegel.Stateful in
   let exchange =
-    S.Rule.create
+    S.Concurrent_rule.create
       ~name:"exchange"
       ~step:
         (fun
@@ -789,7 +769,7 @@ let pool_parallel_adds_and_consumes_test ~concurrency () =
        let pool = S.Pool.create tc in
        let next = Atomic.make 0 in
        let consumed : int list Atomic.t = Atomic.make [] in
-       S.run
+       S.run_concurrent
          ~concurrency
          tc
          (module struct
@@ -820,7 +800,7 @@ exception Concurrent_boom of int
 let concurrent_worker_exception_is_rethrown_test () =
   let module S = Hegel.Stateful in
   let boom =
-    S.Rule.create
+    S.Concurrent_rule.create
       ~name:"boom"
       ~step:(fun tc () ->
         let value = Hegel.draw tc (Hegel.integers ()) in
@@ -835,7 +815,7 @@ let concurrent_worker_exception_is_rethrown_test () =
         ; verbosity = Hegel.Settings.Quiet
         }
       (fun tc ->
-         S.run
+         S.run_concurrent
            tc
            (module struct
              type state = unit
@@ -856,7 +836,7 @@ let concurrent_worker_exception_is_rethrown_test () =
 let concurrent_worker_usage_error_test () =
   let module S = Hegel.Stateful in
   let bad =
-    S.Rule.create
+    S.Concurrent_rule.create
       ~name:"bad"
       ~step:(fun tc () ->
         ignore
@@ -872,7 +852,7 @@ let concurrent_worker_usage_error_test () =
     Hegel.run_hegel_test
       ~settings:(Hegel.Settings.create ~test_cases:2 ~seed:0 ())
       (fun tc ->
-         S.run
+         S.run_concurrent
            tc
            (module struct
              type state = unit
@@ -894,8 +874,7 @@ let concurrent_worker_usage_error_test () =
 ;;
 
 (* Every worker raises the same control exception, so the round's outcomes all
-   carry it and the main thread must re-raise it with the right precedence.
-   Two or more workers keep the round off the inline single-worker path. *)
+   carry it and the main thread must re-raise it with the right precedence. *)
 let concurrent_worker_control_exceptions_test () =
   let module S = Hegel.Stateful in
   List.iter
@@ -906,7 +885,7 @@ let concurrent_worker_control_exceptions_test () =
     ]
     ~f:(fun error ->
       let rule =
-        S.Rule.create
+        S.Concurrent_rule.create
           ~name:"control"
           ~step:(fun tc () ->
             match error with
@@ -927,7 +906,7 @@ let concurrent_worker_control_exceptions_test () =
             ; verbosity = Hegel.Settings.Quiet
             }
           (fun tc ->
-             S.run
+             S.run_concurrent
                tc
                (module struct
                  type state = unit
@@ -970,7 +949,7 @@ let concurrent_always_check_invariant_test () =
       }
     (fun tc ->
        let invariants_checked = ref 0 in
-       let step = S.Rule.create ~name:"step" ~step:(fun _tc () -> ()) () in
+       let step = S.Concurrent_rule.create ~name:"step" ~step:(fun _tc () -> ()) () in
        let invariant =
          S.Invariant.create
            ~name:"check_every_round"
@@ -978,7 +957,7 @@ let concurrent_always_check_invariant_test () =
            ~inv:(fun _tc () -> incr invariants_checked)
            ()
        in
-       S.run
+       S.run_concurrent
          tc
          (module struct
            type state = unit
@@ -1002,7 +981,7 @@ let concurrent_invariant_waits_for_workers_test ~concurrency () =
     type state = int Atomic.t
 
     let rules =
-      [ S.Rule.create
+      [ S.Concurrent_rule.create
           ~name:"work"
           ~step:(fun _tc (active : int Atomic.t) ->
             Atomic.incr active;
@@ -1028,7 +1007,7 @@ let concurrent_invariant_waits_for_workers_test ~concurrency () =
         database = Hegel.Settings.Disabled
       }
     (fun tc ->
-       S.run
+       S.run_concurrent
          ~concurrency
          tc
          (module M)
@@ -1055,7 +1034,7 @@ let clone_exception_releases_pool_lock_test () =
 
 let concurrent_invalid_bounds_test () =
   let module S = Hegel.Stateful in
-  let noop = S.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) () in
+  let noop = S.Concurrent_rule.create ~name:"noop" ~step:(fun _tc () -> ()) () in
   List.iter
     [ 0, 1, "state machine concurrency bounds must satisfy 1 <= min <= max, got [0, 1]"
     ; 2, 1, "state machine concurrency bounds must satisfy 1 <= min <= max, got [2, 1]"
@@ -1063,7 +1042,7 @@ let concurrent_invalid_bounds_test () =
     ~f:(fun (min_concurrency, max_concurrency, expected) ->
       match
         Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
-          S.run
+          S.run_concurrent
             tc
             (module struct
               type state = unit
@@ -1080,6 +1059,27 @@ let concurrent_invalid_bounds_test () =
         Alcotest.(check string) "engine diagnostic" expected msg)
 ;;
 
+let concurrent_no_rules_test () =
+  match
+    Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
+      Hegel.Stateful.run_concurrent
+        tc
+        (module struct
+          type state = unit
+
+          let rules = []
+          let invariants = []
+        end)
+        ~init:())
+  with
+  | () -> Alcotest.fail "expected Usage_error"
+  | exception Hegel.Usage_error msg ->
+    Alcotest.(check string)
+      "engine diagnostic"
+      "cannot run a state machine with no rules"
+      msg
+;;
+
 (* [max_concurrency] defaults to [min_concurrency], so passing only the
    minimum fixes the worker count. Observed through the capability, which
    receives that count as [n]. *)
@@ -1094,14 +1094,16 @@ let concurrent_custom_concurrency_test () =
     }
   in
   let ran = Atomic.make 0 in
-  let step = S.Rule.create ~name:"step" ~step:(fun _tc () -> Atomic.incr ran) () in
+  let step =
+    S.Concurrent_rule.create ~name:"step" ~step:(fun _tc () -> Atomic.incr ran) ()
+  in
   Hegel.run_hegel_test
     ~settings:
       { (Hegel.Settings.create ~test_cases:3 ~seed:0 ()) with
         database = Hegel.Settings.Disabled
       }
     (fun tc ->
-       S.run
+       S.run_concurrent
          ~concurrency:sequential
          tc
          (module struct
@@ -1118,34 +1120,6 @@ let concurrent_custom_concurrency_test () =
     "asked for the drawn concurrency"
     true
     (List.for_all !calls ~f:(fun n -> n = 3));
-  Alcotest.(check bool) "rules ran" true (Atomic.get ran > 0)
-;;
-
-(* With one worker the capability is never consulted: the round runs inline. *)
-let single_worker_runs_inline_test () =
-  let module S = Hegel.Stateful in
-  let unused : Hegel.Concurrency.t =
-    { spawn_join_n = (fun ~n:_ ~f:_ -> failwith "capability used with one worker") }
-  in
-  let ran = Atomic.make 0 in
-  let step = S.Rule.create ~name:"step" ~step:(fun _tc () -> Atomic.incr ran) () in
-  Hegel.run_hegel_test
-    ~settings:
-      { (Hegel.Settings.create ~test_cases:3 ~seed:0 ()) with
-        database = Hegel.Settings.Disabled
-      }
-    (fun tc ->
-       S.run
-         ~concurrency:unused
-         tc
-         (module struct
-           type state = unit
-
-           let rules = [ step ]
-           let invariants = []
-         end)
-         ~step_count:4
-         ~init:());
   Alcotest.(check bool) "rules ran" true (Atomic.get ran > 0)
 ;;
 
@@ -1184,7 +1158,7 @@ let tests =
       "stateful: usage error aborts the run"
       `Quick
       stateful_usage_error_test
-  ; Alcotest.test_case "stateful: rule accessors" `Quick stateful_rule_accessors_test
+  ; Alcotest.test_case "stateful: rule name accessor" `Quick stateful_rule_name_test
   ; Alcotest.test_case "stateful: empty rules raises" `Quick stateful_no_rules_test
   ; Alcotest.test_case
       "stateful: empty pool draw rejects"
@@ -1214,6 +1188,10 @@ let tests =
       "stateful: pool created inside a rule outlives the step"
       `Quick
       test_pool_created_inside_rule
+  ; Alcotest.test_case
+      "stateful: concurrent rule accessors"
+      `Quick
+      concurrent_rule_accessors_test
   ; Alcotest.test_case "stateful: concurrent smoke test" `Quick concurrent_smoke_test
   ; Alcotest.test_case
       "stateful: concurrent groups do not overlap (threads)"
@@ -1285,13 +1263,10 @@ let tests =
       "stateful: concurrent invalid bounds"
       `Quick
       concurrent_invalid_bounds_test
+  ; Alcotest.test_case "stateful: concurrent empty rules" `Quick concurrent_no_rules_test
   ; Alcotest.test_case
       "stateful: concurrent custom concurrency"
       `Quick
       concurrent_custom_concurrency_test
-  ; Alcotest.test_case
-      "stateful: one worker runs inline"
-      `Quick
-      single_worker_runs_inline_test
   ]
 ;;

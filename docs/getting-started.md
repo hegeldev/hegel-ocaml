@@ -318,7 +318,6 @@ after it, and which step broke the invariant:
 
 ```
   state = ()
-  Checking invariants on the initial state.
   Step 1: push
     n = 0
   state = (0)

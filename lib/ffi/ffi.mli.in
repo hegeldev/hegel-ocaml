@@ -526,10 +526,10 @@ val pool_free : context -> pool -> unit
 val new_state_machine
   :  context
   -> test_case
-  -> rule_names:string array
-  -> rule_groups:int array
-  -> invariant_names:string array
-  -> invariants_always_check:bool array
+  -> rule_names:string list
+  -> rule_groups:int list
+  -> invariant_names:string list
+  -> invariants_always_check:bool list
   -> min_concurrency:int
   -> max_concurrency:int
   -> step_count:int
