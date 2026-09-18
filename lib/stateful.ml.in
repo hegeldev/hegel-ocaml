@@ -25,7 +25,6 @@ module Pool = struct
 
   let create ?(clone = Fun.id) tc = Pool_gen.create tc ~clone
   let add = Pool_gen.add
-  let is_empty = Pool_gen.is_empty
   let size = Pool_gen.size
   let values_reusable t = Pool_gen.pool_values t ~consume:false
   let values_consumed t = Pool_gen.pool_values t ~consume:true

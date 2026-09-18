@@ -379,7 +379,6 @@ module Int_pool = struct
   ;;
 
   let size t = Locked.protect t.values Tbl.length
-  let is_empty t = size t = 0
 
   (** [resolve_draw values ~consume variable_id] resolves a drawn pool id
       against the local [values] table, removing it when [consume]. Raises

@@ -17,17 +17,7 @@ let%hegel_test counter tc =
   Counter.run tc ~init:(Atomic.make 0) ~min_concurrency:2 ~max_concurrency:4
 ```
 
-Concurrent rules can specify a group with `[@@rule "group_name"]`. Only rules
-in the same group may run concurrently. Ungrouped rules share an anonymous
-group. Sequential state machines do not accept rule groups.
 
-Concurrent state machines may also be created without the PPX.
-
-When `max_concurrency > 1`, failures are reported without shrinking
-or reproduction blobs. `Stateful.Concurrent_pool` provides thread-safe pools
-for sharing values between rules. Both pool types accept `~clone` to copy
-mutable values on reusable draws.
-
-Failure-blob replay now preserves the original exception backtrace. Malformed
-blobs produce usage errors. Failure reports no longer print the
-`Falsified after ...` count.
+Failure reports no longer print `Checking invariants on the initial state.`
+or the `Falsified after ...` count. Failure-blob replay preserves the original
+exception backtrace, and a malformed blob is a usage error.

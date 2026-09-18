@@ -563,7 +563,7 @@ let pool_add_reuse_consume_test () =
       { (Hegel.Settings.create ~seed:0 ()) with database = Hegel.Settings.Disabled }
     (fun tc ->
        let pool = P.create tc in
-       Alcotest.(check bool) "starts empty" true (P.is_empty pool);
+       Alcotest.(check int) "starts empty" 0 (P.size pool);
        P.add pool tc 10;
        P.add pool tc 20;
        Alcotest.(check int) "two values" 2 (P.size pool);
@@ -574,7 +574,7 @@ let pool_add_reuse_consume_test () =
        Alcotest.(check int) "one remains" 1 (P.size pool);
        let second = Hegel.draw_silent tc (P.values_consumed pool) in
        Alcotest.(check int) "both values consumed" 30 (first + second);
-       Alcotest.(check bool) "ends empty" true (P.is_empty pool))
+       Alcotest.(check int) "ends empty" 0 (P.size pool))
 ;;
 
 let pool_reusable_shares_by_default_test () =
@@ -623,7 +623,7 @@ let pool_reusable_clones_test () =
     let consumed = Hegel.draw_silent tc (P.values_consumed pool) in
     Alcotest.(check bool) "consume returns original" true (phys_equal consumed original);
     Alcotest.(check int) "consume does not clone" 2 (Atomic.get clone_count);
-    Alcotest.(check bool) "consume empties pool" true (P.is_empty pool))
+    Alcotest.(check int) "consume empties pool" 0 (P.size pool))
 ;;
 
 let pool_empty_draw_rejects_test () =
@@ -792,7 +792,7 @@ let pool_parallel_adds_and_consumes_test ~concurrency () =
          "each added value was consumed exactly once"
          (List.range 0 value_count)
          (List.sort consumed ~compare:Int.compare);
-       Alcotest.(check bool) "pool is empty" true (S.Pool.is_empty pool))
+       Alcotest.(check int) "pool is empty" 0 (S.Pool.size pool))
 ;;
 
 exception Concurrent_boom of int

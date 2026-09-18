@@ -282,9 +282,6 @@ module Pool : sig PORTABLE
       ]} *)
   val add : 'a t -> Internal.test_case -> 'a -> unit
 
-  (** Whether the pool holds no values. *)
-  val is_empty : _ t -> bool
-
   (** Returns the number of values in the pool.
 
       {[

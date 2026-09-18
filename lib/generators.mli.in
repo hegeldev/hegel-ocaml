@@ -886,7 +886,6 @@ module Int_pool : sig
   val create : Internal.test_case -> clone:('a -> 'a) PFN -> 'a t
   val add : 'a t -> Internal.test_case -> 'a -> unit
   val size : _ t -> int
-  val is_empty : _ t -> bool
 
   val resolve_draw : 'a Int_table.t -> consume:bool -> int -> 'a
 
