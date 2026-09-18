@@ -71,7 +71,8 @@
   (core
    (>= v0.17))
   (sexp_diff
-   (>= v0.17))))
+   (>= v0.17))
+  concurrent))
 
 (package
  (name ppx_hegel_compat)

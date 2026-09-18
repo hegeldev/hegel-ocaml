@@ -84,7 +84,7 @@ jobs:
         run: |
           eval $(opam env)
           opam install ./*.opam --deps-only --with-test --yes --solver=builtin-0install
-          opam install capsule0 --yes --solver=builtin-0install
+          opam install capsule0 concurrent parallel --yes --solver=builtin-0install
 
       - name: Stage libhegel from the matching GitHub release
         id: libhegel
@@ -106,4 +106,5 @@ jobs:
           # hegel.jane's optional sexp_diff dependency isn't installed by
           # --deps-only --with-test.
           HEGEL_SKIP_JANE_TESTS: "1"
+          HEGEL_CONCURRENT_TESTS: "1"
         run: just check-tests-no-coverage

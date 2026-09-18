@@ -92,6 +92,18 @@ lib/                         # Library source
                              #   test/ dir, gated behind HEGEL_SKIP_JANE_TESTS in
                              #   check-tests-no-coverage since it needs the core/
                              #   sexp_diff opam depopts — see justfile)
+    concurrent/              # Optional hegel.jane.concurrent sublibrary (OxCaml
+      hegel_jane_concurrent  #   only: depends on Jane Street's concurrent; a
+        .ml/.mli, test/      #   sibling of hegel.jane, which must keep building
+                             #   upstream). of_concurrent wraps a local Concurrent.t
+                             #   as a local Hegel.Concurrency.t; the caller opens the
+                             #   scope (Concurrent_in_thread.with_blocking, a Parallel
+                             #   scheduler). Both files are OxCaml
+                             #   syntax (.ocamlformat-ignore). Its test is opt-in
+                             #   through HEGEL_CONCURRENT_TESTS=1 (set by the ox CI
+                             #   job): dune only allows env variables in an
+                             #   executable's enabled_if, and an (optional)
+                             #   executable is still requested by the default alias
 
 ppx/                         # PPX rewriters and derivers
   dune                       # PPX library build configs; a rule generates
@@ -625,7 +637,17 @@ no threads or domains itself. `Hegel.Concurrency.t` is a record with that one
 field; `run_concurrent` and the generated `run` take it as `?concurrency`,
 default `Concurrency.threads` (one systhread per body per round:
 interleaving, no parallelism). One `Pool` serves both kinds; `add` takes the
-calling rule's test case because a pool add is a draw on that handle. `Concurrency.domains` is upstream-only (`#ifndef OXCAML`): a
+calling rule's test case because a pool add is a draw on that handle. The
+optional `hegel.jane.concurrent` sublibrary (`lib/jane/concurrent/`, OxCaml only) is
+the adapter for Jane Street's `Concurrent`: `of_concurrent c` is one
+`Concurrent.spawn_join_n c () ~n ~f` call plus `Base.Iarray.to_list`,
+returning the record with `exclave_`. Every `Concurrent.t` is handed out
+`@ local` and the record captures it, so the capability is local and the run
+that receives it is `[@nontail]`; the caller opens the scope
+(`Concurrent_in_thread.with_blocking Await.Terminator.unkillable`, or a
+`Parallel_scheduler`). A global `Concurrency.t` that opened a
+`with_blocking` scope per round did type-check but was dropped by decision:
+the caller owns the scope. `concurrent` is an opam depopt. `Concurrency.domains` is upstream-only (`#ifndef OXCAML`): a
 pool of `recommended_domain_count - 1` domains created on first use and joined
 at exit, one job queue per domain, jobs dealt round-robin, each job on its own
 systhread inside its domain so bodies stay live however few domains there
