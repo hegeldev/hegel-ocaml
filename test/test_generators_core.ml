@@ -150,7 +150,7 @@ let test_flat_map_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
     let gen =
       flat_map
-        (fun n -> map (fun v -> n, v) (integers ~min_value:0 ~max_value:n ()))
+        (fun (n : int) -> map (fun v -> n, v) (integers ~min_value:0 ~max_value:n ()))
         (integers ~min_value:1 ~max_value:5 ())
     in
     let n, v = Hegel.draw_silent tc gen in
@@ -202,7 +202,7 @@ let test_discardable_group_e2e () =
 (** [printer gen] renders [value] to [expected]. ([gen] is printable, so its
     printer is total — no [option].) *)
 let check_printer name gen value expected =
-  Alcotest.(check string) name expected (Core.Sexp.to_string (printer gen value))
+  Alcotest.(check string) name expected (Core.Sexp.to_string ((printer gen) value))
 ;;
 
 let test_printer_int () = check_printer "int" (integers ()) 42 "42"
@@ -297,7 +297,7 @@ let test_printer_optional_none () =
   check_printer "optional none" (optional (integers ())) None "()"
 ;;
 
-module Pool_gen = Make_pool (Int_table)
+module Pool_gen = Int_pool
 
 let test_resolve_draw () =
   let tbl = Int_table.create 4 in

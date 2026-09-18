@@ -84,6 +84,7 @@ jobs:
         run: |
           eval $(opam env)
           opam install ./*.opam --deps-only --with-test --yes --solver=builtin-0install
+          opam install capsule0 --yes --solver=builtin-0install
 
       - name: Stage libhegel from the matching GitHub release
         id: libhegel

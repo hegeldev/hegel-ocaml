@@ -30,7 +30,13 @@ lib/                         # Library source
   hegel.ml / hegel.mli.in    # Main module — re-exports the public API.
                              #   (.in files are cppo-preprocessed by dune rules
                              #   — `#ifdef OXCAML` compiler compat — into the
-                             #   .ml/.mli the library builds from)
+                             #   .ml/.mli the library builds from. Most .mli and
+                             #   several .ml are .in now: see OxCaml portability)
+  locked.mli.in              # Locked: mutex-guarded shared data. dune `select`
+    locked.mutex.ml          #   picks locked.capsule.ml (capsule0, OxCaml) or
+    locked.capsule.ml        #   locked.mutex.ml (Mutex + value). Core-free.
+                             #   locked.capsule.ml is OxCaml syntax and listed in
+                             #   .ocamlformat-ignore
   ffi/                       # ctypes bindings to native libhegel (NOT instrumented)
     ffi.ml                   # dlopen + 1:1 C-ABI wrappers; settings/run/test_case
                              #   handles; typed draws + string-generator handles;
@@ -181,7 +187,7 @@ the PPX test that parses the engine's `sdk.jsonl`). `core`,
 container or renderer a Jane Street type used to provide, the dependency is
 refunctionalized — the code takes the operations as closures/parameters, and
 each side instantiates them:
-- pools: `make_pool_values`/`resolve_pool_draw` (find/remove/is_empty closures) ← `Make_pool`+`Int_table` (stdlib) / `Hegel_jane` (Core.Hashtbl)
+- pools: `Int_pool` (an `Int_table` of values behind a `Locked`) is the only client-side pool; `resolve_pool_draw` (find/remove closures) is the shared id-resolution step
 - hash tables: `make_hash_tables ~of_pairs ~sexp_of_t` ← `hash_tables` (Stdlib.Hashtbl) / `Hegel_jane.hash_tables` (Hashtbl.Poly)
 - dates/times: `make_dates ~of_date`/`make_times ~of_time`/`make_datetimes ~of_datetime` (+ `~sexp_of`) (+ `?min_date`/`?min_time`/`?min_datetime` and `max_*` bounds) ← `dates`/`times`/`datetimes` (ISO 8601 strings) / `Hegel_jane.dates`/`ofdays` (Core values)
 - chars: `make_characters ~of_char ~sexp_of` ← `chars` / `Hegel_jane.chars`. `Core.Char.t = char`, so both sides draw the same value and only the printer differs (`sexp_of_char` vs `Core.Char.sexp_of_t`) — unlike the other refunctionalized pairs, `of_char` is `Fun.id` on both sides, kept only for symmetry with `~of_date`
@@ -220,7 +226,7 @@ Generators are a discriminated union:
 - **Filtered** — wraps source + predicate. Up to `max_filter_attempts` retries before `assume false`.
 - **CompositeList** — lists of any element core. Uses the collection protocol (with_collection / collection_more) to generate elements one at a time.
 - **Composite** — a `generate_fn` thunk run inside a labeled span; used by tuples, one_of, `lists ~unique`, and hash tables (all of which now always drive the collection protocol / draw sub-values directly — there is no schema fast path).
-- **Values** — the engine-pool core behind `Stateful.Pool`. Refunctionalized: it stores the table's `find`/`remove`/`is_empty` closures, not a concrete hashtable. `Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int)` (doc-hidden, with the ready-made `Int_table`) closes `make_pool_values`/`resolve_pool_draw` over a stdlib table; the optional `hegel.jane` library closes the same primitives (via `Ppx_internal`) over `Core.Hashtbl`. `hash_tables` follows the same strategy at the API level: `make_hash_tables ~of_pairs ~sexp_of_t` is table-agnostic, `hash_tables` closes it over `Stdlib.Hashtbl`, `Hegel_jane.hash_tables` over `Core.Hashtbl.Poly`.
+- **Values** — the engine-pool core behind `Stateful.Pool` and `Concurrent_pool`: `{ pool; select : test_case -> 'a }`, where `select` draws an id from the engine pool and resolves it against the client table, all under the pool's `Locked` so the table never disagrees with the engine about which ids exist. `Generators.Int_pool` (doc-hidden) is that client side over `Int_table`; `resolve_pool_draw` is the shared id-resolution step. `hash_tables` is refunctionalized at the API level: `make_hash_tables ~of_pairs ~sexp_of_t` is table-agnostic, `hash_tables` closes it over `Stdlib.Hashtbl`, `Hegel_jane.hash_tables` over `Core.Hashtbl.Poly`.
 - **Span labels** (libhegel 0.39.0) — a label is an opaque `uint64_t` (OCaml `int64`) identifying the generator that opened a span; the engine treats two spans with the same label as coming from the same generator when it shrinks and mutates, and does nothing else with it. There are no predefined label constants in the ABI any more. `Generators_core.Labels.from_name`/`combine` compute the engine's own hashes (64-bit FNV-1a over the name's bytes / over the labels' little-endian bytes in order — `hegel_label_from_name`/`hegel_label_combine`, pinned equal by `test_labels_match_engine` through the `Ffi.label_*` bindings) so no context is needed at generator construction. Every core stores its `label`, fixed at construction: a `Leaf` from its primitive's name (`leaf ~name:"integers"` → `hegel_ocaml.integers`), and everything built from other generators as `combine [own kind; components' labels…]` (`lists (integers ())` ≠ `lists (text ())`; `map` on a leaf stays a leaf but combines `Labels.mapped` in; `with_printer` leaves the label alone; `Values` is the constant `Labels.pool`). `label_of_core`/`Ppx_internal.label_of` read it back. The deriver emits `combine [fixed_dict|enum_variant; from_name "<type name>"]` so two derived types of the same shape stay distinct. Names are prefixed `hegel_ocaml.` to keep clear of libhegel's own `hegel.<kind>` spans.
 - **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (memoized on the argument via structural hash/equality — a polymorphic `Stdlib.Hashtbl` — so `sexp_of_arg` is display-only and an omitted one shows `<opaque>` without collapsing the key) and shows applied pairs as `name arg = result` in the print region on the final replay. Only *top-level* applications print — a pair applied at draw depth > 0 (inside a span) is suppressed, like a nested draw. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); the name threads even when the function is drawn nested. Result draws are wrapped in a span labelled `combine [Labels.function_result; label of returns]`.
 
@@ -608,6 +614,84 @@ fails for the rest of the process, so `test_hegel.ml` runs the forking
 `loader` suite first. Jane Street's `Concurrent` library is OxCaml-only and
 depends on `core`; its adapter belongs in an optional sublibrary (Phase 3 in
 `plan.md`). See `plan.md` for the OxCaml portability phase.
+
+### OxCaml portability (cppo, modes, the trust boundary)
+
+Under OxCaml (`#ifdef OXCAML`, set by the `cppo-flags` rule in `lib/dune`
+and `lib/ffi/dune`) the library is mode-checked so a concurrent rule body can
+be `portable`. Upstream OCaml builds the same sources with the annotations
+stripped; every file carrying mode syntax is a cppo `.in`. Macros:
+`PORTABLE` = `@@ portable` (field modality), `PFN` = `@ portable` (function
+parameter or return mode), `CROSSING` = `: value mod portable contended`.
+
+- **Interfaces.** `hegel.mli.in`, `generators.mli.in`, `internal.mli.in`,
+  `settings.mli.in`, `derive.mli.in`, `ffi.mli.in` start with a module-level
+  `@@ portable` default: every `val` is portable and the compiler checks each
+  implementation. `stateful.mli.in` instead puts `sig @@ portable` on the
+  `Pool`/`Concurrent_pool`/`Rule`/`Invariant`/`Concurrent_rule` submodules
+  (`SIG_PORTABLE`); the runners (`run`, `run_concurrent`, …) stay nonportable
+  since they reference `Concurrency.threads`, which uses `Thread.create`.
+  Function-typed parameters that end up stored in a generator (`map`,
+  `flat_map`, `filter`, `composite`, `with_printer`, `leaf ~draw ~sexp_of`,
+  `make_*`, `functions* ?sexp_of_arg*`, `Pool.create ~clone`) are `PFN`;
+  `printer` returns `PFN`. `just`, `sampled_from`, `Int_pool.t`, `Pool.t`,
+  `Concurrent_pool.t` constrain their element type to
+  `value mod portable contended`: the value is captured by a closure and read
+  back from a contended context.
+- **Types that cross.** `Generators_core.core`/`generator` are declared
+  `CROSSING`, which holds because every closure field carries `PORTABLE`
+  (`Leaf.draw`, `Mapped.f`, `FlatMapped.f`, `Filtered.predicate`,
+  `Composite.generate_fn`, `Values.select`, `Function.build`,
+  `Printable.sexp_of`). So a module-level generator is portable and a rule
+  body may capture it; a `map` whose closure touches a `ref` is rejected at
+  the `map` call. `Internal.test_case` is `CROSSING` too: handles cross (see
+  below), `test_aborted`/`draw_depth` are `Atomic.t`, the draw-name table and
+  the `owned` record are `Locked.t` (declared `value mod portable contended`
+  in `locked.mli.in`; `with_`'s result type must cross since it leaves the
+  lock). `Concurrent_rule.t.step` is
+  `(test_case -> 'state @ contended -> unit) @@ portable`;
+  `run_concurrent` takes `init:'state @ portable` and
+  `?concurrency:Concurrency.t @ local`; `Concurrency.t`'s field is
+  `n:int -> (f:(int -> outcome) @ portable -> outcome list @ contended) @ local`
+  (a contended array is unreadable, a contended list is not).
+- **The trust boundary is `Ffi`, in two places.** (1) Every libhegel handle
+  is `type handle = H of unit ptr [@@unboxed]`, declared
+  `value mod portable contended` with `[@@unsafe_allow_any_mode_crossing]`
+  under OxCaml (the attribute is not allowed on a type alias, hence the
+  constructor); `handle_t` is a ctypes `view` so every `ptr void` in a C
+  signature converts at the boundary and no wrapper call site changed.
+  libhegel's threading contract (hegel.h "Threading") is what makes it true.
+  (2) ctypes 0.24.0+ox has no mode annotations, so every binding is
+  nonportable; the block at the end of `ffi.ml.in` asserts each exported
+  value portable with `Obj.magic_portable`. Laundering `Ctypes` as a module
+  does not work: its data values (`Ctypes.int` …) stay contended inside
+  portable code. The only other launder is three `ipaddr` functions in
+  `generators_combinators.ml.in`.
+- **Runner shape.** `Stateful_concurrent.run_worker` is the portable worker
+  body; it captures `rules : Concurrent_rule.t list` (a list, not an array:
+  `Array.get` needs an uncontended array), the state machine handle, and the
+  `@ portable` state, and reads its clone from a `test_case list`. The
+  capability is passed down to `loop`, not captured, so it may be local;
+  `with_machine` does not use `Fun.protect` for the same reason; the call in
+  `run_concurrent_internal` is `[@nontail]` (`NONTAIL`).
+- **`Locked` under OxCaml** is `Capsule_prim.Data` + `Capsule_blocking_sync.Mutex`
+  (`capsule0`, deps `basement` and `sexp_type` only). `with_` goes through
+  `Data.iter` and an atomic cell because `Data.extract` wants a unique result,
+  and it carries exceptions out before re-raising because raising under
+  `with_lock` poisons the mutex (a pool must survive a failing `clone`).
+- **Writing portable test/user code.** Inference order matters: a captured
+  variable whose type is still a variable when the closure is checked is
+  rejected, so annotate (`fun (n : int) -> …`, `fun tc (value : int Atomic.t)`,
+  optional parameters `?(max_size : int option)`). Bookkeeping in rule bodies
+  is `Atomic`, never `ref`. `Thread.yield`/`Thread.delay` are nonportable;
+  use `Domain.cpu_relax`/`Caml_unix.sleepf`. Under `open Core`, `Atomic` is
+  Core's and a different type: `module Atomic = Stdlib.Atomic`. A printer
+  application is `(printer gen) v`. `Alcotest.fail` inside a rule body is
+  nonportable; use `failwith`.
+- **Building locally.** `dune build --build-dir _build_ox …` in the
+  `5.2.0+ox` switch (delete `_build_ox` afterwards). The ox CI job installs
+  `capsule0`. ocamlformat cannot parse OxCaml syntax: `.in` files are
+  outside `dune fmt`, and `lib/locked.capsule.ml` is in `.ocamlformat-ignore`.
 
 ## Key Patterns and Conventions
 

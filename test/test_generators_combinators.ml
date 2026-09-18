@@ -60,7 +60,7 @@ let test_one_of_branch_printer () =
        in
        let gen = one_of [ g1; g2 ] in
        let v = Hegel.draw tc gen in
-       let rendered = Core.Sexp.to_string (printer gen v) in
+       let rendered = Core.Sexp.to_string ((printer gen) v) in
        match v with
        | 1 ->
          saw_one := true;

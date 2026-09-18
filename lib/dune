@@ -1,8 +1,22 @@
 (library
  (name hegel)
  (public_name hegel)
- (libraries hegel_ffi ipaddr sexplib0 threads.posix unix)
+ (libraries
+  hegel_ffi
+  ipaddr
+  sexplib0
+  threads.posix
+  unix
+  ; Locked: mutex-guarded shared data. Under OxCaml (where capsule0 is
+  ; installable) it is a capsule, so portable code can use it; elsewhere a
+  ; Mutex around the value. Neither variant depends on core.
+  (select
+   locked.ml
+   from
+   (capsule0.prim capsule0.blocking_sync -> locked.capsule.ml)
+   (-> locked.mutex.ml)))
  (private_modules
+  locked
   stateful_seq
   stateful_concurrent
   generators_core
@@ -84,3 +98,123 @@
    -o
    %{target}
    %{dep:concurrency.ml.in})))
+
+(rule
+ (target internal.mli)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:internal.mli.in})))
+
+(rule
+ (target stateful.mli)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:stateful.mli.in})))
+
+(rule
+ (target settings.mli)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:settings.mli.in})))
+
+(rule
+ (target derive.mli)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:derive.mli.in})))
+
+(rule
+ (target generators_core.ml)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:generators_core.ml.in})))
+
+(rule
+ (target stateful_seq.ml)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:stateful_seq.ml.in})))
+
+(rule
+ (target stateful_concurrent.ml)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:stateful_concurrent.ml.in})))
+
+(rule
+ (target locked.mli)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:locked.mli.in})))
+
+(rule
+ (target generators_primitives.ml)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:generators_primitives.ml.in})))
+
+(rule
+ (target generators_combinators.ml)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:generators_combinators.ml.in})))
+
+(rule
+ (target generators_functions.ml)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:generators_functions.ml.in})))
+
+(rule
+ (target stateful.ml)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:stateful.ml.in})))

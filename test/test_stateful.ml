@@ -1,6 +1,7 @@
 open Core
+
+module Atomic = Stdlib.Atomic
 module Mutex = Caml_threads.Mutex
-module Thread = Caml_threads.Thread
 
 (* Stateful failure test: the [push] rule pushes an int in [0, 100] onto a
    stack; the [pop] rule fails when the popped value is >= 50. Should shrink to
@@ -463,13 +464,13 @@ let concurrent_smoke_test () =
   let increment =
     S.Concurrent_rule.create
       ~name:"increment"
-      ~step:(fun _tc value -> Atomic.incr value)
+      ~step:(fun _tc (value : int Atomic.t) -> Atomic.incr value)
       ()
   in
   let decrement =
     S.Concurrent_rule.create
       ~name:"decrement"
-      ~step:(fun tc value ->
+      ~step:(fun tc (value : int Atomic.t) ->
         Hegel.assume tc (Atomic.get value > 0);
         Atomic.decr value)
       ()
@@ -506,23 +507,25 @@ let concurrent_smoke_test () =
 let concurrent_groups_do_not_overlap_test ~concurrency () =
   let module S = Hegel.Stateful in
   let lock = Mutex.create () in
-  let active_group = ref None in
-  let active_workers = ref 0 in
-  let seen_groups = String.Hash_set.create () in
-  let step group (_tc : Hegel.Internal.test_case) () =
+  let active_group : string option Atomic.t = Atomic.make None in
+  let active_workers = Atomic.make 0 in
+  let seen_groups : string list Atomic.t = Atomic.make [] in
+  let step (group : string) (_tc : Hegel.Internal.test_case) () =
     Mutex.protect lock (fun () ->
-      (match !active_group with
-       | None -> active_group := Some group
+      (match Atomic.get active_group with
+       | None -> Atomic.set active_group (Some group)
        | Some active when String.equal active group -> ()
-       | Some _ -> Alcotest.fail "different groups overlapped");
-      incr active_workers;
-      Hash_set.add seen_groups group);
+       | Some _ -> failwith "different groups overlapped");
+      Atomic.incr active_workers;
+      let seen = Atomic.get seen_groups in
+      if not (List.mem seen group ~equal:String.equal)
+      then Atomic.set seen_groups (group :: seen));
     Fun.protect
       ~finally:(fun () ->
         Mutex.protect lock (fun () ->
-          decr active_workers;
-          if !active_workers = 0 then active_group := None))
-      (fun () -> Thread.delay 0.001)
+          Atomic.decr active_workers;
+          if Atomic.get active_workers = 0 then Atomic.set active_group None))
+      (fun () -> Caml_unix.sleepf 0.001)
   in
   let alpha =
     S.Concurrent_rule.create ~name:"alpha" ~group:"letters" ~step:(step "letters") ()
@@ -558,7 +561,7 @@ let concurrent_groups_do_not_overlap_test ~concurrency () =
   Alcotest.(check (list string))
     "every group ran"
     [ "<anonymous>"; "letters"; "numbers" ]
-    (Hash_set.to_list seen_groups |> List.sort ~compare:String.compare)
+    (Atomic.get seen_groups |> List.sort ~compare:String.compare)
 ;;
 
 let concurrent_pool_add_reuse_consume_test () =
@@ -585,18 +588,20 @@ let concurrent_pool_add_reuse_consume_test () =
 let pool_reusable_clones_test () =
   let module P = Hegel.Stateful.Pool in
   Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
-    let original = ref 10 in
+    let original = Atomic.make 10 in
     let shared_pool = P.create tc in
     P.add shared_pool original;
     let shared = Hegel.draw_silent tc (P.values_reusable shared_pool) in
     Alcotest.(check bool) "default returns original" true (phys_equal shared original);
-    let pool = P.create ~clone:(fun value -> ref !value) tc in
+    let pool =
+      P.create ~clone:(fun (value : int Atomic.t) -> Atomic.make (Atomic.get value)) tc
+    in
     P.add pool original;
     let generator = P.values_reusable pool in
     let first = Hegel.draw_silent tc generator in
-    first := 99;
+    Atomic.set first 99;
     let second = Hegel.draw_silent tc generator in
-    Alcotest.(check int) "second draw is independent" 10 !second;
+    Alcotest.(check int) "second draw is independent" 10 (Atomic.get second);
     Alcotest.(check int) "reuse preserves size" 1 (P.size pool);
     let consumed = Hegel.draw_silent tc (P.values_consumed pool) in
     Alcotest.(check bool) "consume returns original" true (phys_equal consumed original);
@@ -606,26 +611,26 @@ let pool_reusable_clones_test () =
 let concurrent_pool_reusable_clones_test () =
   let module P = Hegel.Stateful.Concurrent_pool in
   Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
-    let original = ref 10 in
-    let clone_count = ref 0 in
+    let original = Atomic.make 10 in
+    let clone_count = Atomic.make 0 in
     let pool =
       P.create
-        ~clone:(fun value ->
-          incr clone_count;
-          ref !value)
+        ~clone:(fun (value : int Atomic.t) ->
+          Atomic.incr clone_count;
+          Atomic.make (Atomic.get value))
         tc
     in
     P.add pool tc original;
     let generator = P.values_reusable pool in
     let first = Hegel.draw_silent tc generator in
-    first := 99;
+    Atomic.set first 99;
     let second = Hegel.draw_silent tc generator in
-    Alcotest.(check int) "each draw clones" 2 !clone_count;
-    Alcotest.(check int) "second draw is independent" 10 !second;
+    Alcotest.(check int) "each draw clones" 2 (Atomic.get clone_count);
+    Alcotest.(check int) "second draw is independent" 10 (Atomic.get second);
     Alcotest.(check int) "reuse preserves size" 1 (P.size pool);
     let consumed = Hegel.draw_silent tc (P.values_consumed pool) in
     Alcotest.(check bool) "consume returns original" true (phys_equal consumed original);
-    Alcotest.(check int) "consume does not clone" 2 !clone_count;
+    Alcotest.(check int) "consume does not clone" 2 (Atomic.get clone_count);
     Alcotest.(check bool) "consume empties pool" true (P.is_empty pool))
 ;;
 
@@ -649,7 +654,7 @@ let concurrent_pool_parallel_adds_test ~concurrency () =
   let add =
     S.Concurrent_rule.create
       ~name:"add"
-      ~step:(fun tc (pool, next) ->
+      ~step:(fun tc ((pool, next) : int S.Concurrent_pool.t * int Atomic.t) ->
         let value = Atomic.fetch_and_add next 1 in
         S.Concurrent_pool.add pool tc value)
       ()
@@ -691,15 +696,22 @@ let concurrent_pool_parallel_adds_test ~concurrency () =
          consumed)
 ;;
 
+(* [atomic_push cell v] prepends [v] to the list in [cell]. Rule bodies are
+   portable, so shared results go through atomics rather than refs. *)
+let rec atomic_push cell v =
+  let old = Stdlib.Atomic.get cell in
+  if not (Stdlib.Atomic.compare_and_set cell old (v :: old)) then atomic_push cell v
+;;
+
 let concurrent_pool_parallel_consumes_test ~concurrency () =
   let module S = Hegel.Stateful in
   let initial_size = 16 in
   let consume =
     S.Concurrent_rule.create
       ~name:"consume"
-      ~step:(fun tc (pool, consumed_lock, consumed) ->
+      ~step:(fun tc ((pool, consumed) : int S.Concurrent_pool.t * int list Atomic.t) ->
         let value = Hegel.draw_silent tc (S.Concurrent_pool.values_consumed pool) in
-        Mutex.protect consumed_lock (fun () -> consumed := value :: !consumed))
+        atomic_push consumed value)
       ()
   in
   Hegel.run_hegel_test
@@ -710,22 +722,21 @@ let concurrent_pool_parallel_consumes_test ~concurrency () =
     (fun tc ->
        let pool = S.Concurrent_pool.create tc in
        List.iter (List.range 0 initial_size) ~f:(S.Concurrent_pool.add pool tc);
-       let consumed = ref [] in
-       let consumed_lock = Mutex.create () in
+       let consumed : int list Atomic.t = Atomic.make [] in
        S.run_concurrent
          ~concurrency
          tc
          (module struct
-           type state = int S.Concurrent_pool.t * Mutex.t * int list ref
+           type state = int S.Concurrent_pool.t * int list Atomic.t
 
            let rules = [ consume ]
            let invariants = []
          end)
          ~step_count:10
-         ~init:(pool, consumed_lock, consumed)
+         ~init:(pool, consumed)
          ~min_concurrency:4
          ~max_concurrency:4;
-       let consumed = Mutex.protect consumed_lock (fun () -> !consumed) in
+       let consumed = Atomic.get consumed in
        let consumed_count = List.length consumed in
        Alcotest.(check int)
          "every successful consume was unique"
@@ -750,14 +761,18 @@ let concurrent_pool_parallel_adds_and_consumes_test ~concurrency () =
   let exchange =
     S.Concurrent_rule.create
       ~name:"exchange"
-      ~step:(fun tc (pool, next, consumed_lock, consumed) ->
+      ~step:
+        (fun
+          tc
+          ((pool, next, consumed) :
+            int S.Concurrent_pool.t * int Atomic.t * int list Atomic.t) ->
         let value = Atomic.fetch_and_add next 1 in
         S.Concurrent_pool.add pool tc value;
-        Thread.yield ();
+        Domain.cpu_relax ();
         let consumed_value =
           Hegel.draw_silent tc (S.Concurrent_pool.values_consumed pool)
         in
-        Mutex.protect consumed_lock (fun () -> consumed := consumed_value :: !consumed))
+        atomic_push consumed consumed_value)
       ()
   in
   Hegel.run_hegel_test
@@ -768,22 +783,21 @@ let concurrent_pool_parallel_adds_and_consumes_test ~concurrency () =
     (fun tc ->
        let pool = S.Concurrent_pool.create tc in
        let next = Atomic.make 0 in
-       let consumed = ref [] in
-       let consumed_lock = Mutex.create () in
+       let consumed : int list Atomic.t = Atomic.make [] in
        S.run_concurrent
          ~concurrency
          tc
          (module struct
-           type state = int S.Concurrent_pool.t * int Atomic.t * Mutex.t * int list ref
+           type state = int S.Concurrent_pool.t * int Atomic.t * int list Atomic.t
 
            let rules = [ exchange ]
            let invariants = []
          end)
          ~step_count:10
-         ~init:(pool, next, consumed_lock, consumed)
+         ~init:(pool, next, consumed)
          ~min_concurrency:8
          ~max_concurrency:8;
-       let consumed = Mutex.protect consumed_lock (fun () -> !consumed) in
+       let consumed = Atomic.get consumed in
        let value_count = Atomic.get next in
        Alcotest.(check int)
          "every addition was consumed"
@@ -976,9 +990,9 @@ let concurrent_invariant_waits_for_workers_test ~concurrency () =
     let rules =
       [ S.Concurrent_rule.create
           ~name:"work"
-          ~step:(fun _tc active ->
+          ~step:(fun _tc (active : int Atomic.t) ->
             Atomic.incr active;
-            Thread.yield ();
+            Domain.cpu_relax ();
             Atomic.decr active)
           ()
       ]

@@ -177,7 +177,9 @@ type printed_point =
 
 type with_opaque =
   { id : int
-  ; handle : (ungeneratable[@sexp.opaque] [@hegel.generator just { thunk = Fun.id }])
+  ; handle :
+      (ungeneratable
+      [@sexp.opaque] [@hegel.generator composite (fun _ -> { thunk = Fun.id })])
   }
 [@@deriving hegel_generator]
 
@@ -439,7 +441,7 @@ let%hegel_test test_printer_e2e tc =
   Alcotest.(check string)
     "derived printer matches the derived sexp converter"
     (Sexp.to_string (sexp_of_printed_point p))
-    (Sexp.to_string (Hegel.Generators.printer hegel_generator_printed_point p))
+    (Sexp.to_string ((Hegel.Generators.printer hegel_generator_printed_point) p))
 [@@settings Hegel.Settings.create ~test_cases:20 ~seed:0 ()]
 ;;
 
@@ -450,7 +452,7 @@ let%hegel_test test_opaque_field_e2e tc =
   ignore (w.id : int);
   w.handle.thunk ();
   let rendered =
-    Sexp.to_string (Hegel.Generators.printer hegel_generator_with_opaque w)
+    Sexp.to_string ((Hegel.Generators.printer hegel_generator_with_opaque) w)
   in
   assert (String.is_substring rendered ~substring:"opaque")
 [@@settings Hegel.Settings.create ~test_cases:20 ~seed:0 ()]

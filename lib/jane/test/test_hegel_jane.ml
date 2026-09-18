@@ -4,7 +4,7 @@ let check_printer name gen value expected =
   Alcotest.(check string)
     name
     expected
-    (Core.Sexp.to_string (Generators.printer gen value))
+    (Core.Sexp.to_string ((Generators.printer gen) value))
 ;;
 
 (** Test: chars draws [Core.Char.t] values across the full Latin-1 range
