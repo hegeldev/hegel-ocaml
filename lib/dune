@@ -17,8 +17,6 @@
    (-> locked.mutex.ml)))
  (private_modules
   locked
-  stateful_seq
-  stateful_concurrent
   generators_core
   generators_primitives
   generators_collections
@@ -148,26 +146,6 @@
    -o
    %{target}
    %{dep:generators_core.ml.in})))
-
-(rule
- (target stateful_seq.ml)
- (action
-  (run
-   %{bin:cppo}
-   %{read-strings:cppo-flags}
-   -o
-   %{target}
-   %{dep:stateful_seq.ml.in})))
-
-(rule
- (target stateful_concurrent.ml)
- (action
-  (run
-   %{bin:cppo}
-   %{read-strings:cppo-flags}
-   -o
-   %{target}
-   %{dep:stateful_concurrent.ml.in})))
 
 (rule
  (target locked.mli)

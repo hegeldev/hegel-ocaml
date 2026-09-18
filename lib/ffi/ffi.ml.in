@@ -63,7 +63,7 @@ let foreign_blocking name typ = foreign ~release_runtime_lock:true name typ
 (* ------------------------------------------------------------------ *)
 
 (* In OxCaml they cross portability and contention since libhegel's threading
-   contract says a handle may move between threads and belongs to one thread at a 
+   contract says a handle may move between threads and belongs to one thread at a
    time. ptr doesn't have a kind, but libhegel handles are captured in many places
    so we need to wrap it in a type with the kind value mod portable contended to keep
    portability and contention. *)
@@ -154,7 +154,7 @@ end
 (* Test context                                                        *)
 (* ------------------------------------------------------------------ *)
 
-let c_context_new = foreign "hegel_context_new" (void @-> returning (handle_t))
+let c_context_new = foreign "hegel_context_new" (void @-> returning handle_t)
 let c_context_free = foreign "hegel_context_free" (handle_t @-> returning int)
 
 (* ------------------------------------------------------------------ *)
@@ -1746,7 +1746,7 @@ let failure_blob ctx f =
 ;;
 
 #ifdef OXCAML
-(* ctypes 0.24.0+ox doesn't have mode annotations. libhegel's threading 
+(* ctypes 0.24.0+ox doesn't have mode annotations. libhegel's threading
    contract makes these safe to call from any thread or domain *)
 let version = Obj.magic_portable version
 let context_new = Obj.magic_portable context_new

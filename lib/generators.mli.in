@@ -83,8 +83,8 @@ type unprintable
     [name @ filename:line = value].
 
     Inside a [let%hegel_test], the PPX supplies the binding name as the label, so
-    [let x = draw tc gen] prints its value as [x = value]. When the same name is 
-    shadowed or drawn in a loop, its draws are numbered [x_1], [x_2], … in draw 
+    [let x = draw tc gen] prints its value as [x = value]. When the same name is
+    shadowed or drawn in a loop, its draws are numbered [x_1], [x_2], … in draw
     order. Pass [?label] to override the name (e.g. [draw ~label:"y" tc gen]).
 
     {[
@@ -107,7 +107,7 @@ val draw
 (** [draw_named ~label ~repeatable tc gen] is the naming-aware draw the
     [let%hegel_test] PPX rewrites bindings to; not intended for direct use
     (prefer {!draw}). It prints [label = value] (bare), or [label_1 = value],
-    [label_2 = value], … when [repeatable] is set. The PPX sets [repeatable = true]  
+    [label_2 = value], … when [repeatable] is set. The PPX sets [repeatable = true]
     for a binding name that is reused or drawn in a loop. *)
 val draw_named
   :  label:string
@@ -139,7 +139,7 @@ val draw_named
 val draw_silent : Internal.test_case -> ('a, 'p) generator -> 'a
 
 (** [draw_silent_named ~name tc gen] is {!draw_silent} threading the draw-site
-    [name] into a function generator ({!functions}). Not intended for 
+    [name] into a function generator ({!functions}). Not intended for
     direct use (prefer {!draw_silent}). *)
 val draw_silent_named : name:string -> Internal.test_case -> ('a, 'p) generator -> 'a
 
@@ -561,7 +561,7 @@ val tuples4
 
     On the failing final replay each top-level application prints as
     [name arg = result] (applications nested inside a span are suppressed).
-    [name] is [?name] when you pass it. Otherwise, the draw-site binding name 
+    [name] is [?name] when you pass it. Otherwise, the draw-site binding name
     inside a [let%hegel_test], else ["function"].
 
     The memo table keys on the argument itself (structural hash/equality), so
@@ -666,7 +666,7 @@ val urls : unit -> (string, printable) generator
     ]} *)
 val domains : ?max_length:int -> unit -> (string, printable) generator
 
-(** A proleptic Gregorian calendar date. [year] is in [\[-999999, 999999\]], 
+(** A proleptic Gregorian calendar date. [year] is in [\[-999999, 999999\]],
     [month] in [\[1, 12\]], and [day] in [\[1, days-in-month\]]. *)
 type date =
   { year : int
@@ -674,7 +674,7 @@ type date =
   ; day : int
   }
 
-(** A time of day at nanosecond resolution. [hour] is in [\[0, 23\]], 
+(** A time of day at nanosecond resolution. [hour] is in [\[0, 23\]],
     [minute] and [second] in [\[0, 59\]], and [nanosecond] in [\[0, 999999999\]]. *)
 type time =
   { hour : int
@@ -685,7 +685,7 @@ type time =
 
 (** [make_dates ~of_date ~sexp_of ?min_date ?max_date ()] builds a generator
     for dates in [\[min_date, max_date\]] over any representation. [of_date]
-    converts each drawn {!date} to the desired representation. The default 
+    converts each drawn {!date} to the desired representation. The default
     range is [\[0001-01-01, 9999-12-31\]].
 
     {[
@@ -706,7 +706,7 @@ val make_dates
 
 (** [make_times ~of_time ~sexp_of ?min_time ?max_time ()] builds a generator
     for times of day in [\[min_time, max_time\]] over any representation.
-    [of_time] converts each drawn {!time} to the desired representation. The 
+    [of_time] converts each drawn {!time} to the desired representation. The
     default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
 val make_times
   :  of_time:(time -> 'a) PFN
@@ -717,8 +717,8 @@ val make_times
   -> ('a, printable) generator
 
 (** [make_datetimes ~of_datetime ~sexp_of ?min_datetime ?max_datetime ()] builds a
-    generator for naive datetimes in [\[min_datetime, max_datetime\]] over any 
-    representation. [of_datetime] converts each drawn [(date, time)] pair to the 
+    generator for naive datetimes in [\[min_datetime, max_datetime\]] over any
+    representation. [of_datetime] converts each drawn [(date, time)] pair to the
     desired representation. The default range is [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
 val make_datetimes
   :  of_datetime:(date * time -> 'a) PFN

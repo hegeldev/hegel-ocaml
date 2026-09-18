@@ -287,26 +287,30 @@ require tc ~msg:"list must stay sorted" (is_sorted xs)
 ## Stateful testing
 
 `Stateful` applies a random sequence of rules to the SUT and checks invariants
-on it. First, create a state machine with `module%hegel_state_machine`. Mark rules with `[@@rule]` and invariants with `[@@invariant]`. `let` names. Every invariant
- is checked on the initial and final states and
-sampled after intermediate steps, or after every step when marked
-`[@@invariant always_check]`. Pass `?sexp_of_state` to `Stateful.run` to trace 
-the model state. Draws are also printed with their `let`-bound name.
+on it. First, create a state machine with `module%hegel_state_machine`. Mark
+rules with `[@@rule]` and invariants with `[@@invariant]`. A rule takes the
+test case and the state and updates the state in place. Every invariant is 
+checked on the initial and final states and sampled after intermediate steps, 
+or after every step when marked `[@@invariant always_check]`. Pass `?sexp_of_state` 
+to `Stateful.run` to trace the model state. Draws are also printed with their 
+`let`-bound name.
 
 ```ocaml
 module%hegel_state_machine Stack = struct
-  type state = int list [@@deriving sexp_of]
+  type state = int list Atomic.t
+
+  let sexp_of_state stack = sexp_of_list sexp_of_int (Atomic.get stack)
 
   let push tc stack =
     let n = draw tc (integers ~min_value:0 ~max_value:9 ()) in
-    n :: stack
+    Atomic.set stack (n :: Atomic.get stack)
   [@@rule]
 
-  let stack_stays_small _tc stack = assert (List.length stack <= 2)
+  let stack_stays_small _tc stack = assert (List.length (Atomic.get stack) <= 2)
   [@@invariant always_check]
 end
 
-let%hegel_test stack_model tc = Stack.run tc ~init:[]
+let%hegel_test stack_model tc = Stack.run tc ~init:(Atomic.make [])
 ```
 
 When a sequence fails, the report shows each step, the draws it made, the state
@@ -334,14 +338,14 @@ them in a module of type `Stateful.State_machine`, and pass it to
 
 ```ocaml
 module Stack = struct
-  type state = int list
+  type state = int list Atomic.t
 
   let push tc stack =
     let n = draw ~label:"n" tc (integers ~min_value:0 ~max_value:9 ()) in
-    n :: stack
+    Atomic.set stack (n :: Atomic.get stack)
 
-  let stack_stays_small _tc stack = assert (List.length stack <= 2)
-  let rules = [ Stateful.Rule.create ~name:"push" ~step:push ]
+  let stack_stays_small _tc stack = assert (List.length (Atomic.get stack) <= 2)
+  let rules = [ Stateful.Rule.create ~name:"push" ~step:push () ]
 
   let invariants =
     [ Stateful.Invariant.create
@@ -353,13 +357,22 @@ module Stack = struct
 end
 
 let%hegel_test stack_model tc =
-  Stateful.run tc (module Stack) ~init:[] ~sexp_of_state:[%sexp_of: int list]
+  Stateful.run
+    tc
+    (module Stack)
+    ~init:(Atomic.make [])
+    ~sexp_of_state:(fun stack -> [%sexp_of: int list] (Atomic.get stack))
 ```
 
 In state machines not written with the PPX, draws print as `draw_1`, `draw_2`, ... unless given a `~label`.
 
-See the `Hegel.Stateful` API docs for invariants across multiple
-rules and for value pools that let one rule act on data an earlier rule produced.
+By default one rule runs at a time. Pass `~max_concurrency:n` to `run` to let
+up to `n` workers run rules at once. Rules marked `[@@rule "group"]` may
+run concurrently only with rules in the same group.
+
+See the `Hegel.Stateful` API docs for concurrent testing, for invariants across
+multiple rules, and for value pools that let one rule act on data an earlier
+rule produced.
 
 ## Change the number of test cases
 

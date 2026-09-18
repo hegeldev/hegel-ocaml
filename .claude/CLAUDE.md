@@ -66,17 +66,17 @@ lib/                         # Library source
   derive.ml                  # Hegel.Derive: scope-resolved names derived code
                              #   refers to (hegel_generator_int/…/char/list/
                              #   option + the Sexplib0 sexp_of_* converters)
-  stateful.ml                # Stateful testing. Rule/Invariant.create (both take the
-                             #   test case), the State_machine module type, and
-                             #   run tc (module M) ~init. The doc-hidden run_internal
-                             #   takes the lists directly and is what the run generated
-                             #   by module%hegel_state_machine calls.
-                             #   Rule and invariant bodies run on indent-2 block handles
-  stateful_seq.ml            # Sequential machines: Pool, Rule, the step loop
-  stateful_concurrent.ml     # Concurrent machines: per round, one clone per worker,
-                             #   one Concurrency.spawn_join_n, then
+  stateful.ml.in             # Stateful testing: Pool, Rule (?group, mutating step),
+                             #   Invariant, State_machine, and run ?concurrency
+                             #   ?min_concurrency ?max_concurrency tc (module M) ~init.
+                             #   One runner: with one worker a round runs inline on
+                             #   tc inside a span; with more, one clone per worker
+                             #   through Concurrency.spawn_join_n and
                              #   reraise_worker_failure over the outcomes. Spawns
-                             #   nothing itself (see Concurrent stateful testing)
+                             #   nothing itself (see Concurrent stateful testing).
+                             #   The doc-hidden run_internal takes the lists directly
+                             #   and is what the PPX-generated run calls. Rule and
+                             #   invariant bodies run on indent-2 block handles
   concurrency.ml.in/.mli.in  # Hegel.Concurrency: the capability record
                              #   (spawn_join_n), threads (the default) and, upstream
                              #   only (#ifndef OXCAML), the pooled domains
@@ -238,14 +238,11 @@ single top-level item: `let name = fun () -> Hegel.run_hegel_test ... (fun tc
 registration, no runtime library, and no side effect at module init. The same
 rewriter also handles `module%hegel_state_machine M = struct … end`, the
 analogue of hegel-rust's `#[hegel::state_machine] impl`. At expansion time it
-collects the bindings marked `[@@rule]`, `[@@invariant]`, or
-`[@@invariant always_check]` into appended `rules` and `invariants` lists
-(`Rule.create ~name:"<binding>" ~step:<binding>` and the same for
-`Invariant.create`) plus a `run ?step_count ?sexp_of_state tc ~init`.
-`module%hegel_concurrent_state_machine` does the same with
-`Concurrent_rule.create ?group` (from `[@@rule "group"]`) and a
-`run ?concurrency ?step_count ?sexp_of_state ~min_concurrency ~max_concurrency
-tc ~init` that calls `Stateful.run_concurrent_internal`. There
+collects the bindings marked `[@@rule]`, `[@@rule "group"]`, `[@@invariant]`,
+or `[@@invariant always_check]` into appended `rules` and `invariants` lists
+(`Rule.create ?group ~name:"<binding>" ~step:<binding> ()` and the same for
+`Invariant.create`) plus a `run ?concurrency ?min_concurrency ?max_concurrency
+?step_count ?sexp_of_state tc ~init`. There
 is no registry and no runtime discovery. The generated `run` calls the
 doc-hidden `Stateful.run_internal`, which takes the lists directly, because
 the expanded module need not declare `type state` and the public
@@ -427,10 +424,10 @@ Who owns what in hegel-ocaml:
   case it was derived from, like `draw_state`), and `run_test_case` calls
   `free_owned` once the case is complete — matching the order in hegel-rust's
   own `hegel-c/tests/c_abi_inprocess.rs`, which frees everything before
-  `hegel_mark_complete`. A `Stateful.Pool` stores a *clone* of the test case
-  it was created on, not the block itself (as hegel-rust's `pool()` does), so
-  a pool created inside a rule body keeps working after that step's block is
-  freed. Clones and blocks used to be freed by a `Gc.finalise_last` finaliser
+  `hegel_mark_complete`. `Stateful.Pool.add` takes the calling rule's test
+  case and the pool handle is owned by the test case, so a pool created
+  inside a rule body keeps working after that step's block is freed. Clones
+  and blocks used to be freed by a `Gc.finalise_last` finaliser
   instead; that was a use-after-free, because the compiler treats a record as
   dead after its last field read, so the finaliser could run in the middle of
   an engine call that had just read `tc.context` (a `note` from an invariant
@@ -467,10 +464,13 @@ Indentation is engine-side too (libhegel 0.37.10 block handles):
 `Internal.with_block tc ~indent f` runs `f` on a handle onto the *same* choice
 stream whose print region is a block nested in `tc`'s at the current position,
 every line `indent` columns further in, ending with the block; the block is
-freed when `f` returns. `Stateful.run` runs each rule's `step` and each
-invariant body with `with_block tc ~indent:2` so their draws nest under the
-`Step N: name` note. It only creates the block when `should_print tc` holds
-(`Stateful.section`); a non-printing case runs the body on `tc` itself, since
+freed when `f` returns. `Stateful.run` runs each rule's `step` and each invariant body with
+`with_block tc ~indent:2` so their draws nest under the `Step N: name` note.
+The rule loop is the `work` function in `Stateful.run_internal`: it pulls
+rule indices from the engine until the worker's round ends, notes the
+heading, runs the body on the block, and on `Assume_rejected` reports the
+rejection to the engine. It only creates the
+block when `should_print tc` holds; a non-printing case runs the body on `tc` itself, since
 a block per step costs a native handle and a context, which
 measured as 50% more wall time and 20x the major collections on a
 200-case x 500-step machine. And
@@ -484,10 +484,10 @@ closure defined inside a `let%hegel_test` body — flagged repeatable by the
 PPX — as `n_1` in every step), while sharing `owned_pools`; a clone instead
 copies the span depth and shares the parent's `draw_state`.
 Unlike a clone, a block must not be driven concurrently with its parent.
-`Internal.set_worker_index` binds `hegel_test_case_set_worker`:
-`Stateful_concurrent` tags each worker's per-round clone so the engine stamps
-its lines `[worker N +X.XXXms]`. `Stateful.run` is sequential (concurrency
-fixed at 1).
+`Internal.set_worker_index` binds `hegel_test_case_set_worker`: with more
+than one worker `Stateful` tags each worker's per-round clone so the engine
+stamps its lines `[worker N +X.XXXms]`; with one worker the round runs on
+`tc` itself and nothing is stamped.
 Flipping the `should_print` gate to always-append (so the engine sees every
 case's representation) is the intended future Tyche switch.
 
@@ -591,20 +591,32 @@ re-raised; after the loop, `Ffi.run_result` failures are raised (single) or
 aggregated into a "Multiple failures" report. `run`/`settings` handles are freed
 in an `Exn.protect ~finally`.
 
-### Concurrent stateful testing (lib/stateful_concurrent.ml, lib/concurrency.ml.in)
+### Concurrent stateful testing (lib/stateful.ml.in, lib/concurrency.ml.in)
 
-The runner spawns no threads or domains. Each round it clones the test case
-once per worker, tags the clone with `set_worker_index`, and makes one call to
-`concurrency.spawn_join_n ~n ~f`, where `f i` pulls rules for worker `i` from
-the engine and runs them on clone `i` until the engine ends the round,
-returning an `outcome` (`None`, or the exception with its backtrace; bodies
-never raise into the capability). `reraise_worker_failure` picks the
+There is one runner; a sequential machine is the concurrent one at one
+worker. `run` takes `?min_concurrency` (default 1) and `?max_concurrency`
+(default `min_concurrency`); the engine draws the worker count in that range
+when it creates the machine. Rules mutate a shared state
+(`step : test_case -> 'state -> unit`) and carry a `?group`. The `work`
+function in `run_internal` runs one worker's round (rules from the engine
+until it ends the round, heading, block, rejection report) and returns
+whether a rule was rejected. With one worker each
+round runs inline on `tc` inside a `stateful_rule` span (`stop_span
+~discard:rejected`), so the run stays deterministic and shrinkable and prints
+`Step N: name` headings, no round header, no worker stamps: the trace a
+sequential machine always had. With more workers each round notes a
+`Round N: group` header, clones the test case once per worker, tags the clone
+with `set_worker_index`, and makes one call to `concurrency.spawn_join_n ~n
+~f`, where `f i` runs `work` for worker `i` on clone `i` (heading `Rule:
+name`), returning an `outcome` (`None`, or the exception with its backtrace;
+bodies never raise into the capability). `reraise_worker_failure` picks the
 highest-precedence failure (usage/internal error, then overrun, then
 invalidation, then a test failure; lowest worker index first), then the
-invariants run on the main thread. `Hegel.Concurrency.t` is a record with that
-one field; `run_concurrent` and the generated `run` take it as `?concurrency`,
-default `Concurrency.threads` (one systhread per body per round: interleaving,
-no parallelism). `Concurrency.domains` is upstream-only (`#ifndef OXCAML`): a
+invariants run on the main thread. The runner spawns no threads or domains
+itself. `Hegel.Concurrency.t` is a record with that one field; `run` and the
+generated `run` take it as `?concurrency`, default `Concurrency.threads` (one
+systhread per body per round: interleaving, no parallelism). With one worker
+the capability is never consulted. `Concurrency.domains` is upstream-only (`#ifndef OXCAML`): a
 pool of `recommended_domain_count - 1` domains created on first use and joined
 at exit, one job queue per domain, jobs dealt round-robin, each job on its own
 systhread inside its domain so bodies stay live however few domains there
@@ -628,16 +640,15 @@ parameter or return mode), `CROSSING` = `: value mod portable contended`.
   `settings.mli.in`, `derive.mli.in`, `ffi.mli.in` start with a module-level
   `@@ portable` default: every `val` is portable and the compiler checks each
   implementation. `stateful.mli.in` instead puts `sig @@ portable` on the
-  `Pool`/`Concurrent_pool`/`Rule`/`Invariant`/`Concurrent_rule` submodules
-  (`SIG_PORTABLE`); the runners (`run`, `run_concurrent`, …) stay nonportable
-  since they reference `Concurrency.threads`, which uses `Thread.create`.
+  `Pool`/`Rule`/`Invariant` submodules (`PORTABLE`); the runners (`run`,
+  `run_internal`) stay nonportable since they reference
+  `Concurrency.threads`, which uses `Thread.create`.
   Function-typed parameters that end up stored in a generator (`map`,
   `flat_map`, `filter`, `composite`, `with_printer`, `leaf ~draw ~sexp_of`,
   `make_*`, `functions* ?sexp_of_arg*`, `Pool.create ~clone`) are `PFN`;
-  `printer` returns `PFN`. `just`, `sampled_from`, `Int_pool.t`, `Pool.t`,
-  `Concurrent_pool.t` constrain their element type to
-  `value mod portable contended`: the value is captured by a closure and read
-  back from a contended context.
+  `printer` returns `PFN`. `just`, `sampled_from`, `Int_pool.t`, `Pool.t`
+  constrain their element type to `value mod portable contended`: the value
+  is captured by a closure and read back from a contended context.
 - **Types that cross.** `Generators_core.core`/`generator` are declared
   `CROSSING`, which holds because every closure field carries `PORTABLE`
   (`Leaf.draw`, `Mapped.f`, `FlatMapped.f`, `Filtered.predicate`,
@@ -648,10 +659,11 @@ parameter or return mode), `CROSSING` = `: value mod portable contended`.
   below), `test_aborted`/`draw_depth` are `Atomic.t`, the draw-name table and
   the `owned` record are `Locked.t` (declared `value mod portable contended`
   in `locked.mli.in`; `protect`'s result type must cross since it leaves the
-  lock). `Concurrent_rule.t.step` is
-  `(test_case -> 'state @ contended -> unit) @@ portable`;
-  `run_concurrent` takes `init:'state @ portable` and
-  `?concurrency:Concurrency.t @ local`; `Concurrency.t`'s field is
+  lock). `Rule.t.step` is
+  `(test_case -> 'state @ contended -> unit) @@ portable`, so every rule
+  body is portable and sees its state contended, at one worker too; `run`
+  takes `init:'state @ portable` and `?concurrency:Concurrency.t @ local`;
+  `Concurrency.t`'s field is
   `n:int -> (f:(int -> outcome) @ portable -> outcome list @ contended) @ local`
   (a contended array is unreadable, a contended list is not).
 - **The trust boundary is `Ffi`, in two places.** (1) Every libhegel handle
@@ -667,13 +679,15 @@ parameter or return mode), `CROSSING` = `: value mod portable contended`.
   does not work: its data values (`Ctypes.int` …) stay contended inside
   portable code. The only other launder is three `ipaddr` functions in
   `generators_combinators.ml.in`.
-- **Runner shape.** `Stateful_concurrent.run_worker` is the portable worker
-  body; it captures `rules : Concurrent_rule.t list` (a list, not an array:
-  `Array.get` needs an uncontended array), the state machine handle, and the
-  `@ portable` state, and reads its clone from a `test_case list`. The
-  capability is passed down to `loop`, not captured, so it may be local;
-  `with_machine` does not use `Fun.protect` for the same reason; the call in
-  `run_concurrent_internal` is `[@nontail]` (`NONTAIL`).
+- **Runner shape.** The `work` function in `run_internal` is the rule loop
+  (next rule from the engine, heading, block, rejection report) and the
+  portable worker body; it captures `rules : Rule.t list` (a list, not an array: `Array.get` needs an
+  uncontended array), the state machine handle, the `@ portable` state, the
+  worker count, and an `int Atomic.t` step counter; `dispatch_round` reads
+  its clone from a `test_case list`. The capability is passed down to
+  `run_rounds` and its `loop`, not captured, so it may be local (the
+  parameters are annotated `@ local`, `LOCAL_CONCURRENCY`); `run_internal`
+  does not use `Fun.protect` for the same reason.
 - **`Locked` under OxCaml** is `Capsule_prim.Data` + `Capsule_blocking_sync.Mutex`
   (`capsule0`, deps `basement` and `sexp_type` only). `protect` goes through
   `Data.iter` and an atomic cell because `Data.extract` wants a unique result,

@@ -4,6 +4,7 @@
     [@@settings ...] attribute. *)
 
 open! Core
+module Atomic = Stdlib.Atomic
 
 let env_var = "ANTITHESIS_OUTPUT_DIR"
 
@@ -140,15 +141,15 @@ let test_failing_writes_condition_false () =
 let invariant_checks = ref 0
 
 module%hegel_state_machine Counter = struct
-  let bump tc n =
+  let bump tc (n : int Atomic.t) =
     let by = Hegel.draw tc (Hegel.integers ~min_value:1 ~max_value:3 ()) in
-    n + by
+    ignore (Atomic.fetch_and_add n by : int)
   [@@rule]
   ;;
 
-  let positive _tc n =
+  let positive _tc (n : int Atomic.t) =
     incr invariant_checks;
-    assert (n >= 0)
+    assert (Atomic.get n >= 0)
   [@@invariant always_check]
   ;;
 
@@ -157,7 +158,7 @@ end
 
 let%hegel_test runs_machine (tc : Hegel.test_case) =
   invariant_checks := 0;
-  Counter.run tc ~init:0 ~step_count:5;
+  Counter.run tc ~init:(Atomic.make 0) ~step_count:5;
   assert (!invariant_checks > 2)
 [@@settings Hegel.Settings.create ~test_cases:3 ()]
 ;;

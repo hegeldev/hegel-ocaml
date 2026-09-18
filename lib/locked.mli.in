@@ -1,9 +1,10 @@
+#ifdef OXCAML
+@@ portable
+#endif
 (** Mutable data shared between concurrent workers, behind a lock. In
     OxCaml the data lives in a capsule, so portable code can use it. *)
 
 #ifdef OXCAML
-@@ portable
-
 type 'a t : value mod portable contended
 
 (** [create init] makes a locked cell holding [init ()]. *)

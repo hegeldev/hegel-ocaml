@@ -23,8 +23,8 @@ exception Stop_test = Ffi.Stop_test
 (** Raised when an assumption or engine draw rejects the case. *)
 exception Assume_rejected = Ffi.Assume_rejected
 
-(** Raised when the engine detects a flaky strategy definition or when 
-the client side pool diverges from the engine side pool. *)
+(** Raised when the engine detects a flaky strategy definition or when
+    the client side pool diverges from the engine side pool. *)
 exception Flaky_strategy
 
 open Settings
@@ -220,7 +220,8 @@ let with_stop_guard tc f =
   | Internal_error _ as exn ->
     (* requires an libhegel/binding fault *)
     (Atomic.set tc.test_aborted true;
-     raise_notrace exn) [@coverage off]
+     raise_notrace exn)
+    [@coverage off]
 ;;
 
 (** [generate_boolean tc p forced] draws a boolean with probability [p] of
@@ -470,20 +471,21 @@ let require _tc ?(msg = "require: condition was false") condition =
   if not condition then failwith msg
 ;;
 
-(* one-field record b/c render_diff is portable and reads the renderer from 
+(* one-field record b/c render_diff is portable and reads the renderer from
    a global [Atomic], so the stored type must cross portability.
    A function type can't have a modality, but a record field can. *)
 #ifdef OXCAML
 type diff_renderer =
   { render : (colored:bool -> original:Sexp.t -> updated:Sexp.t -> string) @@ portable }
 #else
-type diff_renderer = { render : colored:bool -> original:Sexp.t -> updated:Sexp.t -> string }
+type diff_renderer =
+  { render : colored:bool -> original:Sexp.t -> updated:Sexp.t -> string }
 #endif
 
 let diff_renderer : diff_renderer option Atomic.t = Atomic.make None
 
 (** [set_diff_renderer renderer] sets the renderer {!render_diff} delegates to.
-    CANNOT use Option.map because the function parameter is at legacy mode, so 
+    CANNOT use Option.map because the function parameter is at legacy mode, so
     render would become nonportable. *)
 let set_diff_renderer renderer =
   Atomic.set
@@ -651,14 +653,6 @@ let state_machine_next_group tc ~state_machine =
     Ffi.state_machine_next_group tc.context tc.handle ~state_machine)
 ;;
 
-(** [state_machine_next_round tc ~state_machine] asks the engine whether the
-    machine should run another round: [false] once the step budget for the test
-    case is exhausted. Call it before the first rule and after every round.
-    Raises {!Stop_test} when the engine's choice budget is exhausted. *)
-let state_machine_next_round tc ~state_machine =
-  Option.is_some (state_machine_next_group tc ~state_machine)
-;;
-
 let state_machine_next_rule_for_worker tc ~state_machine ~worker_index =
   with_stop_guard tc (fun () ->
     Ffi.state_machine_next_rule tc.context tc.handle ~state_machine ~worker_index)
@@ -791,25 +785,25 @@ let reraise failure = Printexc.raise_with_backtrace failure.exn failure.backtrac
     ignored); no engine worker, shrinking, or database is involved.
 
     @param test_location
-    source location of the test. Passed to libhegel, which inside Antithesis
-    reports the run's result as an assertion at that location. It is also the
-    default database key. Provided automatically by the [let%hegel_test]
-    PPX. When omitted, nothing is reported.
+      source location of the test. Passed to libhegel, which inside Antithesis
+      reports the run's result as an assertion at that location. It is also the
+      default database key. Provided automatically by the [let%hegel_test]
+      PPX. When omitted, nothing is reported.
     @param from_ppx
-    [true] when the run is driven by the [let%hegel_test] PPX; only set by the
-    PPX. Selects the [[@@failure_blobs [...]]] attribute form of the [rerun with:]
-    hint vs. the [~failure_blobs] argument form a plain caller would use.
+      [true] when the run is driven by the [let%hegel_test] PPX; only set by the
+      PPX. Selects the [[@@failure_blobs [...]]] attribute form of the [rerun with:]
+      hint vs. the [~failure_blobs] argument form a plain caller would use.
     @param database_key
-    optional key scoping persisted/replayed failing examples and, under [derandomize],
-    the per-test seed. Defaults to the test's [test_location] (as
-    [file:function_name]) so each [let%hegel_test] gets a stable, distinct
-    key; pass an explicit key to override. When both are absent, the engine
-    uses its own default key.
+      optional key scoping persisted/replayed failing examples and, under [derandomize],
+      the per-test seed. Defaults to the test's [test_location] (as
+      [file:function_name]) so each [let%hegel_test] gets a stable, distinct
+      key; pass an explicit key to override. When both are absent, the engine
+      uses its own default key.
     @param failure_blobs
-    a list of base64 encoded strings (blobs), where each string encodes the choices 
-    made in a failing test run. When the list is nonempty, only the first blob 
-    is decoded and run. The blob is only guaranteed to reproduce a failure within 
-    a specific version of Hegel *)
+      a list of base64 encoded strings (blobs), where each string encodes the choices
+      made in a failing test run. When the list is nonempty, only the first blob
+      is decoded and run. The blob is only guaranteed to reproduce a failure within
+      a specific version of Hegel *)
 let run_test
       ~(settings : Settings.t)
       ?test_location
@@ -891,7 +885,11 @@ let run_test
     match replay_blob blob with
     | Error msg ->
       (* Requires libhegel to corrupt its own generated blob. *)
-      (failwith ("libhegel generated an invalid failure blob: " ^ msg ^ " Please report this at https://github.com/hegeldev/hegel-rust/issues")) [@coverage off]
+      failwith
+        ("libhegel generated an invalid failure blob: "
+         ^ msg
+         ^ " Please report this at https://github.com/hegeldev/hegel-rust/issues")
+      [@coverage off]
     | Ok { result = Failed failure; output; _ } -> blob, failure, output
     | Ok _ -> failwith flaky_diagnostic
   in
@@ -922,7 +920,8 @@ let run_test
         | Some failure -> failure
         | None ->
           (* libhegel cannot accept a failure that the frontend never reported. *)
-          (failwith "hegel: nondeterministic failure has no captured exception") [@coverage off]
+          failwith
+            "hegel: nondeterministic failure has no captured exception" [@coverage off]
       in
       if settings.verbosity <> Quiet
       then (
@@ -1015,9 +1014,9 @@ let run_test
     [Hegel.run_hegel_test].
 
     @param database_key
-    overrides the key scoping this test's persisted corpus and [derandomize]
-    seed. When omitted it defaults to the test's [test_location] (see
-    {!run_test}), so each [let%hegel_test] is scoped by its own identity. *)
+      overrides the key scoping this test's persisted corpus and [derandomize]
+      seed. When omitted it defaults to the test's [test_location] (see
+      {!run_test}), so each [let%hegel_test] is scoped by its own identity. *)
 let run_hegel_test
       ?(settings = Settings.default ())
       ?test_location

@@ -28,7 +28,7 @@ let threads =
 ;;
 
 #ifndef OXCAML
-(* Each domain has its own job queue. Jobs are handed to queues round-robin 
+(* Each domain has its own job queue. Jobs are handed to queues round-robin
    and each one runs on its own systhread inside its domain. The pool lasts
    for the lifetime of the process. *)
 module Domain_pool = struct

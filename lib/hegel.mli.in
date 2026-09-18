@@ -10,7 +10,7 @@
     Hegel runs the test function on many generated inputs. You generate data {e inline},
     drawing values with {!draw} as the test runs, rather than generating the data
     then running the property body. Each {!draw} returns an ordinary OCaml value
-    that you bind with [let], compute with, and branch on, so a later draw can 
+    that you bind with [let], compute with, and branch on, so a later draw can
     depend on an earlier generated value or a value from the system under test.
 
     Because Hegel uses
@@ -18,7 +18,7 @@
     shrinking}, shrinking comes for free.
 
     {2 Getting started}
-    
+
     {3 Install Hegel}
 
     To install Hegel for OCaml:
@@ -172,7 +172,7 @@
 
     {3 Derive generators}
 
-    Annotate the type with [\[@@deriving hegel_generator\]] and add [ppx_hegel_generator] 
+    Annotate the type with [\[@@deriving hegel_generator\]] and add [ppx_hegel_generator]
     to your [preprocess] stanza:
 
     {[
@@ -325,9 +325,9 @@
     ]}
 
     The blob is only meant to reproduce the failure within a specific version of
-    Hegel, since the choice sequence leading to a failure can change from version 
+    Hegel, since the choice sequence leading to a failure can change from version
     to version.
-    
+
     {3 Jane Street Core support}
 
     Projects that use Jane Street's [Core] can also use the optional
@@ -664,8 +664,8 @@ val run_hegel_test_ppx
     [name @ filename:line = value].
 
     Inside a [let%hegel_test], the PPX supplies the binding name as the label, so
-    [let x = draw tc gen] prints its value as [x = value]. When the same name is 
-    shadowed or drawn in a loop, its draws are numbered [x_1], [x_2], … in draw 
+    [let x = draw tc gen] prints its value as [x = value]. When the same name is
+    shadowed or drawn in a loop, its draws are numbered [x_1], [x_2], … in draw
     order. Pass [?label] to override the name (e.g. [draw ~label:"y" tc gen]).
 
     {[
@@ -875,6 +875,6 @@ val with_printer
 (** {3 Cloning a test case} *)
 
 (** [clone tc] creates an independent clone of [tc]. It has its own choice stream
-    forked from the parent test case. When the parent test case is freed, its 
+    forked from the parent test case. When the parent test case is freed, its
     clones are freed with it. Each concurrent task must have its own clone. *)
 val clone : test_case -> test_case

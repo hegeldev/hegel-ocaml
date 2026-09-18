@@ -352,13 +352,6 @@ val new_state_machine_with_concurrency
     when the state machine is complete. *)
 val state_machine_next_group : test_case -> state_machine:state_machine -> int option
 
-(** [state_machine_next_round tc ~state_machine] asks the engine whether the
-    machine should run another round of rules: [false] once the step budget for
-    the test case is exhausted. Call it before the first rule and after every
-    round. Raises {!Stop_test} when the engine's choice budget is
-    exhausted. *)
-val state_machine_next_round : test_case -> state_machine:state_machine -> bool
-
 (** Draw the next rule for a worker, or [None] when its round ends. *)
 val state_machine_next_rule_for_worker
   :  test_case

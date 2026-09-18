@@ -228,9 +228,12 @@ let%expect_test "a list draw prints as one sexp" =
 
 let%expect_test "a stateful rule's drawn arguments appear in its trace" =
   let rule =
-    Stateful.Rule.create ~name:"push" ~step:(fun tc _state ->
-      let _ = Hegel.draw ~label:"n" tc (integers ~min_value:7 ~max_value:7 ()) in
-      assert false)
+    Stateful.Rule.create
+      ~name:"push"
+      ~step:(fun tc _state ->
+        let _ = Hegel.draw ~label:"n" tc (integers ~min_value:7 ~max_value:7 ()) in
+        assert false)
+      ()
   in
   let module M = struct
     type state = unit
@@ -263,7 +266,7 @@ end
 
 let%hegel_test stateful_print tc =
   let vars = Stateful.Pool.create tc in
-  Stateful.Pool.add vars 42;
+  Stateful.Pool.add vars tc 42;
   let val_gen = with_printer sexp_of_int (Stateful.Pool.values_reusable vars) in
   let _x = Hegel.draw tc val_gen in
   Pusher.run tc ~init:() ~step_count:3

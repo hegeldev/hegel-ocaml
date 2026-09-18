@@ -366,7 +366,10 @@ module Int_pool = struct
 #endif
 
   let create tc ~clone =
-    { pool = Internal.new_pool tc; values = Locked.create (fun () -> Tbl.create 16); clone }
+    { pool = Internal.new_pool tc
+    ; values = Locked.create (fun () -> Tbl.create 16)
+    ; clone
+    }
   ;;
 
   let add t tc value =

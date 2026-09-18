@@ -9,9 +9,9 @@ open Generators_primitives
     non-uniform (boundary and "interesting" indices are over-weighted), so
     earlier elements — the first in particular — are drawn more often than the
     middle ones. The output type is the caller's, so the result carries no
-    printer; use {!with_printer} to draw it with {!draw}. 
-    
-    We use a list instead of an array because arrays are contended inside a 
+    printer; use {!with_printer} to draw it with {!draw}.
+
+    We use a list instead of an array because arrays are contended inside a
     portable closure, but Array.* operations need uncontended arrays. *)
 #ifdef OXCAML
 let sampled_from (type (a : value mod portable contended)) (options : a list) =

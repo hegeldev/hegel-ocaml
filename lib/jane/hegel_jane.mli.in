@@ -1,3 +1,6 @@
+#ifdef OXCAML
+@@ portable
+#endif
 (** Jane Street [Core] companion library for Hegel ([hegel.jane]).
 
     It requires the [core] and [sexp_diff] opam packages. Each typed generator
