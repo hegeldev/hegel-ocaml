@@ -44,7 +44,7 @@ let assoc_lists
       (keys : ('a, printable) generator)
       (values : ('b, printable) generator)
       ?(min_size = 0)
-      ?max_size
+      ?(max_size : int option)
       ()
   : (('a * 'b) list, printable) generator
   =
@@ -69,7 +69,7 @@ let make_hash_tables
       (keys : ('a, printable) generator)
       (values : ('b, printable) generator)
       ?(min_size = 0)
-      ?max_size
+      ?(max_size : int option)
       ()
   : ('t, printable) generator
   =
@@ -84,7 +84,7 @@ let make_hash_tables
             of_pairs (draw_association_pairs keys values ~min_size ~max_size data))
       }
   in
-  Printable { core; sexp_of = sexp_of_t pk pv }
+  Printable { core; sexp_of = (fun table -> sexp_of_t pk pv table) }
 ;;
 
 (** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
@@ -114,7 +114,7 @@ let hash_tables keys values ?min_size ?max_size () =
 let lists
       (elements : ('a, printable) generator)
       ?(min_size = 0)
-      ?max_size
+      ?(max_size : int option)
       ?(unique = false)
       ()
   : ('a list, printable) generator

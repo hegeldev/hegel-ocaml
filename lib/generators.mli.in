@@ -1,3 +1,9 @@
+#ifdef OXCAML
+@@ portable
+#define PFN @ portable
+#else
+#define PFN
+#endif
 (** This module provides a composable generator API for property-based testing.
     Generators produce typed OCaml values.
 
@@ -36,6 +42,9 @@
     when the generator carries a printer (and so may be drawn with {!Hegel.draw})
     and {!unprintable} otherwise. *)
 type ('a, 'p) generator
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** Phantom witness that a generator carries a printer; see {!generator}. *)
 type printable
@@ -154,19 +163,19 @@ val draw_silent_named : name:string -> Internal.test_case -> ('a, 'p) generator 
       ;;
     ]} *)
 val with_printer
-  :  ('a -> Sexplib0.Sexp.t)
+  :  ('a -> Sexplib0.Sexp.t) PFN
   -> ('a, 'p) generator
   -> ('a, printable) generator
 
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
-val printer : ('a, printable) generator -> 'a -> Sexplib0.Sexp.t
+val printer : ('a, printable) generator -> ('a -> Sexplib0.Sexp.t) PFN
 
 (** [leaf ~name ~draw ~sexp_of] builds a printable generator from a single
     typed engine draw, labeled from [name]. Not part of the public API. *)
 val leaf
   :  name:string
-  -> draw:(Internal.test_case -> 'a)
-  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  -> draw:(Internal.test_case -> 'a) PFN
+  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
   -> ('a, printable) generator
 
 (**/**)
@@ -298,8 +307,8 @@ val characters
     characters over any representation ['a], covering the full native [char]
     range (codepoints 0-255, i.e. Latin-1). *)
 val make_characters
-  :  of_char:(char -> 'a)
-  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  :  of_char:(char -> 'a) PFN
+  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
   -> unit
   -> ('a, printable) generator
 
@@ -333,7 +342,11 @@ val binary : ?min_size:int -> ?max_size:int -> unit -> (string, printable) gener
         assert (x = 42)
       ;;
     ]} *)
+#ifdef OXCAML
+val just : ('a : value mod portable contended). 'a -> ('a, unprintable) generator
+#else
 val just : 'a -> ('a, unprintable) generator
+#endif
 
 (** {2 Collection generators} *)
 
@@ -385,9 +398,9 @@ val assoc_lists
 (** [make_hash_tables ~of_pairs ~sexp_of_t keys values ?min_size ?max_size ()]
     builds a hash-table generator over any table type ['t]. *)
 val make_hash_tables
-  :  of_pairs:(('a * 'b) list -> 't)
+  :  of_pairs:(('a * 'b) list -> 't) PFN
   -> sexp_of_t:
-       (('a -> Sexplib0.Sexp.t) -> ('b -> Sexplib0.Sexp.t) -> 't -> Sexplib0.Sexp.t)
+       (('a -> Sexplib0.Sexp.t) -> ('b -> Sexplib0.Sexp.t) -> 't -> Sexplib0.Sexp.t) PFN
   -> ('a, printable) generator
   -> ('b, printable) generator
   -> ?min_size:int
@@ -432,7 +445,12 @@ val hash_tables
         ignore color
       ;;
     ]} *)
+#ifdef OXCAML
+val sampled_from
+  : ('a : value mod portable contended). 'a list -> ('a, unprintable) generator
+#else
 val sampled_from : 'a list -> ('a, unprintable) generator
+#endif
 
 (** [one_of generators] creates a generator that picks from one of the given
     printable [generators]. Requires at least one generator. On a failing
@@ -563,7 +581,7 @@ val tuples4
     ]} *)
 val functions
   :  ?name:string
-  -> ?sexp_of_arg:('a -> Sexplib0.Sexp.t)
+  -> ?sexp_of_arg:('a -> Sexplib0.Sexp.t) PFN
   -> returns:('b, _) generator
   -> unit
   -> ('a -> 'b, unprintable) generator
@@ -576,8 +594,8 @@ val functions
     with {!draw_silent}. *)
 val functions2
   :  ?name:string
-  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t)
-  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t)
+  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t) PFN
+  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t) PFN
   -> returns:('c, _) generator
   -> unit
   -> ('a -> 'b -> 'c, unprintable) generator
@@ -590,9 +608,9 @@ val functions2
     [name (arg1 arg2 arg3) = result]. Draw it with {!draw_silent}. *)
 val functions3
   :  ?name:string
-  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t)
-  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t)
-  -> ?sexp_of_arg3:('c -> Sexplib0.Sexp.t)
+  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t) PFN
+  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t) PFN
+  -> ?sexp_of_arg3:('c -> Sexplib0.Sexp.t) PFN
   -> returns:('d, _) generator
   -> unit
   -> ('a -> 'b -> 'c -> 'd, unprintable) generator
@@ -674,13 +692,13 @@ type time =
       let core_dates =
         make_dates
           ~of_date:(fun { year; month; day } ->
-            Core.Date.create_exn ~y:year ~m:(Core.Month.of_int_exn month) ~d:day)
+            Core.Date.create_exn ~y:year ~m:(Core.Month.of_int_exn month) PFN ~d:day)
           ~sexp_of:Core.Date.sexp_of_t
           ()
     ]} *)
 val make_dates
-  :  of_date:(date -> 'a)
-  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  :  of_date:(date -> 'a) PFN
+  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
   -> ?min_date:date
   -> ?max_date:date
   -> unit
@@ -691,8 +709,8 @@ val make_dates
     [of_time] converts each drawn {!time} to the desired representation. The 
     default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
 val make_times
-  :  of_time:(time -> 'a)
-  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  :  of_time:(time -> 'a) PFN
+  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
   -> ?min_time:time
   -> ?max_time:time
   -> unit
@@ -703,8 +721,8 @@ val make_times
     representation. [of_datetime] converts each drawn [(date, time)] pair to the 
     desired representation. The default range is [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
 val make_datetimes
-  :  of_datetime:(date * time -> 'a)
-  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  :  of_datetime:(date * time -> 'a) PFN
+  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
   -> ?min_datetime:date * time
   -> ?max_datetime:date * time
   -> unit
@@ -794,7 +812,7 @@ val from_regex : string -> ?fullmatch:bool -> unit -> (string, printable) genera
           x, y)
       ;;
     ]} *)
-val composite : (Internal.test_case -> 'a) -> ('a, unprintable) generator
+val composite : (Internal.test_case -> 'a) PFN -> ('a, unprintable) generator
 
 (** [map f gen] transforms values from [gen] using [f].
 
@@ -806,7 +824,7 @@ val composite : (Internal.test_case -> 'a) -> ('a, unprintable) generator
         assert (even mod 2 = 0)
       ;;
     ]} *)
-val map : ('a -> 'b) -> ('a, 'p) generator -> ('b, unprintable) generator
+val map : ('a -> 'b) PFN -> ('a, 'p) generator -> ('b, unprintable) generator
 
 (** [flat_map f gen] creates a dependent generator. [f] receives the generated
     value and returns a generator whose value is the final result.
@@ -829,7 +847,7 @@ val map : ('a -> 'b) -> ('a, 'p) generator -> ('b, unprintable) generator
       ;;
     ]} *)
 val flat_map
-  :  ('a -> ('b, 'q) generator)
+  :  ('a -> ('b, 'q) generator) PFN
   -> ('a, 'p) generator
   -> ('b, unprintable) generator
 
@@ -845,7 +863,7 @@ val flat_map
         assert (even mod 2 = 0)
       ;;
     ]} *)
-val filter : ('a -> bool) -> ('a, 'p) generator -> ('a, 'p) generator
+val filter : ('a -> bool) PFN -> ('a, 'p) generator -> ('a, 'p) generator
 
 (**/**)
 (*
@@ -855,17 +873,22 @@ val filter : ('a -> bool) -> ('a, 'p) generator -> ('a, 'p) generator
 
 module Int_table : Stdlib.Hashtbl.S with type key = int
 
-(** [Make_pool (Tbl)] specializes the pool-drawing machinery to the concrete
-    int-keyed hashtable module [Tbl]. *)
-module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) : sig
+(** [Int_pool] is the client side of an engine pool: drawn ids resolved
+    against an [Int_table] of values, behind a lock so concurrent workers can
+    share it. *)
+module Int_pool : sig
+#ifdef OXCAML
+  type ('a : value mod portable contended) t : value mod portable contended
+#else
   type 'a t
+#endif
 
-  val create : Internal.test_case -> clone:('a -> 'a) -> lock:Mutex.t option -> 'a t
+  val create : Internal.test_case -> clone:('a -> 'a) PFN -> 'a t
   val add : 'a t -> Internal.test_case -> 'a -> unit
   val size : _ t -> int
   val is_empty : _ t -> bool
 
-  val resolve_draw : 'a Tbl.t -> consume:bool -> int -> 'a
+  val resolve_draw : 'a Int_table.t -> consume:bool -> int -> 'a
 
   (** Reusable draws use the pool's clone function under its lock, if present.
       Consumed draws return the stored value directly. *)
@@ -958,7 +981,7 @@ module Ppx_internal : sig
       derive PPX to tag composites (e.g. {!Labels.enum_variant}). *)
   val composite_with_label
     :  label:int64
-    -> (Internal.test_case -> 'a)
+    -> (Internal.test_case -> 'a) PFN
     -> ('a, unprintable) generator
 end
 

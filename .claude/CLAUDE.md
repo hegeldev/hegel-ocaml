@@ -647,7 +647,7 @@ parameter or return mode), `CROSSING` = `: value mod portable contended`.
   the `map` call. `Internal.test_case` is `CROSSING` too: handles cross (see
   below), `test_aborted`/`draw_depth` are `Atomic.t`, the draw-name table and
   the `owned` record are `Locked.t` (declared `value mod portable contended`
-  in `locked.mli.in`; `with_`'s result type must cross since it leaves the
+  in `locked.mli.in`; `protect`'s result type must cross since it leaves the
   lock). `Concurrent_rule.t.step` is
   `(test_case -> 'state @ contended -> unit) @@ portable`;
   `run_concurrent` takes `init:'state @ portable` and
@@ -675,7 +675,7 @@ parameter or return mode), `CROSSING` = `: value mod portable contended`.
   `with_machine` does not use `Fun.protect` for the same reason; the call in
   `run_concurrent_internal` is `[@nontail]` (`NONTAIL`).
 - **`Locked` under OxCaml** is `Capsule_prim.Data` + `Capsule_blocking_sync.Mutex`
-  (`capsule0`, deps `basement` and `sexp_type` only). `with_` goes through
+  (`capsule0`, deps `basement` and `sexp_type` only). `protect` goes through
   `Data.iter` and an atomic cell because `Data.extract` wants a unique result,
   and it carries exceptions out before re-raising because raising under
   `with_lock` poisons the mutex (a pool must survive a failing `clone`).

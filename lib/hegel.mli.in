@@ -1,3 +1,9 @@
+#ifdef OXCAML
+@@ portable
+#define PFN @ portable
+#else
+#define PFN
+#endif
 (** {2 Introduction}
     Property-based testing for OCaml, powered by the native {{:https://hegel.dev} Hegel} engine based on {{:https://hypothesis.works} Hypothesis}.
 
@@ -418,14 +424,18 @@ val characters
   -> (string, printable) generator
 
 val make_characters
-  :  of_char:(char -> 'a)
-  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  :  of_char:(char -> 'a) PFN
+  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
   -> unit
   -> ('a, printable) generator
 
 val chars : unit -> (char, printable) generator
 val binary : ?min_size:int -> ?max_size:int -> unit -> (string, printable) generator
+#ifdef OXCAML
+val just : ('a : value mod portable contended). 'a -> ('a, unprintable) generator
+#else
 val just : 'a -> ('a, unprintable) generator
+#endif
 
 val lists
   :  ('a, printable) generator
@@ -444,9 +454,9 @@ val assoc_lists
   -> (('a * 'b) list, printable) generator
 
 val make_hash_tables
-  :  of_pairs:(('a * 'b) list -> 't)
+  :  of_pairs:(('a * 'b) list -> 't) PFN
   -> sexp_of_t:
-       (('a -> Sexplib0.Sexp.t) -> ('b -> Sexplib0.Sexp.t) -> 't -> Sexplib0.Sexp.t)
+       (('a -> Sexplib0.Sexp.t) -> ('b -> Sexplib0.Sexp.t) -> 't -> Sexplib0.Sexp.t) PFN
   -> ('a, printable) generator
   -> ('b, printable) generator
   -> ?min_size:int
@@ -462,7 +472,12 @@ val hash_tables
   -> unit
   -> (('a, 'b) Stdlib.Hashtbl.t, printable) generator
 
+#ifdef OXCAML
+val sampled_from
+  : ('a : value mod portable contended). 'a list -> ('a, unprintable) generator
+#else
 val sampled_from : 'a list -> ('a, unprintable) generator
+#endif
 val one_of : ('a, printable) generator list -> ('a, printable) generator
 val optional : ('a, printable) generator -> ('a option, printable) generator
 
@@ -486,24 +501,24 @@ val tuples4
 
 val functions
   :  ?name:string
-  -> ?sexp_of_arg:('a -> Sexplib0.Sexp.t)
+  -> ?sexp_of_arg:('a -> Sexplib0.Sexp.t) PFN
   -> returns:('b, _) generator
   -> unit
   -> ('a -> 'b, unprintable) generator
 
 val functions2
   :  ?name:string
-  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t)
-  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t)
+  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t) PFN
+  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t) PFN
   -> returns:('c, _) generator
   -> unit
   -> ('a -> 'b -> 'c, unprintable) generator
 
 val functions3
   :  ?name:string
-  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t)
-  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t)
-  -> ?sexp_of_arg3:('c -> Sexplib0.Sexp.t)
+  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t) PFN
+  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t) PFN
+  -> ?sexp_of_arg3:('c -> Sexplib0.Sexp.t) PFN
   -> returns:('d, _) generator
   -> unit
   -> ('a -> 'b -> 'c -> 'd, unprintable) generator
@@ -513,24 +528,24 @@ val urls : unit -> (string, printable) generator
 val domains : ?max_length:int -> unit -> (string, printable) generator
 
 val make_dates
-  :  of_date:(date -> 'a)
-  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  :  of_date:(date -> 'a) PFN
+  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
   -> ?min_date:date
   -> ?max_date:date
   -> unit
   -> ('a, printable) generator
 
 val make_times
-  :  of_time:(time -> 'a)
-  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  :  of_time:(time -> 'a) PFN
+  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
   -> ?min_time:time
   -> ?max_time:time
   -> unit
   -> ('a, printable) generator
 
 val make_datetimes
-  :  of_datetime:(date * time -> 'a)
-  -> sexp_of:('a -> Sexplib0.Sexp.t)
+  :  of_datetime:(date * time -> 'a) PFN
+  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
   -> ?min_datetime:date * time
   -> ?max_datetime:date * time
   -> unit
@@ -547,15 +562,15 @@ val datetimes
 
 val ip_addresses : ?version:[ `V4 | `V6 ] -> unit -> (Ipaddr.t, printable) generator
 val from_regex : string -> ?fullmatch:bool -> unit -> (string, printable) generator
-val composite : (test_case -> 'a) -> ('a, unprintable) generator
-val map : ('a -> 'b) -> ('a, 'p) generator -> ('b, unprintable) generator
+val composite : (test_case -> 'a) PFN -> ('a, unprintable) generator
+val map : ('a -> 'b) PFN -> ('a, 'p) generator -> ('b, unprintable) generator
 
 val flat_map
-  :  ('a -> ('b, 'q) generator)
+  :  ('a -> ('b, 'q) generator) PFN
   -> ('a, 'p) generator
   -> ('b, unprintable) generator
 
-val filter : ('a -> bool) -> ('a, 'p) generator -> ('a, 'p) generator
+val filter : ('a -> bool) PFN -> ('a, 'p) generator -> ('a, 'p) generator
 
 (**/**)
 
@@ -853,7 +868,7 @@ val require_equal
         assert (n >= 0)
     ]} *)
 val with_printer
-  :  ('a -> Sexplib0.Sexp.t)
+  :  ('a -> Sexplib0.Sexp.t) PFN
   -> ('a, 'p) generator
   -> ('a, printable) generator
 

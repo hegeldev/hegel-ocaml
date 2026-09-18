@@ -1,5 +1,12 @@
 type outcome = (exn * Printexc.raw_backtrace) option
+#ifdef OXCAML
+type t =
+  { spawn_join_n :
+      n:int -> (f:(int -> outcome) @ portable -> outcome list @ contended) @ local
+  }
+#else
 type t = { spawn_join_n : n:int -> f:(int -> outcome) -> outcome list }
+#endif
 
 (* we use an outcome list because arrays are contended in OxCaml *)
 

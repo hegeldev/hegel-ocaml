@@ -9,12 +9,18 @@ open Generators_primitives
     non-uniform (boundary and "interesting" indices are over-weighted), so
     earlier elements — the first in particular — are drawn more often than the
     middle ones. The output type is the caller's, so the result carries no
-    printer; use {!with_printer} to draw it with {!draw}. *)
+    printer; use {!with_printer} to draw it with {!draw}. 
+    
+    We use a list instead of an array because arrays are contended inside a 
+    portable closure, but Array.* operations need uncontended arrays. *)
+#ifdef OXCAML
+let sampled_from (type (a : value mod portable contended)) (options : a list) =
+#else
 let sampled_from options =
-  let arr = Array.of_list options in
-  let n = Array.length arr in
+#endif
+  let n = List.length options in
   if n = 0 then raise (Internal.Usage_error "sampled_from requires at least one element");
-  map (fun i -> arr.(i)) (integers ~min_value:0 ~max_value:(n - 1) ())
+  map (fun i -> List.nth options i) (integers ~min_value:0 ~max_value:(n - 1) ())
 ;;
 
 (** [one_of generators] creates a generator that picks from one of the given
@@ -31,22 +37,22 @@ let sampled_from options =
 let one_of (generators : ('a, printable) generator list) : ('a, printable) generator =
   match generators with
   | [] -> failwith "one_of requires at least one generator"
-  | first :: _ ->
-    let cores = Array.of_list (List.map core_of generators) in
-    let printers = Array.of_list (List.map printer generators) in
-    let n = Array.length cores in
-    let drawn_printer = ref (printer first) in
+  | _ :: _ ->
+    let n = List.length generators in
+    (* the branch the last draw came from; 0 (the first branch) before any draw *)
+    let drawn = Atomic.make 0 in
     let core =
       Composite
         { label = Labels.combine (Labels.one_of :: List.map label_of generators)
         ; generate_fn =
             (fun data ->
               let idx = Internal.generate_integer data ~min_value:0 ~max_value:(n - 1) in
-              drawn_printer := printers.(idx);
-              do_draw cores.(idx) data)
+              Atomic.set drawn idx;
+              do_draw (core_of (List.nth generators idx)) data)
         }
     in
-    Printable { core; sexp_of = (fun v -> !drawn_printer v) }
+    Printable
+      { core; sexp_of = (fun v -> (printer (List.nth generators (Atomic.get drawn))) v) }
 ;;
 
 (** [optional_core element] is the generation structure behind {!optional}: a
@@ -73,7 +79,7 @@ let optional_core (element : 'a core) : 'a option core =
 let optional (element : ('a, printable) generator) : ('a option, printable) generator =
   Printable
     { core = optional_core (core_of element)
-    ; sexp_of = Sexplib0.Sexp_conv.sexp_of_option (printer element)
+    ; sexp_of = (fun v -> Sexplib0.Sexp_conv.sexp_of_option (printer element) v)
     }
 ;;
 
@@ -87,10 +93,21 @@ let optional (element : ('a, printable) generator) : ('a option, printable) gene
     The engine returns the address's raw network-order bytes, which [ipaddr]
     parses into a typed value; render with [Ipaddr.to_string] (RFC 5952
     canonical form for v6). *)
+#ifdef OXCAML
+(* The ipaddr library has no mode annotations. *)
+let ipaddr_to_string = Obj.magic_portable Ipaddr.to_string
+let ipaddr_v4_of_octets_exn = Obj.magic_portable Ipaddr.V4.of_octets_exn
+let ipaddr_v6_of_octets_exn = Obj.magic_portable Ipaddr.V6.of_octets_exn
+#else
+let ipaddr_to_string = Ipaddr.to_string
+let ipaddr_v4_of_octets_exn = Ipaddr.V4.of_octets_exn
+let ipaddr_v6_of_octets_exn = Ipaddr.V6.of_octets_exn
+#endif
+
 let ip_addresses ?version () =
-  let sexp_of ip = Sexp.Atom (Ipaddr.to_string ip) in
-  let v4 tc = Ipaddr.V4 (Ipaddr.V4.of_octets_exn (Internal.generate_ipv4 tc)) in
-  let v6 tc = Ipaddr.V6 (Ipaddr.V6.of_octets_exn (Internal.generate_ipv6 tc)) in
+  let sexp_of ip = Sexp.Atom (ipaddr_to_string ip) in
+  let v4 tc = Ipaddr.V4 (ipaddr_v4_of_octets_exn (Internal.generate_ipv4 tc)) in
+  let v6 tc = Ipaddr.V6 (ipaddr_v6_of_octets_exn (Internal.generate_ipv6 tc)) in
   let v4 = leaf ~name:"ipv4" ~draw:v4 ~sexp_of
   and v6 = leaf ~name:"ipv6" ~draw:v6 ~sexp_of in
   match version with

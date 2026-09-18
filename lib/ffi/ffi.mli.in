@@ -6,47 +6,81 @@
    OCaml-native wrappers that copy borrowed C buffers into OCaml strings and
    translate negative status codes into exceptions. *)
 
+#ifdef OXCAML
+@@ portable
+#endif
+
 (** Opaque context handle ([hegel_context_t]). *)
 type context
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** Opaque settings handle ([hegel_settings_t]). *)
 type settings
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** Opaque in-flight run handle ([hegel_run_t]). *)
 type run
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** Opaque per-test-case handle ([hegel_test_case_t]): caller-owned whatever its
     origin ({!next_test_case}, {!test_case_from_blob}, …), freed with
     {!test_case_free}. A run-owned handle stays valid even after {!run_free}
     releases the run's own reference. *)
 type test_case
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** Opaque aggregated run result ([hegel_run_result_t]): a caller-owned snapshot
     independent of its {!run}, valid until freed with {!run_result_free}. *)
 type run_result
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** Opaque single-failure handle ([hegel_failure_t]): a caller-owned snapshot
     independent of its {!type:run_result}, valid until freed with
     {!failure_free}. *)
 type failure
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** Opaque string-generator handle ([hegel_string_generator_t]): built with a
     context via one of the {!string_generator_text} / {!string_generator_regex}
     / … constructors, drawn from with {!generate_string}, and freed with
     {!string_generator_free}. *)
 type string_generator
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** Opaque collection handle ([hegel_collection_t]). Using a collection from
     multiple threads will throw an error. *)
 type collection
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** Opaque variable-pool handle ([hegel_pool_t]). Unlike a {!type:collection} it
     can be used from multiple threads. *)
 type pool
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** Opaque state-machine handle ([hegel_state_machine_t]). It can be shared
     across clones. *)
 type state_machine
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** A proleptic Gregorian calendar date ([hegel_date_t]). *)
 type date =
@@ -572,10 +606,16 @@ val mark_complete : context -> test_case -> status -> string option -> unit
     {!test_case_printer}, or a hole for a handle from {!printer_deferred}. Every
     handle must be freed exactly once with {!printer_free}. *)
 type printer
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** Opaque printer-options handle ([hegel_printer_options_t]): read only during
     {!printer_new} / {!test_case_printer}, freed with {!printer_options_free}. *)
 type printer_options
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** [printer_options_new ctx] creates an options handle with every option at its
     default ([max_width] 79). *)
