@@ -3,9 +3,9 @@
 
 Reads the targeted libhegel version from lib/ffi/loader.ml, lists the
 ``libhegel-<os>-<arch>.{so,dylib,dll}`` assets of the matching hegel-rust
-GitHub release (via the ``gh`` CLI), downloads each one, computes its SHA-256
-locally (we don't trust the published .sha256 sidecars — we recompute), and
-rewrites the ``let checksums = [ ... ]`` table.
+GitHub release (tagged ``libhegel-v<version>``; via the ``gh`` CLI), downloads
+each one, computes its SHA-256 locally (we don't trust the published .sha256
+sidecars — we recompute), and rewrites the ``let checksums = [ ... ]`` table.
 
 Usage: bump ``let version`` in lib/ffi/loader.ml, then run this script and
 commit the diff. Requires the GitHub CLI (`gh`) on PATH.

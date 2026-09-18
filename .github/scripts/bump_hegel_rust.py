@@ -1,10 +1,16 @@
 """Pin a new libhegel release and open/update the bump PR.
 
-Resolves the target hegel-rust version (an explicit argument, else the latest 
-release), writes it into `lib/ffi/loader.ml`, regenerates the baked-in checksums 
-via the existing `scripts/update-checksums.py`, drops a `RELEASE.md` so merging 
-the PR cuts a hegel-ocaml release, and force-pushes a fixed branch (updating an 
-already-open PR in place rather than stacking one PR per release).
+Resolves the target libhegel release tag (an explicit `libhegel-v<version>`
+argument, else the latest libhegel release), writes its version into
+`lib/ffi/loader.ml`, regenerates the baked-in checksums via the existing
+`scripts/update-checksums.py`, drops a `RELEASE.md` so merging the PR cuts a
+hegel-ocaml release, and force-pushes a fixed branch (updating an already-open
+PR in place rather than stacking one PR per release).
+
+hegel-rust tags every release `v<hegeltest version>` (no GitHub release) and a
+release that includes hegel-c additionally `libhegel-v<hegel-c version>`, with
+the GitHub release and binaries on that tag. Only the latter is a libhegel
+release, so this script works in terms of `libhegel-v` tags throughout.
 
 Requires the GitHub CLI (`gh`) on PATH with `GH_TOKEN` set.
 """
@@ -27,6 +33,7 @@ WORKFLOW_URL = (
 )
 
 VERSION_RE = re.compile(r'^let version = "([^"]+)"', re.MULTILINE)
+TAG_PREFIX = "libhegel-v"
 
 
 def git(*args: str) -> None:
@@ -39,15 +46,27 @@ def get_pinned_version() -> str:
     return m.group(1)
 
 
+def version_of_tag(tag: str) -> str:
+    """The `let version` form ("0.42.4") of a `libhegel-v0.42.4` tag."""
+    if not tag.startswith(TAG_PREFIX):
+        sys.exit(f"expected a {TAG_PREFIX}<version> tag, got {tag!r}")
+    return tag[len(TAG_PREFIX):]
+
+
 def resolve_latest() -> str:
-    # `gh release view` with no tag resolves the latest release; strip the
-    # leading `v` so it matches the `let version` form (e.g. "0.19.0").
-    tag = subprocess.run(
-        ["gh", "release", "view", "--repo", RUST_REPO,
-         "--json", "tagName", "--jq", ".tagName"],
+    # The newest `libhegel-v` tag with a GitHub release. hegel-rust's plain
+    # `v<version>` tags are hegeltest releases without one, but filter on the
+    # prefix rather than trusting "latest" to be a libhegel release.
+    tags = subprocess.run(
+        ["gh", "release", "list", "--repo", RUST_REPO,
+         "--exclude-drafts", "--exclude-pre-releases",
+         "--json", "tagName", "--jq", ".[].tagName"],
         check=True, capture_output=True, text=True,
-    ).stdout.strip()
-    return tag.lstrip("v")
+    ).stdout.split()
+    for tag in tags:
+        if tag.startswith(TAG_PREFIX):
+            return tag
+    sys.exit(f"no {TAG_PREFIX}<version> release found in {RUST_REPO}")
 
 
 def set_pinned_version(version: str) -> None:
@@ -57,22 +76,23 @@ def set_pinned_version(version: str) -> None:
     LOADER.write_text(new_text, encoding="utf-8")
 
 
-def bump(requested: str) -> None:
+def bump(requested_tag: str) -> None:
     current = get_pinned_version()
-    target = requested or resolve_latest()
+    target_tag = requested_tag or resolve_latest()
+    target = version_of_tag(target_tag)
 
     if target == current:
-        print(f"Already pinned to v{current}; nothing to do.")
+        print(f"Already pinned to {target_tag}; nothing to do.")
         return
 
-    # Pin the new version, then regenerate checksums.go-equivalent table.
-    # update-checksums.py reads the version back out of loader.ml, so it must
-    # be written first.
+    # Pin the new version, then regenerate the checksum table.
+    # update-checksums.py reads the version back out of loader.ml (and derives
+    # the libhegel-v tag from it), so it must be written first.
     set_pinned_version(target)
     subprocess.run([sys.executable, str(UPDATE_CHECKSUMS)], check=True, cwd=ROOT)
 
-    current_url = f"https://github.com/{RUST_REPO}/releases/tag/v{current}"
-    new_url = f"https://github.com/{RUST_REPO}/releases/tag/v{target}"
+    current_url = f"https://github.com/{RUST_REPO}/releases/tag/{TAG_PREFIX}{current}"
+    new_url = f"https://github.com/{RUST_REPO}/releases/tag/{target_tag}"
 
     RELEASE_MD.write_text(
         "RELEASE_TYPE: patch\n\n"
@@ -94,7 +114,8 @@ def bump(requested: str) -> None:
 
     title = f"Bump pinned `libhegel` to `{target}`"
     body = (
-        f"This PR bumps our pinned `libhegel` version to `v{target}`.\n"
+        f"This PR bumps our pinned `libhegel` version to `{target}` "
+        f"([`{target_tag}`]({new_url})).\n"
         "\n"
         "---\n"
         "\n"
@@ -126,6 +147,7 @@ def bump(requested: str) -> None:
 
 
 if __name__ == "__main__":
-    # An optional argument pins that exact version; with none we take the
-    # latest. The repository_dispatch trigger passes client_payload.version.
+    # An optional argument pins that exact `libhegel-v<version>` tag; with none
+    # we take the latest libhegel release. The repository_dispatch trigger
+    # passes client_payload.tag.
     bump(sys.argv[1] if len(sys.argv) > 1 else "")

@@ -1,16 +1,18 @@
 name: Bump hegel-rust
 
 on:
-  # Fired by hegel-rust's release workflow; client_payload.version carries the
-  # released version so we pin that exact release rather than racing on latest.
+  # Fired by hegel-rust's release workflow when a release includes hegel-c;
+  # client_payload.tag carries the `libhegel-v<version>` tag the GitHub release
+  # and binaries hang off (client_payload.version is the bare version), so we
+  # pin that exact release rather than racing on latest.
   repository_dispatch:
     types: [hegel-rust-release]
-  # Manual escape hatch: run with an empty version to pin the latest release,
-  # or supply a specific version.
+  # Manual escape hatch: run with an empty tag to pin the latest libhegel
+  # release, or supply a specific `libhegel-v<version>` tag.
   workflow_dispatch:
     inputs:
-      version:
-        description: "hegel-rust version to pin (empty = latest release)"
+      tag:
+        description: "libhegel release tag to pin, e.g. libhegel-v0.42.4 (empty = latest libhegel release)"
         required: false
         default: ""
 
@@ -42,5 +44,5 @@ jobs:
           # hegel-ocaml) reads them fine; gh uses GH_TOKEN for the PR commands.
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           HEGEL_RELEASE_APP_ID: ${{ vars.HEGEL_RELEASE_APP_ID }}
-          VERSION: ${{ github.event.client_payload.version || inputs.version }}
-        run: python .github/scripts/bump_hegel_rust.py "$VERSION"
+          TAG: ${{ github.event.client_payload.tag || inputs.tag }}
+        run: python .github/scripts/bump_hegel_rust.py "$TAG"

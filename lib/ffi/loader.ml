@@ -7,7 +7,7 @@
    [../hegel-rust/target/release/] (then [.../debug/]) checkout relative to the
    current working directory, under the name cargo gives the cdylib
    ([libhegel_c.<ext>]). 4. A SHA-256-verified copy downloaded from the
-   hegel-rust GitHub release, cached under
+   hegel-rust GitHub release tagged [libhegel-v<version>], cached under
    [$XDG_CACHE_HOME|~/.cache]/hegel-ocaml/libhegel/<version>/. Set
    [HEGEL_LIBHEGEL_NO_DOWNLOAD=1] to opt out of the download fallback.
 
@@ -250,10 +250,10 @@ let from_cache_or_download os_id ext =
       failwith
         (Printf.sprintf
            "hegel: no baked-in libhegel checksum for platform %s (not published upstream \
-            for v%s). Build hegel-rust and set HEGEL_LIBHEGEL_PATH to the resulting \
+            for %s). Build hegel-rust and set HEGEL_LIBHEGEL_PATH to the resulting \
             libhegel.%s."
            key
-           version
+           release_tag
            ext)
   in
   let cache_path = Filename.concat (cache_dir ()) (local_basename ext) in
