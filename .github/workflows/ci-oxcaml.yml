@@ -54,7 +54,7 @@ jobs:
           # below must bust the cache, otherwise the restored ~/.opam keeps the
           # old switch and "opam switch create" is skipped by the guard. Keep
           # this version in sync with the ocaml-variants line in "Set up OxCaml".
-          key: opam-oxcaml-${{ runner.os }}-5.2.0+ox-with-test-${{ hashFiles('*.opam') }}
+          key: opam-oxcaml-${{ runner.os }}-5.2.0+ox-with-test-${{ hashFiles('*.opam', '.github/oxcaml-ci.opam') }}
           restore-keys: |
             opam-oxcaml-${{ runner.os }}-5.2.0+ox-with-test-
 
@@ -83,8 +83,15 @@ jobs:
           OPAMSOLVERTIMEOUT: "600"
         run: |
           eval $(opam env)
-          opam install ./*.opam --deps-only --with-test --yes --solver=builtin-0install
-          opam install capsule0 concurrent parallel --yes --solver=builtin-0install
+          # One solver call for everything. The OxCaml-only packages
+          # (capsule0, concurrent, parallel) live in .github/oxcaml-ci.opam,
+          # not hegel.opam, because they exist only in the OxCaml repository.
+          # Installing them in a second `opam install` lets the 0install
+          # solver drop packages the first call installed but this one does
+          # not name: it removed alcotest ("conflicts with uutf") when it
+          # picked uutf 1.0.3+ox for textutils, and the test build failed.
+          opam install ./*.opam .github/oxcaml-ci.opam \
+            --deps-only --with-test --yes --solver=builtin-0install
 
       - name: Stage libhegel from the matching GitHub release
         id: libhegel
