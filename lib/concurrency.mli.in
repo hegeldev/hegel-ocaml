@@ -1,6 +1,20 @@
 (** A concurrent state machine runs each round by passing one body per worker to [spawn_join_n].
     [spawn_join_n] must run all of them at the same time and return their outcomes
-    once every body has finished. The library comes with {!threads} by default. *)
+    once every body has finished. The library comes with {!threads} by default.
+
+    Pass a capability as [~concurrency] to {!Stateful.run_concurrent} or to the
+    [run] of a [module%hegel_concurrent_state_machine]:
+
+    {[
+    let%hegel_test counter tc =
+      Stateful.run_concurrent
+        tc
+        (module Counter)
+        ~init:(Atomic.make 0)
+        ~concurrency:Concurrency.threads
+        ~max_concurrency:4
+    ;;
+    ]} *)
 
 (** The result of one worker body: [None] on success, or the exception it
     raised with its backtrace. *)

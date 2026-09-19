@@ -16,14 +16,19 @@ let preserves_order (cap : C.t) () =
 ;;
 
 let records_raising_body (cap : C.t) () =
-  let outcomes = cap.spawn_join_n ~n:2 ~f:(fun i -> if i = 1 then failwith "boom" else None) in
+  let outcomes =
+    cap.spawn_join_n ~n:2 ~f:(fun i -> if i = 1 then failwith "boom" else None)
+  in
   match outcomes with
   | [ None; Some (Failure msg, _) ] -> Alcotest.(check string) "message" "boom" msg
   | _ -> Alcotest.fail "expected the raising body's exception at index 1"
 ;;
 
 let zero_bodies (cap : C.t) () =
-  Alcotest.(check int) "no outcomes" 0 (List.length (cap.spawn_join_n ~n:0 ~f:(fun _ -> None)))
+  Alcotest.(check int)
+    "no outcomes"
+    0
+    (List.length (cap.spawn_join_n ~n:0 ~f:(fun _ -> None)))
 ;;
 
 let tests_for name cap =
@@ -51,7 +56,11 @@ let domains_bodies_live_together () =
       then None
       else Some (Failure "not all bodies were live at once", Printexc.get_raw_backtrace ()))
   in
-  List.iter (function None -> () | Some (exn, _) -> raise exn) outcomes
+  List.iter
+    (function
+      | None -> ()
+      | Some (exn, _) -> raise exn)
+    outcomes
 ;;
 
 let domains_run_off_the_main_domain () =
@@ -62,13 +71,23 @@ let domains_run_off_the_main_domain () =
       then Some (Failure "body ran on the main domain", Printexc.get_raw_backtrace ())
       else None)
   in
-  List.iter (function None -> () | Some (exn, _) -> raise exn) outcomes
+  List.iter
+    (function
+      | None -> ()
+      | Some (exn, _) -> raise exn)
+    outcomes
 ;;
 
 let domain_tests =
   tests_for "domains" C.domains
-  @ [ Alcotest.test_case "domains bodies live together" `Quick domains_bodies_live_together
-    ; Alcotest.test_case "domains run off the main domain" `Quick domains_run_off_the_main_domain
+  @ [ Alcotest.test_case
+        "domains bodies live together"
+        `Quick
+        domains_bodies_live_together
+    ; Alcotest.test_case
+        "domains run off the main domain"
+        `Quick
+        domains_run_off_the_main_domain
     ]
 ;;
 #else

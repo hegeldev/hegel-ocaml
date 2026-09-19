@@ -60,7 +60,7 @@
 (** {2 Concurrent stateful testing}
 
     {!run_concurrent} with [max_concurrency > 1] runs rules on several workers at
-    once. The engine draws the number of workers in [[min_concurrency, max_concurrency]]. 
+    once. The engine draws the number of workers in [[min_concurrency, max_concurrency]].
     Rules belong to a group. Only rules in the same group may run concurrently. Rules
     without a group all belong to the [<anonymous>] group.
 
@@ -76,7 +76,7 @@
     [module%hegel_concurrent_state_machine M = struct … end]. Mark rules with [[@@rule]]
     for the [<anonymous>] group or [[@@rule "<group>"]] for a specific group. Mark
     invariants with [[@@invariant]] or [[@@invariant always_check]]. The PPX generates
-    the [run] function for the state machine. If the module defines [sexp_of_state], 
+    the [run] function for the state machine. If the module defines [sexp_of_state],
     [run] uses it to print the state after each step.
 
     The example store below has a bug. The store locks individual reads and writes,
@@ -377,17 +377,15 @@ module Concurrent_rule : sig PORTABLE
     : value mod portable contended
 #endif
 
-  (** [create ?group ~name ~step ()] declares a concurrent rule. 
+  (** [create ?group ~name ~step ()] declares a concurrent rule.
 
       - [group] defines the concurrency group of the rule. Only rules
         within the same [group] may run concurrently. Rules without an explicit
-        group are in one anonymous group. 
+        group are in one anonymous group.
       - [name] is printed in the final output when the rule is run.
       - [step tc state] performs one application of the rule, drawing any
         arguments it needs from [tc] and updating [state] in place. [tc] is
-        valid only for that step.    
-      
-  *)
+        valid only for that step. *)
 #ifdef OXCAML
   val create
     :  ?group:string
@@ -439,10 +437,10 @@ module type State_machine = sig
 end
 
 (** [run tc (module M) ~init] executes a stateful test by repeatedly applying
-    randomly chosen rules of [M] to the [init] state. Every invariant is 
-    checked on the initial and the final state. After a step, invariants are 
-    randomly sampled unless they were created with [always_check:true]. Raises 
-    [Hegel.Usage_error] if [M] has no rules or [step_count] is below 1. 
+    randomly chosen rules of [M] to the [init] state. Every invariant is
+    checked on the initial and the final state. After a step, invariants are
+    randomly sampled unless they were created with [always_check:true]. Raises
+    [Hegel.Usage_error] if [M] has no rules or [step_count] is below 1.
     [step_count] defaults to 50. Each case runs at least one step and at most
     [step_count].
 
@@ -502,7 +500,7 @@ module type Concurrent_state_machine = sig
 end
 
 (** [run_concurrent ?concurrency ?step_count ?sexp_of_state tc (module M) ~init ?min_concurrency ?max_concurrency]
-    executes a state machine with N workers, where N is in [[min_concurrency, max_concurrency]]. 
+    executes a state machine with N workers, where N is in [[min_concurrency, max_concurrency]].
     [min_concurrency] defaults to 1 and [max_concurrency] to [min_concurrency].
     In a round, all workers receive zero or more rules from one concurrency group.
 

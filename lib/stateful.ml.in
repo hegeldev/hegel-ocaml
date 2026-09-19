@@ -1,13 +1,13 @@
-(** Stateful property-based testing for Hegel. See [stateful.mli]. 
+(** Stateful property-based testing for Hegel. See [stateful.mli].
     Sequential and concurrent runners have some common code that is
     duplicated, but we have to keep them separate to prevent sequential
     stateful tests needing synchronized state for no reason to satisfy
     the OxCaml mode checker *)
-    
+
 #ifdef OXCAML
 #define CONCURRENCY_ARG (concurrency : Concurrency.t @ local = Concurrency.threads)
 #define LOCAL_CONCURRENCY (concurrency : Concurrency.t @ local)
-#define NONTAIL [@nontail]
+#define NONTAIL [@nontail] (* concurrency is captured as local so the stack frame can't be erased *)
 #else
 #define CONCURRENCY_ARG (concurrency = Concurrency.threads)
 #define LOCAL_CONCURRENCY (concurrency : Concurrency.t)
@@ -349,7 +349,7 @@ let run_concurrent_internal
     ~sexp_of_state
     ~init
     run_steps
-  NONTAIL (* concurrency is captured as local so the stack frame can't be erased *)
+  NONTAIL
 ;;
 
 let run_concurrent
