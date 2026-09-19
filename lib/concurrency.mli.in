@@ -14,7 +14,10 @@
         ~concurrency:Concurrency.threads
         ~max_concurrency:4
     ;;
-    ]} *)
+    ]}
+
+    On OxCaml, {{!page-hegel_jane_concurrent}hegel.jane.concurrent} wraps a
+    Jane Street [Concurrent.t] as a capability. *)
 
 (** The result of one worker body: [None] on success, or the exception it
     raised with its backtrace. *)

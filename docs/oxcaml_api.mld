@@ -1,0 +1,240 @@
+{0 Mode-annotated API}
+
+This page lists every public signature that has a mode in OxCaml.
+
+{1 Module-level defaults}
+
+These modules declare [@@ portable] as their default:
+{!Hegel}, {!Hegel.Generators}, {!Hegel.Derive}, {!Hegel.Settings}, {!Hegel_jane}, 
+{{!page-hegel_jane_concurrent}[Hegel_jane_concurrent]}, and the {!Hegel.Stateful} submodules
+{!Hegel.Stateful.Pool}, {!Hegel.Stateful.Rule}, {!Hegel.Stateful.Invariant},
+and {!Hegel.Stateful.Concurrent_rule}. The {!Hegel.Stateful} runners
+({!Hegel.Stateful.run}, {!Hegel.Stateful.run_concurrent}) are not portable.
+
+{1 Hegel}
+
+{!Hegel.test_case}
+
+{[
+type test_case : value mod portable contended
+]}
+
+{!Hegel.with_printer}
+
+{[
+val with_printer
+  :  ('a -> Sexplib0.Sexp.t) @ portable
+  -> ('a, 'p) generator
+  -> ('a, printable) generator
+]}
+
+{1 Hegel.Generators}
+
+{!Hegel.Generators.generator}
+
+{[
+type ('a, 'p) generator : value mod portable contended
+]}
+
+{!Hegel.Generators.just}
+
+{[
+val just : ('a : value mod portable contended). 'a -> ('a, unprintable) generator
+]}
+
+{!Hegel.Generators.sampled_from}
+
+{[
+val sampled_from
+  : ('a : value mod portable contended). 'a list -> ('a, unprintable) generator
+]}
+
+{!Hegel.Generators.map}
+
+{[
+val map : ('a -> 'b) @ portable -> ('a, 'p) generator -> ('b, unprintable) generator
+]}
+
+{!Hegel.Generators.flat_map}
+
+{[
+val flat_map
+  :  ('a -> ('b, 'q) generator) @ portable
+  -> ('a, 'p) generator
+  -> ('b, unprintable) generator
+]}
+
+{!Hegel.Generators.filter}
+
+{[
+val filter : ('a -> bool) @ portable -> ('a, 'p) generator -> ('a, 'p) generator
+]}
+
+{!Hegel.Generators.composite}
+
+{[
+val composite : (test_case -> 'a) @ portable -> ('a, unprintable) generator
+]}
+
+{!Hegel.Generators.make_characters}
+
+{[
+val make_characters
+  :  of_char:(char -> 'a) @ portable
+  -> sexp_of:('a -> Sexplib0.Sexp.t) @ portable
+  -> unit
+  -> ('a, printable) generator
+]}
+
+{!Hegel.Generators.make_hash_tables}
+
+{[
+val make_hash_tables
+  :  of_pairs:(('a * 'b) list -> 't) @ portable
+  -> sexp_of_t:
+       (('a -> Sexplib0.Sexp.t) -> ('b -> Sexplib0.Sexp.t) -> 't -> Sexplib0.Sexp.t)
+       @ portable
+  -> ('a, printable) generator
+  -> ('b, printable) generator
+  -> ?min_size:int
+  -> ?max_size:int
+  -> unit
+  -> ('t, printable) generator
+]}
+
+{!Hegel.Generators.make_dates}
+
+{[
+val make_dates
+  :  of_date:(date -> 'a) @ portable
+  -> sexp_of:('a -> Sexplib0.Sexp.t) @ portable
+  -> ?min_date:date
+  -> ?max_date:date
+  -> unit
+  -> ('a, printable) generator
+]}
+
+{!Hegel.Generators.make_times}
+
+{[
+val make_times
+  :  of_time:(time -> 'a) @ portable
+  -> sexp_of:('a -> Sexplib0.Sexp.t) @ portable
+  -> ?min_time:time
+  -> ?max_time:time
+  -> unit
+  -> ('a, printable) generator
+]}
+
+{!Hegel.Generators.make_datetimes}
+
+{[
+val make_datetimes
+  :  of_datetime:(date * time -> 'a) @ portable
+  -> sexp_of:('a -> Sexplib0.Sexp.t) @ portable
+  -> ?min_datetime:date * time
+  -> ?max_datetime:date * time
+  -> unit
+  -> ('a, printable) generator
+]}
+
+{!Hegel.Generators.functions}
+
+{[
+val functions
+  :  ?name:string
+  -> ?sexp_of_arg:('a -> Sexplib0.Sexp.t) @ portable
+  -> returns:('b, _) generator
+  -> unit
+  -> ('a -> 'b, unprintable) generator
+]}
+
+{!Hegel.Generators.functions2}
+
+{[
+val functions2
+  :  ?name:string
+  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t) @ portable
+  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t) @ portable
+  -> returns:('c, _) generator
+  -> unit
+  -> ('a -> 'b -> 'c, unprintable) generator
+]}
+
+{!Hegel.Generators.functions3}
+
+{[
+val functions3
+  :  ?name:string
+  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t) @ portable
+  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t) @ portable
+  -> ?sexp_of_arg3:('c -> Sexplib0.Sexp.t) @ portable
+  -> returns:('d, _) generator
+  -> unit
+  -> ('a -> 'b -> 'c -> 'd, unprintable) generator
+]}
+
+{1 Hegel.Stateful}
+
+{!Hegel.Stateful.Pool.t}
+
+{[
+type ('a : value mod portable contended) t : value mod portable contended
+]}
+
+{!Hegel.Stateful.Pool.create}
+
+{[
+val create : ?clone:('a -> 'a) @ portable -> test_case -> 'a t
+]}
+
+{!Hegel.Stateful.Concurrent_rule.t}
+
+{[
+type 'state t : value mod portable contended
+]}
+
+{!Hegel.Stateful.Concurrent_rule.create}
+
+{[
+val create
+  :  ?group:string
+  -> name:string
+  -> step:(test_case -> 'state @ contended -> unit) @ portable
+  -> unit
+  -> 'state t
+]}
+
+{!Hegel.Stateful.run_concurrent}
+
+{[
+val run_concurrent
+  :  ?concurrency:Concurrency.t @ local
+  -> ?min_concurrency:int
+  -> ?max_concurrency:int
+  -> ?step_count:int
+  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+  -> test_case
+  -> (module Concurrent_state_machine with type state = 'state)
+  -> init:'state @ portable
+  -> unit
+]}
+
+{1 Hegel.Concurrency}
+
+{!Hegel.Concurrency.t}
+
+{[
+type t =
+  { spawn_join_n :
+      n:int -> (f:(int -> outcome) @ portable -> outcome list @ contended) @ local
+  }
+]}
+
+{1 Hegel_jane_concurrent}
+
+{{!page-hegel_jane_concurrent}[of_concurrent]}
+
+{[
+val of_concurrent : _ Concurrent.t @ local -> Hegel.Concurrency.t @ local
+]}

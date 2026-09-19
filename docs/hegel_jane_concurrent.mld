@@ -1,0 +1,32 @@
+{0 Hegel_jane_concurrent}
+
+{2 Introduction} 
+Runs Hegel's concurrent state machines on Jane Street's [Concurrent] library.
+This is the optional [hegel.jane.concurrent] sublibrary, available on OxCaml
+only.
+
+The caller passes a wrapped capability to {!Hegel.Stateful.run_concurrent} or
+to the [run] of a [module%hegel_concurrent_state_machine]:
+
+{[
+let%hegel_test counter tc =
+  Concurrent_in_thread.with_blocking Await.Terminator.unkillable ~f:(fun concurrent ->
+    Counter.run
+      tc
+      ~concurrency:(Hegel_jane_concurrent.of_concurrent concurrent)
+      ~init:(Atomic.make 0)
+      ~max_concurrency:4 [@nontail])
+;;
+]}
+
+To ensure progress, the concurrency capability should ensure that all workers are 
+live at once and that no worker waits on another worker.
+
+{2 Interface}
+
+{[
+val of_concurrent : _ Concurrent.t @ local -> Hegel.Concurrency.t @ local
+]}
+
+[of_concurrent c] runs each round's workers as tasks of [c].
+
