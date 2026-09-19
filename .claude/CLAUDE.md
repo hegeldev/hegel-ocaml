@@ -431,7 +431,7 @@ the `Ffi` wrappers `check_rc` before reading it.
 
 Who owns what in hegel-ocaml:
 - collections → `Generators_core.with_collection` (`Fun.protect`, so a
-  `Data_exhausted` mid-draw still frees)
+  `Stop_test` mid-draw still frees)
 - state machines → `Stateful.run`, the same way
 - blocks → `Internal.with_block` (`Fun.protect`, freed with its context when
   the body returns or raises), mirroring hegel-rust's lexically scoped
@@ -605,7 +605,7 @@ validated by `hegel_new_state_machine`); only the initial `hegel_settings_new`
 can, on a bad profile configuration, raising `Usage_error`.
 The client controls when a final run occurs. Exceptions map to
 `Ffi.mark_complete` statuses: VALID, INVALID (`Assume_rejected`/`Flaky_strategy`),
-OVERRUN (`Data_exhausted` from a `Stop_test` during a primitive), INTERESTING
+OVERRUN (`Stop_test`, the engine's stop signal during a primitive), INTERESTING
 (any other exception, with a location-derived origin from `extract_origin`).
 Interesting exceptions are captured by origin so the final-replay exception is
 re-raised; after the loop, `Ffi.run_result` failures are raised (single) or
@@ -655,8 +655,9 @@ are. Results go back as an `outcome list`, not an array, because on OxCaml a
 contended array cannot be read. Once any domain has been spawned `Unix.fork`
 fails for the rest of the process, so `test_hegel.ml` runs the forking
 `loader` suite first. Jane Street's `Concurrent` library is OxCaml-only and
-depends on `core`; its adapter belongs in an optional sublibrary (Phase 3 in
-`plan.md`). See `plan.md` for the OxCaml portability phase.
+depends on `core`, which is why its adapter is the optional
+`hegel.jane.concurrent` sublibrary. See `plan.md` for the OxCaml portability
+phase.
 
 ### OxCaml portability (cppo, modes, the trust boundary)
 
@@ -744,8 +745,11 @@ parameter or return mode), `CROSSING` = `: value mod portable contended`.
   nonportable; use `failwith`.
 - **Building locally.** `dune build --build-dir _build_ox …` in the
   `5.2.0+ox` switch (delete `_build_ox` afterwards). The ox CI job installs
-  `capsule0`. ocamlformat cannot parse OxCaml syntax: `.in` files are
-  outside `dune fmt`, and `lib/locked.capsule.ml` is in `.ocamlformat-ignore`.
+  `capsule0`, `concurrent`, and `parallel` from `.github/oxcaml-ci.opam`, in
+  the same `opam install` as the with-test deps (a second solver call can
+  drop packages the first one installed). ocamlformat cannot parse OxCaml
+  syntax: `.in` files are outside `dune fmt`, and `lib/locked.capsule.ml` is
+  in `.ocamlformat-ignore`.
 
 ## Key Patterns and Conventions
 
@@ -777,7 +781,7 @@ parameter or return mode), `CROSSING` = `: value mod portable contended`.
 ### Error Handling
 
 - `Internal.Assume_rejected` — raised by `assume false`; mapped to `mark_complete INVALID`
-- `Internal.Data_exhausted` — raised when StopTest is received; skips `mark_complete`
+- `Internal.Stop_test` — raised when the engine signals StopTest (choice exhaustion); mapped to `mark_complete OVERRUN`
 - `Hegel_ffi.Ffi.Usage_error` (re-exported as `Hegel.Usage_error`) — raised by `check_rc` on `HEGEL_E_INVALID_ARG`; `run_test_case` re-raises it untouched (no `mark_complete`, no shrinking), mirroring hegel-rust's `InvalidArgument` unwind. Generators therefore don't duplicate engine-side argument validation
 
 ### Typed Draws (no schema)

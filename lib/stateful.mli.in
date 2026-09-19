@@ -59,7 +59,7 @@
 
 (** {2 Concurrent stateful testing}
 
-    {!run} with [~max_concurrency] above 1 runs rules on several workers at
+    {!run_concurrent} with [max_concurrency > 1] runs rules on several workers at
     once. The engine draws the number of workers in [[min_concurrency, max_concurrency]]. 
     Rules belong to a group. Only rules in the same group may run concurrently. Rules
     without a group all belong to the [<anonymous>] group.
@@ -74,7 +74,7 @@
 
     With the [ppx_hegel_test] PPX, a concurrent state machine is a module written as
     [module%hegel_concurrent_state_machine M = struct … end]. Mark rules with [[@@rule]]
-    for the [anonymous] group or [[@@rule "<group>"]] for a specific group. Mark
+    for the [<anonymous>] group or [[@@rule "<group>"]] for a specific group. Mark
     invariants with [[@@invariant]] or [[@@invariant always_check]]. The PPX generates
     the [run] function for the state machine. If the module defines [sexp_of_state], 
     [run] uses it to print the state after each step.
@@ -377,10 +377,17 @@ module Concurrent_rule : sig PORTABLE
     : value mod portable contended
 #endif
 
-  (** [create ?group ~name ~step ()] declares a concurrent rule. Only rules
-      with the same [group] may run concurrently. Rules without an explicit
-      group are in one anonymous group. [step tc state] performs one
-      application of the rule. *)
+  (** [create ?group ~name ~step ()] declares a concurrent rule. 
+
+      - [group] defines the concurrency group of the rule. Only rules
+        within the same [group] may run concurrently. Rules without an explicit
+        group are in one anonymous group. 
+      - [name] is printed in the final output when the rule is run.
+      - [step tc state] performs one application of the rule, drawing any
+        arguments it needs from [tc] and updating [state] in place. [tc] is
+        valid only for that step.    
+      
+  *)
 #ifdef OXCAML
   val create
     :  ?group:string
@@ -397,7 +404,10 @@ module Concurrent_rule : sig PORTABLE
     -> 'state t
 #endif
 
+  (** Returns the name of the rule. *)
   val name : _ t -> string
+
+  (** Returns the concurrency group of the rule. *)
   val group : _ t -> string
 end
 
@@ -491,8 +501,9 @@ module type Concurrent_state_machine = sig
   val invariants : state Invariant.t list
 end
 
-(** [run_concurrent ?concurrency ?step_count ?sexp_of_state tc (module M) ~init ~min_concurrency ~max_concurrency]
-    executes a state machine with N workers, where N is in [[min_concurrency, max_concurrency]].
+(** [run_concurrent ?concurrency ?step_count ?sexp_of_state tc (module M) ~init ?min_concurrency ?max_concurrency]
+    executes a state machine with N workers, where N is in [[min_concurrency, max_concurrency]]. 
+    [min_concurrency] defaults to 1 and [max_concurrency] to [min_concurrency].
     In a round, all workers receive zero or more rules from one concurrency group.
 
     Invariants are checked on the initial and final state and sampled between

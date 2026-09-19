@@ -1,6 +1,4 @@
-(** How a concurrent stateful test runs its workers.
-
-    A concurrent state machine runs each round by passing one body per worker.
+(** A concurrent state machine runs each round by passing one body per worker to [spawn_join_n].
     [spawn_join_n] must run all of them at the same time and return their outcomes
     once every body has finished. The library comes with {!threads} by default. *)
 
@@ -25,7 +23,7 @@ type t = { spawn_join_n : n:int -> f:(int -> outcome) -> outcome list }
 val threads : t
 
 #ifndef OXCAML
-(** Runs the bodies in parallel on a pool of [Domain.recommended_domain_count () - 1]
+(** Runs the bodies in parallel on a pool of [[1, Domain.recommended_domain_count () - 1]]
     domains. Each body runs on its own systhread inside a domain. *)
 val domains : t
 #endif
