@@ -28,17 +28,14 @@ printf 'second half of the payload' >> "$out"
 ;;
 
 (* Set up a tempdir containing the stubbed [curl] and pass its path, the PATH
-   value that puts the stub first, and the payload's checksum to [f]. The
-   checksum is computed with the loader's own [sha256_of_file] so the test
-   agrees with the implementation about hashing. *)
+   value that puts the stub first, and an independently computed SHA-256
+   checksum of the payload to [f]. *)
 let with_download_fixture ~f =
   Test_helpers.with_tempdir ~prefix:"hegel-loader-test-" ~f:(fun dir ->
     let curl_path = Filename.concat dir "curl" in
     Out_channel.write_all curl_path ~data:fake_curl_script;
     Core_unix.chmod curl_path ~perm:0o755;
-    let reference = Filename.concat dir "reference-payload" in
-    Out_channel.write_all reference ~data:payload;
-    let expected = Loader.sha256_of_file reference in
+    let expected = "69d91e90de5efd13c7d722f8bac95cf77c3ef7f957203e8753828e8f6b1c8637" in
     let stub_path =
       dir ^ ":" ^ Option.value (Sys.getenv "PATH") ~default:"/usr/bin:/bin"
     in

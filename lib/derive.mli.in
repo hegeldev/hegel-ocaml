@@ -1,3 +1,6 @@
+#ifdef OXCAML
+@@ portable
+#endif
 (** The type [foo] resolves to [hegel_generator_foo], and the type [t] in a
     module [M] resolves to [M.hegel_generator].
 

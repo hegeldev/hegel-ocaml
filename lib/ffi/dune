@@ -18,3 +18,21 @@
 (generate_sites_module
  (module hegel_sites)
  (sites hegel))
+
+(rule
+ (target cppo-flags)
+ (action
+  (with-stdout-to
+   %{target}
+   (bash
+    "case '%{ocaml_version}' in *+ox*) echo '-D';; *) echo '-U';; esac; echo OXCAML"))))
+
+(rule
+ (target ffi.mli)
+ (action
+  (run %{bin:cppo} %{read-strings:cppo-flags} -o %{target} %{dep:ffi.mli.in})))
+
+(rule
+ (target ffi.ml)
+ (action
+  (run %{bin:cppo} %{read-strings:cppo-flags} -o %{target} %{dep:ffi.ml.in})))

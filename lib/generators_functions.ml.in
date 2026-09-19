@@ -15,6 +15,12 @@
 
 open Generators_core
 
+#ifdef OXCAML
+#define PFN @ portable
+#else
+#define PFN
+#endif
+
 (* [make ~explicit_name ~sexp_of_arg ~returns ~adapt] builds the shared function
    core behind {!functions}/{!functions2}/{!functions3}. [adapt] is the identity
    function, or currying for the multi-argument variants. [sexp_of_arg] renders
@@ -25,9 +31,9 @@ open Generators_core
 let make
   : type a b c p.
     string option
-    -> (a -> Sexp.t)
+    -> (a -> Sexp.t) PFN
     -> (b, p) generator
-    -> ((a -> b) -> c)
+    -> ((a -> b) -> c) PFN
     -> (c, unprintable) generator
   =
   fun explicit_name sexp_of_arg returns adapt ->
@@ -75,8 +81,9 @@ let make
     }
 ;;
 
-let sexp_or sexp_of_arg =
-  Option.value sexp_of_arg ~default:(fun _ -> Sexp.Atom "<opaque>")
+let sexp_or : type a. (a -> Sexp.t) option PFN -> (a -> Sexp.t) PFN = function
+  | Some sexp_of_arg -> sexp_of_arg
+  | None -> fun _ -> Sexp.Atom "<opaque>"
 ;;
 
 (** [functions ?name ?sexp_of_arg ~returns ()] creates a generator for functions

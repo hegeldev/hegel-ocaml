@@ -117,8 +117,10 @@ let test_passing_writes_sdk_jsonl () =
 let test_failing_writes_condition_false () =
   with_tempdir ~f:(fun dir ->
     with_env_dir dir ~f:(fun () ->
-      (try simple_fail () with
-       | _ -> ());
+      (match simple_fail () with
+       | () -> Alcotest.fail "expected the PPX wrapper to re-raise the failure"
+       | exception Failure msg ->
+         Alcotest.(check string) "original failure" "deliberate failure" msg);
       let path = Filename.concat dir "sdk.jsonl" in
       Alcotest.(check bool) "sdk.jsonl exists" true (Stdlib.Sys.file_exists path);
       let lines = In_channel.read_all path |> String.split_lines in
@@ -140,13 +142,13 @@ let invariant_checks = ref 0
 module%hegel_state_machine Counter = struct
   let bump tc n =
     let by = Hegel.draw tc (Hegel.integers ~min_value:1 ~max_value:3 ()) in
-    n + by
+    n := !n + by
   [@@rule]
   ;;
 
   let positive _tc n =
     incr invariant_checks;
-    assert (n >= 0)
+    assert (!n >= 0)
   [@@invariant always_check]
   ;;
 
@@ -155,7 +157,7 @@ end
 
 let%hegel_test runs_machine (tc : Hegel.test_case) =
   invariant_checks := 0;
-  Counter.run tc ~init:0 ~step_count:5;
+  Counter.run tc ~init:(ref 0) ~step_count:5;
   assert (!invariant_checks > 2)
 [@@settings Hegel.Settings.create ~test_cases:3 ()]
 ;;

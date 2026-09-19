@@ -1,0 +1,595 @@
+#ifdef OXCAML
+#define PFN @ portable
+#define PORTABLE @@ portable
+#else
+#define PFN
+#define PORTABLE
+#endif
+(** {2 Introduction}
+    A stateful test applies a random sequence of rules to a state. A rule is a
+    [step] function that takes the test case and the state, draws whatever
+    data it needs, and updates the state in place. An invariant is a property
+    that must hold after each step.
+
+    With the [ppx_hegel_test] PPX, a state machine is a module written as
+    [module%hegel_state_machine M = struct … end]. Mark rules with [[@@rule]]
+    and invariants with [[@@invariant]] or [[@@invariant always_check]].
+    The PPX generates the [run] function for the state machine. If the module
+    defines [sexp_of_state], [run] uses it to print the state after each step.
+
+    Without the PPX, create rules with {!Rule.create} and the invariants
+    with {!Invariant.create}, put them in a module of type {!State_machine},
+    and pass that to {!run}.
+
+    Every invariant is checked on the initial and final states. Between steps,
+    invariants are sampled unless marked [always_check].
+
+    Examples in this documentation assume [open Hegel].
+
+    Example: an integer stack.
+
+    {[
+    module%hegel_state_machine Stack = struct
+      type state = int list ref
+
+      let sexp_of_state stack = sexp_of_list sexp_of_int !stack
+
+      let push tc stack =
+        let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
+        stack := n :: !stack
+      [@@rule]
+      ;;
+
+      let pop tc stack =
+        match !stack with
+        | [] -> assume tc false
+        | _ :: rest -> stack := rest
+      [@@rule]
+      ;;
+
+      let short tc stack =
+        note tc (Printf.sprintf "%d elements" (List.length !stack));
+        assert (List.length !stack < 10)
+      [@@invariant always_check]
+      ;;
+    end
+
+    let%hegel_test integer_stack tc = Stack.run tc ~init:(ref [])
+    ]} *)
+
+(** {2 Concurrent stateful testing}
+
+    {!run_concurrent} with [max_concurrency > 1] runs rules on several workers concurrently. 
+    libhegel draws the number of workers in [[min_concurrency, max_concurrency]].
+    Rules belong to a group, and only rules in the same group may run concurrently. Rules
+    without a group all belong to the [<anonymous>] group.
+
+    A round is a step of a concurrent test. Each round selects one rule group,
+    and each worker runs a sequence of rules from that group. Invariants run
+    after all workers finish the round.
+
+    How the workers run is a {!Concurrency.t}. The default implementation is
+    {!Concurrency.threads}, which puts workers on systhreads. See {!Concurrency}
+    for more details.
+
+    With the [ppx_hegel_test] PPX, a concurrent state machine is a module written as
+    [module%hegel_concurrent_state_machine M = struct … end]. Mark rules with [[@@rule]]
+    for the [<anonymous>] group or [[@@rule "<group>"]] for a specific group. Mark
+    invariants with [[@@invariant]] or [[@@invariant always_check]]. The PPX generates
+    the [run] function for the state machine. If the module defines [sexp_of_state],
+    [run] uses it to print the state after each step.
+
+    The example store below has a bug. The store locks individual reads and writes,
+    but releases the lock between reading a counter and writing its incremented value.
+    Two workers can therefore overwrite each other's updates.
+
+    {[
+    module Store = struct
+      type t =
+        { lock : Mutex.t
+        ; values : (int, int) Hashtbl.t
+        }
+
+      let create () = { lock = Mutex.create (); values = Hashtbl.create 4 }
+
+      let get store key =
+        Mutex.protect store.lock (fun () -> Hashtbl.find_opt store.values key)
+      ;;
+
+      let put store key value =
+        Mutex.protect store.lock (fun () -> Hashtbl.replace store.values key value)
+      ;;
+
+      let put_if_absent store key =
+        Mutex.protect store.lock (fun () ->
+          if Hashtbl.mem store.values key
+          then false
+          else (
+            Hashtbl.add store.values key 0;
+            true))
+      ;;
+
+      let increment store key =
+        let value = Option.value (get store key) ~default:0 in
+        put store key (value + 1)
+      ;;
+
+      let snapshot store = Mutex.protect store.lock (fun () -> Hashtbl.copy store.values)
+    end
+
+    module%hegel_concurrent_state_machine Key_value_store = struct
+      type state =
+        { store : Store.t
+        ; keys : int Stateful.Pool.t
+        ; increments : int Atomic.t
+        }
+
+      let register tc state =
+        let key = draw tc (integers ~min_value:0 ~max_value:3 ()) in
+        if Store.put_if_absent state.store key then Stateful.Pool.add state.keys tc key
+      [@@rule "operations"]
+      ;;
+
+      let increment tc state =
+        let key = draw_silent tc (Stateful.Pool.values_reusable state.keys) in
+        Store.increment state.store key;
+        Atomic.incr state.increments
+      [@@rule "operations"]
+      ;;
+
+      let read tc state =
+        let key = draw_silent tc (Stateful.Pool.values_reusable state.keys) in
+        match Store.get state.store key with
+        | Some value -> note tc (Printf.sprintf "read %d -> %d" key value)
+        | None -> note tc (Printf.sprintf "key %d is absent" key)
+      [@@rule "operations"]
+      ;;
+
+      let snapshot tc state =
+        let count = Hashtbl.length (Store.snapshot state.store) in
+        note tc (Printf.sprintf "snapshot holds %d keys" count)
+      [@@rule "snapshot"]
+      ;;
+
+      let no_lost_updates _tc state =
+        let stored =
+          Hashtbl.fold (fun _ value total -> total + value) (Store.snapshot state.store) 0
+        in
+        let performed = Atomic.get state.increments in
+        if stored <> performed
+        then
+          failwith
+            (Printf.sprintf
+               "increments were lost: store sums to %d after %d increments"
+               stored
+               performed)
+      [@@invariant always_check]
+      ;;
+    end
+
+    let%hegel_test concurrent_store tc =
+      let init : Key_value_store.state =
+        { store = Store.create ()
+        ; keys = Stateful.Pool.create tc
+        ; increments = Atomic.make 0
+        }
+      in
+      Key_value_store.run tc ~init ~max_concurrency:4
+    ;;
+    ]}
+
+    The [operations] group allows registration, increments, and reads to overlap.
+    The [snapshot] group runs separately. The invariant compares stored values
+    with an atomic count of completed increments.
+
+    With [max_concurrency > 1], failures are reported without shrinking, replay,
+    database persistence, or reproduction blobs.
+
+    In the failure output, each rule execution is labeled with its worker and the
+    time in milliseconds since the test case began to aid debugging.
+
+    {v
+    --- Failure: concurrent_store (...) -------------------------
+
+    Concurrency level: 4
+    ---------------- Round 1: group "operations" ----------------
+    [worker 2 +0.238ms] Rule: register
+    [worker 2 +0.246ms]   key = 0
+    ...
+    [worker 2 +0.261ms] Rule: read
+    [worker 2 +0.263ms]   read 2 -> 0
+    ...
+    [worker 3 +0.223ms] Rule: increment
+    ...
+    ---------------- Round 2: group "snapshot" ------------------
+    [worker 0 +0.363ms] Rule: snapshot
+    [worker 0 +0.365ms]   snapshot holds 3 keys
+    ...
+    ---------------- Round 3: group "operations" ----------------
+    [worker 0 +0.486ms] Rule: increment
+    ...
+    [worker 1 +0.464ms] Rule: register
+    [worker 1 +0.468ms]   key = 1
+    ...
+    [worker 2 +0.509ms] Rule: increment
+    ...
+    [worker 3 +0.479ms] Rule: increment
+    Invariant no_lost_updates violated after round 3.
+
+    Exception: Failure("increments were lost: store sums to 11 after 12 increments")
+    v} *)
+
+(** {3 OxCaml}
+
+    On OxCaml this library is mode-checked, so the compiler rejects data races
+    in concurrent rule bodies. {{!page-oxcaml_api}Mode-annotated API} lists
+    every public signature that has a mode.
+
+    {!Concurrent_rule.create}'s [step] is [@@ portable] and receives the state
+    [@ contended], and {!run_concurrent} takes [~init] [@ portable].
+
+    [map], [filter], [composite], and [with_printer] take portable functions. The
+    element types of [just], [sampled_from], and {!Pool.t} must cross modes
+    ([value mod portable contended]). Generators derived with [Hegel_jane.Derive] 
+    are portable.
+
+    The [?concurrency] capability is [@ local]. Also, see {{!page-hegel_jane_concurrent}hegel.jane.concurrent}. *)
+
+(** {2 Submodules} *)
+
+module Pool : sig PORTABLE
+  (** A pool of previously generated values. 
+  
+      Rules can add to it and draw from it, so a rule can use values that a
+      another rule produced rather than on a new drawn value. Every operation is
+      safe to call from several workers at once.
+
+      Create one with {!create} and populate it with {!add}. To draw from the
+      pool, use the following generators:
+      - {!values_reusable}: drawing from it returns a value in the pool without
+        removing it.
+      - {!values_consumed}: drawing from it removes a value from the pool and
+        returns it.
+
+      Example: a resource allocator. The [alloc] rule creates a new handle and
+      deposits it in the pool. The [free] rule draws one of those handles back
+      out and releases it. Without a pool, [free] would have no way to name a
+      handle that a previous [alloc] actually created. It could only draw an
+      arbitrary integer, most of which name no live resource.
+
+      {[
+      type state =
+        { mutable live : int list
+        ; handles : int Stateful.Pool.t
+        }
+
+      let alloc =
+        Stateful.Rule.create ~name:"alloc" ~step:(fun tc state ->
+          let h = fresh_handle () in
+          Stateful.Pool.add state.handles tc h;
+          state.live <- h :: state.live)
+      ;;
+
+      let free =
+        Stateful.Rule.create ~name:"free" ~step:(fun tc state ->
+          (* draws a handle a prior [alloc] put in the pool *)
+          let h = draw_silent tc (Stateful.Pool.values_consumed state.handles) in
+          release h;
+          state.live <- List.filter (fun x -> x <> h) state.live)
+      ;;
+      ]} *)
+#ifdef OXCAML
+  type ('a : value mod portable contended) t : value mod portable contended
+#else
+  type 'a t
+#endif
+
+  (** Creates an empty pool. Pools are tied to a test case. Do not reuse one
+      across test cases. Drawn mutable values are shared by default. Pass a
+      copying function for independent mutable values. Consumed draws return
+      the stored value directly. [clone] must not call back into the same
+      pool. *)
+  val create : ?clone:('a -> 'a) PFN -> Internal.test_case -> 'a t
+
+  (** [add pool tc value] records [value] in [pool].
+
+      {[
+      let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
+      Stateful.Pool.add pool tc n
+      ]} *)
+  val add : 'a t -> Internal.test_case -> 'a -> unit
+
+  (** Returns the number of values in the pool.
+
+      {[
+      assume tc (Stateful.Pool.size pool > 0)
+      ]} *)
+  val size : _ t -> int
+
+  (** Draws a value without removing it. A draw from an empty pool rejects the
+      current rule.
+
+      {[
+      let existing = draw_silent tc (Stateful.Pool.values_reusable pool)
+      ]} *)
+  val values_reusable : 'a t -> ('a, Generators.unprintable) Generators.generator
+
+  (** Draws and removes a value. A draw from an empty pool rejects the current
+      rule.
+
+      {[
+      let taken = draw_silent tc (Stateful.Pool.values_consumed pool)
+      ]} *)
+  val values_consumed : 'a t -> ('a, Generators.unprintable) Generators.generator
+end
+
+module Rule : sig PORTABLE
+  (** One possible action in a sequential stateful test. *)
+
+  type 'state t
+
+  (** Declares a rule.
+
+      - [name] is printed in the final output when the rule is run.
+      - [step tc state] performs one application of the rule, drawing any
+        arguments it needs from [tc] and updating [state] in place. [tc] is
+        valid only for that step.
+
+      To trace the state on a failing replay, pass [?sexp_of_state] to {!run}.
+
+      {[
+      let push =
+        Stateful.Rule.create ~name:"push" ~step:(fun tc stack ->
+          let n = draw tc (integers ~min_value:0 ~max_value:100 ()) in
+          stack := n :: !stack)
+      ;;
+      ]} *)
+  val create : name:string -> step:(Internal.test_case -> 'state -> unit) -> 'state t
+
+  (** Returns the name of the rule.
+
+      {[
+      let label = Stateful.Rule.name push
+      ]} *)
+  val name : _ t -> string
+end
+
+module Invariant : sig PORTABLE
+  (** A property that must always be true in a stateful test. *)
+
+  type 'state t
+
+  (** Declares an invariant.
+
+      - [name] is printed in the final output if the test fails on an invariant
+      - [inv tc state] checks the invariant on [state]. Anything it draws or
+        notes through [tc] prints indented under the line before it.
+      - [always_check] defaults to [false]. When [true], the invariant is
+        checked after every step. Otherwise, it is sampled.
+
+      Every invariant is checked on the initial and final states.
+
+      {[
+      let short =
+        Stateful.Invariant.create
+          ~name:"short"
+          ~inv:(fun _tc stack -> assert (List.length !stack < 10))
+          ()
+      ;;
+      ]} *)
+  val create
+    :  name:string
+    -> inv:(Internal.test_case -> 'state -> unit)
+    -> ?always_check:bool
+    -> unit
+    -> 'state t
+
+  (** Returns the name of the invariant. *)
+  val name : _ t -> string
+end
+
+module Concurrent_rule : sig PORTABLE
+  (** One possible action in a concurrent stateful test. *)
+
+  type 'state t
+#ifdef OXCAML
+    : value mod portable contended
+#endif
+
+  (** [create ?group ~name ~step ()] declares a concurrent rule.
+
+      - [group] defines the concurrency group of the rule. Only rules
+        within the same [group] may run concurrently. Rules without an explicit
+        group are in one anonymous group.
+      - [name] is printed in the final output when the rule is run.
+      - [step tc state] performs one application of the rule, drawing any
+        arguments it needs from [tc] and updating [state] in place. [tc] is
+        valid only for that step. *)
+#ifdef OXCAML
+  val create
+    :  ?group:string
+    -> name:string
+    -> step:(Internal.test_case -> 'state @ contended -> unit) @ portable
+    -> unit
+    -> 'state t
+#else
+  val create
+    :  ?group:string
+    -> name:string
+    -> step:(Internal.test_case -> 'state -> unit)
+    -> unit
+    -> 'state t
+#endif
+
+  (** Returns the name of the rule. *)
+  val name : _ t -> string
+
+  (** Returns the concurrency group of the rule. *)
+  val group : _ t -> string
+end
+
+(** {2 Running stateful tests} *)
+
+(** A sequential state machine.
+
+    {[
+    module Counter : Stateful.State_machine with type state = int ref = struct
+      type state = int ref
+
+      let add tc n =
+        n := !n + draw ~label:"by" tc (integers ~min_value:1 ~max_value:10 ())
+      ;;
+
+      let rules = [ Stateful.Rule.create ~name:"add" ~step:add ]
+
+      let invariants =
+        [ Stateful.Invariant.create ~name:"small" ~inv:(fun _tc n -> assert (!n < 100)) ()
+        ]
+      ;;
+    end
+    ]} *)
+module type State_machine = sig
+  type state
+
+  val rules : state Rule.t list
+  val invariants : state Invariant.t list
+end
+
+(** [run tc (module M) ~init] executes a stateful test by applying
+    randomly chosen rules of [M] to the [init] state. Every invariant is
+    checked on the initial and the final state. After a step, invariants are
+    randomly sampled unless they were created with [always_check:true]. Raises
+    [Hegel.Usage_error] if [M] has no rules or [step_count] is below 1.
+    [step_count] defaults to 50. Each case runs at least one step and at most
+    [step_count].
+
+    {[
+    let%hegel_test counter tc =
+      Stateful.run tc (module Counter) ~init:(ref 0) ~step_count:200
+    ;;
+    ]}
+
+    A [module%hegel_state_machine M] has an [M.run tc ~init], which
+    calls this function on [M].
+
+    On a failing replay, each applied rule prints as [Step N: <name>], with the
+    printed draws and notes nested under it. When [sexp_of_state] is supplied,
+    the state is also printed after the initial state and after every step.
+
+    {v
+      state = 0
+      Step 1: add
+        by = 3
+      state = 3
+      Step 2: add
+        by = 7
+      state = 10
+      Invariant small violated after step 2.
+    v} *)
+val run
+  :  ?step_count:int
+  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+  -> Internal.test_case
+  -> (module State_machine with type state = 'state)
+  -> init:'state
+  -> unit
+
+(**/**)
+
+(** [run_internal ~init ~rules ~invariants tc] is {!run} with the rules and
+    invariants passed as lists. The [run] that a [module%hegel_state_machine]
+    generates calls this. *)
+val run_internal
+  :  init:'state
+  -> rules:'state Rule.t list
+  -> invariants:'state Invariant.t list
+  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+  -> ?step_count:int
+  -> Internal.test_case
+  -> unit
+
+(**/**)
+
+(** A state machine whose rules may run concurrently. *)
+module type Concurrent_state_machine = sig
+  type state
+
+  val rules : state Concurrent_rule.t list
+  val invariants : state Invariant.t list
+end
+
+(** [run_concurrent ?concurrency ?step_count ?sexp_of_state tc (module M) ~init ?min_concurrency ?max_concurrency]
+    executes a state machine with N workers, where N is in [[min_concurrency, max_concurrency]].
+    [min_concurrency] defaults to 1 and [max_concurrency] to [min_concurrency].
+
+    If [sexp_of_state] is provided, the state is printed before the first round
+    and after each completed round.
+
+    [step_count] defaults to 50 and bounds the number of rounds per test case.
+    Each worker may execute multiple rules in a round.
+
+    A [max_concurrency] greater than one makes the run nondeterministic. libhegel
+    consequently reports a failure without replaying, shrinking or producing a failure
+    blob.
+
+    [concurrency] runs each round's workers. See {!Concurrency}. It defaults to
+    {!Concurrency.threads}, which puts workers on systhreads.
+
+    Raises [Hegel.Usage_error] if [M] has no rules, [step_count] is below 1,
+    or the bounds do not satisfy [1 <= min_concurrency <= max_concurrency]. *)
+#ifdef OXCAML
+val run_concurrent
+  :  ?concurrency:Concurrency.t @ local
+  -> ?min_concurrency:int
+  -> ?max_concurrency:int
+  -> ?step_count:int
+  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+  -> Internal.test_case
+  -> (module Concurrent_state_machine with type state = 'state)
+  -> init:'state @ portable
+  -> unit
+#else
+val run_concurrent
+  :  ?concurrency:Concurrency.t
+  -> ?min_concurrency:int
+  -> ?max_concurrency:int
+  -> ?step_count:int
+  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+  -> Internal.test_case
+  -> (module Concurrent_state_machine with type state = 'state)
+  -> init:'state
+  -> unit
+#endif
+
+(**/**)
+
+(** [run_concurrent_internal ~init ~rules ~invariants tc] is
+    {!run_concurrent} with the rules and invariants passed as lists. The [run]
+    that a [module%hegel_concurrent_state_machine] generates calls this. *)
+#ifdef OXCAML
+val run_concurrent_internal
+  :  init:'state @ portable
+  -> rules:'state Concurrent_rule.t list
+  -> invariants:'state Invariant.t list
+  -> ?concurrency:Concurrency.t @ local
+  -> ?min_concurrency:int
+  -> ?max_concurrency:int
+  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+  -> ?step_count:int
+  -> Internal.test_case
+  -> unit
+#else
+val run_concurrent_internal
+  :  init:'state
+  -> rules:'state Concurrent_rule.t list
+  -> invariants:'state Invariant.t list
+  -> ?concurrency:Concurrency.t
+  -> ?min_concurrency:int
+  -> ?max_concurrency:int
+  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+  -> ?step_count:int
+  -> Internal.test_case
+  -> unit
+#endif
+
+(**/**)

@@ -7,6 +7,9 @@ module Generators = Generators
 (** Stateful property-based testing on top of {!Generators}. *)
 module Stateful = Stateful
 
+(** Concurrency capabilities for concurrent stateful tests. *)
+module Concurrency = Concurrency
+
 module Settings = Settings
 
 (** Auxiliary submodule for [@@deriving hegel_generator]. Included
@@ -87,7 +90,7 @@ type test_location = Internal.test_location =
   }
 
 exception Assume_rejected = Internal.Assume_rejected
-exception Usage_error = Hegel_ffi.Ffi.Usage_error
+exception Usage_error = Internal.Usage_error
 
 (** {2 Convenience re-exports} *)
 
@@ -160,20 +163,10 @@ let draw_silent = Generators.draw_silent
     (prefer {!draw_silent}). See {!Generators.draw_silent_named}. *)
 let draw_silent_named = Generators.draw_silent_named
 
-(** [clone tc] forks an independent clone of [tc] for driving generation from
-    another thread; its native resources are owned by the test case and freed
+(** [clone tc] forks an independent clone of [tc] for driving generation
+    concurrently. Its native resources are owned by the test case and freed
     once the case completes. See {!Internal.clone}. *)
 let clone = Internal.clone
-
-type 'a worker = 'a Internal.worker
-
-(** [spawn tc f] runs [f] on a fresh clone of [tc] on a new thread. See
-    {!Internal.spawn}. *)
-let spawn = Internal.spawn
-
-(** [join w] waits for worker [w] and returns its result, re-raising any
-    exception the worker raised. See {!Internal.join}. *)
-let join = Internal.join
 
 (** [with_printer sexp_of gen] attaches [sexp_of] so [gen] can be drawn with
     {!draw}. See {!Generators.with_printer}. *)

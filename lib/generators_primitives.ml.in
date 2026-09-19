@@ -35,12 +35,12 @@ let smallest_nonzero_magnitude = 5e-324
     - [allow_nan]: [true] only when no bounds are set
     - [allow_infinity]: [true] when at most one bound is set *)
 let floats
-      ?min_value
-      ?max_value
+      ?(min_value : float option)
+      ?(max_value : float option)
       ?(exclude_min = false)
       ?(exclude_max = false)
-      ?allow_nan
-      ?allow_infinity
+      ?(allow_nan : bool option)
+      ?(allow_infinity : bool option)
       ()
   =
   let has_min = Option.is_some min_value in
@@ -117,13 +117,13 @@ let effective_categories ?categories ?exclude_categories () =
 let text_generator
       ~min_size
       ~max_size
-      ?codec
-      ?min_codepoint
-      ?max_codepoint
-      ?categories
-      ?exclude_categories
-      ?include_characters
-      ?exclude_characters
+      ?(codec : string option)
+      ?(min_codepoint : int option)
+      ?(max_codepoint : int option)
+      ?(categories : string list option)
+      ?(exclude_categories : string list option)
+      ?(include_characters : string option)
+      ?(exclude_characters : string option)
       ()
   =
   let categories, exclude_categories =
@@ -267,7 +267,7 @@ let make_characters ~of_char ~sexp_of () =
 let chars () = make_characters ~of_char:Fun.id ~sexp_of:sexp_of_char ()
 
 (** [binary ?min_size ?max_size ()] creates a generator for binary byte strings. *)
-let binary ?(min_size = 0) ?max_size () =
+let binary ?(min_size = 0) ?(max_size : int option) () =
   if min_size < 0
   then
     raise
@@ -285,7 +285,13 @@ let binary ?(min_size = 0) ?max_size () =
 (** [just value] creates a generator that always produces [value].
 
     The output type is chosen by the caller, so no printer is carried. *)
+#ifdef OXCAML
+let just (type (a : value mod portable contended)) (value : a) =
+  leaf_silent ~name:"just" ~draw:(fun _ -> value)
+;;
+#else
 let just value = leaf_silent ~name:"just" ~draw:(fun _ -> value)
+#endif
 
 (** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
     a regular expression [pattern], written in the syntax of Python's [re]
@@ -322,7 +328,7 @@ let urls () = leaf ~name:"urls" ~draw:Internal.generate_url ~sexp_of:sexp_of_str
     (punycode [xn--] labels reserved by RFC 5890 are excluded). Generated
     domains never exceed [max_length] (default 255, per RFC 1035 §2.3.4); when
     provided, [max_length] must be in [4, 255]. *)
-let domains ?max_length () =
+let domains ?(max_length : int option) () =
   let max_length = Option.value max_length ~default:255 in
   leaf
     ~name:"domains"

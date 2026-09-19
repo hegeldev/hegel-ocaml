@@ -21,6 +21,7 @@ depends: [
   "alcotest" {with-test & >= "1.7"}
   "core_unix" {with-test & >= "v0.17"}
   "ppx_expect" {with-test & >= "v0.17"}
+  "re" {with-test & >= "1.12"}
   "ocplib-endian" {>= "1.2"}
   "ppx_js_style" {>= "v0.17"}
   "bisect_ppx" {with-dev-setup & >= "2.8"}
@@ -30,6 +31,7 @@ depends: [
 depopts: [
   "core" {>= "v0.17"}
   "sexp_diff" {>= "v0.17"}
+  "concurrent"
 ]
 dev-repo: "git+https://github.com/hegeldev/hegel-ocaml.git"
 available: arch != "riscv64"

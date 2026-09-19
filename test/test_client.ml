@@ -217,17 +217,6 @@ let test_phase_to_string () =
   Alcotest.(check string) "shrink" "shrink" (Settings.phase_to_string Settings.Shrink)
 ;;
 
-let test_extract_origin () =
-  let origin =
-    try failwith "boom" with
-    | e -> Internal.extract_origin e
-  in
-  Alcotest.(check bool)
-    "origin mentions Failure"
-    true
-    (Test_helpers.contains_substring origin "Failure")
-;;
-
 (** With backtrace recording off there are no slots, exercising the no-location
     fallback in [extract_origin]. *)
 let test_extract_origin_no_backtrace () =
@@ -240,10 +229,7 @@ let test_extract_origin_no_backtrace () =
         try failwith "boom" with
         | e -> Internal.extract_origin e
       in
-      Alcotest.(check bool)
-        "fallback origin mentions Failure"
-        true
-        (Test_helpers.contains_substring origin "Failure"))
+      Alcotest.(check string) "origin without a backtrace" "Failure at :0" origin)
 ;;
 
 (* Two same-typed exceptions ([Failure]) raised at different source lines must
@@ -253,11 +239,11 @@ let test_extract_origin_no_backtrace () =
    be tail-call-eliminated and collapse to the caller's frame. *)
 let test_extract_origin_distinct_lines () =
   let a =
-    try failwith "boom one" with
+    try failwith "boom" with
     | e -> Internal.extract_origin e
   in
   let b =
-    try failwith "boom two" with
+    try failwith "boom" with
     | e -> Internal.extract_origin e
   in
   Alcotest.(check bool)
@@ -341,13 +327,6 @@ let test_render_sexp_breaks_when_narrow () =
 
 let int_gen = integers ~min_value:0 ~max_value:100 ()
 
-(** A passing property: drawn ints are always within bounds. *)
-let test_run_passing () =
-  run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:50 ()) (fun tc ->
-    let v = Hegel.draw tc int_gen in
-    assert (v >= 0 && v <= 100))
-;;
-
 exception Boom
 
 (** A failing property re-raises the (shrunk) OCaml exception. *)
@@ -369,12 +348,40 @@ let test_run_failing_reraises () =
   | None -> Alcotest.fail "expected a failure"
 ;;
 
+let test_run_usage_error_propagates () =
+  match
+    run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun _tc ->
+      raise (Usage_error "usage sentinel"))
+  with
+  | () -> Alcotest.fail "expected Usage_error"
+  | exception Usage_error message ->
+    Alcotest.(check string) "usage error message" "usage sentinel" message
+  | exception exn -> raise exn
+;;
+
+let test_run_internal_error_propagates () =
+  match
+    run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun _tc ->
+      raise (Internal.Internal_error "internal sentinel"))
+  with
+  | () -> Alcotest.fail "expected Internal_error"
+  | exception Internal.Internal_error message ->
+    Alcotest.(check string) "internal error message" "internal sentinel" message
+  | exception exn -> raise exn
+;;
+
 (** [assume false] rejects cases without failing the run. *)
 let test_run_assume_rejects () =
-  run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ()) (fun tc ->
+  let rejected = ref false in
+  let accepted = ref false in
+  run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ~seed:0 ()) (fun tc ->
     let v = Hegel.draw tc int_gen in
-    assume tc (v >= 0);
-    assert (v >= 0))
+    if v < 50 then rejected := true;
+    assume tc (v >= 50);
+    assert (v >= 50);
+    accepted := true);
+  Alcotest.(check bool) "attempted rejected cases" true !rejected;
+  Alcotest.(check bool) "accepted cases still run" true !accepted
 ;;
 
 (** Nesting test cases is rejected. *)
@@ -578,7 +585,7 @@ let test_run_flaky_strategy () =
 exception A
 exception B
 
-(** Two distinct failing assertions surface as a "Multiple failures" report. *)
+(** Two distinct failing assertions surface as an aggregate failure. *)
 let test_run_multiple_failures () =
   let msg =
     try
@@ -597,11 +604,7 @@ let test_run_multiple_failures () =
     | _ -> None
   in
   match msg with
-  | Some m ->
-    Alcotest.(check bool)
-      "reports multiple failures"
-      true
-      (Test_helpers.contains_substring m "failures found")
+  | Some m -> Alcotest.(check string) "reports both failures" "2 failures found!" m
   | None -> Alcotest.fail "expected multiple failures"
 ;;
 
@@ -726,10 +729,10 @@ let test_run_health_check_failure () =
         assume tc (v > 1_000_000));
       false
     with
-    | Failure _ -> true
+    | Failure msg -> String.is_substring msg ~substring:"FailedHealthCheck: FilterTooMuch"
     | _ -> false
   in
-  Alcotest.(check bool) "health-check failure surfaced" true raised
+  Alcotest.(check bool) "filter health-check diagnostic surfaced" true raised
 ;;
 
 (** Exercise the optional-argument default paths of the primitives: [start_span]
@@ -746,7 +749,7 @@ let test_run_primitive_defaults () =
     assert (v >= 0 && a >= 0 && b >= 0))
 ;;
 
-let test_overrun_case_is_discarded () =
+let test_stop_test_does_not_fail_run () =
   run_hegel_test
     ~settings:
       { (Hegel.Settings.create ~test_cases:1 ()) with
@@ -758,7 +761,7 @@ let test_overrun_case_is_discarded () =
       }
     (fun tc ->
        ignore (Hegel.draw_silent tc int_gen : int);
-       raise Internal.Data_exhausted)
+       raise Internal.Stop_test)
 ;;
 
 let tests =
@@ -774,7 +777,6 @@ let tests =
   ; Alcotest.test_case "Settings.create" `Quick test_settings_create
   ; Alcotest.test_case "health_check_to_string" `Quick test_health_check_to_string
   ; Alcotest.test_case "phase_to_string" `Quick test_phase_to_string
-  ; Alcotest.test_case "extract_origin" `Quick test_extract_origin
   ; Alcotest.test_case
       "extract_origin no backtrace"
       `Quick
@@ -784,7 +786,10 @@ let tests =
       `Quick
       test_extract_origin_distinct_lines
   ; Alcotest.test_case "color_enabled" `Quick test_color_enabled
-  ; Alcotest.test_case "overrun case discarded" `Quick test_overrun_case_is_discarded
+  ; Alcotest.test_case
+      "Stop_test does not fail the run"
+      `Quick
+      test_stop_test_does_not_fail_run
   ; Alcotest.test_case "stderr_color_enabled" `Quick test_stderr_color_enabled
   ; Alcotest.test_case "stderr_color" `Quick test_stderr_color
   ; Alcotest.test_case "render_diff" `Quick test_render_diff
@@ -798,8 +803,12 @@ let tests =
       `Quick
       test_no_test_location_reports_nothing
   ; Alcotest.test_case "test_location invalid utf8" `Quick test_test_location_invalid_utf8
-  ; Alcotest.test_case "run passing" `Quick test_run_passing
   ; Alcotest.test_case "run failing re-raises" `Quick test_run_failing_reraises
+  ; Alcotest.test_case "run Usage_error propagates" `Quick test_run_usage_error_propagates
+  ; Alcotest.test_case
+      "run Internal_error propagates"
+      `Quick
+      test_run_internal_error_propagates
   ; Alcotest.test_case "run assume rejects" `Quick test_run_assume_rejects
   ; Alcotest.test_case "run nested guard" `Quick test_run_nested_guard
   ; Alcotest.test_case "render_sexp atoms" `Quick test_render_sexp_atoms

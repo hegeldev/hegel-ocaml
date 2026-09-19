@@ -12,7 +12,7 @@ let run_passing verbosity =
     Hegel.note tc marker)
 ;;
 
-(** A property that fails (so the engine performs a final replay) and notes the
+(** A property that fails (so the client performs a final replay) and notes the
     marker on every case. *)
 let run_failing verbosity =
   let settings = { (Hegel.Settings.create ~test_cases:5 ~seed:1 ()) with verbosity } in
@@ -36,10 +36,9 @@ let%expect_test "Normal notes only on the final failing replay" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
-      NOTE_MARKER
+    NOTE_MARKER
 
     Exception: Failure("boom")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -105,8 +104,7 @@ let%expect_test "prints from clone interleave deterministically" =
   (try
      Hegel.run_hegel_test ~settings (fun tc ->
        Hegel.note tc "before clone";
-       let w = Hegel.spawn tc (fun c -> Hegel.note c "from clone") in
-       Hegel.join w;
+       Hegel.note (Hegel.clone tc) "from clone";
        Hegel.note tc "after clone";
        failwith "boom")
    with
@@ -114,12 +112,11 @@ let%expect_test "prints from clone interleave deterministically" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
-      before clone
-      from clone
-      after clone
+    before clone
+    from clone
+    after clone
 
     Exception: Failure("boom")
     rerun with: ~failure_blobs:[ "<BLOB>" ]

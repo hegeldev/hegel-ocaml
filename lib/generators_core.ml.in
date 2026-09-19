@@ -1,5 +1,15 @@
 module Sexp = Sexplib0.Sexp
 
+#ifdef OXCAML
+#define PORTABLE @@ portable
+#define PFN @ portable
+#define CROSSING : value mod portable contended
+#else
+#define PORTABLE
+#define PFN
+#define CROSSING
+#endif
+
 (** Span labels. A label identifies a generator to the engine, which treats
     two spans with the same label as coming from the same generator when it
     shrinks and mutates test cases, and does nothing else with it. [from_name]
@@ -61,27 +71,27 @@ end
 
     Every core carries its span [label] (see {!Labels}), fixed at construction
     from the core's own kind and its components' labels. *)
-type 'a core =
+type 'a core CROSSING =
   | Leaf :
-      { draw : Internal.test_case -> 'a
+      { draw : (Internal.test_case -> 'a) PORTABLE
       ; label : int64
       }
       -> 'a core
   | Mapped :
       { source : 'b core
-      ; f : 'b -> 'a
+      ; f : ('b -> 'a) PORTABLE
       ; label : int64
       }
       -> 'a core
   | FlatMapped :
       { source : 'b core
-      ; f : 'b -> 'a core
+      ; f : ('b -> 'a core) PORTABLE
       ; label : int64
       }
       -> 'a core
   | Filtered :
       { source : 'a core
-      ; predicate : 'a -> bool
+      ; predicate : ('a -> bool) PORTABLE
       ; label : int64
       }
       -> 'a core
@@ -94,19 +104,16 @@ type 'a core =
       -> 'a list core
   | Composite :
       { label : int64
-      ; generate_fn : Internal.test_case -> 'a
+      ; generate_fn : (Internal.test_case -> 'a) PORTABLE
       }
       -> 'a core
   | Values :
       { pool : Internal.pool
-      ; find : int -> 'a option
-      ; remove : int -> unit
-      ; is_empty : unit -> bool
-      ; consume : bool
+      ; select : (Internal.test_case -> 'a) PORTABLE
       }
       -> 'a core
   | Function :
-      { build : name:string option -> Internal.test_case -> 'a
+      { build : (name:string option -> Internal.test_case -> 'a) PORTABLE
       ; label : int64
       }
       -> 'a core
@@ -143,10 +150,10 @@ type unprintable = private [ `Unprintable ]
     Generators produce typed OCaml values and can be combined using {!map},
     {!flat_map}, and {!filter}. The phantom is what makes {!draw} require a
     printer at compile time while {!draw_silent} accepts any generator. *)
-type ('a, 'p) generator =
+type ('a, 'p) generator CROSSING =
   | Printable :
       { core : 'a core
-      ; sexp_of : 'a -> Sexp.t
+      ; sexp_of : ('a -> Sexp.t) PORTABLE
       }
       -> ('a, printable) generator
   | Unprintable : { core : 'a core } -> ('a, unprintable) generator
@@ -181,13 +188,13 @@ let label_of : type a p. (a, p) generator -> int64 =
 (** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding
     a printable generator that {!draw} accepts. This is the explicit way to make
     a [map]/[flat_map]/[sampled_from]/[just] result printable. *)
-let with_printer : type a p. (a -> Sexp.t) -> (a, p) generator -> (a, printable) generator
+let with_printer : type a p. (a -> Sexp.t) PFN -> (a, p) generator -> (a, printable) generator
   =
   fun sexp_of gen -> Printable { core = core_of gen; sexp_of }
 ;;
 
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
-let printer : type a. (a, printable) generator -> a -> Sexp.t = function
+let printer : type a. (a, printable) generator -> (a -> Sexp.t) PFN = function
   | Printable { sexp_of; _ } -> sexp_of
   | _ -> .
 ;;
@@ -207,14 +214,6 @@ let composite_with_label ~label generate_fn =
     grouping), so they are suppressed on the final replay and only an outer
     [draw] of the whole value prints. *)
 let composite generate_fn = composite_with_label ~label:Labels.fixed_dict generate_fn
-
-(** [make_pool_values ~pool ~find ~remove ~is_empty ~consume] builds an
-    unprintable generator that picks a value from the engine pool [pool],
-    resolving the drawn id via [find]. When [consume], [remove] deletes the
-    picked value. [is_empty] reports whether the backing table is empty. *)
-let make_pool_values ~pool ~find ~remove ~is_empty ~consume =
-  Unprintable { core = Values { pool; find; remove; is_empty; consume } }
-;;
 
 (** Maximum number of filter attempts before calling [assume false]. *)
 let max_filter_attempts = 3
@@ -266,7 +265,7 @@ type collection =
   }
 
 (** [get_collection coll data] initializes the engine-side collection and
-    returns its handle. Raises {!Internal.Data_exhausted} on StopTest. *)
+    returns its handle. Raises {!Internal.Stop_test} on StopTest. *)
 let get_collection coll data =
   match coll.handle with
   | Some h -> h
@@ -293,7 +292,7 @@ let with_collection ~min_size ?max_size data f =
 (** [collection_more coll data] returns [true] if more elements should be
     generated, [false] when the collection is complete. Once it returns [false],
     subsequent calls return [false] immediately. Raises
-    {!Internal.Data_exhausted} on StopTest. *)
+    {!Internal.Stop_test} on StopTest. *)
 let collection_more coll data =
   if coll.finished
   then false
@@ -306,7 +305,7 @@ let collection_more coll data =
 
 (** [collection_reject coll data] rejects the last element of the collection.
     No-op if the collection is already finished. Raises
-    {!Internal.Data_exhausted} on StopTest. *)
+    {!Internal.Stop_test} on StopTest. *)
 let collection_reject coll data =
   if not coll.finished
   then (
@@ -333,17 +332,54 @@ let pick tc ~find ~remove ~is_empty pool ~consume =
 ;;
 
 (** Defined for convenience *)
+#ifdef OXCAML
+module Int_table = Stdlib.Hashtbl.MakePortable (struct
+    type t = int
+
+    let equal = Int.equal
+    let hash = Stdlib.Hashtbl.hash
+  end)
+#else
 module Int_table = Stdlib.Hashtbl.Make (struct
     type t = int
 
     let equal = Int.equal
     let hash = Stdlib.Hashtbl.hash
   end)
+#endif
 
-(** [Make_pool (Tbl)] specializes the pool-drawing machinery
-    ({!make_pool_values}/{!resolve_pool_draw}) to a concrete int-keyed hashtable
-    module [Tbl]. *)
-module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) = struct
+module Int_pool = struct
+  module Tbl = Int_table
+
+#ifdef OXCAML
+  type ('a : value mod portable contended) t : value mod portable contended =
+    { pool : Internal.pool
+    ; values : 'a Tbl.t Locked.t
+    ; clone : ('a -> 'a) @@ portable
+    }
+#else
+  type 'a t =
+    { pool : Internal.pool
+    ; values : 'a Tbl.t Locked.t
+    ; clone : 'a -> 'a
+    }
+#endif
+
+  let create tc ~clone =
+    { pool = Internal.new_pool tc
+    ; values = Locked.create (fun () -> Tbl.create 16)
+    ; clone
+    }
+  ;;
+
+  let add t tc value =
+    Locked.protect t.values (fun values ->
+      let variable_id = Internal.pool_add tc ~pool:t.pool in
+      Tbl.replace values variable_id value)
+  ;;
+
+  let size t = Locked.protect t.values Tbl.length
+
   (** [resolve_draw values ~consume variable_id] resolves a drawn pool id
       against the local [values] table, removing it when [consume]. Raises
       [Internal.Flaky_strategy] on an unknown id (an engine-contract violation). *)
@@ -355,17 +391,24 @@ module Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int) = struct
       variable_id
   ;;
 
-  (** [pool_values ~pool ~values ~consume] builds an unprintable generator that
-      picks a value from the engine pool [pool], resolving the drawn id against
-      the local [values] table. When [consume], the picked value is removed from
-      the pool. *)
-  let pool_values ~pool ~values ~consume =
-    make_pool_values
-      ~pool
-      ~find:(fun id -> Tbl.find_opt values id)
-      ~remove:(fun id -> Tbl.remove values id)
-      ~is_empty:(fun () -> Tbl.length values = 0)
-      ~consume
+  let pool_values { pool; values; clone } ~consume =
+    let clone = if consume then Fun.id else clone in
+    Unprintable
+      { core =
+          Values
+            { pool
+            ; select =
+                (fun tc ->
+                  Locked.protect values (fun values ->
+                    pick
+                      tc
+                      ~find:(fun id -> Option.map clone (Tbl.find_opt values id))
+                      ~remove:(fun id -> Tbl.remove values id)
+                      ~is_empty:(fun () -> Tbl.length values = 0)
+                      pool
+                      ~consume))
+            }
+      }
   ;;
 end
 
@@ -410,8 +453,7 @@ let rec do_draw : type a. a core -> Internal.test_case -> a =
         in
         collect []))
   | Composite { label; generate_fn } -> group label data (fun () -> generate_fn data)
-  | Values { pool; find; remove; is_empty; consume } ->
-    pick data ~find ~remove ~is_empty pool ~consume
+  | Values { select; _ } -> select data
   | Function { build; _ } -> build ~name:None data
 ;;
 
@@ -506,7 +548,7 @@ let draw_silent_named
 
     When [gen]'s core is a [Leaf], the draw closure is composed in place (no
     extra span); otherwise a [Mapped] core is created. *)
-let map : type a b p. (a -> b) -> (a, p) generator -> (b, unprintable) generator =
+let map : type a b p. (a -> b) PFN -> (a, p) generator -> (b, unprintable) generator =
   fun f gen ->
   match core_of gen with
   | Leaf { draw; label } ->
@@ -533,7 +575,7 @@ let map : type a b p. (a -> b) -> (a, p) generator -> (b, unprintable) generator
     carries no printer; use {!with_printer} to draw it with {!draw}. *)
 let flat_map
   : type a b p q.
-    (a -> (b, q) generator) -> (a, p) generator -> (b, unprintable) generator
+    (a -> (b, q) generator) PFN -> (a, p) generator -> (b, unprintable) generator
   =
   fun f gen ->
   let source = core_of gen in
@@ -550,7 +592,7 @@ let flat_map
 (** [filter predicate gen] filters values from [gen] using [predicate], keeping
     [gen]'s printability. Tries up to {!max_filter_attempts} times; calls
     [assume false] if all attempts fail. *)
-let filter : type a p. (a -> bool) -> (a, p) generator -> (a, p) generator =
+let filter : type a p. (a -> bool) PFN -> (a, p) generator -> (a, p) generator =
   fun predicate gen ->
   let filtered core =
     Filtered

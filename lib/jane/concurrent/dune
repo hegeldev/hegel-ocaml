@@ -1,0 +1,7 @@
+; The optional adapter for Jane Street's Concurrent library (OxCaml only)
+
+(library
+ (name hegel_jane_concurrent)
+ (public_name hegel.jane.concurrent)
+ (optional)
+ (libraries hegel base await concurrent concurrent.in_thread))

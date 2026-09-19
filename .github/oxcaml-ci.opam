@@ -1,0 +1,17 @@
+opam-version: "2.0"
+synopsis: "OxCaml-only dependencies of hegel's CI (never published)"
+description: """
+Installed by .github/workflows/ci-oxcaml.yml alongside the with-test
+dependencies of the real packages, in the same solver call. These are not
+declared in hegel.opam because they exist only in the OxCaml opam repository.
+"""
+maintainer: "Hegel developers"
+authors: "Hegel developers"
+license: "MIT"
+homepage: "https://github.com/hegeldev/hegel-ocaml"
+bug-reports: "https://github.com/hegeldev/hegel-ocaml/issues"
+depends: [
+  "capsule0"
+  "concurrent"
+  "parallel"
+]

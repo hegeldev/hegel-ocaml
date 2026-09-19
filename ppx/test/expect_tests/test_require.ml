@@ -1,7 +1,7 @@
 (** Snapshot tests for [Hegel.require] and [Hegel.require_equal]: the failure
     messages, the sexp diff printed in the report body, and the caller-derived
     failure origins. Tests call [run_hegel_test] directly with the database
-    disabled — see [test_failure_report.ml] for why. *)
+    disabled to avoid persisted examples affecting the report. *)
 
 let sexp_of_int_list = Core.List.sexp_of_t Core.Int.sexp_of_t
 
@@ -19,8 +19,7 @@ let%expect_test "require fails with the default message" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
     Exception: Failure("require: condition was false")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
@@ -35,8 +34,7 @@ let%expect_test "require fails with a custom message" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
     Exception: Failure("the invariant broke")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
@@ -52,12 +50,11 @@ let%expect_test "require_equal prints a sexp diff of the two values" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
-      require_equal: values differ (- lhs / + rhs):
-      - (1 2 3)
-      + (1 9 3)
+    require_equal: values differ (- lhs / + rhs):
+    - (1 2 3)
+    + (1 9 3)
 
     Exception: Failure("require_equal: values differ")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -86,16 +83,15 @@ let%expect_test "require failures get caller-derived origins" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
     Failure 1 of 2:
-      draw_1 = 60
+    draw_1 = 60
 
     Exception: Failure("too big")
 
     Failure 2 of 2:
-      draw_1 = 0
+    draw_1 = 0
 
     Exception: Failure("too small")
     |}]

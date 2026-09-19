@@ -93,6 +93,7 @@ check-tests-no-coverage:
       dune build ppx/test/test_ppx_derive_jane.exe
       ./_build/default/ppx/test/test_ppx_derive_jane.exe
     fi
+    dune runtest lib/jane/concurrent/test --force
 
 # these aliases are provided as ux improvements for local developers. CI should use the longer
 # forms.

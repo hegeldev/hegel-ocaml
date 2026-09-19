@@ -6,6 +6,7 @@
   test_helpers
   test_client
   test_clone
+  test_concurrency
   test_generators_core
   test_generators_primitives
   test_generators_collections
@@ -29,3 +30,16 @@
  (libraries hegel hegel_ffi alcotest core core_unix)
  (preprocess
   (pps ppx_js_style -- -allow-unannotated-ignores)))
+
+; test_concurrency.ml.in is cppo-preprocessed: the Concurrency.domains tests
+; exist only where Concurrency.domains does (not under OxCaml).
+
+(rule
+ (target test_concurrency.ml)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:../lib/cppo-flags}
+   -o
+   %{target}
+   %{dep:test_concurrency.ml.in})))

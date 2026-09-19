@@ -1,5 +1,4 @@
 open! Core
-open Hegel
 module G = Hegel.Generators
 
 let one_case_settings () = Hegel.Settings.create ~test_cases:1 ()
@@ -112,33 +111,6 @@ let test_clone_copies_draw_depth () =
     Hegel.Internal.decr_draw_depth tc)
 ;;
 
-let test_spawn_join_returns_value () =
-  let both = ref (0, 0) in
-  Hegel.run_hegel_test ~settings:(one_case_settings ()) (fun tc ->
-    let w = spawn tc (fun worker -> Hegel.draw_silent worker small_int) in
-    let main = Hegel.draw_silent tc small_int in
-    let from_worker = join w in
-    both := main, from_worker);
-  let main, from_worker = !both in
-  Alcotest.(check bool) "main in range" true (main >= 0 && main <= 9);
-  Alcotest.(check bool) "worker in range" true (from_worker >= 0 && from_worker <= 9)
-;;
-
-let test_spawn_join_reraises () =
-  let raised = ref false in
-  Hegel.run_hegel_test ~settings:(one_case_settings ()) (fun tc ->
-    let w = spawn tc (fun _worker -> failwith "worker boom") in
-    (try
-       let (_ : int) = join w in
-       ()
-     with
-     | Failure msg when String.equal msg "worker boom" -> raised := true);
-    (* Parent handle is still usable after the worker's failure. *)
-    let (_ : int) = Hegel.draw_silent tc small_int in
-    ());
-  Alcotest.(check bool) "join re-raised the worker exception" true !raised
-;;
-
 let tests =
   [ Alcotest.test_case "clone draws" `Quick test_clone_draws
   ; Alcotest.test_case "clone concurrent" `Quick test_clone_concurrent
@@ -147,7 +119,5 @@ let tests =
   ; Alcotest.test_case "clones owned by case" `Quick test_clones_owned_by_case
   ; Alcotest.test_case "clone shares draw names" `Quick test_clone_shares_draw_names
   ; Alcotest.test_case "clone copies draw depth" `Quick test_clone_copies_draw_depth
-  ; Alcotest.test_case "spawn/join returns value" `Quick test_spawn_join_returns_value
-  ; Alcotest.test_case "spawn/join re-raises" `Quick test_spawn_join_reraises
   ]
 ;;
