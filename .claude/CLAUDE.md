@@ -255,16 +255,21 @@ single top-level item: `let name = fun () -> Hegel.run_hegel_test ... (fun tc
 registration, no runtime library, and no side effect at module init. The same
 rewriter also handles `module%hegel_state_machine M = struct … end`, the
 analogue of hegel-rust's `#[hegel::state_machine] impl`. At expansion time it
-collects the bindings marked `[@@rule]`, `[@@invariant]`, or
-`[@@invariant always_check]` into appended `rules` and `invariants` lists
-(`Rule.create ~name:"<binding>" ?weight ~step:<binding> ()` — `?weight` only
-for a `[@@rule <float>]` payload, which the concurrent form rejects — and the
-same for `Invariant.create`) plus a `run ?step_count ?sexp_of_state tc ~init`.
-`module%hegel_concurrent_state_machine` does the same with
-`Concurrent_rule.create ?group ~name ~step ()` (a `[@@rule "group"]` payload,
-which the sequential form rejects) and a `run ?concurrency ?min_concurrency
-?max_concurrency ?step_count ?sexp_of_state tc ~init` that calls
-`Stateful.run_concurrent_internal`. There
+collects the bindings marked `[@@rule]` or `[@@invariant]` into appended
+`rules` and `invariants` lists (`Rule.create ~name:"<binding>" ~weight
+~step:<binding> ()` and the same for `Invariant.create`) plus a
+`run ?step_count ?sexp_of_state tc ~init`. A marker's options are a *record*
+payload and nothing else — `[@@rule { weight = 2.5 }]`,
+`[@@invariant { always_check = true }]`, bare `[@@rule]` for the defaults.
+`rule_attribute` spells out one `Ast_pattern` alternative per field
+combination, so the fields take either order and either may be omitted, and a
+repeated or unknown field is a compile error. A weight is carried
+as the text of a float literal (an int payload gains a `.`) and defaults to
+`1.0`. `module%hegel_concurrent_state_machine` does the same with
+`Concurrent_rule.create ?group ~weight ~name ~step ()`, whose `[@@rule]` record
+also takes `group` (which the sequential form rejects), and a
+`run ?concurrency ?min_concurrency ?max_concurrency ?step_count
+?sexp_of_state tc ~init` that calls `Stateful.run_concurrent_internal`. There
 is no registry and no runtime discovery. The generated `run` calls the
 doc-hidden `Stateful.run_internal`, which takes the lists directly, because
 the expanded module need not declare `type state` and the public

@@ -13,10 +13,10 @@
 
     With the [ppx_hegel_test] PPX, a state machine is a module written as
     [module%hegel_state_machine M = struct … end]. Mark rules with [[@@rule]]
-    or [[@@rule <weight>]] and invariants with [[@@invariant]] or
-    [[@@invariant always_check]].
-    The PPX generates the [run] function for the state machine. If the module
-    defines [sexp_of_state], [run] uses it to print the state after each step.
+    and invariants with [[@@invariant]]. See {!Rule} and {!Invariant}
+    for valid payloads. The PPX generates the [run] function for the state 
+    machine. If the module defines [sexp_of_state], [run] uses it to print the
+    state after each step.
 
     Without the PPX, create rules with {!Rule.create} and the invariants
     with {!Invariant.create}, put them in a module of type {!State_machine},
@@ -51,7 +51,7 @@
       let short tc stack =
         note tc (Printf.sprintf "%d elements" (List.length !stack));
         assert (List.length !stack < 10)
-      [@@invariant always_check]
+      [@@invariant { always_check = true }]
       ;;
     end
 
@@ -75,10 +75,9 @@
 
     With the [ppx_hegel_test] PPX, a concurrent state machine is a module written as
     [module%hegel_concurrent_state_machine M = struct … end]. Mark rules with [[@@rule]]
-    for the [<anonymous>] group or [[@@rule "<group>"]] for a specific group. Mark
-    invariants with [[@@invariant]] or [[@@invariant always_check]]. The PPX generates
-    the [run] function for the state machine. If the module defines [sexp_of_state],
-    [run] uses it to print the state after each step.
+    and invariants with [[@@invariant]]. See {!Concurrent_rule} and {!Invariant} for 
+    valid payloads. The PPX generates the [run] function for the state machine. If the 
+    module defines [sexp_of_state], [run] uses it to print the state after each step.
 
     The example store below has a bug. The store locks individual reads and writes,
     but releases the lock between reading a counter and writing its incremented value.
@@ -128,14 +127,14 @@
       let register tc state =
         let key = draw tc (integers ~min_value:0 ~max_value:3 ()) in
         if Store.put_if_absent state.store key then Stateful.Pool.add state.keys tc key
-      [@@rule "operations"]
+      [@@rule { group = "operations" }]
       ;;
 
       let increment tc state =
         let key = draw_silent tc (Stateful.Pool.values_reusable state.keys) in
         Store.increment state.store key;
         Atomic.incr state.increments
-      [@@rule "operations"]
+      [@@rule { group = "operations" }]
       ;;
 
       let read tc state =
@@ -143,13 +142,13 @@
         match Store.get state.store key with
         | Some value -> note tc (Printf.sprintf "read %d -> %d" key value)
         | None -> note tc (Printf.sprintf "key %d is absent" key)
-      [@@rule "operations"]
+      [@@rule { group = "operations" }]
       ;;
 
       let snapshot tc state =
         let count = Hashtbl.length (Store.snapshot state.store) in
         note tc (Printf.sprintf "snapshot holds %d keys" count)
-      [@@rule "snapshot"]
+      [@@rule { group = "snapshot" }]
       ;;
 
       let no_lost_updates _tc state =
@@ -164,7 +163,7 @@
                "increments were lost: store sums to %d after %d increments"
                stored
                performed)
-      [@@invariant always_check]
+      [@@invariant { always_check = true }]
       ;;
     end
 
@@ -344,7 +343,7 @@ module Rule : sig PORTABLE
         arguments it needs from [tc] and updating [state] in place. [tc] is
         valid only for that step.
 
-      To trace the state on a failing replay, pass [?sexp_of_state] to {!run}.
+      With the PPX, a rule takes the following record payload: [[@@rule { weight = ... }]].
 
       {[
       let push =
@@ -389,6 +388,9 @@ module Invariant : sig PORTABLE
 
       Every invariant is checked on the initial and final states.
 
+      With the PPX, an invariant takes the following record payload: 
+      [[@@invariant { always_checked = true | false }]].
+
       {[
       let short =
         Stateful.Invariant.create
@@ -416,18 +418,26 @@ module Concurrent_rule : sig PORTABLE
     : value mod portable contended
 #endif
 
-  (** [create ?group ~name ~step ()] declares a concurrent rule.
+  (** [create ?group ?weight ~name ~step ()] declares a concurrent rule.
 
       - [group] defines the concurrency group of the rule. Only rules
         within the same [group] may run concurrently. Rules without an explicit
         group are in one anonymous group.
+      - [weight] is a hint of how frequently the rule should be run. The
+        default weight is 1.0, and weights must be finite and strictly
+        positive.
       - [name] is printed in the final output when the rule is run.
       - [step tc state] performs one application of the rule, drawing any
         arguments it needs from [tc] and updating [state] in place. [tc] is
-        valid only for that step. *)
+        valid only for that step.
+
+      With the PPX, a concurrent rule takes the following record payload: 
+      [[@@rule { group = "group"; weight = <weight> }]]. The order of the fields
+      does not matter and neither are required. *)
 #ifdef OXCAML
   val create
     :  ?group:string
+    -> ?weight:float
     -> name:string
     -> step:(Internal.test_case -> 'state @ contended -> unit) @ portable
     -> unit
@@ -435,6 +445,7 @@ module Concurrent_rule : sig PORTABLE
 #else
   val create
     :  ?group:string
+    -> ?weight:float
     -> name:string
     -> step:(Internal.test_case -> 'state -> unit)
     -> unit
@@ -446,6 +457,9 @@ module Concurrent_rule : sig PORTABLE
 
   (** Returns the concurrency group of the rule. *)
   val group : _ t -> string
+
+  (** Returns the weight of the rule. *)
+  val weight : _ t -> float
 end
 
 (** {2 Running stateful tests} *)

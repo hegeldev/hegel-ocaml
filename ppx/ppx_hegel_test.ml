@@ -28,12 +28,12 @@
       let sexp_of_state n = sexp_of_int !n
       let add tc n = n := !n + draw tc (integers ~min_value:1 ~max_value:10 ()) [@@rule]
       let small _tc n = assert (!n < 100) [@@invariant]
-      let positive _tc n = assert (!n >= 0) [@@invariant always_check]
+      let positive _tc n = assert (!n >= 0) [@@invariant { always_check = true }]
     end
     ]}
     The above is rewritten into the following:
     {[
-    let rules = [ Hegel.Stateful.Rule.create ~name:"add" ~step:add () ]
+    let rules = [ Hegel.Stateful.Rule.create ~name:"add" ~weight:1.0 ~step:add () ]
 
     let invariants =
       [ Hegel.Stateful.Invariant.create ~name:"small" ~inv:small ~always_check:false ()
@@ -49,6 +49,14 @@
       Hegel.Stateful.run_internal ~init ~rules ~invariants ~sexp_of_state ?step_count tc
     ;;
     ]}
+
+    A marker's options are written as a record, whose fields may be given in
+    any order and any of which may be left out: [[@@rule { weight = 2.5 }]],
+    [[@@invariant { always_check = true }]]. A rule's [weight] tells the engine
+    how often to pick that rule relative to the others, and defaults to [1.0].
+    A rule in a [module%hegel_concurrent_state_machine] also takes a [group],
+    as [[@@rule { group = "io"; weight = 2.5 }]]; a group on a sequential rule
+    is an error.
 
     In a test body and in a marked rule or invariant body, a
     [let x = draw tc gen] binding has its name injected so the drawn value
@@ -72,24 +80,38 @@ let failure_blobs_attribute =
     (fun ~attr_loc blobs -> attr_loc, blobs)
 ;;
 
-(** What a [[@@rule]] attribute carried: a concurrency group in a concurrent
-    machine, a weight in a sequential one, or nothing. *)
 type rule_payload =
-  | No_payload
-  | Group of string
-  | Weight of string
+  { group : string option
+  ; weight : string option
+  }
+
+let weight_pattern () =
+  Ast_pattern.(efloat __ ||| map1 (eint __) ~f:(fun weight -> string_of_int weight ^ "."))
+;;
+
+let record_payload fields = Ast_pattern.(single_expr_payload (pexp_record fields none))
+let field name pattern = Ast_pattern.(loc (lident (string name)) ** pattern)
+let group_field () = field "group" Ast_pattern.(estring __)
+let weight_field () = field "weight" (weight_pattern ())
 
 let rule_attribute =
   Attribute.declare_with_attr_loc
     "hegel.rule"
     Attribute.Context.value_binding
     Ast_pattern.(
-      map0 (pstr nil) ~f:No_payload
-      ||| map1 (single_expr_payload (estring __)) ~f:(fun group -> Group group)
-      ||| map1 (single_expr_payload (efloat __)) ~f:(fun weight -> Weight weight)
+      map0 (pstr nil) ~f:{ group = None; weight = None }
       ||| map1
-            (single_expr_payload (eint __))
-            ~f:(fun weight -> Weight (string_of_int weight ^ ".")))
+            (record_payload (group_field () ^:: nil))
+            ~f:(fun group -> { weight = None; group = Some group })
+      ||| map1
+            (record_payload (weight_field () ^:: nil))
+            ~f:(fun weight -> { group = None; weight = Some weight })
+      ||| map2
+            (record_payload (group_field () ^:: weight_field () ^:: nil))
+            ~f:(fun group weight -> { group = Some group; weight = Some weight })
+      ||| map2
+            (record_payload (weight_field () ^:: group_field () ^:: nil))
+            ~f:(fun weight group -> { group = Some group; weight = Some weight }))
     (fun ~attr_loc payload -> attr_loc, payload)
 ;;
 
@@ -98,9 +120,7 @@ let invariant_attribute =
     "hegel.invariant"
     Attribute.Context.value_binding
     Ast_pattern.(
-      alt
-        (map0 (pstr nil) ~f:false)
-        (map0 (single_expr_payload (pexp_ident (lident (string "always_check")))) ~f:true))
+      map0 (pstr nil) ~f:false ||| record_payload (field "always_check" (ebool __) ^:: nil))
     Fun.id
 ;;
 
@@ -389,30 +409,35 @@ type marker =
       }
   | Invariant of { always_check : bool }
 
-(** [marker_of_binding ~concurrent vb] is [vb] with its marker attribute
-    removed and the marker that attribute carried, if any. *)
-let marker_of_binding ~concurrent (vb : value_binding) : value_binding * marker option =
-  let vb, rule = consume rule_attribute vb in
-  let vb, invariant = consume invariant_attribute vb in
-  match rule, invariant with
-  | Some _, Some _ ->
-    Location.raise_errorf
-      ~loc:vb.pvb_loc
-      "ppx_hegel_test: a binding can be marked [@@@@rule] or [@@@@invariant], not both"
-  | Some (attr_loc, Group _), None when not concurrent ->
+let rule_marker ~concurrent ~attr_loc { group; weight } =
+  if Option.is_some group && not concurrent
+  then
     Location.raise_errorf
       ~loc:attr_loc
       "ppx_hegel_test: rule groups are only supported in \
-       module%%hegel_concurrent_state_machine"
-  | Some (attr_loc, Weight _), None when concurrent ->
+       module%%hegel_concurrent_state_machine";
+  Rule { group; weight = Option.value weight ~default:"1.0" }
+;;
+
+(** [marker_of_binding ~concurrent vb] is [vb] with its marker attribute
+    removed and the marker that attribute carried, if any. A binding carries
+    at most one marker, so the other attribute is consumed only to reject one
+    that carries both. *)
+let marker_of_binding ~concurrent (vb : value_binding) : value_binding * marker option =
+  let marked_both (vb : value_binding) =
     Location.raise_errorf
-      ~loc:attr_loc
-      "ppx_hegel_test: rule weights are only supported in module%%hegel_state_machine"
-  | Some (_, No_payload), None -> vb, Some (Rule { group = None; weight = "1.0" })
-  | Some (_, Group group), None -> vb, Some (Rule { group = Some group; weight = "1.0" })
-  | Some (_, Weight weight), None -> vb, Some (Rule { group = None; weight })
-  | None, Some always_check -> vb, Some (Invariant { always_check })
-  | None, None -> vb, None
+      ~loc:vb.pvb_loc
+      "ppx_hegel_test: a binding can be marked [@@@@rule] or [@@@@invariant], not both"
+  in
+  match consume rule_attribute vb with
+  | vb, Some (attr_loc, payload) ->
+    (match consume invariant_attribute vb with
+     | vb, None -> vb, Some (rule_marker ~concurrent ~attr_loc payload)
+     | vb, Some _ -> marked_both vb)
+  | vb, None ->
+    (match consume invariant_attribute vb with
+     | vb, None -> vb, None
+     | vb, Some always_check -> vb, Some (Invariant { always_check }))
 ;;
 
 (** [expand_machine_item item] returns [item] with its marker attributes
@@ -527,6 +552,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
                    match group with
                    | None -> [%expr None]
                    | Some group -> [%expr Some [%e estring ~loc group]]]
+               ~weight:[%e efloat ~loc weight]
                ~name:[%e estring ~loc name]
                ~step:[%e evar ~loc name]
                ()]
