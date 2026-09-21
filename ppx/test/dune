@@ -8,6 +8,7 @@
 ; every attribute consumed must be recorded as handled, and generated nodes must
 ; be ghosts (a real location on a node the user did not write overlaps its
 ; siblings).
+
 (test
  (name test_ppx_derive)
  (package ppx_hegel_generator)

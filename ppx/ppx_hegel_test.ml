@@ -153,10 +153,14 @@ let build_location_record ~loc ~function_name : expression =
       let function_name () =
         Hegel.run_hegel_test [?settings] location body_fn
       ;;
-    ]} *)
-let build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn
+    ]}
+
+    [attrs] are the attributes of the original binding that the expander did not
+    consume. *)
+let build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn ~attrs
   : structure_item list
   =
+  let loc = { loc with loc_ghost = true } in
   let location_record = build_location_record ~loc ~function_name in
   let base_call =
     match settings_expr with
@@ -312,7 +316,7 @@ let inject_draw ~tc_name (flags : (string, bool) Stdlib.Hashtbl.t) (vb : value_b
     , Pexp_apply (({ pexp_desc = Pexp_ident ({ txt = lid; _ } as ident); _ } as fn), args)
     )
     when not (has_label_arg args) ->
-    let loc = vb.pvb_expr.pexp_loc in
+    let loc = { vb.pvb_expr.pexp_loc with loc_ghost = true } in
     let repeatable =
       match Stdlib.Hashtbl.find_opt flags name with
       | Some b -> b
@@ -388,7 +392,7 @@ let inject_draw_silent ~tc_name (vb : value_binding) : value_binding =
     , Pexp_apply (({ pexp_desc = Pexp_ident ({ txt = lid; _ } as ident); _ } as fn), args)
     )
     when not (has_name_arg args) ->
-    let loc = vb.pvb_expr.pexp_loc in
+    let loc = { vb.pvb_expr.pexp_loc with loc_ghost = true } in
     let named_fn =
       { fn with pexp_desc = Pexp_ident { ident with txt = draw_silent_named_lident lid } }
     in
@@ -592,6 +596,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
       ~loc
       "ppx_hegel_test: module%%%s needs at least one [@@@@rule] binding"
       extension_name;
+  let loc = { loc with loc_ghost = true } in
   let open Ast_builder.Default in
   let rule_exprs =
     List.map

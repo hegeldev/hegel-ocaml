@@ -33,12 +33,6 @@ let sexp_of_str_type_decl ~loc ~path decls =
     ~localize:false
 ;;
 
-let extract_expr_tuple e =
-  match e.pexp_desc with
-  | Pexp_tuple labeled_es -> Some (List.map snd labeled_es)
-  | _ -> None
-;;
-
 let unwrap_pattern_constraint pat =
   match pat.ppat_desc with
   | Ppat_constraint (inner, _, _) -> Some inner

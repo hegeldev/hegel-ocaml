@@ -36,10 +36,6 @@ val sexp_of_str_type_decl
   -> rec_flag * type_declaration list
   -> structure
 
-(** [extract_expr_tuple e] returns [Some es] if [e] is a tuple expression,
-    [None] otherwise. On OxCaml, strips the optional labels from labeled tuples. *)
-val extract_expr_tuple : expression -> expression list option
-
 (** [unwrap_pattern_constraint pat] returns [Some inner] if [pat] is a
     type-constraint pattern ([(p : ty)]), [None] otherwise. On OxCaml,
     [Ppat_constraint] carries an extra modes argument. *)
