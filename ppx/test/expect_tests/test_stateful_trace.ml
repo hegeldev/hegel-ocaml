@@ -25,7 +25,7 @@ module%hegel_state_machine Counter = struct
   let my_inv tc n =
     Hegel.note tc (sprintf "checking n = %d" !n);
     assert (!n <= 1)
-  [@@invariant always_check]
+  [@@invariant { always_check = true }]
   ;;
 end
 
@@ -223,10 +223,10 @@ module%hegel_concurrent_state_machine Concurrent_counter = struct
   type state = int Atomic.t
 
   let sexp_of_state state = Sexplib0.Sexp.Atom (Int.to_string (Atomic.get state))
-  let increment _tc state = Atomic.incr state [@@rule "writes"]
+  let increment _tc state = Atomic.incr state [@@rule { group = "writes" }]
 
   let stays_zero _tc state = if Atomic.get state <> 0 then failwith "invariant boom"
-  [@@invariant always_check]
+  [@@invariant { always_check = true }]
   ;;
 end
 

@@ -184,10 +184,13 @@ let stateful_usage_error_test () =
     Alcotest.(check int) "rule attempted once" 1 !attempts
 ;;
 
-let stateful_rule_name_test () =
+let stateful_rule_accessors_test () =
   let module S = Hegel.Stateful in
-  let rule = S.Rule.create ~name:"my_rule" ~step:(fun _tc _state -> ()) () in
-  Alcotest.(check string) "name" "my_rule" (S.Rule.name rule)
+  let rule = S.Rule.create ~name:"my_rule" ~weight:2.5 ~step:(fun _tc _state -> ()) () in
+  Alcotest.(check string) "name" "my_rule" (S.Rule.name rule);
+  Alcotest.(check (float 0.)) "weight" 2.5 (S.Rule.weight rule);
+  let unweighted = S.Rule.create ~name:"other" ~step:(fun _tc _state -> ()) () in
+  Alcotest.(check (float 0.)) "default weight" 1.0 (S.Rule.weight unweighted)
 ;;
 
 let stateful_no_rules_test () =
@@ -477,11 +480,15 @@ let test_pool_created_inside_rule () =
 
 let concurrent_rule_accessors_test () =
   let module R = Hegel.Stateful.Concurrent_rule in
-  let rule = R.create ~name:"read" ~group:"io" ~step:(fun _tc _state -> ()) () in
+  let rule =
+    R.create ~name:"read" ~group:"io" ~weight:2.5 ~step:(fun _tc _state -> ()) ()
+  in
   Alcotest.(check string) "name" "read" (R.name rule);
   Alcotest.(check string) "group" "io" (R.group rule);
+  Alcotest.(check (float 0.)) "weight" 2.5 (R.weight rule);
   let anonymous = R.create ~name:"write" ~step:(fun _tc _state -> ()) () in
-  Alcotest.(check string) "anonymous group" "<anonymous>" (R.group anonymous)
+  Alcotest.(check string) "anonymous group" "<anonymous>" (R.group anonymous);
+  Alcotest.(check (float 0.)) "default weight" 1.0 (R.weight anonymous)
 ;;
 
 let concurrent_smoke_test () =
@@ -1191,7 +1198,7 @@ let tests =
       "stateful: usage error aborts the run"
       `Quick
       stateful_usage_error_test
-  ; Alcotest.test_case "stateful: rule name accessor" `Quick stateful_rule_name_test
+  ; Alcotest.test_case "stateful: rule name accessor" `Quick stateful_rule_accessors_test
   ; Alcotest.test_case "stateful: empty rules raises" `Quick stateful_no_rules_test
   ; Alcotest.test_case
       "stateful: empty pool draw rejects"

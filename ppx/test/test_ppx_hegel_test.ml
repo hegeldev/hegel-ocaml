@@ -4,6 +4,7 @@
     [@@settings ...] attribute. *)
 
 open! Core
+module Atomic = Stdlib.Atomic
 
 let env_var = "ANTITHESIS_OUTPUT_DIR"
 
@@ -149,19 +150,19 @@ module%hegel_state_machine Counter = struct
   let bump_twice tc n =
     let by = Hegel.draw tc (Hegel.integers ~min_value:1 ~max_value:3 ()) in
     n := !n + (2 * by)
-  [@@rule 2.5]
+  [@@rule { weight = 2.5 }]
   ;;
 
   let bump_thrice tc n =
     let by = Hegel.draw tc (Hegel.integers ~min_value:1 ~max_value:3 ()) in
     n := !n + (3 * by)
-  [@@rule 3]
+  [@@rule { weight = 3 }]
   ;;
 
   let positive _tc n =
     incr invariant_checks;
     assert (!n >= 0)
-  [@@invariant always_check]
+  [@@invariant { always_check = true }]
   ;;
 
   let helper = 42
@@ -189,6 +190,44 @@ let test_state_machine_collects_marked_bindings () =
     (List.map Counter.invariants ~f:Hegel.Stateful.Invariant.name);
   Alcotest.(check int) "unmarked items are kept" 42 Counter.helper;
   with_tempdir ~f:(fun dir -> with_env_dir dir ~f:runs_machine)
+;;
+
+module%hegel_concurrent_state_machine Ledger = struct
+  let deposit _tc (n : int Atomic.t) = Atomic.incr n [@@rule]
+  let withdraw _tc (n : int Atomic.t) = Atomic.decr n [@@rule { group = "money" }]
+  let audit _tc (n : int Atomic.t) = ignore (Atomic.get n : int) [@@rule { weight = 2.5 }]
+
+  let settle _tc (n : int Atomic.t) = Atomic.incr n
+  [@@rule { group = "money"; weight = 3 }]
+  ;;
+
+  let reconcile _tc (n : int Atomic.t) = Atomic.decr n
+  [@@rule { weight = 4.0; group = "money" }]
+  ;;
+
+  let nonnegative _tc (_n : int Atomic.t) = () [@@invariant]
+end
+
+let%hegel_test runs_ledger (tc : Hegel.test_case) =
+  Ledger.run tc ~init:(Atomic.make 0) ~step_count:3
+[@@settings Hegel.Settings.create ~test_cases:3 ()]
+;;
+
+let test_concurrent_state_machine_collects_groups_and_weights () =
+  let module R = Hegel.Stateful.Concurrent_rule in
+  Alcotest.(check (list string))
+    "rule names"
+    [ "deposit"; "withdraw"; "audit"; "settle"; "reconcile" ]
+    (List.map Ledger.rules ~f:R.name);
+  Alcotest.(check (list string))
+    "rule groups"
+    [ "<anonymous>"; "money"; "<anonymous>"; "money"; "money" ]
+    (List.map Ledger.rules ~f:R.group);
+  Alcotest.(check (list (float 0.)))
+    "rule weights"
+    [ 1.0; 1.0; 2.5; 3.0; 4.0 ]
+    (List.map Ledger.rules ~f:R.weight);
+  with_tempdir ~f:(fun dir -> with_env_dir dir ~f:runs_ledger)
 ;;
 
 let test_no_settings_runs_with_defaults () =
@@ -219,6 +258,10 @@ let () =
             "module%hegel_state_machine collects [@@rule]/[@@invariant] bindings"
             `Quick
             test_state_machine_collects_marked_bindings
+        ; Alcotest.test_case
+            "module%hegel_concurrent_state_machine collects groups and weights"
+            `Quick
+            test_concurrent_state_machine_collects_groups_and_weights
         ] )
     ]
 ;;
