@@ -1,0 +1,11 @@
+; Hand-written odoc pages. hegel_jane_concurrent.mld documents the OxCaml-only
+; hegel.jane.concurrent sublibrary: it cannot compile where the docs are built
+; (upstream OCaml, no Jane Street `concurrent`), so odoc never sees its
+; interface and the page carries the signature by hand. Keep it in sync with
+; lib/jane/concurrent/hegel_jane_concurrent.mli. oxcaml_api.mld lists every
+; public signature that carries a mode annotation on OxCaml; keep it in sync
+; with the .mli.in files.
+
+(documentation
+ (package hegel)
+ (mld_files hegel_jane_concurrent oxcaml_api))

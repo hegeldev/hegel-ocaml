@@ -1,3 +1,6 @@
+#ifdef OXCAML
+@@ portable
+#endif
 (** Configuration for a Hegel test run.
 
     Create a {!Settings.t} with {!Settings.create}, {!Settings.default}, or

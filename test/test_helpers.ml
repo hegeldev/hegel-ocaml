@@ -61,19 +61,16 @@ let contains_substring s sub =
     check 0)
 ;;
 
-(** Helper: check where a given command is *)
-let find_cmd cmd =
-  let inp_stream = Core_unix.open_process_in ("which " ^ cmd) in
-  let output = String.strip (In_channel.input_all inp_stream) in
-  let exit_code = Core_unix.close_process_in inp_stream in
-  match exit_code with
-  | Ok () -> output
-  | Error err ->
-    raise
-      (Failure
-         (sprintf
-            "Command failed with status: %s"
-            (match err with
-             | `Exit_non_zero code -> Int.to_string code
-             | `Signal signal -> "signaled: " ^ Signal.to_string signal)))
+let parallel_concurrency : Hegel.Concurrency.t =
+  { spawn_join_n =
+      (fun ~n ~f ->
+        Stdlib.List.init n (fun i ->
+          (Stdlib.Domain.spawn [@alert "-do_not_spawn_domains-unsafe_multidomain"])
+            (fun () -> f i))
+        |> Stdlib.List.map Stdlib.Domain.join)
+  }
+;;
+
+let sequential_concurrency : Hegel.Concurrency.t =
+  { spawn_join_n = (fun ~n ~f -> Stdlib.List.init n f) }
 ;;

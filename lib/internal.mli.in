@@ -1,14 +1,16 @@
+#ifdef OXCAML
+@@ portable
+#endif
 (** This module implements the client-side logic for running property-based
     tests against the native libhegel engine (via {!Hegel_ffi.Ffi}).
 
     Examples in this documentation assume [open Hegel]. *)
 
-(** Raised when {!assume} condition is [false]. *)
-exception Assume_rejected
+(** Engine signal to stop the current test case, including choice exhaustion. *)
+exception Stop_test
 
-(** Raised when the engine runs out of choice budget for the current test case
-    (StopTest). *)
-exception Data_exhausted
+(** Raised when an assumption or engine draw rejects the case. *)
+exception Assume_rejected
 
 (** Raised when the engine detects a flaky strategy definition or when the
     client side pool diverges from the engine side pool. *)
@@ -19,6 +21,9 @@ exception Flaky_strategy
 
     @canonical Hegel.test_case *)
 type test_case
+#ifdef OXCAML
+  : value mod portable contended
+#endif
 
 (** A source location identifying a single test, passed to the engine with the
     run's settings.
@@ -56,17 +61,8 @@ val with_block : test_case -> indent:int -> (test_case -> 'a) -> 'a
     currently owns; they are freed together once the case completes. *)
 val owned_clone_count : test_case -> int
 
-(** A running worker spawned by {!spawn}; joined with {!join}. Re-exported as
-    [Hegel.worker]. *)
-type 'a worker
-
-(** [spawn tc f] runs [f] on a fresh clone of [tc] on a new thread, capturing
-    its result or exception. Re-exported as [Hegel.spawn]. *)
-val spawn : test_case -> (test_case -> 'a) -> 'a worker
-
-(** [join w] waits for [w] and returns its result — re-raising any exception the
-    worker raised. Re-exported as [Hegel.join]. *)
-val join : 'a worker -> 'a
+(** Tags subsequent output from [tc] with a concurrent worker index. *)
+val set_worker_index : test_case -> int -> unit
 
 (** [extract_origin exn] extracts an InterestingOrigin string from an exception.
     Uses the backtrace if available; derived from the assertion's location so
@@ -74,18 +70,19 @@ val join : 'a worker -> 'a
 val extract_origin : exn -> string
 
 exception Usage_error of string
+exception Internal_error of string
 
 (** [generate_boolean tc p forced] draws a boolean with probability [p] of
     [true]. If [forced] is [Some b] the value is forced to [b]. Raises
-    {!Data_exhausted} on StopTest. *)
+    {!Stop_test} on StopTest. *)
 val generate_boolean : test_case -> float -> bool option -> bool
 
 (** [generate_integer tc ~min_value ~max_value] draws an integer in the
-    inclusive range. Raises {!Data_exhausted} on StopTest. *)
+    inclusive range. Raises {!Stop_test} on StopTest. *)
 val generate_integer : test_case -> min_value:int -> max_value:int -> int
 
 (** [generate_float tc ...] draws a width-64 float under the given NaN /
-    infinity / exclusion policy. Raises {!Data_exhausted} on StopTest. *)
+    infinity / exclusion policy. Raises {!Stop_test} on StopTest. *)
 val generate_float
   :  test_case
   -> min_value:float
@@ -98,11 +95,11 @@ val generate_float
   -> float
 
 (** [generate_bytes tc ~min_size ~max_size] draws a byte string
-    ([max_size = None] means unbounded). Raises {!Data_exhausted} on StopTest. *)
+    ([max_size = None] means unbounded). Raises {!Stop_test} on StopTest. *)
 val generate_bytes : test_case -> min_size:int -> max_size:int option -> string
 
 (** [generate_text tc ...] draws a text string over the described alphabet.
-    Raises {!Data_exhausted} on StopTest. *)
+    Raises {!Stop_test} on StopTest. *)
 val generate_text
   :  test_case
   -> min_size:int
@@ -117,7 +114,7 @@ val generate_text
   -> string
 
 (** [generate_regex tc ~pattern ~fullmatch] draws a string matching [pattern]
-    (Python-[re] syntax). Raises {!Data_exhausted} on StopTest. *)
+    (Python-[re] syntax). Raises {!Stop_test} on StopTest. *)
 val generate_regex : test_case -> pattern:string -> fullmatch:bool -> string
 
 (** [generate_email tc] draws an RFC 5321/5322 email address. Raises
@@ -199,9 +196,16 @@ val stderr_color : string -> string -> string
     delegates to. The optional [hegel.jane] library sets a [sexp_diff]-backed
     renderer through this hook. Without one, {!render_diff} prints both values
     in full. *)
+#ifdef OXCAML
+val set_diff_renderer
+  :  (colored:bool -> original:Sexplib0.Sexp.t -> updated:Sexplib0.Sexp.t -> string) option
+     @ portable
+  -> unit
+#else
 val set_diff_renderer
   :  (colored:bool -> original:Sexplib0.Sexp.t -> updated:Sexplib0.Sexp.t -> string) option
   -> unit
+#endif
 
 (** [render_diff ~colored ~original ~updated] renders the two differing values:
     both values in full by default ([-]/[+], red/green when [colored]), or a
@@ -331,35 +335,36 @@ val pool_generate : test_case -> pool:pool -> ?consume:bool -> unit -> int
     {!state_machine_free}. *)
 type state_machine = Hegel_ffi.Ffi.state_machine
 
-(** [new_state_machine tc ~rule_names ~invariant_names ~invariants_always_check ~step_count] registers a sequential engine-owned state machine with the
-    named rules and invariants, running at most [step_count] rules per test
-    case. Raises {!Usage_error} if [rule_names] is empty or [step_count] is
-    below 1. *)
-val new_state_machine
+(** Registers a sequential or concurrent engine-owned state machine and
+    returns its handle with the concurrency level selected by libhegel. *)
+val new_state_machine_with_concurrency
   :  test_case
   -> rule_names:string list
+  -> rule_groups:int list
   -> invariant_names:string list
   -> invariants_always_check:bool list
   -> step_count:int
-  -> state_machine
+  -> min_concurrency:int
+  -> max_concurrency:int
+  -> state_machine * int
 
-(** [state_machine_next_round tc ~state_machine] asks the engine whether the
-    machine should run another round of rules: [false] once the step budget for
-    the test case is exhausted. Call it before the first rule and after every
-    round. Raises {!Data_exhausted} when the engine's choice budget is
-    exhausted. *)
-val state_machine_next_round : test_case -> state_machine:state_machine -> bool
+(** Starts the next state-machine round and returns its group id, or [None]
+    when the state machine is complete. *)
+val state_machine_next_group : test_case -> state_machine:state_machine -> int option
 
-(** [state_machine_next_rule tc ~state_machine] draws the index (in
-    [\[0, num_rules)]) of the next rule to run this round, letting the engine
-    choose and shrink the rule sequence, or returns [None] when the round is
-    over. Raises {!Data_exhausted} when the engine's choice budget is exhausted. *)
-val state_machine_next_rule : test_case -> state_machine:state_machine -> int option
+(** Draw the next rule for a worker, or [None] when its round ends. *)
+val state_machine_next_rule_for_worker
+  :  test_case
+  -> state_machine:state_machine
+  -> worker_index:int
+  -> int option
 
-(** [state_machine_rule_rejected tc ~state_machine] reports that the rule last
-    returned by {!state_machine_next_rule} did not complete. A rejected rule
-    does not count against the step budget. *)
-val state_machine_rule_rejected : test_case -> state_machine:state_machine -> unit
+(** Report that the worker's last rule was rejected. *)
+val state_machine_rule_rejected_for_worker
+  :  test_case
+  -> state_machine:state_machine
+  -> worker_index:int
+  -> unit
 
 (** [state_machine_should_check_invariant tc ~state_machine ~invariant_index]
     decides whether to run invariant [invariant_index] after the current round.

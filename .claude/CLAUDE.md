@@ -30,7 +30,13 @@ lib/                         # Library source
   hegel.ml / hegel.mli.in    # Main module — re-exports the public API.
                              #   (.in files are cppo-preprocessed by dune rules
                              #   — `#ifdef OXCAML` compiler compat — into the
-                             #   .ml/.mli the library builds from)
+                             #   .ml/.mli the library builds from. Most .mli and
+                             #   several .ml are .in now: see OxCaml portability)
+  locked.mli.in              # Locked: mutex-guarded shared data. dune `select`
+    locked.mutex.ml          #   picks locked.capsule.ml (capsule0, OxCaml) or
+    locked.capsule.ml        #   locked.mutex.ml (Mutex + value). Core-free.
+                             #   locked.capsule.ml is OxCaml syntax and listed in
+                             #   .ocamlformat-ignore
   ffi/                       # ctypes bindings to native libhegel (NOT instrumented)
     ffi.ml                   # dlopen + 1:1 C-ABI wrappers; settings/run/test_case
                              #   handles; typed draws + string-generator handles;
@@ -60,19 +66,44 @@ lib/                         # Library source
   derive.ml                  # Hegel.Derive: scope-resolved names derived code
                              #   refers to (hegel_generator_int/…/char/list/
                              #   option + the Sexplib0 sexp_of_* converters)
-  stateful.ml                # Stateful testing. Rule/Invariant.create (both take the
-                             #   test case), the State_machine module type, and
-                             #   run tc (module M) ~init. The doc-hidden run_internal
-                             #   takes the lists directly and is what the run generated
-                             #   by module%hegel_state_machine calls.
+  stateful.ml.in             # Stateful testing: Pool (shared by both machine kinds),
+                             #   Rule (sequential, plain mutating step), Concurrent_rule
+                             #   (?group, portable step), Invariant, State_machine +
+                             #   run tc (module M) ~init, Concurrent_state_machine +
+                             #   run_concurrent ?concurrency ?min/max_concurrency.
+                             #   Both runners share run_machine (engine machine,
+                             #   initial/final checks, free) and run_rules (one
+                             #   worker's rules for a round); the sequential one runs
+                             #   inline on tc inside a span, the concurrent one clones
+                             #   per worker through Concurrency.spawn_join_n and
+                             #   reraise_worker_failure. Spawns nothing itself (see
+                             #   Concurrent stateful testing). The doc-hidden
+                             #   run_internal/run_concurrent_internal take the lists
+                             #   directly and are what the PPX-generated run calls.
                              #   Rule and invariant bodies run on indent-2 block handles
+  concurrency.ml.in/.mli.in  # Hegel.Concurrency: the capability record
+                             #   (spawn_join_n), threads (the default) and, upstream
+                             #   only (#ifndef OXCAML), the pooled domains
   jane/                      # Optional hegel.jane sublibrary ((optional) in dune).
-    hegel_jane.ml/.mli       #   Core.Hashtbl hash_tables + pool helpers and the
+    hegel_jane.ml/.mli.in    #   Core.Hashtbl hash_tables + pool helpers and the
     test/                    #   sexp_diff require_equal renderer (set_sexp_diff);
+                             #   (.mli.in: cppo, the OxCaml portable default)
                              #   instrumented + coverage-gated like lib/ (its own
                              #   test/ dir, gated behind HEGEL_SKIP_JANE_TESTS in
                              #   check-tests-no-coverage since it needs the core/
                              #   sexp_diff opam depopts — see justfile)
+    concurrent/              # Optional hegel.jane.concurrent sublibrary (OxCaml
+      hegel_jane_concurrent  #   only: depends on Jane Street's concurrent; a
+        .ml/.mli, test/      #   sibling of hegel.jane, which must keep building
+                             #   upstream). of_concurrent wraps a local Concurrent.t
+                             #   as a local Hegel.Concurrency.t; the caller opens the
+                             #   scope (Concurrent_in_thread.with_blocking, a Parallel
+                             #   scheduler). Both files are OxCaml
+                             #   syntax (.ocamlformat-ignore). Its test is opt-in
+                             #   through HEGEL_CONCURRENT_TESTS=1 (set by the ox CI
+                             #   job): dune only allows env variables in an
+                             #   executable's enabled_if, and an (optional)
+                             #   executable is still requested by the default alias
 
 ppx/                         # PPX rewriters and derivers
   dune                       # PPX library build configs; a rule generates
@@ -99,7 +130,10 @@ test/                        # hegel's own test suite (one executable: test_hege
   dune                       #   Alcotest, package hegel — runs under `-p hegel`;
                              #   no PPX preprocessing beyond the ppx_js_style linter)
   test_hegel.ml              # Top-level Alcotest runner
-  test_helpers.ml            # Shared test utilities
+  test_helpers.ml            # Shared test utilities (+ the test-only parallel and
+                             #   sequential Concurrency capabilities)
+  test_concurrency.ml.in     # Concurrency tests (cppo: the domains tests exist
+                             #   upstream only)
   test_client.ml             # Internal config + run lifecycle tests (real engine)
   test_generators_*.ml       # Generator core / primitives / collections / combinators
   test_stateful.ml           # Stateful testing tests
@@ -170,7 +204,7 @@ the PPX test that parses the engine's `sdk.jsonl`). `core`,
 container or renderer a Jane Street type used to provide, the dependency is
 refunctionalized — the code takes the operations as closures/parameters, and
 each side instantiates them:
-- pools: `make_pool_values`/`resolve_pool_draw` (find/remove/is_empty closures) ← `Make_pool`+`Int_table` (stdlib) / `Hegel_jane` (Core.Hashtbl)
+- pools: `Int_pool` (an `Int_table` of values behind a `Locked`) is the only client-side pool; `resolve_pool_draw` (find/remove closures) is the shared id-resolution step
 - hash tables: `make_hash_tables ~of_pairs ~sexp_of_t` ← `hash_tables` (Stdlib.Hashtbl) / `Hegel_jane.hash_tables` (Hashtbl.Poly)
 - dates/times: `make_dates ~of_date`/`make_times ~of_time`/`make_datetimes ~of_datetime` (+ `~sexp_of`) (+ `?min_date`/`?min_time`/`?min_datetime` and `max_*` bounds) ← `dates`/`times`/`datetimes` (ISO 8601 strings) / `Hegel_jane.dates`/`ofdays` (Core values)
 - chars: `make_characters ~of_char ~sexp_of` ← `chars` / `Hegel_jane.chars`. `Core.Char.t = char`, so both sides draw the same value and only the printer differs (`sexp_of_char` vs `Core.Char.sexp_of_t`) — unlike the other refunctionalized pairs, `of_char` is `Fun.id` on both sides, kept only for symmetry with `~of_date`
@@ -209,7 +243,7 @@ Generators are a discriminated union:
 - **Filtered** — wraps source + predicate. Up to `max_filter_attempts` retries before `assume false`.
 - **CompositeList** — lists of any element core. Uses the collection protocol (with_collection / collection_more) to generate elements one at a time.
 - **Composite** — a `generate_fn` thunk run inside a labeled span; used by tuples, one_of, `lists ~unique`, and hash tables (all of which now always drive the collection protocol / draw sub-values directly — there is no schema fast path).
-- **Values** — the engine-pool core behind `Stateful.Pool`. Refunctionalized: it stores the table's `find`/`remove`/`is_empty` closures, not a concrete hashtable. `Make_pool (Tbl : Stdlib.Hashtbl.S with type key = int)` (doc-hidden, with the ready-made `Int_table`) closes `make_pool_values`/`resolve_pool_draw` over a stdlib table; the optional `hegel.jane` library closes the same primitives (via `Ppx_internal`) over `Core.Hashtbl`. `hash_tables` follows the same strategy at the API level: `make_hash_tables ~of_pairs ~sexp_of_t` is table-agnostic, `hash_tables` closes it over `Stdlib.Hashtbl`, `Hegel_jane.hash_tables` over `Core.Hashtbl.Poly`.
+- **Values** — the engine-pool core behind `Stateful.Pool` and `Concurrent_pool`: `{ pool; select : test_case -> 'a }`, where `select` draws an id from the engine pool and resolves it against the client table, all under the pool's `Locked` so the table never disagrees with the engine about which ids exist. `Generators.Int_pool` (doc-hidden) is that client side over `Int_table`; `resolve_pool_draw` is the shared id-resolution step. `hash_tables` is refunctionalized at the API level: `make_hash_tables ~of_pairs ~sexp_of_t` is table-agnostic, `hash_tables` closes it over `Stdlib.Hashtbl`, `Hegel_jane.hash_tables` over `Core.Hashtbl.Poly`.
 - **Span labels** (libhegel 0.39.0) — a label is an opaque `uint64_t` (OCaml `int64`) identifying the generator that opened a span; the engine treats two spans with the same label as coming from the same generator when it shrinks and mutates, and does nothing else with it. There are no predefined label constants in the ABI any more. `Generators_core.Labels.from_name`/`combine` compute the engine's own hashes (64-bit FNV-1a over the name's bytes / over the labels' little-endian bytes in order — `hegel_label_from_name`/`hegel_label_combine`, pinned equal by `test_labels_match_engine` through the `Ffi.label_*` bindings) so no context is needed at generator construction. Every core stores its `label`, fixed at construction: a `Leaf` from its primitive's name (`leaf ~name:"integers"` → `hegel_ocaml.integers`), and everything built from other generators as `combine [own kind; components' labels…]` (`lists (integers ())` ≠ `lists (text ())`; `map` on a leaf stays a leaf but combines `Labels.mapped` in; `with_printer` leaves the label alone; `Values` is the constant `Labels.pool`). `label_of_core`/`Ppx_internal.label_of` read it back. The deriver emits `combine [fixed_dict|enum_variant; from_name "<type name>"]` so two derived types of the same shape stay distinct. Names are prefixed `hegel_ocaml.` to keep clear of libhegel's own `hegel.<kind>` spans.
 - **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (memoized on the argument via structural hash/equality — a polymorphic `Stdlib.Hashtbl` — so `sexp_of_arg` is display-only and an omitted one shows `<opaque>` without collapsing the key) and shows applied pairs as `name arg = result` in the print region on the final replay. Only *top-level* applications print — a pair applied at draw depth > 0 (inside a span) is suppressed, like a nested draw. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); the name threads even when the function is drawn nested. Result draws are wrapped in a span labelled `combine [Labels.function_result; label of returns]`.
 
@@ -224,7 +258,12 @@ analogue of hegel-rust's `#[hegel::state_machine] impl`. At expansion time it
 collects the bindings marked `[@@rule]`, `[@@invariant]`, or
 `[@@invariant always_check]` into appended `rules` and `invariants` lists
 (`Rule.create ~name:"<binding>" ~step:<binding>` and the same for
-`Invariant.create`) plus a `run ?step_count ?sexp_of_state tc ~init`. There
+`Invariant.create`) plus a `run ?step_count ?sexp_of_state tc ~init`.
+`module%hegel_concurrent_state_machine` does the same with
+`Concurrent_rule.create ?group ~name ~step ()` (a `[@@rule "group"]` payload,
+which the sequential form rejects) and a `run ?concurrency ?min_concurrency
+?max_concurrency ?step_count ?sexp_of_state tc ~init` that calls
+`Stateful.run_concurrent_internal`. There
 is no registry and no runtime discovery. The generated `run` calls the
 doc-hidden `Stateful.run_internal`, which takes the lists directly, because
 the expanded module need not declare `type state` and the public
@@ -392,7 +431,7 @@ the `Ffi` wrappers `check_rc` before reading it.
 
 Who owns what in hegel-ocaml:
 - collections → `Generators_core.with_collection` (`Fun.protect`, so a
-  `Data_exhausted` mid-draw still frees)
+  `Stop_test` mid-draw still frees)
 - state machines → `Stateful.run`, the same way
 - blocks → `Internal.with_block` (`Fun.protect`, freed with its context when
   the body returns or raises), mirroring hegel-rust's lexically scoped
@@ -406,10 +445,10 @@ Who owns what in hegel-ocaml:
   case it was derived from, like `draw_state`), and `run_test_case` calls
   `free_owned` once the case is complete — matching the order in hegel-rust's
   own `hegel-c/tests/c_abi_inprocess.rs`, which frees everything before
-  `hegel_mark_complete`. A `Stateful.Pool` stores a *clone* of the test case
-  it was created on, not the block itself (as hegel-rust's `pool()` does), so
-  a pool created inside a rule body keeps working after that step's block is
-  freed. Clones and blocks used to be freed by a `Gc.finalise_last` finaliser
+  `hegel_mark_complete`. `Stateful.Pool.add` takes the calling rule's test
+  case and the pool handle is owned by the test case, so a pool created
+  inside a rule body keeps working after that step's block is freed. Clones
+  and blocks used to be freed by a `Gc.finalise_last` finaliser
   instead; that was a use-after-free, because the compiler treats a record as
   dead after its last field read, so the finaliser could run in the middle of
   an engine call that had just read `tc.context` (a `note` from an invariant
@@ -446,10 +485,13 @@ Indentation is engine-side too (libhegel 0.37.10 block handles):
 `Internal.with_block tc ~indent f` runs `f` on a handle onto the *same* choice
 stream whose print region is a block nested in `tc`'s at the current position,
 every line `indent` columns further in, ending with the block; the block is
-freed when `f` returns. `Stateful.run` runs each rule's `step` and each
-invariant body with `with_block tc ~indent:2` so their draws nest under the
-`Step N: name` note. It only creates the block when `should_print tc` holds
-(`Stateful.section`); a non-printing case runs the body on `tc` itself, since
+freed when `f` returns. `Stateful.run` runs each rule's `step` and each invariant body with
+`with_block tc ~indent:2` so their draws nest under the `Step N: name` note.
+The rule loop is `Stateful.run_rules`, shared by both runners: it pulls rule
+indices from the engine until the worker's round ends, notes the heading
+(`Step N:` sequentially, `Rule:` concurrently), runs the body on the block,
+and on `Assume_rejected` reports the rejection to the engine. It only creates the
+block when `should_print tc` holds; a non-printing case runs the body on `tc` itself, since
 a block per step costs a native handle and a context, which
 measured as 50% more wall time and 20x the major collections on a
 200-case x 500-step machine. And
@@ -462,8 +504,11 @@ fresh `draw_state` (a rule's draw names are scoped to that one invocation: a
 closure defined inside a `let%hegel_test` body — flagged repeatable by the
 PPX — as `n_1` in every step), while sharing `owned_pools`; a clone instead
 copies the span depth and shares the parent's `draw_state`.
-Unlike a clone, a block must not be driven concurrently with its parent. `hegel_test_case_set_worker` (worker attribution) is not bound:
-`Stateful.run` is sequential (concurrency fixed at 1).
+Unlike a clone, a block must not be driven concurrently with its parent.
+`Internal.set_worker_index` binds `hegel_test_case_set_worker`:
+`run_concurrent` tags each worker's per-round clone so the engine stamps its
+lines `[worker N +X.XXXms]`; the sequential `run` runs on `tc` itself and
+nothing is stamped.
 Flipping the `should_print` gate to always-append (so the engine sees every
 case's representation) is the intended future Tyche switch.
 
@@ -560,12 +605,151 @@ validated by `hegel_new_state_machine`); only the initial `hegel_settings_new`
 can, on a bad profile configuration, raising `Usage_error`.
 The client controls when a final run occurs. Exceptions map to
 `Ffi.mark_complete` statuses: VALID, INVALID (`Assume_rejected`/`Flaky_strategy`),
-OVERRUN (`Data_exhausted` from a `Stop_test` during a primitive), INTERESTING
+OVERRUN (`Stop_test`, the engine's stop signal during a primitive), INTERESTING
 (any other exception, with a location-derived origin from `extract_origin`).
 Interesting exceptions are captured by origin so the final-replay exception is
 re-raised; after the loop, `Ffi.run_result` failures are raised (single) or
 aggregated into a "Multiple failures" report. `run`/`settings` handles are freed
 in an `Exn.protect ~finally`.
+
+### Concurrent stateful testing (lib/stateful.ml.in, lib/concurrency.ml.in)
+
+Two runners share `run_machine` and `run_rules`, mirroring hegel-rust's
+`Rule`/`ConcurrentRule` split. Both kinds of rule mutate their state in
+place (`step : test_case -> 'state -> unit`; nothing returns a new state).
+The sequential `run` (`Rule`, no groups, concurrency fixed at 1) runs each
+round inline on `tc` inside a `stateful_rule` span (`stop_span
+~discard:rejected`), deterministic and shrinkable, with `Step N: name`
+headings and no worker stamps; its rule bodies are ordinary functions, so on
+OxCaml they see the state uncontended and plain refs work. The concurrent
+`run_concurrent` (`Concurrent_rule` with `?group`, `?min_concurrency` default
+1, `?max_concurrency` default `min_concurrency`; the engine draws the worker
+count when it creates the machine) never runs a rule inline, even at one
+worker: each round notes a `Round N: group` header, clones the test case once
+per worker, tags the clone with `set_worker_index`, and makes one call to
+`concurrency.spawn_join_n ~n ~f`, where `f i` runs `run_rules` for worker
+`i` on clone `i` (heading `Rule: name`), returning an `outcome` (`None`, or
+the exception with its backtrace; bodies never raise into the capability).
+`reraise_worker_failure` picks the highest-precedence failure (usage/internal
+error, then overrun, then invalidation, then a test failure; lowest worker
+index first), then the invariants run on the main thread. The runner spawns
+no threads or domains itself. `Hegel.Concurrency.t` is a record with that one
+field; `run_concurrent` and the generated `run` take it as `?concurrency`,
+default `Concurrency.threads` (one systhread per body per round:
+interleaving, no parallelism). One `Pool` serves both kinds; `add` takes the
+calling rule's test case because a pool add is a draw on that handle. The
+optional `hegel.jane.concurrent` sublibrary (`lib/jane/concurrent/`, OxCaml only) is
+the adapter for Jane Street's `Concurrent`: `of_concurrent c` is one
+`Concurrent.spawn_join_n c () ~n ~f` call plus `Base.Iarray.to_list`,
+returning the record with `exclave_`. Every `Concurrent.t` is handed out
+`@ local` and the record captures it, so the capability is local and the run
+that receives it is `[@nontail]`; the caller opens the scope
+(`Concurrent_in_thread.with_blocking Await.Terminator.unkillable`, or a
+`Parallel_scheduler`). A global `Concurrency.t` that opened a
+`with_blocking` scope per round did type-check but was dropped by decision:
+the caller owns the scope. `concurrent` is an opam depopt. `Concurrency.domains` is upstream-only (`#ifndef OXCAML`): a
+pool of `recommended_domain_count - 1` domains created on first use and joined
+at exit, one job queue per domain, jobs dealt round-robin, each job on its own
+systhread inside its domain so bodies stay live however few domains there
+are. Results go back as an `outcome list`, not an array, because on OxCaml a
+contended array cannot be read. Once any domain has been spawned `Unix.fork`
+fails for the rest of the process, so `test_hegel.ml` runs the forking
+`loader` suite first. Jane Street's `Concurrent` library is OxCaml-only and
+depends on `core`, which is why its adapter is the optional
+`hegel.jane.concurrent` sublibrary. See `plan.md` for the OxCaml portability
+phase.
+
+### OxCaml portability (cppo, modes, the trust boundary)
+
+Under OxCaml (`#ifdef OXCAML`, set by the `cppo-flags` rule in `lib/dune`
+and `lib/ffi/dune`) the library is mode-checked so a concurrent rule body can
+be `portable`. Upstream OCaml builds the same sources with the annotations
+stripped; every file carrying mode syntax is a cppo `.in`. Macros:
+`PORTABLE` = `@@ portable` (field modality), `PFN` = `@ portable` (function
+parameter or return mode), `CROSSING` = `: value mod portable contended`.
+
+- **Interfaces.** `hegel.mli.in`, `generators.mli.in`, `internal.mli.in`,
+  `settings.mli.in`, `derive.mli.in`, `ffi.mli.in`, and
+  `jane/hegel_jane.mli.in` start with a module-level `@@ portable` default:
+  every `val` is portable and the compiler checks each implementation. Core's
+  own functions are portable in the `5.2.0+ox` switch, so `hegel_jane.ml`
+  needs no annotations of its own, and a type derived under
+  `Hegel_jane.Derive` gets a portable printer. `stateful.mli.in` instead puts `sig @@ portable` on the
+  `Pool`/`Rule`/`Invariant`/`Concurrent_rule` submodules (`PORTABLE`); the
+  runners (`run`, `run_concurrent`, …) stay nonportable since they reference
+  `Concurrency.threads`, which uses `Thread.create`.
+  Function-typed parameters that end up stored in a generator (`map`,
+  `flat_map`, `filter`, `composite`, `with_printer`, `leaf ~draw ~sexp_of`,
+  `make_*`, `functions* ?sexp_of_arg*`, `Pool.create ~clone`) are `PFN`;
+  `printer` returns `PFN`. `just`, `sampled_from`, `Int_pool.t`, `Pool.t`
+  constrain their element type to `value mod portable contended`: the value
+  is captured by a closure and read back from a contended context.
+- **Types that cross.** `Generators_core.core`/`generator` are declared
+  `CROSSING`, which holds because every closure field carries `PORTABLE`
+  (`Leaf.draw`, `Mapped.f`, `FlatMapped.f`, `Filtered.predicate`,
+  `Composite.generate_fn`, `Values.select`, `Function.build`,
+  `Printable.sexp_of`). So a module-level generator is portable and a rule
+  body may capture it; a `map` whose closure touches a `ref` is rejected at
+  the `map` call. `Internal.test_case` is `CROSSING` too: handles cross (see
+  below), `test_aborted`/`draw_depth` are `Atomic.t`, the draw-name table and
+  the `owned` record are `Locked.t` (declared `value mod portable contended`
+  in `locked.mli.in`; `protect`'s result type must cross since it leaves the
+  lock). `Concurrent_rule.t.step` is
+  `(test_case -> 'state @ contended -> unit) @@ portable`, so a concurrent
+  rule body is portable and sees its state contended; a sequential
+  `Rule.t.step` has no modes, which is why the two rule types exist (OxCaml
+  has no mode polymorphism to make one step serve both). `run_concurrent`
+  takes `init:'state @ portable` and `?concurrency:Concurrency.t @ local`;
+  `Concurrency.t`'s field is
+  `n:int -> (f:(int -> outcome) @ portable -> outcome list @ contended) @ local`
+  (a contended array is unreadable, a contended list is not).
+- **The trust boundary is `Ffi`, in two places.** (1) Every libhegel handle
+  is `type handle = H of unit ptr [@@unboxed]`, declared
+  `value mod portable contended` with `[@@unsafe_allow_any_mode_crossing]`
+  under OxCaml (the attribute is not allowed on a type alias, hence the
+  constructor); `handle_t` is a ctypes `view` so every `ptr void` in a C
+  signature converts at the boundary and no wrapper call site changed.
+  libhegel's threading contract (hegel.h "Threading") is what makes it true.
+  (2) ctypes 0.24.0+ox has no mode annotations, so every binding is
+  nonportable; the block at the end of `ffi.ml.in` asserts each exported
+  value portable with `Obj.magic_portable`. Laundering `Ctypes` as a module
+  does not work: its data values (`Ctypes.int` …) stay contended inside
+  portable code. The only other launder is three `ipaddr` functions in
+  `generators_combinators.ml.in`.
+- **Runner shape.** `run_rules` is the shared rule loop (next rule from the
+  engine, heading, block, rejection report), parameterized by a heading
+  function and a `rule : int -> string * (test_case -> unit)` lookup so it
+  serves both rule types. The `work` function in `run_concurrent_internal`
+  is the portable worker body; it captures `rules : Concurrent_rule.t list`
+  (a list, not an array: `Array.get` needs an uncontended array), the state
+  machine handle, and the `@ portable` state; `dispatch_round` reads its
+  clone from a `test_case list`. The capability is passed down to `loop`,
+  not captured, so it may be local (`dispatch_round`'s parameter is
+  annotated `@ local`, `LOCAL_CONCURRENCY`); `run_machine` does not use
+  `Fun.protect` for the same reason, and the `run_machine` call in
+  `run_concurrent_internal` is `[@nontail]` (`NONTAIL`) because its callback
+  argument captures the local capability.
+- **`Locked` under OxCaml** is `Capsule_prim.Data` + `Capsule_blocking_sync.Mutex`
+  (`capsule0`, deps `basement` and `sexp_type` only). `protect` goes through
+  `Data.iter` and an atomic cell because `Data.extract` wants a unique result,
+  and it carries exceptions out before re-raising because raising under
+  `with_lock` poisons the mutex (a pool must survive a failing `clone`).
+- **Writing portable test/user code.** Inference order matters: a captured
+  variable whose type is still a variable when the closure is checked is
+  rejected, so annotate (`fun (n : int) -> …`, `fun tc (value : int Atomic.t)`,
+  optional parameters `?(max_size : int option)`). Bookkeeping in rule bodies
+  is `Atomic`, never `ref`. `Thread.yield`/`Thread.delay` are nonportable;
+  use `Domain.cpu_relax`/`Caml_unix.sleepf`. Under `open Core`, `Atomic` is
+  Core's and a different type: `module Atomic = Stdlib.Atomic`. A printer
+  application is `(printer gen) v`. `Alcotest.fail` inside a rule body is
+  nonportable; use `failwith`.
+- **Building locally.** `dune build --build-dir _build_ox …` in the
+  `5.2.0+ox` switch (delete `_build_ox` afterwards). The ox CI job installs
+  `capsule0`, `concurrent`, and `parallel` from `.github/oxcaml-ci.opam`, in
+  the same `opam install` as the with-test deps (a second solver call can
+  drop packages the first one installed). ocamlformat cannot parse OxCaml
+  syntax: `.in` files are outside `dune fmt`, and `lib/locked.capsule.ml` is
+  in `.ocamlformat-ignore`.
 
 ## Key Patterns and Conventions
 
@@ -597,7 +781,7 @@ in an `Exn.protect ~finally`.
 ### Error Handling
 
 - `Internal.Assume_rejected` — raised by `assume false`; mapped to `mark_complete INVALID`
-- `Internal.Data_exhausted` — raised when StopTest is received; skips `mark_complete`
+- `Internal.Stop_test` — raised when the engine signals StopTest (choice exhaustion); mapped to `mark_complete OVERRUN`
 - `Hegel_ffi.Ffi.Usage_error` (re-exported as `Hegel.Usage_error`) — raised by `check_rc` on `HEGEL_E_INVALID_ARG`; `run_test_case` re-raises it untouched (no `mark_complete`, no shrinking), mirroring hegel-rust's `InvalidArgument` unwind. Generators therefore don't duplicate engine-side argument validation
 
 ### Typed Draws (no schema)

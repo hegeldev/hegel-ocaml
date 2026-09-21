@@ -44,7 +44,7 @@ let%hegel_test test_map_combinator tc =
 let%hegel_test test_flat_map_combinator tc =
   let pair_gen =
     flat_map
-      (fun n ->
+      (fun (n : int) ->
          map
            (fun lst -> n, lst)
            (lists (integers ~min_value:0 ~max_value:99 ()) ~min_size:n ~max_size:n ()))

@@ -1,6 +1,6 @@
 let int_gen = Hegel.integers ~min_value:0 ~max_value:100 ()
 
-let%expect_test "no-draw failure prints a bodyless singular report" =
+let%expect_test "no-draw failure prints a report without drawn values" =
   (try
      Hegel.run_hegel_test
        ~settings:
@@ -13,14 +13,13 @@ let%expect_test "no-draw failure prints a bodyless singular report" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
     Exception: Failure("boom")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
 
-let%expect_test "later falsification counts plural test cases" =
+let%expect_test "failure report prints the shrunk counterexample" =
   (try
      Hegel.run_hegel_test
        ~settings:
@@ -35,10 +34,9 @@ let%expect_test "later falsification counts plural test cases" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 4 test cases (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
-      draw_1 = 60
+    draw_1 = 60
 
     Exception: Failure("large values are broken")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -69,24 +67,23 @@ let%expect_test "a multiline drawn value aligns under its name" =
   print_string (Expect_scrub.scrub_report ~hide_draw_positions:false [%expect.output]);
   [%expect
     {|
-    --- Failure ------------------------------------------------------------
-    Falsified after 1 test case (0 discarded):
+    --- Failure --------------------------------------------------------------------
 
-      l @ draw.ml:<LINE> = (00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000
-       00000)
+    l @ draw.ml:<LINE> = (00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000
+     00000)
 
     Exception: File "ppx/test/expect_tests/test_failure_report.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]

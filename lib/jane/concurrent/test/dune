@@ -1,0 +1,26 @@
+; Opt-in: set HEGEL_CONCURRENT_TESTS=1 where hegel.jane.concurrent builds (OxCaml
+; with concurrent and parallel installed). An executable's enabled_if may
+; only test environment variables, and an (optional) executable is still
+; requested by the default alias, so a library-availability gate cannot work.
+
+(executable
+ (name test_hegel_jane_concurrent)
+ (enabled_if
+  (= %{env:HEGEL_CONCURRENT_TESTS=0} 1))
+ (libraries
+  hegel
+  hegel_jane_concurrent
+  await
+  concurrent
+  concurrent.in_thread
+  parallel.scheduler
+  alcotest)
+ (preprocess
+  (pps ppx_js_style -- -allow-unannotated-ignores)))
+
+(rule
+ (alias runtest)
+ (enabled_if
+  (= %{env:HEGEL_CONCURRENT_TESTS=0} 1))
+ (action
+  (run %{exe:test_hegel_jane_concurrent.exe})))

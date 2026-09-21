@@ -113,23 +113,6 @@ let hash_tables keys values ?min_size ?max_size () =
     ()
 ;;
 
-let resolve_draw values ~consume variable_id =
-  G.Ppx_internal.resolve_pool_draw
-    ~find:(Hashtbl.find values)
-    ~remove:(Hashtbl.remove values)
-    ~consume
-    variable_id
-;;
-
-let pool_values ~pool ~values ~consume =
-  G.Ppx_internal.make_pool_values
-    ~pool
-    ~find:(Hashtbl.find values)
-    ~remove:(Hashtbl.remove values)
-    ~is_empty:(fun () -> Hashtbl.is_empty values)
-    ~consume
-;;
-
 let sexp_diff_renderer ~colored ~original ~updated =
   let diff = Sexp_diff.Algo.diff ~original ~updated () in
   let display_options = Sexp_diff.Display.Display_options.create Two_column in

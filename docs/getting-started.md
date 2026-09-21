@@ -177,7 +177,6 @@ On failure this prints:
 
 ```
 --- Failure: reverse_is_identity (test/my_tests.ml:1) ------------------
-Falsified after 8 test cases (0 discarded):
 
   xs = (0 1)
 
@@ -185,9 +184,8 @@ Exception: File "test/my_tests.ml", line 3, characters 2-8: Assertion failed
 rerun with: [@@failure_blobs [ "AXic..." ]]
 ```
 
-`Falsified after N test cases (M discarded)` counts the cases that ran before
-the failure (`M` of them were rejected, for example by `assume`). The final line
-replays the exact case. Under `let%hegel_test` it is a `[@@failure_blobs [ "..." ]]` 
+The final line shows how to replay the exact case. Under `let%hegel_test` it is
+a `[@@failure_blobs [ "..." ]]`
 attribute you paste onto the test, while a plain `run_hegel_test` caller gets a
 `~failure_blobs:[ "..." ]` argument to pass. On a terminal the header prints in 
 red. Set `HEGEL_COLOR=0` to disable color (or `1` to force it on). Set 
@@ -289,26 +287,30 @@ require tc ~msg:"list must stay sorted" (is_sorted xs)
 ## Stateful testing
 
 `Stateful` applies a random sequence of rules to the SUT and checks invariants
-on it. First, create a state machine with `module%hegel_state_machine`. Mark rules with `[@@rule]` and invariants with `[@@invariant]`. `let` names. Every invariant
- is checked on the initial and final states and
-sampled after intermediate steps, or after every step when marked
-`[@@invariant always_check]`. Pass `?sexp_of_state` to `Stateful.run` to trace 
-the model state. Draws are also printed with their `let`-bound name.
+on it. First, create a state machine with `module%hegel_state_machine`. Mark
+rules with `[@@rule]` and invariants with `[@@invariant]`. A rule takes the
+test case and the state and updates the state in place. Every invariant is 
+checked on the initial and final states and sampled after intermediate steps, 
+or after every step when marked `[@@invariant always_check]`. Pass `?sexp_of_state` 
+to `Stateful.run` to trace the model state. Draws are also printed with their 
+`let`-bound name.
 
 ```ocaml
 module%hegel_state_machine Stack = struct
-  type state = int list [@@deriving sexp_of]
+  type state = int list ref
+
+  let sexp_of_state stack = sexp_of_list sexp_of_int !stack
 
   let push tc stack =
     let n = draw tc (integers ~min_value:0 ~max_value:9 ()) in
-    n :: stack
+    stack := n :: !stack
   [@@rule]
 
-  let stack_stays_small _tc stack = assert (List.length stack <= 2)
+  let stack_stays_small _tc stack = assert (List.length !stack <= 2)
   [@@invariant always_check]
 end
 
-let%hegel_test stack_model tc = Stack.run tc ~init:[]
+let%hegel_test stack_model tc = Stack.run tc ~init:(ref [])
 ```
 
 When a sequence fails, the report shows each step, the draws it made, the state
@@ -316,7 +318,6 @@ after it, and which step broke the invariant:
 
 ```
   state = ()
-  Checking invariants on the initial state.
   Step 1: push
     n = 0
   state = (0)
@@ -336,13 +337,13 @@ them in a module of type `Stateful.State_machine`, and pass it to
 
 ```ocaml
 module Stack = struct
-  type state = int list
+  type state = int list ref
 
   let push tc stack =
     let n = draw ~label:"n" tc (integers ~min_value:0 ~max_value:9 ()) in
-    n :: stack
+    stack := n :: !stack
 
-  let stack_stays_small _tc stack = assert (List.length stack <= 2)
+  let stack_stays_small _tc stack = assert (List.length !stack <= 2)
   let rules = [ Stateful.Rule.create ~name:"push" ~step:push ]
 
   let invariants =
@@ -355,13 +356,23 @@ module Stack = struct
 end
 
 let%hegel_test stack_model tc =
-  Stateful.run tc (module Stack) ~init:[] ~sexp_of_state:[%sexp_of: int list]
+  Stateful.run
+    tc
+    (module Stack)
+    ~init:(ref [])
+    ~sexp_of_state:(fun stack -> [%sexp_of: int list] !stack)
 ```
 
 In state machines not written with the PPX, draws print as `draw_1`, `draw_2`, ... unless given a `~label`.
 
-See the `Hegel.Stateful` API docs for invariants across multiple
-rules and for value pools that let one rule act on data an earlier rule produced.
+One rule runs at a time. To run rules on several workers at once, write a
+`module%hegel_concurrent_state_machine` and pass `~max_concurrency:n` to its
+`run`. Rules marked `[@@rule "group"]` run concurrently only with rules in 
+the same group.
+
+See the `Hegel.Stateful` API docs for concurrent testing, for invariants across
+multiple rules, and for value pools that let one rule act on data an earlier
+rule produced.
 
 ## Change the number of test cases
 

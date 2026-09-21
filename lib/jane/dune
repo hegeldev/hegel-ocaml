@@ -10,3 +10,13 @@
   (pps ppx_js_style))
  (instrumentation
   (backend bisect_ppx)))
+
+(rule
+ (target hegel_jane.mli)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:../cppo-flags}
+   -o
+   %{target}
+   %{dep:hegel_jane.mli.in})))

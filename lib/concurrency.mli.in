@@ -1,0 +1,45 @@
+(** A concurrent state machine runs each round by passing one body per worker to [spawn_join_n].
+    [spawn_join_n] must run all of them at the same time and return their outcomes
+    once every body has finished. Hegel uses {!threads} by default.
+
+    Pass a capability as [~concurrency] to {!Stateful.run_concurrent} or to the
+    [run] of a [module%hegel_concurrent_state_machine]:
+
+    {[
+    let%hegel_test counter tc =
+      Stateful.run_concurrent
+        tc
+        (module Counter)
+        ~init:(Atomic.make 0)
+        ~concurrency:Concurrency.threads
+        ~max_concurrency:4
+    ;;
+    ]}
+
+    On OxCaml, {{!page-hegel_jane_concurrent}hegel.jane.concurrent} wraps a
+    Jane Street [Concurrent.t] as a capability. *)
+
+(** The result of one worker body: [None] on success, or the exception it
+    raised with its backtrace. *)
+type outcome = (exn * Printexc.raw_backtrace) option
+
+(** A concurrency capability. [spawn_join_n ~n ~f] runs [f 0] … [f (n - 1)] as
+    concurrent tasks and returns their outcomes once all of them have finished.
+    If [f i] raises, the exception is recorded as task [i]'s outcome. *)
+#ifdef OXCAML
+type t =
+  { spawn_join_n :
+      n:int -> (f:(int -> outcome) @ portable -> outcome list @ contended) @ local
+  }
+#else
+type t = { spawn_join_n : n:int -> f:(int -> outcome) -> outcome list }
+#endif
+
+(** Runs each body on its own systhread. *)
+val threads : t
+
+#ifndef OXCAML
+(** Runs the bodies in parallel on a pool of [[1, Domain.recommended_domain_count () - 1]]
+    domains. Each body runs on its own systhread inside a domain. *)
+val domains : t
+#endif

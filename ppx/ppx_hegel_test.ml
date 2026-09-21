@@ -23,11 +23,12 @@
     A state machine is a module whose rules and invariants are marked:
     {[
     module%hegel_state_machine Counter = struct
-      type state = int [@@deriving sexp_of]
+      type state = int ref
 
-      let add tc n = n + draw tc (integers ~min_value:1 ~max_value:10 ()) [@@rule]
-      let small _tc n = assert (n < 100) [@@invariant]
-      let positive _tc n = assert (n >= 0) [@@invariant always_check]
+      let sexp_of_state n = sexp_of_int !n
+      let add tc n = n := !n + draw tc (integers ~min_value:1 ~max_value:10 ()) [@@rule]
+      let small _tc n = assert (!n < 100) [@@invariant]
+      let positive _tc n = assert (!n >= 0) [@@invariant always_check]
     end
     ]}
     The above is rewritten into the following:
@@ -441,14 +442,29 @@ let expand_value_binding ~loc (vb : value_binding) : structure_item list =
 
 (** A marker attribute on a binding inside a [module%hegel_state_machine]. *)
 type marker =
-  | Rule
+  | Rule of string option
   | Invariant of { always_check : bool }
 
-let marker_of_attr (attr : attribute) : marker option =
+let marker_of_attr ~concurrent (attr : attribute) : marker option =
   match attr.attr_name.txt, attr.attr_payload with
-  | "rule", PStr [] -> Some Rule
+  | "rule", PStr [] -> Some (Rule None)
+  | "rule", _ when not concurrent ->
+    Location.raise_errorf
+      ~loc:attr.attr_loc
+      "ppx_hegel_test: rule groups are only supported in \
+       module%%hegel_concurrent_state_machine"
+  | ( "rule"
+    , PStr
+        [ { pstr_desc =
+              Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_string (group, _, _)); _ }, _)
+          ; _
+          }
+        ] ) -> Some (Rule (Some group))
   | "rule", _ ->
-    Location.raise_errorf ~loc:attr.attr_loc "ppx_hegel_test: [@@@@rule] takes no payload"
+    Location.raise_errorf
+      ~loc:attr.attr_loc
+      "ppx_hegel_test: [@@@@rule] either takes no payload or only a string literal group \
+       name"
   | "invariant", PStr [] -> Some (Invariant { always_check = false })
   | ( "invariant"
     , PStr
@@ -472,11 +488,13 @@ let is_marker (attr : attribute) =
 (** [expand_machine_item item] returns [item] with its marker attributes
     removed and the draws in marked bodies labeled and the
     [(name, marker)] of every marked binding it held. *)
-let expand_machine_item (item : structure_item) : structure_item * (string * marker) list =
+let expand_machine_item ~concurrent (item : structure_item)
+  : structure_item * (string * marker) list
+  =
   match item.pstr_desc with
   | Pstr_value (rec_flag, vbs) ->
     let expand_binding (vb : value_binding) =
-      match List.filter_map marker_of_attr vb.pvb_attributes with
+      match List.filter_map (marker_of_attr ~concurrent) vb.pvb_attributes with
       | [] -> vb, None
       | _ :: _ :: _ ->
         Location.raise_errorf
@@ -486,7 +504,7 @@ let expand_machine_item (item : structure_item) : structure_item * (string * mar
       | [ marker ] ->
         let what =
           match marker with
-          | Rule -> "rule"
+          | Rule _ -> "rule"
           | Invariant _ -> "invariant"
         in
         let name = extract_function_name ~what vb.pvb_pat in
@@ -542,27 +560,28 @@ let has_sexp_of_state (items : structure_item list) : bool =
     items
 ;;
 
-(** Expander for [module%hegel_state_machine M = struct … end]. It keeps the
-    body's items, with the marker attributes removed and the draws in marked
-    bodies labelled, and appends [rules], [invariants], and
-    [run ?step_count ?sexp_of_state tc ~init]. At least one [[@@rule]] binding
-    is required. *)
-let expand_state_machine ~loc (mb : module_binding) : structure_item list =
+(** Expand sequential and concurrent state-machine modules, collecting marked
+    bindings and appending their rules, invariants, and runner. *)
+let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item list =
+  let extension_name =
+    if concurrent then "hegel_concurrent_state_machine" else "hegel_state_machine"
+  in
   let items =
     match mb.pmb_expr.pmod_desc with
     | Pmod_structure items -> items
     | _ ->
       Location.raise_errorf
         ~loc
-        "ppx_hegel_test: module%%hegel_state_machine expects a [struct … end] body"
+        "ppx_hegel_test: module%%%s expects a [struct … end] body"
+        extension_name
   in
-  let items, marked = List.split (List.map expand_machine_item items) in
+  let items, marked = List.split (List.map (expand_machine_item ~concurrent) items) in
   let marked = List.concat marked in
   let rules, invariants =
     List.fold_right
       (fun (name, marker) (rules, invariants) ->
          match marker with
-         | Rule -> name :: rules, invariants
+         | Rule group -> (name, group) :: rules, invariants
          | Invariant { always_check } -> rules, (name, always_check) :: invariants)
       marked
       ([], [])
@@ -571,15 +590,29 @@ let expand_state_machine ~loc (mb : module_binding) : structure_item list =
   then
     Location.raise_errorf
       ~loc
-      "ppx_hegel_test: a state machine needs at least one [@@@@rule] binding";
+      "ppx_hegel_test: module%%%s needs at least one [@@@@rule] binding"
+      extension_name;
   let open Ast_builder.Default in
   let rule_exprs =
     List.map
-      (fun name ->
-         [%expr
-           Hegel.Stateful.Rule.create
-             ~name:[%e estring ~loc name]
-             ~step:[%e evar ~loc name]])
+      (fun (name, group) ->
+         if concurrent
+         then
+           [%expr
+             Hegel.Stateful.Concurrent_rule.create
+               ?group:
+                 [%e
+                   match group with
+                   | None -> [%expr None]
+                   | Some group -> [%expr Some [%e estring ~loc group]]]
+               ~name:[%e estring ~loc name]
+               ~step:[%e evar ~loc name]
+               ()]
+         else
+           [%expr
+             Hegel.Stateful.Rule.create
+               ~name:[%e estring ~loc name]
+               ~step:[%e evar ~loc name]])
       rules
   in
   let invariant_exprs =
@@ -594,7 +627,54 @@ let expand_state_machine ~loc (mb : module_binding) : structure_item list =
       invariants
   in
   let run =
-    if has_sexp_of_state items
+    if concurrent
+    then
+      if has_sexp_of_state items
+      then
+        [%stri
+          let run
+                ?concurrency
+                ?min_concurrency
+                ?max_concurrency
+                ?step_count
+                ?(sexp_of_state = sexp_of_state)
+                tc
+                ~init
+            =
+            Hegel.Stateful.run_concurrent_internal
+              ~init
+              ~rules
+              ~invariants
+              ?concurrency
+              ?min_concurrency
+              ?max_concurrency
+              ~sexp_of_state
+              ?step_count
+              tc
+          ;;]
+      else
+        [%stri
+          let run
+                ?concurrency
+                ?min_concurrency
+                ?max_concurrency
+                ?step_count
+                ?sexp_of_state
+                tc
+                ~init
+            =
+            Hegel.Stateful.run_concurrent_internal
+              ~init
+              ~rules
+              ~invariants
+              ?concurrency
+              ?min_concurrency
+              ?max_concurrency
+              ?sexp_of_state
+              ?step_count
+              tc
+          ;;]
+    else if has_sexp_of_state items
     then
       [%stri
         let run ?step_count ?(sexp_of_state = sexp_of_state) tc ~init =
@@ -641,7 +721,15 @@ let state_machine_extension =
     "hegel_state_machine"
     Extension.Context.structure_item
     Ast_pattern.(pstr (pstr_module __ ^:: nil))
-    (fun ~loc ~path:_ mb -> expand_state_machine ~loc mb)
+    (fun ~loc ~path:_ mb -> expand_state_machine ~concurrent:false ~loc mb)
+;;
+
+let concurrent_state_machine_extension =
+  Extension.declare_inline
+    "hegel_concurrent_state_machine"
+    Extension.Context.structure_item
+    Ast_pattern.(pstr (pstr_module __ ^:: nil))
+    (fun ~loc ~path:_ mb -> expand_state_machine ~concurrent:true ~loc mb)
 ;;
 
 let () =
@@ -650,5 +738,6 @@ let () =
     ~rules:
       [ Context_free.Rule.extension extension
       ; Context_free.Rule.extension state_machine_extension
+      ; Context_free.Rule.extension concurrent_state_machine_extension
       ]
 ;;

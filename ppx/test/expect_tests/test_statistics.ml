@@ -60,8 +60,7 @@ let%expect_test "shrink replays are excluded from the statistics" =
     {|
     Statistics (over 2 test cases):
       * v: count 2, min 0, median 26.5, mean 26.50, p90 53, max 53
-    --- Failure ------------------------------------------------------------
-    Falsified after 2 test cases (0 discarded):
+    --- Failure --------------------------------------------------------------------
     Exception: File "ppx/test/expect_tests/test_statistics.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
