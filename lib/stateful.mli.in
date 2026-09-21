@@ -14,7 +14,7 @@
     With the [ppx_hegel_test] PPX, a state machine is a module written as
     [module%hegel_state_machine M = struct … end]. Mark rules with [[@@rule]]
     and invariants with [[@@invariant]]. See {!Rule} and {!Invariant}
-    for valid payloads. The PPX generates the [run] function for the state 
+    for valid options. The PPX generates the [run] function for the state 
     machine. If the module defines [sexp_of_state], [run] uses it to print the
     state after each step.
 
@@ -76,7 +76,7 @@
     With the [ppx_hegel_test] PPX, a concurrent state machine is a module written as
     [module%hegel_concurrent_state_machine M = struct … end]. Mark rules with [[@@rule]]
     and invariants with [[@@invariant]]. See {!Concurrent_rule} and {!Invariant} for 
-    valid payloads. The PPX generates the [run] function for the state machine. If the 
+    valid options. The PPX generates the [run] function for the state machine. If the 
     module defines [sexp_of_state], [run] uses it to print the state after each step.
 
     The example store below has a bug. The store locks individual reads and writes,
@@ -343,7 +343,7 @@ module Rule : sig PORTABLE
         arguments it needs from [tc] and updating [state] in place. [tc] is
         valid only for that step.
 
-      With the PPX, a rule takes the following record payload: [[@@rule { weight = ... }]].
+      With the PPX, a rule takes the following option: [[@@rule { weight = ... }]].
 
       {[
       let push =
@@ -388,7 +388,7 @@ module Invariant : sig PORTABLE
 
       Every invariant is checked on the initial and final states.
 
-      With the PPX, an invariant takes the following record payload: 
+      With the PPX, an invariant takes the following option: 
       [[@@invariant { always_checked = true | false }]].
 
       {[
@@ -431,7 +431,7 @@ module Concurrent_rule : sig PORTABLE
         arguments it needs from [tc] and updating [state] in place. [tc] is
         valid only for that step.
 
-      With the PPX, a concurrent rule takes the following record payload: 
+      With the PPX, a concurrent rule takes the following options: 
       [[@@rule { group = "group"; weight = <weight> }]]. The order of the fields
       does not matter and neither are required. *)
 #ifdef OXCAML
