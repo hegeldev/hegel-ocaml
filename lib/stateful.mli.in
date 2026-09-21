@@ -59,9 +59,9 @@
 
 (** {2 Concurrent stateful testing}
 
-    {!run_concurrent} with [max_concurrency > 1] runs rules on several workers at
-    once. The engine draws the number of workers in [[min_concurrency, max_concurrency]].
-    Rules belong to a group. Only rules in the same group may run concurrently. Rules
+    {!run_concurrent} with [max_concurrency > 1] runs rules on several workers concurrently. 
+    libhegel draws the number of workers in [[min_concurrency, max_concurrency]].
+    Rules belong to a group, and only rules in the same group may run concurrently. Rules
     without a group all belong to the [<anonymous>] group.
 
     A round is a step of a concurrent test. Each round selects one rule group,
@@ -219,12 +219,28 @@
     Exception: Failure("increments were lost: store sums to 11 after 12 increments")
     v} *)
 
+(** {3 OxCaml}
+
+    On OxCaml this library is mode-checked. {{!page-oxcaml_api}Mode-annotated API} lists
+    every public signature that has a mode.
+
+    {!Concurrent_rule.create}'s [step] is [@@ portable] and receives the state
+    [@ contended], and {!run_concurrent} takes [~init] [@ portable].
+
+    [map], [filter], [composite], and [with_printer] take portable functions. The
+    element types of [just], [sampled_from], and {!Pool.t} cross modes
+    ([value mod portable contended]). Generators derived with [Hegel_jane.Derive] 
+    are portable.
+
+    The [?concurrency] capability is [@ local]. Also, see {{!page-hegel_jane_concurrent}hegel.jane.concurrent}. *)
+
 (** {2 Submodules} *)
 
 module Pool : sig PORTABLE
-  (** A pool of previously generated values. Rules can add to it and
-      draw from it, so a rule can act on a handle or identifier that an earlier
-      rule produced rather than on a new drawn value. Every operation is
+  (** A pool of previously generated values. 
+  
+      Rules can add to it and draw from it, so a rule can use values that a
+      another rule produced rather than on a new drawn value. Every operation is
       safe to call from several workers at once.
 
       Create one with {!create} and populate it with {!add}. To draw from the
@@ -234,7 +250,7 @@ module Pool : sig PORTABLE
       - {!values_consumed}: drawing from it removes a value from the pool and
         returns it.
 
-      Example: a resource allocator. The [alloc] rule creates a fresh handle and
+      Example: a resource allocator. The [alloc] rule creates a new handle and
       deposits it in the pool. The [free] rule draws one of those handles back
       out and releases it. Without a pool, [free] would have no way to name a
       handle that a previous [alloc] actually created. It could only draw an
@@ -307,7 +323,8 @@ module Pool : sig PORTABLE
 end
 
 module Rule : sig PORTABLE
-  (** A rule is one possible action in a sequential stateful test. *)
+  (** One possible action in a sequential stateful test. *)
+
   type 'state t
 
   (** Declares a rule.
@@ -337,7 +354,8 @@ module Rule : sig PORTABLE
 end
 
 module Invariant : sig PORTABLE
-  (** An invariant is a property that must always be true in a stateful test. *)
+  (** A property that must always be true in a stateful test. *)
+
   type 'state t
 
   (** Declares an invariant.
@@ -370,8 +388,8 @@ module Invariant : sig PORTABLE
 end
 
 module Concurrent_rule : sig PORTABLE
-  (** A rule applied to shared state by concurrent workers. The caller is
-      responsible for synchronizing mutable state accessed by rule bodies. *)
+  (** One possible action in a concurrent stateful test. *)
+
   type 'state t
 #ifdef OXCAML
     : value mod portable contended
@@ -411,7 +429,7 @@ end
 
 (** {2 Running stateful tests} *)
 
-(** A state machine.
+(** A sequential state machine.
 
     {[
     module Counter : Stateful.State_machine with type state = int ref = struct
@@ -436,7 +454,7 @@ module type State_machine = sig
   val invariants : state Invariant.t list
 end
 
-(** [run tc (module M) ~init] executes a stateful test by repeatedly applying
+(** [run tc (module M) ~init] executes a stateful test by applying
     randomly chosen rules of [M] to the [init] state. Every invariant is
     checked on the initial and the final state. After a step, invariants are
     randomly sampled unless they were created with [always_check:true]. Raises
@@ -502,10 +520,6 @@ end
 (** [run_concurrent ?concurrency ?step_count ?sexp_of_state tc (module M) ~init ?min_concurrency ?max_concurrency]
     executes a state machine with N workers, where N is in [[min_concurrency, max_concurrency]].
     [min_concurrency] defaults to 1 and [max_concurrency] to [min_concurrency].
-    In a round, all workers receive zero or more rules from one concurrency group.
-
-    Invariants are checked on the initial and final state and sampled between
-    rounds, unless they were created with [always_check:true].
 
     If [sexp_of_state] is provided, the state is printed before the first round
     and after each completed round.

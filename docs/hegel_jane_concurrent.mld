@@ -1,6 +1,5 @@
-@@ portable
+{0 Hegel_jane_concurrent}
 
-(**
 {2 Introduction} 
 Runs Hegel's concurrent state machines on Jane Street's [Concurrent] library.
 This sublibrary is available on OxCaml only.
@@ -20,7 +19,10 @@ let%hegel_test counter tc =
 ]}
 
 {2 Interface}
-*)
 
-(** [of_concurrent c] runs each round's workers as tasks of [c]. *)
+{[
 val of_concurrent : _ Concurrent.t @ local -> Hegel.Concurrency.t @ local
+]}
+
+[of_concurrent c] runs each round's workers as tasks of [c].
+
