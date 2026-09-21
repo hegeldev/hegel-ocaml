@@ -56,69 +56,48 @@
 
 open Ppxlib
 
-(** [extract_settings_attr attrs] returns the expression carried by
-    [[@@settings expr]] if present, else [None]. *)
-let extract_settings_attr (attrs : attributes) : expression option =
-  List.find_map
-    (fun (attr : attribute) ->
-       if String.equal attr.attr_name.txt "settings"
-       then (
-         match attr.attr_payload with
-         | PStr [ { pstr_desc = Pstr_eval (e, _); _ } ] -> Some e
-         | _ ->
-           Location.raise_errorf
-             ~loc:attr.attr_loc
-             "ppx_hegel_test: [@@settings ...] must carry a single expression")
-       else None)
-    attrs
+let settings_attribute =
+  Attribute.declare
+    "hegel.settings"
+    Attribute.Context.value_binding
+    Ast_pattern.(single_expr_payload __)
+    Fun.id
 ;;
 
-(** [parse_string_list e] returns the list of literal strings carried by [e]
-    when [e] has the shape [[ "..."; "..."; ... ]], else raises a located error
-    pointing at the offending sub-expression. *)
-let rec parse_string_list (e : expression) : string list =
-  match e.pexp_desc with
-  | Pexp_construct ({ txt = Lident "[]"; _ }, None) -> []
-  | Pexp_construct ({ txt = Lident "::"; _ }, Some payload) ->
-    (match Ppx_compat.extract_expr_tuple payload with
-     | Some [ head; tail ] ->
-       let head_str =
-         match head.pexp_desc with
-         | Pexp_constant (Pconst_string (s, _, _)) -> s
-         | _ ->
-           Location.raise_errorf
-             ~loc:head.pexp_loc
-             "ppx_hegel_test: elements must be string literals"
-       in
-       head_str :: parse_string_list tail
-     | _ -> Location.raise_errorf ~loc:e.pexp_loc "ppx_hegel_test: malformed list payload")
-  | _ ->
-    Location.raise_errorf
-      ~loc:e.pexp_loc
-      "ppx_hegel_test: expected a list literal of string literals"
+let failure_blobs_attribute =
+  Attribute.declare_with_attr_loc
+    "hegel.failure_blobs"
+    Attribute.Context.value_binding
+    Ast_pattern.(single_expr_payload (elist (estring __)))
+    (fun ~attr_loc blobs -> attr_loc, blobs)
 ;;
 
-(** [extract_failure_blobs_attr attrs] returns the parsed string list if a
-    [[@@failure_blobs ...]] attribute is present, else [None]. *)
-let extract_failure_blobs_attr (attrs : attributes) : string list option =
-  List.find_map
-    (fun (attr : attribute) ->
-       if String.equal attr.attr_name.txt "failure_blobs"
-       then (
-         match attr.attr_payload with
-         | PStr [ { pstr_desc = Pstr_eval (e, _); _ } ] ->
-           (match parse_string_list e with
-            | [] ->
-              Location.raise_errorf
-                ~loc:attr.attr_loc
-                "ppx_hegel_test: [@@failure_blobs ...] must have at least one element"
-            | lst -> Some lst)
-         | _ ->
-           Location.raise_errorf
-             ~loc:attr.attr_loc
-             "ppx_hegel_test: [@@failure_blobs ...] must carry a list literal")
-       else None)
-    attrs
+let rule_attribute =
+  Attribute.declare_with_attr_loc
+    "hegel.rule"
+    Attribute.Context.value_binding
+    Ast_pattern.(
+      alt
+        (map0 (pstr nil) ~f:None)
+        (map1 (single_expr_payload (estring __)) ~f:(fun group -> Some group)))
+    (fun ~attr_loc group -> attr_loc, group)
+;;
+
+let invariant_attribute =
+  Attribute.declare
+    "hegel.invariant"
+    Attribute.Context.value_binding
+    Ast_pattern.(
+      alt
+        (map0 (pstr nil) ~f:false)
+        (map0 (single_expr_payload (pexp_ident (lident (string "always_check")))) ~f:true))
+    Fun.id
+;;
+
+let consume attr node =
+  match Attribute.consume attr node with
+  | Some (node, payload) -> node, Some payload
+  | None -> node, None
 ;;
 
 (** [extract_function_name ~what pat] returns the name bound by [pat] if [pat]
@@ -144,6 +123,16 @@ let build_location_record ~loc ~function_name : expression =
     ; file = [%e Ast_builder.Default.estring ~loc file_str]
     ; begin_line = [%e Ast_builder.Default.eint ~loc line]
     }]
+;;
+
+(** [set_attributes attrs item] is the [let] stri [item] with [attrs]
+    as the attributes of every binding in [item]. *)
+let set_attributes (attrs : attributes) (item : structure_item) : structure_item =
+  match item.pstr_desc with
+  | Pstr_value (rec_flag, vbs) ->
+    let vbs = List.map (fun vb -> { vb with pvb_attributes = attrs }) vbs in
+    { item with pstr_desc = Pstr_value (rec_flag, vbs) }
+  | _ -> item
 ;;
 
 (** [build_items ~loc ~function_name ~settings_expr ~body_fn] returns the single
@@ -179,7 +168,7 @@ let build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn ~attr
   in
   let pat = Ast_builder.Default.pvar ~loc function_name in
   let definition = [%stri let [%p pat] = fun () -> [%e call]] in
-  [ definition ]
+  [ set_attributes attrs definition ]
 ;;
 
 (** [is_draw_lident lid] is [true] when [lid]'s final component is [draw],
@@ -436,12 +425,29 @@ let inject_labels (fn : expression) : expression =
 (** Expander for a single [let%hegel_test ...] structure item. *)
 let expand_value_binding ~loc (vb : value_binding) : structure_item list =
   let function_name = extract_function_name ~what:"test" vb.pvb_pat in
-  let settings_expr = extract_settings_attr vb.pvb_attributes in
-  let failure_blobs = extract_failure_blobs_attr vb.pvb_attributes in
+  let vb, settings_expr = consume settings_attribute vb in
+  let vb, failure_blobs = consume failure_blobs_attribute vb in
+  let failure_blobs =
+    Option.map
+      (fun (attr_loc, blobs) ->
+         if List.is_empty blobs
+         then
+           Location.raise_errorf
+             ~loc:attr_loc
+             "ppx_hegel_test: [@@@@failure_blobs ...] must have at least one element";
+         blobs)
+      failure_blobs
+  in
   (* The body of [let%hegel_test name <args> = expr] is parsed as [let name = <args -> expr>]. We pass that lambda as the [test_fn] to
      [Hegel.run_hegel_test]. *)
   let body_fn = inject_labels vb.pvb_expr in
-  build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn
+  build_items
+    ~loc
+    ~function_name
+    ~settings_expr
+    ~failure_blobs
+    ~body_fn
+    ~attrs:vb.pvb_attributes
 ;;
 
 (** A marker attribute on a binding inside a [module%hegel_state_machine]. *)
@@ -449,44 +455,24 @@ type marker =
   | Rule of string option
   | Invariant of { always_check : bool }
 
-let marker_of_attr ~concurrent (attr : attribute) : marker option =
-  match attr.attr_name.txt, attr.attr_payload with
-  | "rule", PStr [] -> Some (Rule None)
-  | "rule", _ when not concurrent ->
+(** [marker_of_binding ~concurrent vb] is [vb] with its marker attribute
+    removed and the marker that attribute carried, if any. *)
+let marker_of_binding ~concurrent (vb : value_binding) : value_binding * marker option =
+  let vb, rule = consume rule_attribute vb in
+  let vb, invariant = consume invariant_attribute vb in
+  match rule, invariant with
+  | Some _, Some _ ->
     Location.raise_errorf
-      ~loc:attr.attr_loc
+      ~loc:vb.pvb_loc
+      "ppx_hegel_test: a binding can be marked [@@@@rule] or [@@@@invariant], not both"
+  | Some (attr_loc, Some _), None when not concurrent ->
+    Location.raise_errorf
+      ~loc:attr_loc
       "ppx_hegel_test: rule groups are only supported in \
        module%%hegel_concurrent_state_machine"
-  | ( "rule"
-    , PStr
-        [ { pstr_desc =
-              Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_string (group, _, _)); _ }, _)
-          ; _
-          }
-        ] ) -> Some (Rule (Some group))
-  | "rule", _ ->
-    Location.raise_errorf
-      ~loc:attr.attr_loc
-      "ppx_hegel_test: [@@@@rule] either takes no payload or only a string literal group \
-       name"
-  | "invariant", PStr [] -> Some (Invariant { always_check = false })
-  | ( "invariant"
-    , PStr
-        [ { pstr_desc =
-              Pstr_eval
-                ({ pexp_desc = Pexp_ident { txt = Lident "always_check"; _ }; _ }, _)
-          ; _
-          }
-        ] ) -> Some (Invariant { always_check = true })
-  | "invariant", _ ->
-    Location.raise_errorf
-      ~loc:attr.attr_loc
-      "ppx_hegel_test: [@@@@invariant] takes no payload, or [always_check]"
-  | _ -> None
-;;
-
-let is_marker (attr : attribute) =
-  String.equal attr.attr_name.txt "rule" || String.equal attr.attr_name.txt "invariant"
+  | Some (_, group), None -> vb, Some (Rule group)
+  | None, Some always_check -> vb, Some (Invariant { always_check })
+  | None, None -> vb, None
 ;;
 
 (** [expand_machine_item item] returns [item] with its marker attributes
@@ -498,25 +484,16 @@ let expand_machine_item ~concurrent (item : structure_item)
   match item.pstr_desc with
   | Pstr_value (rec_flag, vbs) ->
     let expand_binding (vb : value_binding) =
-      match List.filter_map (marker_of_attr ~concurrent) vb.pvb_attributes with
-      | [] -> vb, None
-      | _ :: _ :: _ ->
-        Location.raise_errorf
-          ~loc:vb.pvb_loc
-          "ppx_hegel_test: a binding can be marked [@@@@rule] or [@@@@invariant], not \
-           both"
-      | [ marker ] ->
+      match marker_of_binding ~concurrent vb with
+      | vb, None -> vb, None
+      | vb, Some marker ->
         let what =
           match marker with
           | Rule _ -> "rule"
           | Invariant _ -> "invariant"
         in
         let name = extract_function_name ~what vb.pvb_pat in
-        ( { vb with
-            pvb_expr = inject_labels vb.pvb_expr
-          ; pvb_attributes = List.filter (fun a -> not (is_marker a)) vb.pvb_attributes
-          }
-        , Some (name, marker) )
+        { vb with pvb_expr = inject_labels vb.pvb_expr }, Some (name, marker)
     in
     let vbs, marked = List.split (List.map expand_binding vbs) in
     { item with pstr_desc = Pstr_value (rec_flag, vbs) }, List.filter_map Fun.id marked
