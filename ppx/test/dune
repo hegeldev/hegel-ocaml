@@ -4,6 +4,11 @@
 ; ppx packages resolved from the installed world. In a dev checkout everything
 ; resolves locally as usual.
 
+; [-check -locations-check] turn on ppxlib's audits of the expanders' output:
+; every attribute consumed must be recorded as handled, and generated nodes must
+; be ghosts (a real location on a node the user did not write overlaps its
+; siblings).
+
 (test
  (name test_ppx_derive)
  (package ppx_hegel_generator)
@@ -15,7 +20,9 @@
    ppx_hegel_generator
    ppx_hegel_test
    --
-   -allow-unannotated-ignores)))
+   -allow-unannotated-ignores
+   -check
+   -locations-check)))
 
 (executable
  (name test_ppx_derive_jane)
@@ -28,7 +35,9 @@
    ppx_hegel_generator
    ppx_hegel_test
    --
-   -allow-unannotated-ignores)))
+   -allow-unannotated-ignores
+   -check
+   -locations-check)))
 
 (test
  (name test_ppx_hegel_test)
@@ -36,4 +45,10 @@
  (modules test_ppx_hegel_test)
  (libraries hegel alcotest core core_unix threads.posix yojson)
  (preprocess
-  (pps ppx_js_style ppx_hegel_test -- -allow-unannotated-ignores)))
+  (pps
+   ppx_js_style
+   ppx_hegel_test
+   --
+   -allow-unannotated-ignores
+   -check
+   -locations-check)))

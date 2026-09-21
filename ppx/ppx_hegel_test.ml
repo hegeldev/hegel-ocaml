@@ -56,69 +56,48 @@
 
 open Ppxlib
 
-(** [extract_settings_attr attrs] returns the expression carried by
-    [[@@settings expr]] if present, else [None]. *)
-let extract_settings_attr (attrs : attributes) : expression option =
-  List.find_map
-    (fun (attr : attribute) ->
-       if String.equal attr.attr_name.txt "settings"
-       then (
-         match attr.attr_payload with
-         | PStr [ { pstr_desc = Pstr_eval (e, _); _ } ] -> Some e
-         | _ ->
-           Location.raise_errorf
-             ~loc:attr.attr_loc
-             "ppx_hegel_test: [@@settings ...] must carry a single expression")
-       else None)
-    attrs
+let settings_attribute =
+  Attribute.declare
+    "hegel.settings"
+    Attribute.Context.value_binding
+    Ast_pattern.(single_expr_payload __)
+    Fun.id
 ;;
 
-(** [parse_string_list e] returns the list of literal strings carried by [e]
-    when [e] has the shape [[ "..."; "..."; ... ]], else raises a located error
-    pointing at the offending sub-expression. *)
-let rec parse_string_list (e : expression) : string list =
-  match e.pexp_desc with
-  | Pexp_construct ({ txt = Lident "[]"; _ }, None) -> []
-  | Pexp_construct ({ txt = Lident "::"; _ }, Some payload) ->
-    (match Ppx_compat.extract_expr_tuple payload with
-     | Some [ head; tail ] ->
-       let head_str =
-         match head.pexp_desc with
-         | Pexp_constant (Pconst_string (s, _, _)) -> s
-         | _ ->
-           Location.raise_errorf
-             ~loc:head.pexp_loc
-             "ppx_hegel_test: elements must be string literals"
-       in
-       head_str :: parse_string_list tail
-     | _ -> Location.raise_errorf ~loc:e.pexp_loc "ppx_hegel_test: malformed list payload")
-  | _ ->
-    Location.raise_errorf
-      ~loc:e.pexp_loc
-      "ppx_hegel_test: expected a list literal of string literals"
+let failure_blobs_attribute =
+  Attribute.declare_with_attr_loc
+    "hegel.failure_blobs"
+    Attribute.Context.value_binding
+    Ast_pattern.(single_expr_payload (elist (estring __)))
+    (fun ~attr_loc blobs -> attr_loc, blobs)
 ;;
 
-(** [extract_failure_blobs_attr attrs] returns the parsed string list if a
-    [[@@failure_blobs ...]] attribute is present, else [None]. *)
-let extract_failure_blobs_attr (attrs : attributes) : string list option =
-  List.find_map
-    (fun (attr : attribute) ->
-       if String.equal attr.attr_name.txt "failure_blobs"
-       then (
-         match attr.attr_payload with
-         | PStr [ { pstr_desc = Pstr_eval (e, _); _ } ] ->
-           (match parse_string_list e with
-            | [] ->
-              Location.raise_errorf
-                ~loc:attr.attr_loc
-                "ppx_hegel_test: [@@failure_blobs ...] must have at least one element"
-            | lst -> Some lst)
-         | _ ->
-           Location.raise_errorf
-             ~loc:attr.attr_loc
-             "ppx_hegel_test: [@@failure_blobs ...] must carry a list literal")
-       else None)
-    attrs
+let rule_attribute =
+  Attribute.declare_with_attr_loc
+    "hegel.rule"
+    Attribute.Context.value_binding
+    Ast_pattern.(
+      alt
+        (map0 (pstr nil) ~f:None)
+        (map1 (single_expr_payload (estring __)) ~f:(fun group -> Some group)))
+    (fun ~attr_loc group -> attr_loc, group)
+;;
+
+let invariant_attribute =
+  Attribute.declare
+    "hegel.invariant"
+    Attribute.Context.value_binding
+    Ast_pattern.(
+      alt
+        (map0 (pstr nil) ~f:false)
+        (map0 (single_expr_payload (pexp_ident (lident (string "always_check")))) ~f:true))
+    Fun.id
+;;
+
+let consume attr node =
+  match Attribute.consume attr node with
+  | Some (node, payload) -> node, Some payload
+  | None -> node, None
 ;;
 
 (** [extract_function_name ~what pat] returns the name bound by [pat] if [pat]
@@ -146,6 +125,16 @@ let build_location_record ~loc ~function_name : expression =
     }]
 ;;
 
+(** [set_attributes attrs item] is the [let] stri [item] with [attrs]
+    as the attributes of every binding in [item]. *)
+let set_attributes (attrs : attributes) (item : structure_item) : structure_item =
+  match item.pstr_desc with
+  | Pstr_value (rec_flag, vbs) ->
+    let vbs = List.map (fun vb -> { vb with pvb_attributes = attrs }) vbs in
+    { item with pstr_desc = Pstr_value (rec_flag, vbs) }
+  | _ -> item
+;;
+
 (** [build_items ~loc ~function_name ~settings_expr ~body_fn] returns the single
     structure item the expander splices in:
 
@@ -153,10 +142,14 @@ let build_location_record ~loc ~function_name : expression =
       let function_name () =
         Hegel.run_hegel_test [?settings] location body_fn
       ;;
-    ]} *)
-let build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn
+    ]}
+
+    [attrs] are the attributes of the original binding that the expander did not
+    consume. *)
+let build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn ~attrs
   : structure_item list
   =
+  let loc = { loc with loc_ghost = true } in
   let location_record = build_location_record ~loc ~function_name in
   let base_call =
     match settings_expr with
@@ -175,38 +168,29 @@ let build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn
   in
   let pat = Ast_builder.Default.pvar ~loc function_name in
   let definition = [%stri let [%p pat] = fun () -> [%e call]] in
-  [ definition ]
+  [ set_attributes attrs definition ]
 ;;
 
-(** [is_draw_lident lid] is [true] when [lid]'s final component is [draw],
-    whether unqualified ([draw]) or qualified ([Hegel.draw], [Generators.draw],
-    a module alias [G.draw], …). Precision comes from the receiver check in
-    {!draw_binding_name} (the draw must be applied to the test's own [tc]), so
-    this only needs to recognize the name; [draw_silent] is a different name and
-    is excluded. *)
-let is_draw_lident : longident -> bool = function
-  | Lident "draw" | Ldot (_, "draw") -> true
-  | _ -> false
+(** [is_named name lid] is [true] when [lid]'s final component is [name],
+    whether unqualified ([draw]) or qualified ([Hegel.draw], a module alias
+    [G.draw], …). *)
+let is_named name : longident -> bool = function
+  | Lident n | Ldot (_, n) -> String.equal n name
+  | Lapply _ -> false
 ;;
 
-(** [draw_named_lident lid] is [lid] with its final [draw] component replaced by
-    [draw_named], preserving the module prefix the user wrote, so the rewrite
-    targets the same module's internal entry point (e.g. [Hegel.draw] becomes
-    [Hegel.draw_named]). *)
-let draw_named_lident : longident -> longident = function
-  | Lident "draw" -> Lident "draw_named"
-  | Ldot (prefix, "draw") -> Ldot (prefix, "draw_named")
+let rename_last ~to_ : longident -> longident = function
+  | Lident _ -> Lident to_
+  | Ldot (prefix, _) -> Ldot (prefix, to_)
   | other -> other
 ;;
 
-(** [has_label_arg args] is [true] when an application already passes [~label]
-    (or [?label]) explicitly, in which case the hand-written label wins. *)
-let has_label_arg (args : (arg_label * expression) list) : bool =
+let has_label label (args : (arg_label * expression) list) : bool =
   List.exists
     (fun (lbl, _) ->
        match lbl with
-       | Labelled "label" | Optional "label" -> true
-       | _ -> false)
+       | Labelled l | Optional l -> String.equal l label
+       | Nolabel -> false)
     args
 ;;
 
@@ -235,19 +219,23 @@ let test_case_name (e : expression) : string option =
 (** [tc_arg_is ~tc_name args] is [true] when the first positional argument of an
     application is exactly the identifier [tc_name]. *)
 let tc_arg_is ~tc_name (args : (arg_label * expression) list) : bool =
-  match List.find_map (fun (lbl, e) -> if lbl = Nolabel then Some e else None) args with
+  match
+    List.find_map
+      (fun (lbl, e) ->
+         match lbl with
+         | Nolabel -> Some e
+         | Labelled _ | Optional _ -> None)
+      args
+  with
   | Some { pexp_desc = Pexp_ident { txt = Lident n; _ }; _ } -> String.equal n tc_name
   | _ -> false
 ;;
 
-(** [draw_binding_name ~tc_name vb] returns [Some name] when [vb] is
-    [let <name> = draw tc …] — a simple-variable binding whose right-hand side
-    is a [draw] application on the test's own [tc] — and [None] otherwise. *)
-let draw_binding_name ~tc_name (vb : value_binding) : string option =
+let drawn_binding_name ~tc_name ~fn_name (vb : value_binding) : string option =
   match vb.pvb_pat.ppat_desc, vb.pvb_expr.pexp_desc with
   | ( Ppat_var { txt = name; _ }
     , Pexp_apply ({ pexp_desc = Pexp_ident { txt = lid; _ }; _ }, args) )
-    when is_draw_lident lid && tc_arg_is ~tc_name args -> Some name
+    when is_named fn_name lid && tc_arg_is ~tc_name args -> Some name
   | _ -> None
 ;;
 
@@ -274,7 +262,7 @@ let collect_repeatable ~tc_name (body : expression) : (string, bool) Stdlib.Hash
         | Some vbs ->
           List.iter
             (fun vb ->
-               match draw_binding_name ~tc_name vb with
+               match drawn_binding_name ~tc_name ~fn_name:"draw" vb with
                | Some name -> record name
                | None -> ())
             vbs;
@@ -296,124 +284,50 @@ let collect_repeatable ~tc_name (body : expression) : (string, bool) Stdlib.Hash
   flags
 ;;
 
-(** [inject_draw ~tc_name flags vb] rewrites [let x = M.draw tc gen] into
-    [let x = M.draw_named ~label:"x" ~repeatable:b tc gen], so the drawn value
-    prints as [x = value] (numbered when [x] is flagged repeatable in [flags] —
-    reused name or drawn in a loop). It targets the internal [draw_named] rather
-    than the public [draw] (so [repeatable] stays off the public API), keeping
-    the module prefix [M] the user wrote. It fires only for a simple-variable
-    binding whose right-hand side is a [draw] application on [tc] with no
-    explicit [~label]; every other binding is unchanged. *)
-let inject_draw ~tc_name (flags : (string, bool) Stdlib.Hashtbl.t) (vb : value_binding)
-  : value_binding
-  =
-  match draw_binding_name ~tc_name vb, vb.pvb_expr.pexp_desc with
+(** [inject ~tc_name ~fn_name ~veto ~extra_args vb] rewrites
+    [let x = M.<fn_name> tc gen] into [let x = M.<fn_name>_named <extra_args> tc gen] *)
+let inject ~tc_name ~fn_name ~veto ~extra_args (vb : value_binding) : value_binding =
+  match drawn_binding_name ~tc_name ~fn_name vb, vb.pvb_expr.pexp_desc with
   | ( Some name
     , Pexp_apply (({ pexp_desc = Pexp_ident ({ txt = lid; _ } as ident); _ } as fn), args)
     )
-    when not (has_label_arg args) ->
-    let loc = vb.pvb_expr.pexp_loc in
-    let repeatable =
-      match Stdlib.Hashtbl.find_opt flags name with
-      | Some b -> b
-      | None -> false
-    in
+    when not (has_label veto args) ->
+    let loc = { vb.pvb_expr.pexp_loc with loc_ghost = true } in
     let named_fn =
-      { fn with pexp_desc = Pexp_ident { ident with txt = draw_named_lident lid } }
+      { fn with
+        pexp_desc =
+          Pexp_ident { ident with txt = rename_last ~to_:(fn_name ^ "_named") lid }
+      }
     in
-    let named_args =
+    { vb with
+      pvb_expr = Ast_builder.Default.pexp_apply ~loc named_fn (extra_args ~loc name @ args)
+    }
+  | _ -> vb
+;;
+
+let inject_labels ~tc_name (flags : (string, bool) Stdlib.Hashtbl.t) =
+  let inject_draw =
+    inject ~tc_name ~fn_name:"draw" ~veto:"label" ~extra_args:(fun ~loc name ->
+      let repeatable =
+        match Stdlib.Hashtbl.find_opt flags name with
+        | Some b -> b
+        | None -> false
+      in
       [ Labelled "label", Ast_builder.Default.estring ~loc name
       ; Labelled "repeatable", Ast_builder.Default.ebool ~loc repeatable
-      ]
-    in
-    { vb with
-      pvb_expr = Ast_builder.Default.pexp_apply ~loc named_fn (named_args @ args)
-    }
-  | _ -> vb
-;;
-
-(** [is_draw_silent_lident lid] is [true] when [lid]'s final component is
-    [draw_silent], qualified or not. Distinct from {!is_draw_lident}, which keys
-    on the [draw] component; [draw_silent] is its own name. *)
-let is_draw_silent_lident : longident -> bool = function
-  | Lident "draw_silent" | Ldot (_, "draw_silent") -> true
-  | _ -> false
-;;
-
-(** [draw_silent_named_lident lid] is [lid] with its final [draw_silent]
-    component replaced by [draw_silent_named], preserving the module prefix, so
-    the rewrite targets the same module's internal entry point (e.g.
-    [Hegel.draw_silent] becomes [Hegel.draw_silent_named]). *)
-let draw_silent_named_lident : longident -> longident = function
-  | Lident "draw_silent" -> Lident "draw_silent_named"
-  | Ldot (prefix, "draw_silent") -> Ldot (prefix, "draw_silent_named")
-  | other -> other
-;;
-
-(** [has_name_arg args] is [true] when an application already passes [~name] (or
-    [?name]) explicitly, in which case the hand-written name wins. *)
-let has_name_arg (args : (arg_label * expression) list) : bool =
-  List.exists
-    (fun (lbl, _) ->
-       match lbl with
-       | Labelled "name" | Optional "name" -> true
-       | _ -> false)
-    args
-;;
-
-(** [draw_silent_binding_name ~tc_name vb] returns [Some name] when [vb] is
-    [let <name> = draw_silent tc …] — a simple-variable binding whose right-hand
-    side is a [draw_silent] application on the test's own [tc] — and [None]
-    otherwise. *)
-let draw_silent_binding_name ~tc_name (vb : value_binding) : string option =
-  match vb.pvb_pat.ppat_desc, vb.pvb_expr.pexp_desc with
-  | ( Ppat_var { txt = name; _ }
-    , Pexp_apply ({ pexp_desc = Pexp_ident { txt = lid; _ }; _ }, args) )
-    when is_draw_silent_lident lid && tc_arg_is ~tc_name args -> Some name
-  | _ -> None
-;;
-
-(** [inject_draw_silent ~tc_name vb] rewrites [let x = draw_silent tc gen] into
-    [let x = draw_silent_named ~name:"x" tc gen], so a function generator
-    ({!Hegel.Generators.functions}) drawn there labels its shown pairs
-    [x arg = result]. [~name] is ignored for every other generator, so the
-    rewrite is harmless. Like {!inject_draw} it targets the internal
-    [draw_silent_named] (keeping [~name] off the public [draw_silent]) and keeps
-    the module prefix the user wrote. It fires only for a simple-variable
-    binding whose right-hand side is a [draw_silent] application on [tc] with no
-    explicit [~name]. *)
-let inject_draw_silent ~tc_name (vb : value_binding) : value_binding =
-  match draw_silent_binding_name ~tc_name vb, vb.pvb_expr.pexp_desc with
-  | ( Some name
-    , Pexp_apply (({ pexp_desc = Pexp_ident ({ txt = lid; _ } as ident); _ } as fn), args)
-    )
-    when not (has_name_arg args) ->
-    let loc = vb.pvb_expr.pexp_loc in
-    let named_fn =
-      { fn with pexp_desc = Pexp_ident { ident with txt = draw_silent_named_lident lid } }
-    in
-    let named_args = [ Labelled "name", Ast_builder.Default.estring ~loc name ] in
-    { vb with
-      pvb_expr = Ast_builder.Default.pexp_apply ~loc named_fn (named_args @ args)
-    }
-  | _ -> vb
-;;
-
-(** A traversal that applies {!inject_draw} and {!inject_draw_silent} to every
-    [let]-binding in an expression, threading the precomputed [flags], so labels
-    are injected throughout the test body (nested [let]s, helper functions,
-    match arms, …). Each binding is at most one of a [draw] or a [draw_silent]
-    on [tc], so the two injectors compose (each leaves the other's bindings
-    untouched). Draws nested inside a generation span are still suppressed at
-    runtime by the depth gate, so labeling them is harmless. *)
-let label_injector ~tc_name flags =
+      ])
+  in
+  let inject_draw_silent =
+    inject ~tc_name ~fn_name:"draw_silent" ~veto:"name" ~extra_args:(fun ~loc name ->
+      [ Labelled "name", Ast_builder.Default.estring ~loc name ])
+  in
   object
     inherit Ast_traverse.map as super
 
     method! expression e =
       let e = super#expression e in
       Ppx_compat.map_let_value_bindings
-        (List.map (fun vb -> inject_draw_silent ~tc_name (inject_draw ~tc_name flags vb)))
+        (List.map (fun vb -> inject_draw_silent (inject_draw vb)))
         e
   end
 ;;
@@ -426,18 +340,35 @@ let inject_labels (fn : expression) : expression =
   | None -> fn
   | Some tc_name ->
     let flags = collect_repeatable ~tc_name (Ppx_compat.peel_fun_params fn) in
-    (label_injector ~tc_name flags)#expression fn
+    (inject_labels ~tc_name flags)#expression fn
 ;;
 
 (** Expander for a single [let%hegel_test ...] structure item. *)
 let expand_value_binding ~loc (vb : value_binding) : structure_item list =
   let function_name = extract_function_name ~what:"test" vb.pvb_pat in
-  let settings_expr = extract_settings_attr vb.pvb_attributes in
-  let failure_blobs = extract_failure_blobs_attr vb.pvb_attributes in
+  let vb, settings_expr = consume settings_attribute vb in
+  let vb, failure_blobs = consume failure_blobs_attribute vb in
+  let failure_blobs =
+    Option.map
+      (fun (attr_loc, blobs) ->
+         if List.is_empty blobs
+         then
+           Location.raise_errorf
+             ~loc:attr_loc
+             "ppx_hegel_test: [@@@@failure_blobs ...] must have at least one element";
+         blobs)
+      failure_blobs
+  in
   (* The body of [let%hegel_test name <args> = expr] is parsed as [let name = <args -> expr>]. We pass that lambda as the [test_fn] to
      [Hegel.run_hegel_test]. *)
   let body_fn = inject_labels vb.pvb_expr in
-  build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn
+  build_items
+    ~loc
+    ~function_name
+    ~settings_expr
+    ~failure_blobs
+    ~body_fn
+    ~attrs:vb.pvb_attributes
 ;;
 
 (** A marker attribute on a binding inside a [module%hegel_state_machine]. *)
@@ -445,44 +376,24 @@ type marker =
   | Rule of string option
   | Invariant of { always_check : bool }
 
-let marker_of_attr ~concurrent (attr : attribute) : marker option =
-  match attr.attr_name.txt, attr.attr_payload with
-  | "rule", PStr [] -> Some (Rule None)
-  | "rule", _ when not concurrent ->
+(** [marker_of_binding ~concurrent vb] is [vb] with its marker attribute
+    removed and the marker that attribute carried, if any. *)
+let marker_of_binding ~concurrent (vb : value_binding) : value_binding * marker option =
+  let vb, rule = consume rule_attribute vb in
+  let vb, invariant = consume invariant_attribute vb in
+  match rule, invariant with
+  | Some _, Some _ ->
     Location.raise_errorf
-      ~loc:attr.attr_loc
+      ~loc:vb.pvb_loc
+      "ppx_hegel_test: a binding can be marked [@@@@rule] or [@@@@invariant], not both"
+  | Some (attr_loc, Some _), None when not concurrent ->
+    Location.raise_errorf
+      ~loc:attr_loc
       "ppx_hegel_test: rule groups are only supported in \
        module%%hegel_concurrent_state_machine"
-  | ( "rule"
-    , PStr
-        [ { pstr_desc =
-              Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_string (group, _, _)); _ }, _)
-          ; _
-          }
-        ] ) -> Some (Rule (Some group))
-  | "rule", _ ->
-    Location.raise_errorf
-      ~loc:attr.attr_loc
-      "ppx_hegel_test: [@@@@rule] either takes no payload or only a string literal group \
-       name"
-  | "invariant", PStr [] -> Some (Invariant { always_check = false })
-  | ( "invariant"
-    , PStr
-        [ { pstr_desc =
-              Pstr_eval
-                ({ pexp_desc = Pexp_ident { txt = Lident "always_check"; _ }; _ }, _)
-          ; _
-          }
-        ] ) -> Some (Invariant { always_check = true })
-  | "invariant", _ ->
-    Location.raise_errorf
-      ~loc:attr.attr_loc
-      "ppx_hegel_test: [@@@@invariant] takes no payload, or [always_check]"
-  | _ -> None
-;;
-
-let is_marker (attr : attribute) =
-  String.equal attr.attr_name.txt "rule" || String.equal attr.attr_name.txt "invariant"
+  | Some (_, group), None -> vb, Some (Rule group)
+  | None, Some always_check -> vb, Some (Invariant { always_check })
+  | None, None -> vb, None
 ;;
 
 (** [expand_machine_item item] returns [item] with its marker attributes
@@ -494,25 +405,16 @@ let expand_machine_item ~concurrent (item : structure_item)
   match item.pstr_desc with
   | Pstr_value (rec_flag, vbs) ->
     let expand_binding (vb : value_binding) =
-      match List.filter_map (marker_of_attr ~concurrent) vb.pvb_attributes with
-      | [] -> vb, None
-      | _ :: _ :: _ ->
-        Location.raise_errorf
-          ~loc:vb.pvb_loc
-          "ppx_hegel_test: a binding can be marked [@@@@rule] or [@@@@invariant], not \
-           both"
-      | [ marker ] ->
+      match marker_of_binding ~concurrent vb with
+      | vb, None -> vb, None
+      | vb, Some marker ->
         let what =
           match marker with
           | Rule _ -> "rule"
           | Invariant _ -> "invariant"
         in
         let name = extract_function_name ~what vb.pvb_pat in
-        ( { vb with
-            pvb_expr = inject_labels vb.pvb_expr
-          ; pvb_attributes = List.filter (fun a -> not (is_marker a)) vb.pvb_attributes
-          }
-        , Some (name, marker) )
+        { vb with pvb_expr = inject_labels vb.pvb_expr }, Some (name, marker)
     in
     let vbs, marked = List.split (List.map expand_binding vbs) in
     { item with pstr_desc = Pstr_value (rec_flag, vbs) }, List.filter_map Fun.id marked
@@ -592,6 +494,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
       ~loc
       "ppx_hegel_test: module%%%s needs at least one [@@@@rule] binding"
       extension_name;
+  let loc = { loc with loc_ghost = true } in
   let open Ast_builder.Default in
   let rule_exprs =
     List.map
@@ -626,74 +529,47 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
              ()])
       invariants
   in
+  let default_sexp_of_state =
+    if has_sexp_of_state items then [%expr Some sexp_of_state] else [%expr None]
+  in
   let run =
     if concurrent
     then
-      if has_sexp_of_state items
-      then
-        [%stri
-          let run
-                ?concurrency
-                ?min_concurrency
-                ?max_concurrency
-                ?step_count
-                ?(sexp_of_state = sexp_of_state)
-                tc
-                ~init
-            =
-            Hegel.Stateful.run_concurrent_internal
-              ~init
-              ~rules
-              ~invariants
-              ?concurrency
-              ?min_concurrency
-              ?max_concurrency
-              ~sexp_of_state
-              ?step_count
-              tc
-          ;;]
-      else
-        [%stri
-          let run
-                ?concurrency
-                ?min_concurrency
-                ?max_concurrency
-                ?step_count
-                ?sexp_of_state
-                tc
-                ~init
-            =
-            Hegel.Stateful.run_concurrent_internal
-              ~init
-              ~rules
-              ~invariants
-              ?concurrency
-              ?min_concurrency
-              ?max_concurrency
-              ?sexp_of_state
-              ?step_count
-              tc
-          ;;]
-    else if has_sexp_of_state items
-    then
       [%stri
-        let run ?step_count ?(sexp_of_state = sexp_of_state) tc ~init =
-          Hegel.Stateful.run_internal
+        let run
+              ?concurrency
+              ?min_concurrency
+              ?max_concurrency
+              ?step_count
+              ?sexp_of_state:override
+              tc
+              ~init
+          =
+          Hegel.Stateful.run_concurrent_internal
             ~init
             ~rules
             ~invariants
-            ~sexp_of_state
+            ?concurrency
+            ?min_concurrency
+            ?max_concurrency
+            ?sexp_of_state:
+              (match override with
+               | Some _ as s -> s
+               | None -> [%e default_sexp_of_state])
             ?step_count
             tc
         ;;]
     else
       [%stri
-        let run ?step_count ?sexp_of_state tc ~init =
+        let run ?step_count ?sexp_of_state:override tc ~init =
           Hegel.Stateful.run_internal
             ~init
             ~rules
             ~invariants
-            ?sexp_of_state
+            ?sexp_of_state:
+              (match override with
+               | Some _ as s -> s
+               | None -> [%e default_sexp_of_state])
             ?step_count
             tc
         ;;]
