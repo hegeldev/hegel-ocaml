@@ -75,7 +75,8 @@
 
     A concurrent rule takes a context after the test case. If using {!Concurrency.threads} 
     or {!Concurrency.domains} it is [()]. A capability wrapping a scheduler passes
-    the scheduler's per-task handle, so a rule can spawn its own tasks. 
+    the scheduler's per-task handle. This can be used by the system under test or the rule
+    to spawn its own tasks.
 
     With the [ppx_hegel_test] PPX, a concurrent state machine is a module written as
     [module%hegel_concurrent_state_machine M = struct … end]. Mark rules with [[@@rule]]

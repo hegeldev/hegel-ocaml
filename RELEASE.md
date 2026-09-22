@@ -32,7 +32,26 @@ let withdraw tc account = ... [@@rule "money"]
 let positive _tc account = ... [@@invariant always_check]
 
 (* after *)
-let withdraw tc account = ... [@@rule { group = "money"; weight = 2.0 }]
+let withdraw tc ctx account = ... [@@rule { group = "money"; weight = 2.0 }]
 let positive _tc account = ... [@@invariant { always_check = true }]
 ```
 The options may be given in any order or left out.
+
+Concurrent rules now receive the worker's context `ctx`. 
+
+`Hegel.Concurrency.t` takes the context's type as a parameter. `Stateful.Concurrent_state_machine`
+declares `type ctx`, and `Stateful.run_concurrent` takes `~concurrency` as a required argument. 
+
+A `module%hegel_concurrent_state_machine` that does not declare `type ctx` uses threads by default
+and its rules take `()` as the context.
+
+On OxCaml, `Hegel_jane_concurrent.of_concurrent` passes `Hegel_jane_concurrent.ctx` defined as follows:
+
+```
+type 'a ctx =
+  { context : 'a
+  ; concurrent : 'a Concurrent.t
+  }
+```
+
+`context` is the scheduler's per-task context and `concurrent` is a concurrency capability. 
