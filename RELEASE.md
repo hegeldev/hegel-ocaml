@@ -3,7 +3,7 @@ RELEASE_TYPE: minor
 This release adds weights to stateful rules and changes how options are passed
 to `[@@rule]` and `[@@invariant]`.
 
-A rule's weight is a hint about how often the engine should pick that rule
+A rule's weight is a hint about how often libhegel should pick that rule
 relative to other rules. It defaults to `1.0`, and may be written as either an
 integer or a float:
 
@@ -18,11 +18,7 @@ end
 Without the PPX, pass `?weight` to `Stateful.Rule.create`/`Stateful.Concurrent_rule.create`. 
 A weight must be finite and strictly positive.
 
-`Stateful.Rule.create` now takes a trailing unit argument:
-
-```ocaml
-Stateful.Rule.create ~name:"push" ~step:push ()
-```
+`Stateful.Rule.create` now takes a trailing unit argument.
 
 Options on `[@@rule]` and `[@@invariant]` are now a record:
 

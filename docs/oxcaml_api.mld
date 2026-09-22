@@ -191,7 +191,7 @@ val create : ?clone:('a -> 'a) @ portable -> test_case -> 'a t
 {!Hegel.Stateful.Concurrent_rule.t}
 
 {[
-type 'state t : value mod portable contended
+type ('ctx, 'state) t : value mod portable contended
 ]}
 
 {!Hegel.Stateful.Concurrent_rule.create}
@@ -199,23 +199,24 @@ type 'state t : value mod portable contended
 {[
 val create
   :  ?group:string
+  -> ?weight:float
   -> name:string
-  -> step:(test_case -> 'state @ contended -> unit) @ portable
+  -> step:(test_case -> 'ctx @ local -> 'state @ contended -> unit) @ portable
   -> unit
-  -> 'state t
+  -> ('ctx, 'state) t
 ]}
 
 {!Hegel.Stateful.run_concurrent}
 
 {[
 val run_concurrent
-  :  ?concurrency:Concurrency.t @ local
+  :  concurrency:'ctx Concurrency.t @ local
   -> ?min_concurrency:int
   -> ?max_concurrency:int
   -> ?step_count:int
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
   -> test_case
-  -> (module Concurrent_state_machine with type state = 'state)
+  -> (module Concurrent_state_machine with type ctx = 'ctx and type state = 'state)
   -> init:'state @ portable
   -> unit
 ]}
@@ -225,9 +226,10 @@ val run_concurrent
 {!Hegel.Concurrency.t}
 
 {[
-type t =
+type 'ctx t =
   { spawn_join_n :
-      n:int -> (f:(int -> outcome) @ portable -> outcome list @ contended) @ local
+      n:int
+      -> (f:('ctx @ local -> int -> outcome) @ portable -> outcome list @ contended) @ local
   }
 ]}
 
@@ -236,5 +238,5 @@ type t =
 {{!page-hegel_jane_concurrent}[of_concurrent]}
 
 {[
-val of_concurrent : _ Concurrent.t @ local -> Hegel.Concurrency.t @ local
+val of_concurrent : 'a Concurrent.t @ local -> 'a ctx Hegel.Concurrency.t @ local
 ]}
