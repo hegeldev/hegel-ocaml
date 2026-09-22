@@ -55,7 +55,11 @@ val clone : test_case -> test_case
     {!note}/draw line it prints is indented [indent] columns further than [tc]'s
     lines. The block is freed when [f] returns or raises, so it must not escape
     [f]. *)
+#ifdef OXCAML
+val with_block : test_case -> indent:int -> (test_case -> 'a) @ local -> 'a
+#else
 val with_block : test_case -> indent:int -> (test_case -> 'a) -> 'a
+#endif
 
 (** [owned_clone_count tc] is the number of clone handles the test case
     currently owns; they are freed together once the case completes. *)

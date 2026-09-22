@@ -68,9 +68,10 @@ lib/                         # Library source
                              #   option + the Sexplib0 sexp_of_* converters)
   stateful.ml.in             # Stateful testing: Pool (shared by both machine kinds),
                              #   Rule (sequential, plain mutating step), Concurrent_rule
-                             #   (?group, portable step), Invariant, State_machine +
-                             #   run tc (module M) ~init, Concurrent_state_machine +
-                             #   run_concurrent ?concurrency ?min/max_concurrency.
+                             #   (?group, portable step taking the worker's ctx),
+                             #   Invariant, State_machine + run tc (module M) ~init,
+                             #   Concurrent_state_machine (type ctx) +
+                             #   run_concurrent ~concurrency ?min/max_concurrency.
                              #   Both runners share run_machine (engine machine,
                              #   initial/final checks, free) and run_rules (one
                              #   worker's rules for a round); the sequential one runs
@@ -267,9 +268,14 @@ repeated or unknown field is a compile error. A weight is carried
 as the text of a float literal (an int payload gains a `.`) and defaults to
 `1.0`. `module%hegel_concurrent_state_machine` does the same with
 `Concurrent_rule.create ?group ~weight ~name ~step ()`, whose `[@@rule]` record
-also takes `group` (which the sequential form rejects), and a
-`run ?concurrency ?min_concurrency ?max_concurrency ?step_count
-?sexp_of_state tc ~init` that calls `Stateful.run_concurrent_internal`. There
+also takes `group` (which the sequential form rejects). Its rule bodies take
+the worker's context between the test case and the state (`tc ctx state`).
+If the module declares `type ctx`, the generated `run ~concurrency
+?min_concurrency ?max_concurrency ?step_count ?sexp_of_state tc ~init` makes
+the capability required, since no default can supply that context; otherwise
+the PPX appends `type ctx = unit` and the `run` defaults `?concurrency` to
+`Hegel.Concurrency.threads` (`declares_type`). Both call
+`Stateful.run_concurrent_internal`. There
 is no registry and no runtime discovery. The generated `run` calls the
 doc-hidden `Stateful.run_internal`, which takes the lists directly, because
 the expanded module need not declare `type state` and the public
@@ -439,8 +445,9 @@ Who owns what in hegel-ocaml:
 - collections → `Generators_core.with_collection` (`Fun.protect`, so a
   `Stop_test` mid-draw still frees)
 - state machines → `Stateful.run`, the same way
-- blocks → `Internal.with_block` (`Fun.protect`, freed with its context when
-  the body returns or raises), mirroring hegel-rust's lexically scoped
+- blocks → `Internal.with_block` (freed with its context when the body
+  returns or raises; a hand-written match, not `Fun.protect`, because the
+  callback may be a local closure), mirroring hegel-rust's lexically scoped
   `TestCase::child`. So the `tc` a rule or invariant body receives is valid
   only for that step (documented on `Rule.create`/`Invariant.create`).
 - variable pools and clones → the test case. `Stateful.Pool.create` and
@@ -622,7 +629,21 @@ in an `Exn.protect ~finally`.
 
 Two runners share `run_machine` and `run_rules`, mirroring hegel-rust's
 `Rule`/`ConcurrentRule` split. Both kinds of rule mutate their state in
-place (`step : test_case -> 'state -> unit`; nothing returns a new state).
+place; nothing returns a new state. A sequential `step` is
+`test_case -> 'state -> unit`; a concurrent one is
+`test_case -> 'ctx -> 'state -> unit`, where `'ctx` is the per-worker
+context the capability passes to each body: `Concurrency.t` is `'ctx t` with
+`f : 'ctx -> int -> outcome`, `threads` and `domains` are `unit t` passing
+`()`, `Concurrent_state_machine` declares `type ctx`, and `run_concurrent`
+takes `~concurrency` as required because a `threads` default would pin
+`ctx = unit`. The context exists so the system under test can run its own
+tasks on the scheduler hegel runs on: `Hegel_jane_concurrent.of_concurrent`
+passes each rule `{ context; concurrent }`, the task's scheduler value (a
+`Parallel_kernel.t` under a `Parallel` scheduler) and its fresh nested
+`Concurrent.t`. Rules never see the round's `Scope.t`: a task detached onto
+it that fails raises out of `spawn_join_n` and loses every sibling's
+outcome, while nested work through `ctx.concurrent` fails inside its rule's
+own outcome (findings from the standalone probe, 2026-09-22).
 The sequential `run` (`Rule`, no groups, concurrency fixed at 1) runs each
 round inline on `tc` inside a `stateful_rule` span (`stop_span
 ~discard:rejected`), deterministic and shrinkable, with `Step N: name`
@@ -640,9 +661,10 @@ the exception with its backtrace; bodies never raise into the capability).
 error, then overrun, then invalidation, then a test failure; lowest worker
 index first), then the invariants run on the main thread. The runner spawns
 no threads or domains itself. `Hegel.Concurrency.t` is a record with that one
-field; `run_concurrent` and the generated `run` take it as `?concurrency`,
-default `Concurrency.threads` (one systhread per body per round:
-interleaving, no parallelism). One `Pool` serves both kinds; `add` takes the
+field; `run_concurrent` takes it as `~concurrency` (required), and the
+generated `run` defaults it to `Concurrency.threads` (one systhread per body
+per round: interleaving, no parallelism) only when the module declares no
+`type ctx`. One `Pool` serves both kinds; `add` takes the
 calling rule's test case because a pool add is a draw on that handle. The
 optional `hegel.jane.concurrent` sublibrary (`lib/jane/concurrent/`, OxCaml only) is
 the adapter for Jane Street's `Concurrent`: `of_concurrent c` is one
@@ -701,13 +723,16 @@ parameter or return mode), `CROSSING` = `: value mod portable contended`.
   the `owned` record are `Locked.t` (declared `value mod portable contended`
   in `locked.mli.in`; `protect`'s result type must cross since it leaves the
   lock). `Concurrent_rule.t.step` is
-  `(test_case -> 'state @ contended -> unit) @@ portable`, so a concurrent
-  rule body is portable and sees its state contended; a sequential
+  `(test_case -> 'ctx @ local -> 'state @ contended -> unit) @@ portable`, so a
+  concurrent rule body is portable, sees its state contended, and gets its
+  context local (the adapter's record captures a task-local `Concurrent.t`);
+  a rule written as a named function marks that parameter `(ctx @ local)`
+  unless the context type crosses locality, as `unit` does. A sequential
   `Rule.t.step` has no modes, which is why the two rule types exist (OxCaml
   has no mode polymorphism to make one step serve both). `run_concurrent`
-  takes `init:'state @ portable` and `?concurrency:Concurrency.t @ local`;
+  takes `init:'state @ portable` and `concurrency:'ctx Concurrency.t @ local`;
   `Concurrency.t`'s field is
-  `n:int -> (f:(int -> outcome) @ portable -> outcome list @ contended) @ local`
+  `n:int -> (f:('ctx @ local -> int -> outcome) @ portable -> outcome list @ contended) @ local`
   (a contended array is unreadable, a contended list is not).
 - **The trust boundary is `Ffi`, in two places.** (1) Every libhegel handle
   is `type handle = H of unit ptr [@@unboxed]`, declared
@@ -724,8 +749,11 @@ parameter or return mode), `CROSSING` = `: value mod portable contended`.
   `generators_combinators.ml.in`.
 - **Runner shape.** `run_rules` is the shared rule loop (next rule from the
   engine, heading, block, rejection report), parameterized by a heading
-  function and a `rule : int -> string * (test_case -> unit)` lookup so it
-  serves both rule types. The `work` function in `run_concurrent_internal`
+  function, a `~ctx @ local` (`()` sequentially), and a
+  `rule : int -> string * (test_case -> 'ctx @ local -> unit)` lookup so it
+  serves both rule types; the body closure it hands `with_block` captures the
+  local context, which is why `with_block` takes its callback `@ local` and
+  frees with a match instead of `Fun.protect`. The `work` function in `run_concurrent_internal`
   is the portable worker body; it captures `rules : Concurrent_rule.t list`
   (a list, not an array: `Array.get` needs an uncontended array), the state
   machine handle, and the `@ portable` state; `dispatch_round` reads its

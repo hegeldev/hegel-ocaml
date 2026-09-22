@@ -1,3 +1,4 @@
 lib/locked.capsule.ml
 lib/jane/concurrent/hegel_jane_concurrent.ml
 lib/jane/concurrent/hegel_jane_concurrent.mli
+lib/jane/concurrent/test/test_hegel_jane_concurrent.ml

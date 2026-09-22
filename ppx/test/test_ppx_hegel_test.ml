@@ -193,15 +193,18 @@ let test_state_machine_collects_marked_bindings () =
 ;;
 
 module%hegel_concurrent_state_machine Ledger = struct
-  let deposit _tc (n : int Atomic.t) = Atomic.incr n [@@rule]
-  let withdraw _tc (n : int Atomic.t) = Atomic.decr n [@@rule { group = "money" }]
-  let audit _tc (n : int Atomic.t) = ignore (Atomic.get n : int) [@@rule { weight = 2.5 }]
+  let deposit _tc () (n : int Atomic.t) = Atomic.incr n [@@rule]
+  let withdraw _tc () (n : int Atomic.t) = Atomic.decr n [@@rule { group = "money" }]
 
-  let settle _tc (n : int Atomic.t) = Atomic.incr n
+  let audit _tc () (n : int Atomic.t) = ignore (Atomic.get n : int)
+  [@@rule { weight = 2.5 }]
+  ;;
+
+  let settle _tc () (n : int Atomic.t) = Atomic.incr n
   [@@rule { group = "money"; weight = 3 }]
   ;;
 
-  let reconcile _tc (n : int Atomic.t) = Atomic.decr n
+  let reconcile _tc () (n : int Atomic.t) = Atomic.decr n
   [@@rule { weight = 4.0; group = "money" }]
   ;;
 

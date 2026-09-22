@@ -14,7 +14,7 @@
     With the [ppx_hegel_test] PPX, a state machine is a module written as
     [module%hegel_state_machine M = struct … end]. Mark rules with [[@@rule]]
     and invariants with [[@@invariant]]. See {!Rule} and {!Invariant}
-    for valid options. The PPX generates the [run] function for the state 
+    for valid options. The PPX generates the [run] function for the state
     machine. If the module defines [sexp_of_state], [run] uses it to print the
     state after each step.
 
@@ -60,7 +60,7 @@
 
 (** {2 Concurrent stateful testing}
 
-    {!run_concurrent} with [max_concurrency > 1] runs rules on several workers concurrently. 
+    {!run_concurrent} with [max_concurrency > 1] runs rules on several workers concurrently.
     libhegel draws the number of workers in [[min_concurrency, max_concurrency]].
     Rules belong to a group, and only rules in the same group may run concurrently. Rules
     without a group all belong to the [<anonymous>] group.
@@ -73,10 +73,14 @@
     {!Concurrency.threads}, which puts workers on systhreads. See {!Concurrency}
     for more details.
 
+    A concurrent rule takes a context after the test case. If using {!Concurrency.threads} 
+    or {!Concurrency.domains} it is [()]. A capability wrapping a scheduler passes
+    the scheduler's per-task handle, so a rule can spawn its own tasks. 
+
     With the [ppx_hegel_test] PPX, a concurrent state machine is a module written as
     [module%hegel_concurrent_state_machine M = struct … end]. Mark rules with [[@@rule]]
-    and invariants with [[@@invariant]]. See {!Concurrent_rule} and {!Invariant} for 
-    valid options. The PPX generates the [run] function for the state machine. If the 
+    and invariants with [[@@invariant]]. See {!Concurrent_rule} and {!Invariant} for
+    valid options. The PPX generates the [run] function for the state machine. If the
     module defines [sexp_of_state], [run] uses it to print the state after each step.
 
     The example store below has a bug. The store locks individual reads and writes,
@@ -124,20 +128,20 @@
         ; increments : int Atomic.t
         }
 
-      let register tc state =
+      let register tc () state =
         let key = draw tc (integers ~min_value:0 ~max_value:3 ()) in
         if Store.put_if_absent state.store key then Stateful.Pool.add state.keys tc key
       [@@rule { group = "operations" }]
       ;;
 
-      let increment tc state =
+      let increment tc () state =
         let key = draw_silent tc (Stateful.Pool.values_reusable state.keys) in
         Store.increment state.store key;
         Atomic.incr state.increments
       [@@rule { group = "operations" }]
       ;;
 
-      let read tc state =
+      let read tc () state =
         let key = draw_silent tc (Stateful.Pool.values_reusable state.keys) in
         match Store.get state.store key with
         | Some value -> note tc (Printf.sprintf "read %d -> %d" key value)
@@ -145,7 +149,7 @@
       [@@rule { group = "operations" }]
       ;;
 
-      let snapshot tc state =
+      let snapshot tc () state =
         let count = Hashtbl.length (Store.snapshot state.store) in
         note tc (Printf.sprintf "snapshot holds %d keys" count)
       [@@rule { group = "snapshot" }]
@@ -229,16 +233,17 @@
 
     [map], [filter], [composite], and [with_printer] take portable functions. The
     element types of [just], [sampled_from], and {!Pool.t} cross modes
-    ([value mod portable contended]). Generators derived with [Hegel_jane.Derive] 
+    ([value mod portable contended]). Generators derived with [Hegel_jane.Derive]
     are portable.
 
-    The [?concurrency] capability is [@ local]. Also, see {{!page-hegel_jane_concurrent}hegel.jane.concurrent}. *)
+    The [~concurrency] capability and context are [@ local]. Also, see 
+    {{!page-hegel_jane_concurrent}hegel.jane.concurrent}. *)
 
 (** {2 Submodules} *)
 
 module Pool : sig PORTABLE
-  (** A pool of previously generated values. 
-  
+  (** A pool of previously generated values.
+
       Rules can add to it and draw from it, so a rule can use values that a
       another rule produced rather than on a new drawn value. Every operation is
       safe to call from several workers at once.
@@ -388,7 +393,7 @@ module Invariant : sig PORTABLE
 
       Every invariant is checked on the initial and final states.
 
-      With the PPX, an invariant takes the following option: 
+      With the PPX, an invariant takes the following option:
       [[@@invariant { always_checked = true | false }]].
 
       {[
@@ -413,7 +418,7 @@ end
 module Concurrent_rule : sig PORTABLE
   (** One possible action in a concurrent stateful test. *)
 
-  type 'state t
+  type ('ctx, 'state) t
 #ifdef OXCAML
     : value mod portable contended
 #endif
@@ -427,11 +432,12 @@ module Concurrent_rule : sig PORTABLE
         default weight is 1.0, and weights must be finite and strictly
         positive.
       - [name] is printed in the final output when the rule is run.
-      - [step tc state] performs one application of the rule, drawing any
-        arguments it needs from [tc] and updating [state] in place. [tc] is
-        valid only for that step.
+      - [step tc ctx state] performs one application of the rule, drawing any
+        arguments it needs from [tc] and updating [state] in place. [ctx] is
+        the context the concurrency capability gives the worker. [tc] and [ctx] 
+        are valid only for that step.
 
-      With the PPX, a concurrent rule takes the following options: 
+      With the PPX, a concurrent rule takes the following options:
       [[@@rule { group = "group"; weight = <weight> }]]. The order of the fields
       does not matter and neither are required. *)
 #ifdef OXCAML
@@ -439,27 +445,27 @@ module Concurrent_rule : sig PORTABLE
     :  ?group:string
     -> ?weight:float
     -> name:string
-    -> step:(Internal.test_case -> 'state @ contended -> unit) @ portable
+    -> step:(Internal.test_case -> 'ctx @ local -> 'state @ contended -> unit) @ portable
     -> unit
-    -> 'state t
+    -> ('ctx, 'state) t
 #else
   val create
     :  ?group:string
     -> ?weight:float
     -> name:string
-    -> step:(Internal.test_case -> 'state -> unit)
+    -> step:(Internal.test_case -> 'ctx -> 'state -> unit)
     -> unit
-    -> 'state t
+    -> ('ctx, 'state) t
 #endif
 
   (** Returns the name of the rule. *)
-  val name : _ t -> string
+  val name : (_, _) t -> string
 
   (** Returns the concurrency group of the rule. *)
-  val group : _ t -> string
+  val group : (_, _) t -> string
 
   (** Returns the weight of the rule. *)
-  val weight : _ t -> float
+  val weight : (_, _) t -> float
 end
 
 (** {2 Running stateful tests} *)
@@ -544,17 +550,23 @@ val run_internal
 
 (**/**)
 
-(** A state machine whose rules may run concurrently. *)
+(** A state machine whose rules may run concurrently. [ctx] is the concurrency 
+    context its rules take. *)
 module type Concurrent_state_machine = sig
+  type ctx
   type state
 
-  val rules : state Concurrent_rule.t list
+  val rules : (ctx, state) Concurrent_rule.t list
   val invariants : state Invariant.t list
 end
 
-(** [run_concurrent ?concurrency ?step_count ?sexp_of_state tc (module M) ~init ?min_concurrency ?max_concurrency]
+(** [run_concurrent ~concurrency tc (module M) ~init ?min_concurrency ?max_concurrency]
     executes a state machine with N workers, where N is in [[min_concurrency, max_concurrency]].
     [min_concurrency] defaults to 1 and [max_concurrency] to [min_concurrency].
+
+    [concurrency] runs each round's workers and gives each rule its context.
+    See {!Concurrency}. A [module%hegel_concurrent_state_machine] that does not
+    declare [type ctx] defaults to using threads.
 
     If [sexp_of_state] is provided, the state is printed before the first round
     and after each completed round.
@@ -566,46 +578,43 @@ end
     consequently reports a failure without replaying, shrinking or producing a failure
     blob.
 
-    [concurrency] runs each round's workers. See {!Concurrency}. It defaults to
-    {!Concurrency.threads}, which puts workers on systhreads.
-
     Raises [Hegel.Usage_error] if [M] has no rules, [step_count] is below 1,
     or the bounds do not satisfy [1 <= min_concurrency <= max_concurrency]. *)
 #ifdef OXCAML
 val run_concurrent
-  :  ?concurrency:Concurrency.t @ local
+  :  concurrency:'ctx Concurrency.t @ local
   -> ?min_concurrency:int
   -> ?max_concurrency:int
   -> ?step_count:int
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
   -> Internal.test_case
-  -> (module Concurrent_state_machine with type state = 'state)
+  -> (module Concurrent_state_machine with type ctx = 'ctx and type state = 'state)
   -> init:'state @ portable
   -> unit
 #else
 val run_concurrent
-  :  ?concurrency:Concurrency.t
+  :  concurrency:'ctx Concurrency.t
   -> ?min_concurrency:int
   -> ?max_concurrency:int
   -> ?step_count:int
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
   -> Internal.test_case
-  -> (module Concurrent_state_machine with type state = 'state)
+  -> (module Concurrent_state_machine with type ctx = 'ctx and type state = 'state)
   -> init:'state
   -> unit
 #endif
 
 (**/**)
 
-(** [run_concurrent_internal ~init ~rules ~invariants tc] is
+(** [run_concurrent_internal ~init ~rules ~invariants ~concurrency tc] is
     {!run_concurrent} with the rules and invariants passed as lists. The [run]
     that a [module%hegel_concurrent_state_machine] generates calls this. *)
 #ifdef OXCAML
 val run_concurrent_internal
   :  init:'state @ portable
-  -> rules:'state Concurrent_rule.t list
+  -> rules:('ctx, 'state) Concurrent_rule.t list
   -> invariants:'state Invariant.t list
-  -> ?concurrency:Concurrency.t @ local
+  -> concurrency:'ctx Concurrency.t @ local
   -> ?min_concurrency:int
   -> ?max_concurrency:int
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
@@ -615,9 +624,9 @@ val run_concurrent_internal
 #else
 val run_concurrent_internal
   :  init:'state
-  -> rules:'state Concurrent_rule.t list
+  -> rules:('ctx, 'state) Concurrent_rule.t list
   -> invariants:'state Invariant.t list
-  -> ?concurrency:Concurrency.t
+  -> concurrency:'ctx Concurrency.t
   -> ?min_concurrency:int
   -> ?max_concurrency:int
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)

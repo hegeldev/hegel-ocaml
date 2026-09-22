@@ -13,6 +13,7 @@
   await
   concurrent
   concurrent.in_thread
+  parallel.kernel
   parallel.scheduler
   alcotest)
  (preprocess

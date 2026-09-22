@@ -117,7 +117,7 @@ let%expect_test "state trace across multiple rules" =
 module%hegel_concurrent_state_machine Concurrent_boom = struct
   type state = unit
 
-  let boom tc () =
+  let boom tc () () =
     ignore (Hegel.draw tc (integers ()) : int);
     failwith "concurrent boom"
   [@@rule]
@@ -223,7 +223,7 @@ module%hegel_concurrent_state_machine Concurrent_counter = struct
   type state = int Atomic.t
 
   let sexp_of_state state = Sexplib0.Sexp.Atom (Int.to_string (Atomic.get state))
-  let increment _tc state = Atomic.incr state [@@rule { group = "writes" }]
+  let increment _tc () state = Atomic.incr state [@@rule { group = "writes" }]
 
   let stays_zero _tc state = if Atomic.get state <> 0 then failwith "invariant boom"
   [@@invariant { always_check = true }]

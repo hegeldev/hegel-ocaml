@@ -11,6 +11,12 @@ module Sexp = Sexplib0.Sexp
 module Ffi = Hegel_ffi.Ffi
 
 #ifdef OXCAML
+#define LOCAL(x) (x @ local)
+#else
+#define LOCAL(x) x
+#endif
+
+#ifdef OXCAML
 module DLS = Stdlib.Domain.Safe.DLS
 #else
 module DLS = Stdlib.Domain.DLS
@@ -143,7 +149,7 @@ let clone (tc : test_case) =
 
 (** [with_block tc ~indent f] runs [f] on a {!test_case} for an indented
     section of [tc]'s output. *)
-let with_block (tc : test_case) ~indent f =
+let with_block (tc : test_case) ~indent LOCAL(f) =
   let context = Ffi.context_new () in
   let handle = Ffi.test_case_block tc.context tc.handle ~indent in
   let b =
@@ -158,11 +164,17 @@ let with_block (tc : test_case) ~indent f =
     ; owned = tc.owned
     }
   in
-  Fun.protect
-    ~finally:(fun () ->
-      Ffi.test_case_free context handle;
-      Ffi.context_free context)
-    (fun () -> f b)
+  let free () =
+    Ffi.test_case_free context handle;
+    Ffi.context_free context
+  in
+  match f b with
+  | result ->
+    free ();
+    result
+  | exception exn ->
+    free ();
+    raise exn
 ;;
 
 let set_worker_index tc worker_index =

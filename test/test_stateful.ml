@@ -481,14 +481,19 @@ let test_pool_created_inside_rule () =
 let concurrent_rule_accessors_test () =
   let module R = Hegel.Stateful.Concurrent_rule in
   let rule =
-    R.create ~name:"read" ~group:"io" ~weight:2.5 ~step:(fun _tc _state -> ()) ()
+    R.create ~name:"read" ~group:"io" ~weight:2.5 ~step:(fun _tc () _state -> ()) ()
   in
   Alcotest.(check string) "name" "read" (R.name rule);
   Alcotest.(check string) "group" "io" (R.group rule);
   Alcotest.(check (float 0.)) "weight" 2.5 (R.weight rule);
-  let anonymous = R.create ~name:"write" ~step:(fun _tc _state -> ()) () in
+  let anonymous = R.create ~name:"write" ~step:(fun _tc () _state -> ()) () in
   Alcotest.(check string) "anonymous group" "<anonymous>" (R.group anonymous);
   Alcotest.(check (float 0.)) "default weight" 1.0 (R.weight anonymous)
+;;
+
+let rec try_decrement n =
+  let v = Stdlib.Atomic.get n in
+  v > 0 && (Stdlib.Atomic.compare_and_set n v (v - 1) || try_decrement n)
 ;;
 
 let concurrent_smoke_test () =
@@ -496,18 +501,17 @@ let concurrent_smoke_test () =
   let increment =
     S.Concurrent_rule.create
       ~name:"increment"
-      ~step:(fun _tc (value : int Atomic.t) -> Atomic.incr value)
+      ~step:(fun _tc () (value : int Atomic.t) -> Atomic.incr value)
       ()
   in
   let decrement =
     S.Concurrent_rule.create
       ~name:"decrement"
-      ~step:(fun tc (value : int Atomic.t) ->
-        Hegel.assume tc (Atomic.get value > 0);
-        Atomic.decr value)
+      ~step:(fun tc () (value : int Atomic.t) -> Hegel.assume tc (try_decrement value))
       ()
   in
   let module M = struct
+    type ctx = unit
     type state = int Atomic.t
 
     let rules = [ increment; decrement ]
@@ -528,6 +532,7 @@ let concurrent_smoke_test () =
       }
     (fun tc ->
        S.run_concurrent
+         ~concurrency:Hegel.Concurrency.threads
          tc
          (module M)
          ~step_count:5
@@ -542,7 +547,7 @@ let concurrent_groups_do_not_overlap_test ~concurrency () =
   let active_group : string option Atomic.t = Atomic.make None in
   let active_workers = Atomic.make 0 in
   let seen_groups : string list Atomic.t = Atomic.make [] in
-  let step (group : string) (_tc : Hegel.Internal.test_case) () =
+  let step (group : string) (_tc : Hegel.Internal.test_case) () () =
     Mutex.protect lock (fun () ->
       (match Atomic.get active_group with
        | None -> Atomic.set active_group (Some group)
@@ -581,6 +586,7 @@ let concurrent_groups_do_not_overlap_test ~concurrency () =
          ~concurrency
          tc
          (module struct
+           type ctx = unit
            type state = unit
 
            let rules = [ alpha; beta; one; anonymous ]
@@ -686,7 +692,7 @@ let pool_parallel_adds_test ~concurrency () =
   let add =
     S.Concurrent_rule.create
       ~name:"add"
-      ~step:(fun tc ((pool, next) : int S.Pool.t * int Atomic.t) ->
+      ~step:(fun tc () ((pool, next) : int S.Pool.t * int Atomic.t) ->
         let value = Atomic.fetch_and_add next 1 in
         S.Pool.add pool tc value)
       ()
@@ -703,6 +709,7 @@ let pool_parallel_adds_test ~concurrency () =
          ~concurrency
          tc
          (module struct
+           type ctx = unit
            type state = int S.Pool.t * int Atomic.t
 
            let rules = [ add ]
@@ -738,7 +745,7 @@ let pool_parallel_consumes_test ~concurrency () =
   let consume =
     S.Concurrent_rule.create
       ~name:"consume"
-      ~step:(fun tc ((pool, consumed) : int S.Pool.t * int list Atomic.t) ->
+      ~step:(fun tc () ((pool, consumed) : int S.Pool.t * int list Atomic.t) ->
         let value = Hegel.draw_silent tc (S.Pool.values_consumed pool) in
         atomic_push consumed value)
       ()
@@ -756,6 +763,7 @@ let pool_parallel_consumes_test ~concurrency () =
          ~concurrency
          tc
          (module struct
+           type ctx = unit
            type state = int S.Pool.t * int list Atomic.t
 
            let rules = [ consume ]
@@ -792,7 +800,9 @@ let pool_parallel_adds_and_consumes_test ~concurrency () =
       ~name:"exchange"
       ~step:
         (fun
-          tc ((pool, next, consumed) : int S.Pool.t * int Atomic.t * int list Atomic.t) ->
+          tc
+          ()
+          ((pool, next, consumed) : int S.Pool.t * int Atomic.t * int list Atomic.t) ->
         let value = Atomic.fetch_and_add next 1 in
         S.Pool.add pool tc value;
         Domain.cpu_relax ();
@@ -813,6 +823,7 @@ let pool_parallel_adds_and_consumes_test ~concurrency () =
          ~concurrency
          tc
          (module struct
+           type ctx = unit
            type state = int S.Pool.t * int Atomic.t * int list Atomic.t
 
            let rules = [ exchange ]
@@ -842,7 +853,7 @@ let concurrent_worker_exception_is_rethrown_test () =
   let boom =
     S.Concurrent_rule.create
       ~name:"boom"
-      ~step:(fun tc () ->
+      ~step:(fun tc () () ->
         let value = Hegel.draw tc (Hegel.integers ()) in
         raise (Concurrent_boom value))
       ()
@@ -856,8 +867,10 @@ let concurrent_worker_exception_is_rethrown_test () =
         }
       (fun tc ->
          S.run_concurrent
+           ~concurrency:Hegel.Concurrency.threads
            tc
            (module struct
+             type ctx = unit
              type state = unit
 
              let rules = [ boom ]
@@ -878,7 +891,7 @@ let concurrent_worker_usage_error_test () =
   let bad =
     S.Concurrent_rule.create
       ~name:"bad"
-      ~step:(fun tc () ->
+      ~step:(fun tc () () ->
         ignore
           (Hegel.draw_silent
              tc
@@ -893,8 +906,10 @@ let concurrent_worker_usage_error_test () =
       ~settings:(Hegel.Settings.create ~test_cases:2 ~seed:0 ())
       (fun tc ->
          S.run_concurrent
+           ~concurrency:Hegel.Concurrency.threads
            tc
            (module struct
+             type ctx = unit
              type state = unit
 
              let rules = [ bad ]
@@ -927,7 +942,7 @@ let concurrent_worker_control_exceptions_test () =
       let rule =
         S.Concurrent_rule.create
           ~name:"control"
-          ~step:(fun tc () ->
+          ~step:(fun tc () () ->
             match error with
             | Hegel.Internal.Assume_rejected ->
               (* exceeding the libhegel nesting limit invalidates the tc *)
@@ -947,8 +962,10 @@ let concurrent_worker_control_exceptions_test () =
             }
           (fun tc ->
              S.run_concurrent
+               ~concurrency:Hegel.Concurrency.threads
                tc
                (module struct
+                 type ctx = unit
                  type state = unit
 
                  let rules = [ rule ]
@@ -989,7 +1006,7 @@ let concurrent_always_check_invariant_test () =
       }
     (fun tc ->
        let invariants_checked = ref 0 in
-       let step = S.Concurrent_rule.create ~name:"step" ~step:(fun _tc () -> ()) () in
+       let step = S.Concurrent_rule.create ~name:"step" ~step:(fun _tc () () -> ()) () in
        let invariant =
          S.Invariant.create
            ~name:"check_every_round"
@@ -998,8 +1015,10 @@ let concurrent_always_check_invariant_test () =
            ()
        in
        S.run_concurrent
+         ~concurrency:Hegel.Concurrency.threads
          tc
          (module struct
+           type ctx = unit
            type state = unit
 
            let rules = [ step ]
@@ -1018,12 +1037,13 @@ let concurrent_always_check_invariant_test () =
 let concurrent_invariant_waits_for_workers_test ~concurrency () =
   let module S = Hegel.Stateful in
   let module M = struct
+    type ctx = unit
     type state = int Atomic.t
 
     let rules =
       [ S.Concurrent_rule.create
           ~name:"work"
-          ~step:(fun _tc (active : int Atomic.t) ->
+          ~step:(fun _tc () (active : int Atomic.t) ->
             Atomic.incr active;
             Domain.cpu_relax ();
             Atomic.decr active)
@@ -1074,7 +1094,7 @@ let clone_exception_releases_pool_lock_test () =
 
 let concurrent_invalid_bounds_test () =
   let module S = Hegel.Stateful in
-  let noop = S.Concurrent_rule.create ~name:"noop" ~step:(fun _tc () -> ()) () in
+  let noop = S.Concurrent_rule.create ~name:"noop" ~step:(fun _tc () () -> ()) () in
   List.iter
     [ 0, 1, "state machine concurrency bounds must satisfy 1 <= min <= max, got [0, 1]"
     ; 2, 1, "state machine concurrency bounds must satisfy 1 <= min <= max, got [2, 1]"
@@ -1083,8 +1103,10 @@ let concurrent_invalid_bounds_test () =
       match
         Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
           S.run_concurrent
+            ~concurrency:Hegel.Concurrency.threads
             tc
             (module struct
+              type ctx = unit
               type state = unit
 
               let rules = [ noop ]
@@ -1103,8 +1125,10 @@ let concurrent_no_rules_test () =
   match
     Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:1 ()) (fun tc ->
       Hegel.Stateful.run_concurrent
+        ~concurrency:Hegel.Concurrency.threads
         tc
         (module struct
+          type ctx = unit
           type state = unit
 
           let rules = []
@@ -1126,16 +1150,16 @@ let concurrent_no_rules_test () =
 let concurrent_custom_concurrency_test () =
   let module S = Hegel.Stateful in
   let calls = ref [] in
-  let sequential : Hegel.Concurrency.t =
+  let sequential : unit Hegel.Concurrency.t =
     { spawn_join_n =
         (fun ~n ~f ->
           calls := n :: !calls;
-          List.init n ~f)
+          List.init n ~f:(fun i -> f () i))
     }
   in
   let ran = Atomic.make 0 in
   let step =
-    S.Concurrent_rule.create ~name:"step" ~step:(fun _tc () -> Atomic.incr ran) ()
+    S.Concurrent_rule.create ~name:"step" ~step:(fun _tc () () -> Atomic.incr ran) ()
   in
   Hegel.run_hegel_test
     ~settings:
@@ -1147,6 +1171,7 @@ let concurrent_custom_concurrency_test () =
          ~concurrency:sequential
          tc
          (module struct
+           type ctx = unit
            type state = unit
 
            let rules = [ step ]

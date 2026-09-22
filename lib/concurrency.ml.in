@@ -1,18 +1,19 @@
 type outcome = (exn * Printexc.raw_backtrace) option
 #ifdef OXCAML
-type t =
+type 'ctx t =
   { spawn_join_n :
-      n:int -> (f:(int -> outcome) @ portable -> outcome list @ contended) @ local
+      n:int
+      -> (f:('ctx @ local -> int -> outcome) @ portable -> outcome list @ contended) @ local
   }
 #else
-type t = { spawn_join_n : n:int -> f:(int -> outcome) -> outcome list }
+type 'ctx t = { spawn_join_n : n:int -> f:('ctx -> int -> outcome) -> outcome list }
 #endif
 
 (* we use an outcome list because arrays are contended in OxCaml *)
 
 (* [guard f i] runs body [i]; an exception becomes its outcome. *)
 let guard f i =
-  try f i with
+  try f () i with
   | exn -> Some (exn, Printexc.get_raw_backtrace ())
 ;;
 

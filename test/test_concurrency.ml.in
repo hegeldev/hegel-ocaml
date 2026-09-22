@@ -1,8 +1,8 @@
 module C = Hegel.Concurrency
 
-let preserves_order (cap : C.t) () =
+let preserves_order (cap : unit C.t) () =
   let outcomes =
-    cap.spawn_join_n ~n:5 ~f:(fun i ->
+    cap.spawn_join_n ~n:5 ~f:(fun () i ->
       Some (Failure (string_of_int i), Printexc.get_raw_backtrace ()))
   in
   Alcotest.(check int) "one outcome per body" 5 (List.length outcomes);
@@ -15,20 +15,20 @@ let preserves_order (cap : C.t) () =
     outcomes
 ;;
 
-let records_raising_body (cap : C.t) () =
+let records_raising_body (cap : unit C.t) () =
   let outcomes =
-    cap.spawn_join_n ~n:2 ~f:(fun i -> if i = 1 then failwith "boom" else None)
+    cap.spawn_join_n ~n:2 ~f:(fun () i -> if i = 1 then failwith "boom" else None)
   in
   match outcomes with
   | [ None; Some (Failure msg, _) ] -> Alcotest.(check string) "message" "boom" msg
   | _ -> Alcotest.fail "expected the raising body's exception at index 1"
 ;;
 
-let zero_bodies (cap : C.t) () =
+let zero_bodies (cap : unit C.t) () =
   Alcotest.(check int)
     "no outcomes"
     0
-    (List.length (cap.spawn_join_n ~n:0 ~f:(fun _ -> None)))
+    (List.length (cap.spawn_join_n ~n:0 ~f:(fun () _ -> None)))
 ;;
 
 let tests_for name cap =
@@ -47,7 +47,7 @@ let domains_bodies_live_together () =
   let arrived = Atomic.make 0 in
   let deadline = Unix.gettimeofday () +. 5.0 in
   let outcomes =
-    C.domains.spawn_join_n ~n ~f:(fun _ ->
+    C.domains.spawn_join_n ~n ~f:(fun () _ ->
       Atomic.incr arrived;
       while Atomic.get arrived < n && Unix.gettimeofday () < deadline do
         Thread.yield ()
@@ -66,7 +66,7 @@ let domains_bodies_live_together () =
 let domains_run_off_the_main_domain () =
   let main = Domain.self () in
   let outcomes =
-    C.domains.spawn_join_n ~n:2 ~f:(fun _ ->
+    C.domains.spawn_join_n ~n:2 ~f:(fun () _ ->
       if Domain.self () = main
       then Some (Failure "body ran on the main domain", Printexc.get_raw_backtrace ())
       else None)
