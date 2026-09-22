@@ -56,7 +56,9 @@
     how often to pick that rule relative to the others, and defaults to [1.0].
     A rule in a [module%hegel_concurrent_state_machine] also takes a [group],
     as [[@@rule { group = "io"; weight = 2.5 }]]; a group on a sequential rule
-    is an error.
+    is an error. A module that declares [type ctx] gets a [run ~concurrency ...]
+    whose capability must supply that context. Otherwise, [type ctx = unit] and
+    [concurrency] defaults to [Hegel.Concurrency.threads].
 
     In a test body and in a marked rule or invariant body, a
     [let x = draw tc gen] binding has its name injected so the drawn value
@@ -506,6 +508,18 @@ let has_sexp_of_state (items : structure_item list) : bool =
     items
 ;;
 
+let declares_type name (items : structure_item list) =
+  List.exists
+    (fun (item : structure_item) ->
+       match item.pstr_desc with
+       | Pstr_type (_, decls) ->
+         List.exists
+           (fun (decl : type_declaration) -> String.equal decl.ptype_name.txt name)
+           decls
+       | _ -> false)
+    items
+;;
+
 (** Expand sequential and concurrent state-machine modules, collecting marked
     bindings and appending their rules, invariants, and runner. *)
 let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item list =
@@ -579,33 +593,35 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
   let default_sexp_of_state =
     if has_sexp_of_state items then [%expr Some sexp_of_state] else [%expr None]
   in
+  let declares_ctx = concurrent && declares_type "ctx" items in
   let run =
     if concurrent
-    then
-      [%stri
-        let run
-              ?concurrency
+    then (
+      let body =
+        [%expr
+          fun ?min_concurrency
+            ?max_concurrency
+            ?step_count
+            ?sexp_of_state:override
+            tc
+            ~init ->
+            Hegel.Stateful.run_concurrent_internal
+              ~init
+              ~rules
+              ~invariants
+              ~concurrency
               ?min_concurrency
               ?max_concurrency
+              ?sexp_of_state:
+                (match override with
+                 | Some _ as s -> s
+                 | None -> [%e default_sexp_of_state])
               ?step_count
-              ?sexp_of_state:override
-              tc
-              ~init
-          =
-          Hegel.Stateful.run_concurrent_internal
-            ~init
-            ~rules
-            ~invariants
-            ?concurrency
-            ?min_concurrency
-            ?max_concurrency
-            ?sexp_of_state:
-              (match override with
-               | Some _ as s -> s
-               | None -> [%e default_sexp_of_state])
-            ?step_count
-            tc
-        ;;]
+              tc]
+      in
+      if declares_ctx
+      then [%stri let run ~concurrency = [%e body]]
+      else [%stri let run ?(concurrency = Hegel.Concurrency.threads) = [%e body]])
     else
       [%stri
         let run ?step_count ?sexp_of_state:override tc ~init =
@@ -622,10 +638,11 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
         ;;]
   in
   let generated =
-    [ [%stri let rules = [%e elist ~loc rule_exprs]]
-    ; [%stri let invariants = [%e elist ~loc invariant_exprs]]
-    ; run
-    ]
+    (if concurrent && not declares_ctx then [ [%stri type ctx = unit] ] else [])
+    @ [ [%stri let rules = [%e elist ~loc rule_exprs]]
+      ; [%stri let invariants = [%e elist ~loc invariant_exprs]]
+      ; run
+      ]
   in
   let pmb_expr = { mb.pmb_expr with pmod_desc = Pmod_structure (items @ generated) } in
   [ pstr_module ~loc { mb with pmb_expr } ]
