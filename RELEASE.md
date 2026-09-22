@@ -1,7 +1,7 @@
 RELEASE_TYPE: minor
 
-This release adds weights to stateful rules and changes how options are passed
-to `[@@rule]` and `[@@invariant]`.
+This release adds weights to stateful rules, adds concurrency capabilities to concurrent
+rules, and changes how options are passed to `[@@rule]` and `[@@invariant]`.
 
 A rule's weight is a hint about how often libhegel should pick that rule
 relative to other rules. It defaults to `1.0`, and may be written as either an
