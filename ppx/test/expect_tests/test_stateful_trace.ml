@@ -25,7 +25,7 @@ module%hegel_state_machine Counter = struct
   let my_inv tc n =
     Hegel.note tc (sprintf "checking n = %d" !n);
     assert (!n <= 1)
-  [@@invariant always_check]
+  [@@invariant { always_check = true }]
   ;;
 end
 
@@ -55,7 +55,7 @@ let%expect_test "invariant violated in the initial state" =
   let module M = struct
     type state = unit
 
-    let rules = [ Stateful.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) ]
+    let rules = [ Stateful.Rule.create ~name:"noop" ~step:(fun _tc () -> ()) () ]
 
     let invariants =
       [ Stateful.Invariant.create ~name:"silly_inv" ~inv:(fun _tc () -> assert false) () ]
@@ -117,7 +117,7 @@ let%expect_test "state trace across multiple rules" =
 module%hegel_concurrent_state_machine Concurrent_boom = struct
   type state = unit
 
-  let boom tc () =
+  let boom tc () () =
     ignore (Hegel.draw tc (integers ()) : int);
     failwith "concurrent boom"
   [@@rule]
@@ -223,10 +223,10 @@ module%hegel_concurrent_state_machine Concurrent_counter = struct
   type state = int Atomic.t
 
   let sexp_of_state state = Sexplib0.Sexp.Atom (Int.to_string (Atomic.get state))
-  let increment _tc state = Atomic.incr state [@@rule "writes"]
+  let increment _tc () state = Atomic.incr state [@@rule { group = "writes" }]
 
   let stays_zero _tc state = if Atomic.get state <> 0 then failwith "invariant boom"
-  [@@invariant always_check]
+  [@@invariant { always_check = true }]
   ;;
 end
 

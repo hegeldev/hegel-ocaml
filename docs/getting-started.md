@@ -289,10 +289,11 @@ require tc ~msg:"list must stay sorted" (is_sorted xs)
 `Stateful` applies a random sequence of rules to the SUT and checks invariants
 on it. First, create a state machine with `module%hegel_state_machine`. Mark
 rules with `[@@rule]` and invariants with `[@@invariant]`. A rule takes the
-test case and the state and updates the state in place. Every invariant is 
-checked on the initial and final states and sampled after intermediate steps, 
-or after every step when marked `[@@invariant always_check]`. Pass `?sexp_of_state` 
-to `Stateful.run` to trace the model state. Draws are also printed with their 
+test case and the state and updates the state in place. Rules may be weighted
+with `[@@rule { weight = <weight> }]`. Every invariant is checked on the initial
+and final states and sampled after intermediate steps, or after every step when
+marked `[@@invariant { always_check = true }]`. Pass `?sexp_of_state` to 
+`Stateful.run` to trace the model state. Draws are also printed with their 
 `let`-bound name.
 
 ```ocaml
@@ -307,7 +308,7 @@ module%hegel_state_machine Stack = struct
   [@@rule]
 
   let stack_stays_small _tc stack = assert (List.length !stack <= 2)
-  [@@invariant always_check]
+  [@@invariant { always_check = true }]
 end
 
 let%hegel_test stack_model tc = Stack.run tc ~init:(ref [])
@@ -344,7 +345,7 @@ module Stack = struct
     stack := n :: !stack
 
   let stack_stays_small _tc stack = assert (List.length !stack <= 2)
-  let rules = [ Stateful.Rule.create ~name:"push" ~step:push ]
+  let rules = [ Stateful.Rule.create ~name:"push" ~step:push () ]
 
   let invariants =
     [ Stateful.Invariant.create
@@ -367,8 +368,9 @@ In state machines not written with the PPX, draws print as `draw_1`, `draw_2`, .
 
 One rule runs at a time. To run rules on several workers at once, write a
 `module%hegel_concurrent_state_machine` and pass `~max_concurrency:n` to its
-`run`. Rules marked `[@@rule "group"]` run concurrently only with rules in 
-the same group.
+`run`. Rules marked `[@@rule { group = "group" }]` run concurrently only with
+rules in the same group, and `[@@rule { weight = <weight> }]` hints at the 
+proportion of times a rule should be executed. 
 
 See the `Hegel.Stateful` API docs for concurrent testing, for invariants across
 multiple rules, and for value pools that let one rule act on data an earlier

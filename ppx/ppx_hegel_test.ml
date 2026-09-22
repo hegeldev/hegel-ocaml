@@ -28,12 +28,12 @@
       let sexp_of_state n = sexp_of_int !n
       let add tc n = n := !n + draw tc (integers ~min_value:1 ~max_value:10 ()) [@@rule]
       let small _tc n = assert (!n < 100) [@@invariant]
-      let positive _tc n = assert (!n >= 0) [@@invariant always_check]
+      let positive _tc n = assert (!n >= 0) [@@invariant { always_check = true }]
     end
     ]}
     The above is rewritten into the following:
     {[
-    let rules = [ Hegel.Stateful.Rule.create ~name:"add" ~step:add ]
+    let rules = [ Hegel.Stateful.Rule.create ~name:"add" ~weight:1.0 ~step:add () ]
 
     let invariants =
       [ Hegel.Stateful.Invariant.create ~name:"small" ~inv:small ~always_check:false ()
@@ -49,6 +49,16 @@
       Hegel.Stateful.run_internal ~init ~rules ~invariants ~sexp_of_state ?step_count tc
     ;;
     ]}
+
+    A marker's options are written as a record, whose fields may be given in
+    any order and any of which may be left out: [[@@rule { weight = 2.5 }]],
+    [[@@invariant { always_check = true }]]. A rule's [weight] tells the engine
+    how often to pick that rule relative to the others, and defaults to [1.0].
+    A rule in a [module%hegel_concurrent_state_machine] also takes a [group],
+    as [[@@rule { group = "io"; weight = 2.5 }]]; a group on a sequential rule
+    is an error. A module that declares [type ctx] gets a [run ~concurrency ...]
+    whose capability must supply that context. Otherwise, [type ctx = unit] and
+    [concurrency] defaults to [Hegel.Concurrency.threads].
 
     In a test body and in a marked rule or invariant body, a
     [let x = draw tc gen] binding has its name injected so the drawn value
@@ -72,15 +82,39 @@ let failure_blobs_attribute =
     (fun ~attr_loc blobs -> attr_loc, blobs)
 ;;
 
+type rule_payload =
+  { group : string option
+  ; weight : string option
+  }
+
+let weight_pattern () =
+  Ast_pattern.(efloat __ ||| map1 (eint __) ~f:(fun weight -> string_of_int weight ^ "."))
+;;
+
+let record_payload fields = Ast_pattern.(single_expr_payload (pexp_record fields none))
+let field name pattern = Ast_pattern.(loc (lident (string name)) ** pattern)
+let group_field () = field "group" Ast_pattern.(estring __)
+let weight_field () = field "weight" (weight_pattern ())
+
 let rule_attribute =
   Attribute.declare_with_attr_loc
     "hegel.rule"
     Attribute.Context.value_binding
     Ast_pattern.(
-      alt
-        (map0 (pstr nil) ~f:None)
-        (map1 (single_expr_payload (estring __)) ~f:(fun group -> Some group)))
-    (fun ~attr_loc group -> attr_loc, group)
+      map0 (pstr nil) ~f:{ group = None; weight = None }
+      ||| map1
+            (record_payload (group_field () ^:: nil))
+            ~f:(fun group -> { weight = None; group = Some group })
+      ||| map1
+            (record_payload (weight_field () ^:: nil))
+            ~f:(fun weight -> { group = None; weight = Some weight })
+      ||| map2
+            (record_payload (group_field () ^:: weight_field () ^:: nil))
+            ~f:(fun group weight -> { group = Some group; weight = Some weight })
+      ||| map2
+            (record_payload (weight_field () ^:: group_field () ^:: nil))
+            ~f:(fun weight group -> { group = Some group; weight = Some weight }))
+    (fun ~attr_loc payload -> attr_loc, payload)
 ;;
 
 let invariant_attribute =
@@ -88,9 +122,7 @@ let invariant_attribute =
     "hegel.invariant"
     Attribute.Context.value_binding
     Ast_pattern.(
-      alt
-        (map0 (pstr nil) ~f:false)
-        (map0 (single_expr_payload (pexp_ident (lident (string "always_check")))) ~f:true))
+      map0 (pstr nil) ~f:false ||| record_payload (field "always_check" (ebool __) ^:: nil))
     Fun.id
 ;;
 
@@ -373,27 +405,41 @@ let expand_value_binding ~loc (vb : value_binding) : structure_item list =
 
 (** A marker attribute on a binding inside a [module%hegel_state_machine]. *)
 type marker =
-  | Rule of string option
+  | Rule of
+      { group : string option
+      ; weight : string
+      }
   | Invariant of { always_check : bool }
 
-(** [marker_of_binding ~concurrent vb] is [vb] with its marker attribute
-    removed and the marker that attribute carried, if any. *)
-let marker_of_binding ~concurrent (vb : value_binding) : value_binding * marker option =
-  let vb, rule = consume rule_attribute vb in
-  let vb, invariant = consume invariant_attribute vb in
-  match rule, invariant with
-  | Some _, Some _ ->
-    Location.raise_errorf
-      ~loc:vb.pvb_loc
-      "ppx_hegel_test: a binding can be marked [@@@@rule] or [@@@@invariant], not both"
-  | Some (attr_loc, Some _), None when not concurrent ->
+let rule_marker ~concurrent ~attr_loc { group; weight } =
+  if Option.is_some group && not concurrent
+  then
     Location.raise_errorf
       ~loc:attr_loc
       "ppx_hegel_test: rule groups are only supported in \
-       module%%hegel_concurrent_state_machine"
-  | Some (_, group), None -> vb, Some (Rule group)
-  | None, Some always_check -> vb, Some (Invariant { always_check })
-  | None, None -> vb, None
+       module%%hegel_concurrent_state_machine";
+  Rule { group; weight = Option.value weight ~default:"1.0" }
+;;
+
+(** [marker_of_binding ~concurrent vb] is [vb] with its marker attribute
+    removed and the marker that attribute carried, if any. A binding carries
+    at most one marker, so the other attribute is consumed only to reject one
+    that carries both. *)
+let marker_of_binding ~concurrent (vb : value_binding) : value_binding * marker option =
+  let marked_both (vb : value_binding) =
+    Location.raise_errorf
+      ~loc:vb.pvb_loc
+      "ppx_hegel_test: a binding can be marked [@@@@rule] or [@@@@invariant], not both"
+  in
+  match consume rule_attribute vb with
+  | vb, Some (attr_loc, payload) ->
+    (match consume invariant_attribute vb with
+     | vb, None -> vb, Some (rule_marker ~concurrent ~attr_loc payload)
+     | vb, Some _ -> marked_both vb)
+  | vb, None ->
+    (match consume invariant_attribute vb with
+     | vb, None -> vb, None
+     | vb, Some always_check -> vb, Some (Invariant { always_check }))
 ;;
 
 (** [expand_machine_item item] returns [item] with its marker attributes
@@ -462,6 +508,18 @@ let has_sexp_of_state (items : structure_item list) : bool =
     items
 ;;
 
+let declares_type name (items : structure_item list) =
+  List.exists
+    (fun (item : structure_item) ->
+       match item.pstr_desc with
+       | Pstr_type (_, decls) ->
+         List.exists
+           (fun (decl : type_declaration) -> String.equal decl.ptype_name.txt name)
+           decls
+       | _ -> false)
+    items
+;;
+
 (** Expand sequential and concurrent state-machine modules, collecting marked
     bindings and appending their rules, invariants, and runner. *)
 let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item list =
@@ -483,7 +541,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
     List.fold_right
       (fun (name, marker) (rules, invariants) ->
          match marker with
-         | Rule group -> (name, group) :: rules, invariants
+         | Rule { group; weight } -> (name, group, weight) :: rules, invariants
          | Invariant { always_check } -> rules, (name, always_check) :: invariants)
       marked
       ([], [])
@@ -498,7 +556,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
   let open Ast_builder.Default in
   let rule_exprs =
     List.map
-      (fun (name, group) ->
+      (fun (name, group, weight) ->
          if concurrent
          then
            [%expr
@@ -508,6 +566,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
                    match group with
                    | None -> [%expr None]
                    | Some group -> [%expr Some [%e estring ~loc group]]]
+               ~weight:[%e efloat ~loc weight]
                ~name:[%e estring ~loc name]
                ~step:[%e evar ~loc name]
                ()]
@@ -515,7 +574,9 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
            [%expr
              Hegel.Stateful.Rule.create
                ~name:[%e estring ~loc name]
-               ~step:[%e evar ~loc name]])
+               ~weight:[%e efloat ~loc weight]
+               ~step:[%e evar ~loc name]
+               ()])
       rules
   in
   let invariant_exprs =
@@ -532,33 +593,35 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
   let default_sexp_of_state =
     if has_sexp_of_state items then [%expr Some sexp_of_state] else [%expr None]
   in
+  let declares_ctx = concurrent && declares_type "ctx" items in
   let run =
     if concurrent
-    then
-      [%stri
-        let run
-              ?concurrency
+    then (
+      let body =
+        [%expr
+          fun ?min_concurrency
+            ?max_concurrency
+            ?step_count
+            ?sexp_of_state:override
+            tc
+            ~init ->
+            Hegel.Stateful.run_concurrent_internal
+              ~init
+              ~rules
+              ~invariants
+              ~concurrency
               ?min_concurrency
               ?max_concurrency
+              ?sexp_of_state:
+                (match override with
+                 | Some _ as s -> s
+                 | None -> [%e default_sexp_of_state])
               ?step_count
-              ?sexp_of_state:override
-              tc
-              ~init
-          =
-          Hegel.Stateful.run_concurrent_internal
-            ~init
-            ~rules
-            ~invariants
-            ?concurrency
-            ?min_concurrency
-            ?max_concurrency
-            ?sexp_of_state:
-              (match override with
-               | Some _ as s -> s
-               | None -> [%e default_sexp_of_state])
-            ?step_count
-            tc
-        ;;]
+              tc]
+      in
+      if declares_ctx
+      then [%stri let run ~concurrency = [%e body]]
+      else [%stri let run ?(concurrency = Hegel.Concurrency.threads) = [%e body]])
     else
       [%stri
         let run ?step_count ?sexp_of_state:override tc ~init =
@@ -575,10 +638,11 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
         ;;]
   in
   let generated =
-    [ [%stri let rules = [%e elist ~loc rule_exprs]]
-    ; [%stri let invariants = [%e elist ~loc invariant_exprs]]
-    ; run
-    ]
+    (if concurrent && not declares_ctx then [ [%stri type ctx = unit] ] else [])
+    @ [ [%stri let rules = [%e elist ~loc rule_exprs]]
+      ; [%stri let invariants = [%e elist ~loc invariant_exprs]]
+      ; run
+      ]
   in
   let pmb_expr = { mb.pmb_expr with pmod_desc = Pmod_structure (items @ generated) } in
   [ pstr_module ~loc { mb with pmb_expr } ]

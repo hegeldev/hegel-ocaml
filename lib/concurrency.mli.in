@@ -23,23 +23,27 @@
     raised with its backtrace. *)
 type outcome = (exn * Printexc.raw_backtrace) option
 
-(** A concurrency capability. [spawn_join_n ~n ~f] runs [f 0] … [f (n - 1)] as
-    concurrent tasks and returns their outcomes once all of them have finished.
-    If [f i] raises, the exception is recorded as task [i]'s outcome. *)
+(** A concurrency capability. [spawn_join_n ~n ~f] runs [f ctx 0] … [f ctx (n - 1)]
+    as concurrent tasks and returns their outcomes once all of them have
+    finished. [ctx] is the context the implementation gives each task, such as
+    a scheduler handle. If [f ctx i] raises, the exception is recorded as task [i]'s 
+    outcome. *)
 #ifdef OXCAML
-type t =
+type 'ctx t =
   { spawn_join_n :
-      n:int -> (f:(int -> outcome) @ portable -> outcome list @ contended) @ local
+      n:int
+      -> (f:('ctx @ local -> int -> outcome) @ portable -> outcome list @ contended) @ local
   }
 #else
-type t = { spawn_join_n : n:int -> f:(int -> outcome) -> outcome list }
+type 'ctx t = { spawn_join_n : n:int -> f:('ctx -> int -> outcome) -> outcome list }
 #endif
 
-(** Runs each body on its own systhread. *)
-val threads : t
+(** Runs each body on its own systhread, with [()] as its context. *)
+val threads : unit t
 
 #ifndef OXCAML
 (** Runs the bodies in parallel on a pool of [[1, Domain.recommended_domain_count () - 1]]
-    domains. Each body runs on its own systhread inside a domain. *)
-val domains : t
+    domains. Each body runs on its own systhread inside a domain, with [()] as
+    its context. *)
+val domains : unit t
 #endif

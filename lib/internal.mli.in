@@ -55,7 +55,11 @@ val clone : test_case -> test_case
     {!note}/draw line it prints is indented [indent] columns further than [tc]'s
     lines. The block is freed when [f] returns or raises, so it must not escape
     [f]. *)
+#ifdef OXCAML
+val with_block : test_case -> indent:int -> (test_case -> 'a) @ local -> 'a
+#else
 val with_block : test_case -> indent:int -> (test_case -> 'a) -> 'a
+#endif
 
 (** [owned_clone_count tc] is the number of clone handles the test case
     currently owns; they are freed together once the case completes. *)
@@ -336,11 +340,13 @@ val pool_generate : test_case -> pool:pool -> ?consume:bool -> unit -> int
 type state_machine = Hegel_ffi.Ffi.state_machine
 
 (** Registers a sequential or concurrent engine-owned state machine and
-    returns its handle with the concurrency level selected by libhegel. *)
+    returns its handle with the concurrency level selected by libhegel. Raises
+    {!Usage_error} if [rule_weights] contains a non-positive float. *)
 val new_state_machine_with_concurrency
   :  test_case
   -> rule_names:string list
   -> rule_groups:int list
+  -> rule_weights:float list
   -> invariant_names:string list
   -> invariants_always_check:bool list
   -> step_count:int

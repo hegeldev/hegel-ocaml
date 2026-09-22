@@ -5,12 +5,16 @@
     the OxCaml mode checker *)
 
 #ifdef OXCAML
-#define CONCURRENCY_ARG (concurrency : Concurrency.t @ local = Concurrency.threads)
-#define LOCAL_CONCURRENCY (concurrency : Concurrency.t @ local)
+#define CONCURRENCY_PARAM ~(concurrency : _ Concurrency.t @ local)
+#define LOCAL_CONCURRENCY (concurrency : _ Concurrency.t @ local)
+#define LOCAL(x) (x @ local)
+#define LOCAL_CTX ~(ctx @ local)
 #define NONTAIL [@nontail] (* concurrency is captured as local so the stack frame can't be erased *)
 #else
-#define CONCURRENCY_ARG (concurrency = Concurrency.threads)
-#define LOCAL_CONCURRENCY (concurrency : Concurrency.t)
+#define CONCURRENCY_PARAM ~(concurrency : _ Concurrency.t)
+#define LOCAL_CONCURRENCY (concurrency : _ Concurrency.t)
+#define LOCAL(x) x
+#define LOCAL_CTX ~ctx
 #define NONTAIL
 #endif
 
@@ -33,31 +37,39 @@ end
 module Rule = struct
   type 'state t =
     { name : string
+    ; weight : float
     ; step : Internal.test_case -> 'state -> unit
     }
 
-  let create ~name ~step = { name; step }
+  let create ~name ?(weight = 1.0) ~step () = { name; weight; step }
   let name t = t.name
+  let weight t = t.weight
 end
 
 module Concurrent_rule = struct
 #ifdef OXCAML
-  type 'state t : value mod portable contended =
+  type ('ctx, 'state) t : value mod portable contended =
     { name : string
     ; group : string
-    ; step : (Internal.test_case -> 'state @ contended -> unit) @@ portable
+    ; weight : float
+    ; step : (Internal.test_case -> 'ctx @ local -> 'state @ contended -> unit) @@ portable
     }
 #else
-  type 'state t =
+  type ('ctx, 'state) t =
     { name : string
     ; group : string
-    ; step : Internal.test_case -> 'state -> unit
+    ; weight : float
+    ; step : Internal.test_case -> 'ctx -> 'state -> unit
     }
 #endif
 
-  let create ?(group = "<anonymous>") ~name ~step () = { name; group; step }
+  let create ?(group = "<anonymous>") ?(weight = 1.0) ~name ~step () =
+    { name; group; weight; step }
+  ;;
+
   let name t = t.name
   let group t = t.group
+  let weight t = t.weight
 end
 
 module Invariant = struct
@@ -71,8 +83,8 @@ module Invariant = struct
   let name invariant = invariant.name
 end
 
-let run_rules tc ~state_machine ~worker_index ~heading ~rule =
-  let rec loop rejected =
+let run_rules tc ~state_machine ~worker_index LOCAL_CTX ~heading ~rule =
+  let rec loop LOCAL(ctx) rejected =
     match Internal.state_machine_next_rule_for_worker tc ~state_machine ~worker_index with
     | None -> rejected
     | Some rule_index ->
@@ -80,16 +92,16 @@ let run_rules tc ~state_machine ~worker_index ~heading ~rule =
       Internal.note tc (heading name);
       (match
          if Internal.should_print tc
-         then Internal.with_block tc ~indent:2 body
-         else body tc
+         then Internal.with_block tc ~indent:2 (fun tc -> body tc ctx)
+         else body tc ctx
        with
-       | () -> loop rejected
+       | () -> loop ctx rejected
        | exception Internal.Assume_rejected ->
          Internal.state_machine_rule_rejected_for_worker tc ~state_machine ~worker_index;
          Internal.note tc "Rule stopped early due to violated assumption.";
-         loop true)
+         loop ctx true)
   in
-  loop false
+  loop ctx false
 ;;
 
 let unique_groups groups =
@@ -111,8 +123,8 @@ let dispatch_round LOCAL_CONCURRENCY tc ~num_workers ~work =
       Internal.set_worker_index worker_tc worker_index;
       worker_tc)
   in
-  concurrency.spawn_join_n ~n:num_workers ~f:(fun worker_index ->
-    match work ~worker_index (List.nth cases worker_index) with
+  concurrency.spawn_join_n ~n:num_workers ~f:(fun ctx worker_index ->
+    match work ctx ~worker_index (List.nth cases worker_index) with
     | () -> None
     | exception exn -> Some (exn, Printexc.get_raw_backtrace ()))
 ;;
@@ -153,6 +165,7 @@ let run_machine
       tc
       ~rule_names
       ~rule_groups
+      ~rule_weights
       ~invariants
       ~step_count
       ~min_concurrency
@@ -166,6 +179,7 @@ let run_machine
       tc
       ~rule_names
       ~rule_groups
+      ~rule_weights
       ~invariant_names:(List.map Invariant.name invariants)
       ~invariants_always_check:
         (List.map (fun inv -> inv.Invariant.always_check) invariants)
@@ -237,10 +251,11 @@ let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
               tc
               ~state_machine
               ~worker_index:0
+              ~ctx:()
               ~heading:(fun name -> Printf.sprintf "Step %d: %s" step name)
               ~rule:(fun rule_index ->
                 let rule = List.nth rules rule_index in
-                rule.Rule.name, fun tc -> rule.Rule.step tc init)
+                rule.Rule.name, fun tc () -> rule.Rule.step tc init)
           with
           | rejected -> rejected
           | exception e ->
@@ -258,6 +273,7 @@ let run_internal ~init ~rules ~invariants ?sexp_of_state ?(step_count = 50) tc =
     tc
     ~rule_names:(List.map Rule.name rules)
     ~rule_groups:(List.map (fun _ -> 0) rules)
+    ~rule_weights:(List.map Rule.weight rules)
     ~invariants
     ~step_count
     ~min_concurrency:1
@@ -286,9 +302,10 @@ let run
 ;;
 
 module type Concurrent_state_machine = sig
+  type ctx
   type state
 
-  val rules : state Concurrent_rule.t list
+  val rules : (ctx, state) Concurrent_rule.t list
   val invariants : state Invariant.t list
 end
 
@@ -296,7 +313,7 @@ let run_concurrent_internal
       ~init
       ~rules
       ~invariants
-      ?CONCURRENCY_ARG
+      CONCURRENCY_PARAM
       ?(min_concurrency = 1)
       ?(max_concurrency = min_concurrency)
       ?sexp_of_state
@@ -306,17 +323,18 @@ let run_concurrent_internal
   let rule_groups = List.map Concurrent_rule.group rules in
   let group_names = unique_groups rule_groups in
   let run_steps ~state_machine ~num_workers ~print_state ~check_invariants =
-    let work ~worker_index tc =
+    let work LOCAL(ctx) ~worker_index tc =
       (* returns if a rule was rejected or not, doesn't matter for concurrent *)
       let (_ : bool) =
         run_rules
           tc
           ~state_machine
           ~worker_index
+          ~ctx
           ~heading:(fun name -> Printf.sprintf "Rule: %s" name)
           ~rule:(fun rule_index ->
             let rule = List.nth rules rule_index in
-            rule.Concurrent_rule.name, fun tc -> rule.Concurrent_rule.step tc init)
+            rule.Concurrent_rule.name, fun tc ctx -> rule.Concurrent_rule.step tc ctx init)
       in
       ()
     in
@@ -342,6 +360,7 @@ let run_concurrent_internal
     tc
     ~rule_names:(List.map Concurrent_rule.name rules)
     ~rule_groups:(group_indices rule_groups group_names)
+    ~rule_weights:(List.map Concurrent_rule.weight rules)
     ~invariants
     ~step_count
     ~min_concurrency
@@ -353,21 +372,21 @@ let run_concurrent_internal
 ;;
 
 let run_concurrent
-      (type s)
-      ?concurrency
+      (type c s)
+      ~concurrency
       ?min_concurrency
       ?max_concurrency
       ?step_count
       ?sexp_of_state
       tc
-      (module M : Concurrent_state_machine with type state = s)
+      (module M : Concurrent_state_machine with type ctx = c and type state = s)
       ~(init : s)
   =
   run_concurrent_internal
     ~init
     ~rules:M.rules
     ~invariants:M.invariants
-    ?concurrency
+    ~concurrency
     ?min_concurrency
     ?max_concurrency
     ?sexp_of_state

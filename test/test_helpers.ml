@@ -61,16 +61,16 @@ let contains_substring s sub =
     check 0)
 ;;
 
-let parallel_concurrency : Hegel.Concurrency.t =
+let parallel_concurrency : unit Hegel.Concurrency.t =
   { spawn_join_n =
       (fun ~n ~f ->
         Stdlib.List.init n (fun i ->
           (Stdlib.Domain.spawn [@alert "-do_not_spawn_domains-unsafe_multidomain"])
-            (fun () -> f i))
+            (fun () -> f () i))
         |> Stdlib.List.map Stdlib.Domain.join)
   }
 ;;
 
-let sequential_concurrency : Hegel.Concurrency.t =
-  { spawn_join_n = (fun ~n ~f -> Stdlib.List.init n f) }
+let sequential_concurrency : unit Hegel.Concurrency.t =
+  { spawn_join_n = (fun ~n ~f -> Stdlib.List.init n (fun i -> f () i)) }
 ;;
