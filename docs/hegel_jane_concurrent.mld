@@ -19,7 +19,7 @@ let%hegel_test counter tc =
 ;;
 ]}
 
-A rule takes a {!ctx} containing the scheduler's per-task context and a
+A rule takes a [ctx] containing the scheduler's per-task context and a
 [Concurrent.t]. A machine declares the context type as [ctx]. 
 For example, with a [Parallel] scheduler it is [Parallel_kernel.t]:
 
