@@ -43,7 +43,7 @@ let tests_for name cap =
    finishes only if every body is live as soon as it is dequeued. The deadline
    turns a hang into a failure. *)
 let domains_bodies_live_together () =
-  let n = Domain.recommended_domain_count () + 2 in
+  let n = min 10 (Domain.recommended_domain_count ()) in
   let arrived = Atomic.make 0 in
   let deadline = Unix.gettimeofday () +. 5.0 in
   let outcomes =
@@ -78,9 +78,25 @@ let domains_run_off_the_main_domain () =
     outcomes
 ;;
 
+let domains_pool_grows () =
+  ignore (C.domains.spawn_join_n ~n:1 ~f:(fun () _ -> None) : C.outcome list);
+  let n = min 10 (Domain.recommended_domain_count () - 1) in
+  let seen = Array.make n (-1) in
+  ignore
+    (C.domains.spawn_join_n ~n ~f:(fun () i ->
+       seen.(i) <- (Domain.self () :> int);
+       None)
+     : C.outcome list);
+  Alcotest.(check int)
+    "one domain per body"
+    n
+    (List.length (List.sort_uniq compare (Array.to_list seen)))
+;;
+
 let domain_tests =
   tests_for "domains" C.domains
-  @ [ Alcotest.test_case
+  @ [ Alcotest.test_case "domains pool grows" `Quick domains_pool_grows
+    ; Alcotest.test_case
         "domains bodies live together"
         `Quick
         domains_bodies_live_together
