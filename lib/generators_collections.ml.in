@@ -1,5 +1,11 @@
 open Generators_core
 
+#ifdef OXCAML
+#define AT(m) @ m
+#else
+#define AT(m)
+#endif
+
 (* [validate_size_bounds ~min_size ~max_size] rejects negative collection size
    bounds. *)
 let validate_size_bounds ~min_size ~max_size =
@@ -16,7 +22,16 @@ let validate_size_bounds ~min_size ~max_size =
 (* [draw_association_pairs keys values ~min_size ~max_size data] drives the
    collection protocol to produce unique-keyed [(key, value)] pairs in draw
    order. Duplicate keys are rejected client-side, compared structurally. *)
-let draw_association_pairs keys values ~min_size ~max_size data =
+let draw_association_pairs
+  : type a b.
+    (a, printable) generator
+    -> (b, printable) generator
+    -> min_size:int
+    -> max_size:int option
+    -> Internal.test_case
+    -> (a * b) list
+  =
+  fun keys values ~min_size ~max_size data ->
   with_collection ~min_size ?max_size data (fun coll ->
     let rec collect acc =
       if collection_more coll data
@@ -40,42 +55,44 @@ let draw_association_pairs keys values ~min_size ~max_size data =
 
     Key-value pairs are generated one at a time via the collection protocol,
     with duplicate keys rejected client-side. *)
-let assoc_lists
-      (keys : ('a, printable) generator)
-      (values : ('b, printable) generator)
+let%template assoc_lists
+      (keys : ('a, printable) generator AT(m))
+      (values : ('b, printable) generator AT(m))
       ?(min_size = 0)
       ?(max_size : int option)
       ()
-  : (('a * 'b) list, printable) generator
+  : (('a * 'b) list, printable) generator AT(m)
   =
   validate_size_bounds ~min_size ~max_size;
-  let pk = printer keys
-  and pv = printer values in
+  let pk = (printer [@mode m]) keys
+  and pv = (printer [@mode m]) values in
   let sexp_of kvs = Sexp.List (List.map (fun (k, v) -> Sexp.List [ pk k; pv v ]) kvs) in
   let core =
     Composite
       { label = Labels.combine [ Labels.assoc_list; label_of keys; label_of values ]
-      ; generate_fn = draw_association_pairs keys values ~min_size ~max_size
+      ; generate_fn =
+          (fun data -> draw_association_pairs keys values ~min_size ~max_size data)
       }
   in
   Printable { core; sexp_of }
+[@@mode m = (nonportable, portable)]
 ;;
 
 (** [make_hash_tables ~of_pairs ~sexp_of_t keys values ?min_size ?max_size ()]
     builds a hash-table generator over any table type ['t]. *)
-let make_hash_tables
-      ~of_pairs
-      ~sexp_of_t
-      (keys : ('a, printable) generator)
-      (values : ('b, printable) generator)
+let%template make_hash_tables
+      ~(of_pairs : (('a * 'b) list -> 't) AT(m))
+      ~(sexp_of_t : (('a -> Sexp.t) -> ('b -> Sexp.t) -> 't -> Sexp.t) AT(m))
+      (keys : ('a, printable) generator AT(m))
+      (values : ('b, printable) generator AT(m))
       ?(min_size = 0)
       ?(max_size : int option)
       ()
-  : ('t, printable) generator
+  : ('t, printable) generator AT(m)
   =
   validate_size_bounds ~min_size ~max_size;
-  let pk = printer keys
-  and pv = printer values in
+  let pk = (printer [@mode m]) keys
+  and pv = (printer [@mode m]) values in
   let core =
     Composite
       { label = Labels.combine [ Labels.hash_table; label_of keys; label_of values ]
@@ -85,12 +102,20 @@ let make_hash_tables
       }
   in
   Printable { core; sexp_of = (fun table -> sexp_of_t pk pv table) }
+[@@mode m = (nonportable, portable)]
 ;;
 
 (** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
     polymorphic [Stdlib.Hashtbl.t] tables over printable [keys] and [values]. *)
-let hash_tables keys values ?min_size ?max_size () =
-  make_hash_tables
+let%template hash_tables
+      (keys : ('a, printable) generator AT(m))
+      (values : ('b, printable) generator AT(m))
+      ?min_size
+      ?max_size
+      ()
+  : (('a, 'b) Stdlib.Hashtbl.t, printable) generator AT(m)
+  =
+  (make_hash_tables [@mode m])
     ~of_pairs:(fun pairs ->
       let table = Stdlib.Hashtbl.create (List.length pairs) in
       List.iter (fun (k, v) -> Stdlib.Hashtbl.replace table k v) pairs;
@@ -103,6 +128,7 @@ let hash_tables keys values ?min_size ?max_size () =
     ?min_size
     ?max_size
     ()
+[@@mode m = (nonportable, portable)]
 ;;
 
 (** [lists elements ?min_size ?max_size ?unique ()] creates a generator for
@@ -111,22 +137,23 @@ let hash_tables keys values ?min_size ?max_size () =
     Elements are generated one at a time via the collection protocol inside a
     {!Labels.list} span. When [unique] is [true], duplicate elements are
     rejected client-side so the generated list contains only distinct elements. *)
-let lists
-      (elements : ('a, printable) generator)
+let%template lists
+      (elements : ('a, printable) generator AT(m))
       ?(min_size = 0)
       ?(max_size : int option)
       ?(unique = false)
       ()
-  : ('a list, printable) generator
+  : ('a list, printable) generator AT(m)
   =
   validate_size_bounds ~min_size ~max_size;
-  let elt = printer elements in
+  let elt = (printer [@mode m]) elements in
+  let element_core = (core_of [@mode m]) elements in
   let sexp_of xs = Sexp.List (List.map elt xs) in
   let core =
     if not unique
     then
       CompositeList
-        { elements = core_of elements
+        { elements = element_core
         ; min_size
         ; max_size
         ; label = Labels.combine [ Labels.list; label_of elements ]
@@ -144,7 +171,7 @@ let lists
                 let rec collect acc =
                   if collection_more coll data
                   then (
-                    let elem = do_draw (core_of elements) data in
+                    let elem = do_draw element_core data in
                     if List.mem elem acc
                     then (
                       collection_reject coll data;
@@ -156,4 +183,5 @@ let lists
         }
   in
   Printable { core; sexp_of }
+[@@mode m = (nonportable, portable)]
 ;;

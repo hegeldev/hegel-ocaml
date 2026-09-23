@@ -1,0 +1,19 @@
+; [ppx_template] rewrites [let%template] and [[@mode ...]] into one definition
+; per mode. It exists only for OxCaml, and dune allows no variables in [pps]
+; names, so this library links it when it is installed. Otherwise it links a
+; rewriter that keeps each [%template] item and removes the marker. Upstream
+; OCaml ignores the [[@mode]] attributes that remain.
+
+(library
+ (name hegel_template)
+ (public_name hegel.template)
+ (kind ppx_rewriter)
+ (libraries
+  ppxlib
+  (select
+   hegel_template.ml
+   from
+   (ppx_template -> hegel_template.oxcaml.ml)
+   (-> hegel_template.upstream.ml)))
+ (preprocess
+  (pps ppx_js_style)))

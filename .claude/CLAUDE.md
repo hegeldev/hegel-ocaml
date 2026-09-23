@@ -37,9 +37,6 @@ lib/                         # Library source
     locked.capsule.ml        #   locked.mutex.ml (Mutex + value). Core-free.
                              #   locked.capsule.ml is OxCaml syntax and listed in
                              #   .ocamlformat-ignore
-  template/                  # hegel.template ppx: ppx_template on OxCaml, a
-                             #   %template-stripping rewriter elsewhere (dune
-                             #   select). NOT instrumented
   ffi/                       # ctypes bindings to native libhegel (NOT instrumented)
     ffi.ml                   # dlopen + 1:1 C-ABI wrappers; settings/run/test_case
                              #   handles; typed draws + string-generator handles;
@@ -108,6 +105,10 @@ lib/                         # Library source
                              #   job): dune only allows env variables in an
                              #   executable's enabled_if, and an (optional)
                              #   executable is still requested by the default alias
+
+template/                    # hegel.template ppx: links ppx_template on
+                             #   OxCaml, a %template-stripping rewriter
+                             #   elsewhere (dune select). NOT instrumented
 
 ppx/                         # PPX rewriters and derivers
   dune                       # PPX library build configs; a rule generates
@@ -720,12 +721,14 @@ a caller picks the portable instance with `(map [@mode portable])`.
 so the plain instance takes any type. ppx_template names the portable
 instance `f__portable` (the kind axis adds nothing), so references inside
 `(m, c)` templates use `[@mode m]`. The primitives are not templated: they
-return `PRET`. `ppx_template` exists only for OxCaml, so the
-`hegel.template` ppx (`lib/template/`) `select`s it when installed and
-otherwise links a rewriter that strips the `%template` marker; upstream OCaml
-ignores the remaining `[@mode]` attributes. `lib/`, `lib/jane/`, `test/`, and
-both hegel PPXes list `hegel.template`, the PPXes so users get
-`[@mode portable]` without adding `ppx_template` themselves. cppo still
+return `PRET`. `ppx_template` exists only for OxCaml, and dune allows no
+variables in `pps` library names, so the `hegel.template` ppx (`template/`)
+`select`s it when installed and otherwise links a rewriter that keeps each
+`let%template`/`val%template` item and removes the marker (single items only,
+not `[%%template]` blocks); upstream OCaml ignores the remaining `[@mode]`
+attributes. `lib/`, `lib/jane/`, `test/`, and both hegel PPXes list
+`hegel.template`, the PPXes so users get `[@mode portable]` without adding
+`ppx_template` themselves. cppo still
 guards the syntax upstream cannot parse (`@ m`, kind annotations).
 
 - **Interfaces.** `hegel.mli.in`, `generators.mli.in`, `internal.mli.in`,
