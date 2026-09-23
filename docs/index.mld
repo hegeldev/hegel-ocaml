@@ -1,0 +1,17 @@
+{0 hegel}
+
+{1 Library hegel}
+
+The entry point of this library is the module: {!Hegel}.
+
+{1 Library hegel.jane}
+
+The entry point of this library is the module: {!Hegel_jane}.
+
+{1 Library hegel.jane.concurrent}
+
+OxCaml only. The entry point of this library is the module: {{!page-hegel_jane_concurrent}[Hegel_jane_concurrent]}.
+
+{1 Pages}
+
+- {{!page-oxcaml_api}Mode-annotated API}

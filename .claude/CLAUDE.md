@@ -700,8 +700,13 @@ that receives it is `[@nontail]`; the caller opens the scope
 `Parallel_scheduler`). A global `Concurrency.t` that opened a
 `with_blocking` scope per round did type-check but was dropped by decision:
 the caller owns the scope. `concurrent` is an opam depopt. `Concurrency.domains` is upstream-only (`#ifndef OXCAML`): a
-pool of `recommended_domain_count - 1` domains created on first use and joined
-at exit, one job queue per domain, jobs dealt round-robin, each job on its own
+pool that each call grows to `min n (recommended_domain_count - 1)` domains
+and never shrinks (it holds its domains until exit and OCaml allows only 128,
+so a pool sized to the machine left none for other `Domain.spawn`s on a
+256-core opam-repo-ci worker; sizing by the first call's `n` alone would pin
+a `~min_concurrency:1` run to one domain; the domains tests ask for at most
+12 bodies so they do not fill the pool on such a worker), joined at exit, each call using
+its own snapshot of the worker array, one job queue per domain, jobs dealt round-robin, each job on its own
 systhread inside its domain so bodies stay live however few domains there
 are. Results go back as an `outcome list`, not an array, because on OxCaml a
 contended array cannot be read. Once any domain has been spawned `Unix.fork`

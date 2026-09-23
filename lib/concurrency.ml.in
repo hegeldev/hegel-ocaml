@@ -1,13 +1,17 @@
-type outcome = (exn * Printexc.raw_backtrace) option
 #ifdef OXCAML
+#define MODE(m) @ m
+#else
+#define MODE(m)
+#endif
+
+type outcome = (exn * Printexc.raw_backtrace) option
+
 type 'ctx t =
   { spawn_join_n :
       n:int
-      -> (f:('ctx @ local -> int -> outcome) @ portable -> outcome list @ contended) @ local
+      -> (f:('ctx MODE(local) -> int -> outcome) MODE(portable) -> outcome list MODE(contended))
+         MODE(local)
   }
-#else
-type 'ctx t = { spawn_join_n : n:int -> f:('ctx -> int -> outcome) -> outcome list }
-#endif
 
 (* we use an outcome list because arrays are contended in OxCaml *)
 
@@ -55,57 +59,53 @@ module Domain_pool = struct
       run w
   ;;
 
-  type pool =
-    { workers : worker array
-    ; next : int Atomic.t
-    }
+  let workers = ref [||]
+  let domains = ref []
+  let next = Atomic.make 0
+  let pool_lock = Mutex.create ()
 
-  let create () =
-    (* minus 1 because runner's domain takes 1 *)
-    let size = max 1 (Domain.recommended_domain_count () - 1) in
-    let workers =
-      Array.init size (fun _ ->
-        { lock = Mutex.create () (* lock on worker itself *)
-        ; ready = Condition.create () (* worker has everything it needs to execute *)
-        ; jobs = Queue.create ()
-        ; stop = false (* test is about to end *)
-        })
-    in
-    let domains = Array.map (fun w -> Domain.spawn (fun () -> run w)) workers in
+  let () =
     at_exit (fun () ->
       Array.iter
         (fun w ->
            Mutex.protect w.lock (fun () ->
              w.stop <- true;
              Condition.signal w.ready))
-        workers;
-      Array.iter Domain.join domains);
-    { workers; next = Atomic.make 0 }
+        !workers;
+      List.iter Domain.join !domains)
   ;;
 
-  let pool = ref None
-  let pool_lock = Mutex.create ()
-
-  let get_pool () =
+  (* Grows the pool to [min n cap] domains and returns its workers. *)
+  let get_pool n =
     Mutex.protect pool_lock (fun () ->
-      match !pool with
-      | Some p -> p
-      | None ->
-        let p = create () in
-        pool := Some p;
-        p)
+      (* minus 1 because runner's domain takes 1 *)
+      let cap = Domain.recommended_domain_count () - 1 in
+      for _ = Array.length !workers + 1 to max 1 (min n cap) do
+        let w =
+          { lock = Mutex.create () (* lock on worker itself *)
+          ; ready = Condition.create () (* worker has everything it needs to execute *)
+          ; jobs = Queue.create ()
+          ; stop = false (* test is about to end *)
+          }
+        in
+        (* record each worker with its domain, so a failed spawn cannot leave
+           a domain that joins but never stops *)
+        domains := Domain.spawn (fun () -> run w) :: !domains;
+        workers := Array.append !workers [| w |]
+      done;
+      !workers)
   ;;
 
   let submit pool job =
-    let i = Atomic.fetch_and_add pool.next 1 mod Array.length pool.workers in
-    let w = pool.workers.(i) in
+    let i = Atomic.fetch_and_add next 1 mod Array.length pool in
+    let w = pool.(i) in
     Mutex.protect w.lock (fun () ->
       Queue.push job w.jobs;
       Condition.signal w.ready)
   ;;
 
   let spawn_join_n ~n ~f =
-    let pool = get_pool () in
+    let pool = get_pool n in
     let outcomes = Array.make n None in
     let lock = Mutex.create () in
     let finished = Condition.create () in

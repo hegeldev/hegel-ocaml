@@ -8,4 +8,4 @@
 
 (documentation
  (package hegel)
- (mld_files hegel_jane_concurrent oxcaml_api))
+ (mld_files index hegel_jane_concurrent oxcaml_api))
