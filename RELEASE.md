@@ -16,7 +16,7 @@ The primitive generators, such as `integers` and `text`, are already portable.
 attribute has no effect.
 
 `[@@deriving hegel_generator ~portable]` makes a derived generator portable.
-It is a compile error on upstream OCaml.
+On upstream OCaml it has no effect.
 
 Generators no longer cross portability. A generator that a portable closure
 captures must now be annotated with `[@mode portable]`, and a derived one with 

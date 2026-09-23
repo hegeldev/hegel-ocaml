@@ -17,7 +17,7 @@
       [sexp_of_<t>] (via ppx_sexp_conv's expander) and bakes it in with
       [with_printer]; [[@sexp.opaque]] is the escape hatch for un-sexpable
       fields
-    - [~portable] (OxCaml only, in [Portable_derived]) *)
+    - [~portable], which draws the same values as the plain derivation *)
 
 open! Core
 open Hegel
@@ -435,6 +435,83 @@ let test_do_not_generate_data_e2e () =
   assert (String.is_substring blocked_sexp ~substring:"opaque")
 ;;
 
+(* The same types derived twice. The type names are the same, so the labels are
+   the same, and one seed gives the same draws. *)
+module Plain_derived = struct
+  type leaf = { a : int } [@@deriving hegel_generator]
+
+  type record =
+    { xs : int list
+    ; o : string option
+    ; l : leaf
+    }
+  [@@deriving hegel_generator]
+
+  type enum =
+    | E1
+    | E2
+  [@@deriving hegel_generator]
+
+  type variant =
+    | V1 of float
+    | V2 of int * char
+    | V3 of { w : bool }
+  [@@deriving hegel_generator]
+
+  type alias = int * bool [@@deriving hegel_generator]
+end
+
+module Portable_derived = struct
+  type leaf = { a : int } [@@deriving hegel_generator ~portable]
+
+  type record =
+    { xs : int list
+    ; o : string option
+    ; l : leaf
+    }
+  [@@deriving hegel_generator ~portable]
+
+  type enum =
+    | E1
+    | E2
+  [@@deriving hegel_generator ~portable]
+
+  type variant =
+    | V1 of float
+    | V2 of int * char
+    | V3 of { w : bool }
+  [@@deriving hegel_generator ~portable]
+
+  type alias = int * bool [@@deriving hegel_generator ~portable]
+end
+
+(** Test: [~portable] draws the same values as the plain derivation. *)
+let test_portable_matches_plain_e2e () =
+  let collect gen =
+    let seen = ref [] in
+    Hegel.run_hegel_test
+      ~settings:(Hegel.Settings.create ~test_cases:30 ~seed:0 ())
+      (fun tc ->
+         seen
+         := Sexp.to_string ((Hegel.Generators.printer gen) (Hegel.draw_silent tc gen))
+            :: !seen);
+    List.rev !seen
+  in
+  let same name plain portable =
+    Alcotest.(check (list string)) name (collect plain) (collect portable)
+  in
+  same
+    "record"
+    Plain_derived.hegel_generator_record
+    Portable_derived.hegel_generator_record;
+  same "enum" Plain_derived.hegel_generator_enum Portable_derived.hegel_generator_enum;
+  same
+    "variant"
+    Plain_derived.hegel_generator_variant
+    Portable_derived.hegel_generator_variant;
+  same "alias" Plain_derived.hegel_generator_alias Portable_derived.hegel_generator_alias
+;;
+
 (** Test: bare deriving yields a printable generator *)
 let%hegel_test test_printer_e2e tc =
   let p = Hegel.draw tc hegel_generator_printed_point in
@@ -505,7 +582,10 @@ let () =
         ; Alcotest.test_case "do_not_generate (data)" `Quick test_do_not_generate_data_e2e
         ; Alcotest.test_case "default printer" `Quick test_printer_e2e
         ; Alcotest.test_case "opaque field escape hatch" `Quick test_opaque_field_e2e
-        ]
-        @ Portable_derived.tests )
+        ; Alcotest.test_case
+            "portable matches plain"
+            `Quick
+            test_portable_matches_plain_e2e
+        ] )
     ]
 ;;

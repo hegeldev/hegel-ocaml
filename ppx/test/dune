@@ -12,7 +12,7 @@
 (test
  (name test_ppx_derive)
  (package ppx_hegel_generator)
- (modules test_ppx_derive portable_derived)
+ (modules test_ppx_derive)
  (libraries hegel alcotest core core_unix threads.posix)
  (preprocess
   (pps
@@ -52,13 +52,3 @@
    -allow-unannotated-ignores
    -check
    -locations-check)))
-
-; [~portable] is OxCaml only, so its test module is picked by compiler.
-
-(rule
- (target portable_derived.ml)
- (action
-  (with-stdout-to
-   %{target}
-   (bash
-    "case '%{ocaml_version}' in *+ox*) cat %{dep:portable_derived_oxcaml.ml};; *) cat %{dep:portable_derived_upstream.ml};; esac"))))

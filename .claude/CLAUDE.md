@@ -387,10 +387,8 @@ the base_quickcheck conventions:
    (`M.hegel_generator`, an override) that is not portable is a compile error
    at the use site. A parameterized generator used under `~portable` must be a
    template, as `Hegel.Derive`'s `list`/`option` are. Opt-in, so a user who
-   derives without it meets no modes. Off OxCaml it is a compile error
-   (`Ppx_compat.is_oxcaml`), so its test lives in
-   `ppx/test/portable_derived_oxcaml.ml`, which a bash rule picks over the empty
-   `portable_derived_upstream.ml` by `%{ocaml_version}`.
+   derives without it meets no modes. On upstream OCaml it has no effect:
+   the attributes it emits are ignored.
 7. **Jane**: `Hegel_jane.Derive` includes `Hegel.Derive`, swaps the char pair
    to the `Core.Char` flavor, and adds wrapper modules (`Date`, `Time_ns`,
    `Time_ns.Span`) that include their Core counterparts plus a

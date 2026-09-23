@@ -72,6 +72,3 @@ val map_let_value_bindings
 (** [portable_value_description vd] marks [vd] portable. On OxCaml, adds the
     [portable] modality. Elsewhere, returns [vd] unchanged. *)
 val portable_value_description : value_description -> value_description
-
-(** [is_oxcaml] is [true] when this PPX is built for the OxCaml compiler. *)
-val is_oxcaml : bool

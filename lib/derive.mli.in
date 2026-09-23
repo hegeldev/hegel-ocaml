@@ -22,7 +22,7 @@
 
     On OxCaml, [[@@deriving hegel_generator ~portable]] makes the generator
     portable, so a concurrent rule body can capture it. On upstream OCaml,
-    [~portable] is a compile error.
+    [~portable] has no effect.
 
     A different module in scope can shadow these names to change the defaults.
     For example, [Hegel_jane.Derive] resolves the same names to [Core]-typed

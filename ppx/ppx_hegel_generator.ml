@@ -45,7 +45,31 @@ let do_not_generate_attribute =
     ()
 ;;
 
-let rec generator_expr_of_core_type (ct : core_type) : expression =
+(** [with_mode ~portable e] is [(e [@mode portable])] when [portable], else
+    [e]. ppx_template then selects the portable instance of [e]. *)
+let with_mode ~portable (e : expression) : expression =
+  if portable
+  then (
+    let loc = e.pexp_loc in
+    let attr =
+      Ast_builder.Default.attribute
+        ~loc
+        ~name:(Ast_builder.Default.Located.mk ~loc "mode")
+        ~payload:(PStr [ Ast_builder.Default.pstr_eval ~loc [%expr portable] [] ])
+    in
+    { e with pexp_attributes = e.pexp_attributes @ [ attr ] })
+  else e
+;;
+
+(** [check_portable ~loc portable] rejects [~portable] off OxCaml, where it
+    would have no effect. *)
+let check_portable ~loc portable =
+  if portable && not Ppx_compat.is_oxcaml
+  then
+    Location.raise_errorf
+      ~loc
+      "ppx_hegel_generator: ~portable requires the OxCaml compiler"
+;;
   let loc = ct.ptyp_loc in
   match Attribute.get generator_override_attribute ct with
   | Some override -> override
