@@ -79,3 +79,5 @@ let map_let_value_bindings f e =
 let portable_value_description vd =
   { vd with pval_modalities = [ { txt = Modality "portable"; loc = vd.pval_loc } ] }
 ;;
+
+let is_oxcaml = true

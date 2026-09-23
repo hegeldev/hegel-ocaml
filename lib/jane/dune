@@ -7,7 +7,7 @@
  (optional)
  (libraries hegel core sexp_diff)
  (preprocess
-  (pps ppx_js_style))
+  (pps ppx_js_style hegel.template))
  (instrumentation
   (backend bisect_ppx)))
 

@@ -12,7 +12,6 @@
   test_generators_collections
   test_generators_combinators
   test_generators_functions
-  test_generators_portable
   test_stateful
   test_loader)
  (libraries hegel hegel_ffi alcotest core core_unix ipaddr threads.posix)

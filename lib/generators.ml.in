@@ -40,5 +40,7 @@ end
 module Ppx_internal = struct
   module Labels = Generators_core.Labels
 
-  let composite_with_label = Generators_core.composite_with_label
+  let%template composite_with_label = (Generators_core.composite_with_label [@mode m])
+  [@@mode m = (nonportable, portable)]
+  ;;
 end

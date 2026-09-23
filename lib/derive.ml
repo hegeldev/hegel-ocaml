@@ -5,8 +5,15 @@ let hegel_generator_bool = Generators.booleans ()
 let hegel_generator_float = Generators.floats ~allow_nan:false ~allow_infinity:false ()
 let hegel_generator_string = Generators.text ()
 let hegel_generator_char = Generators.chars ()
-let hegel_generator_list g = Generators.lists g ()
-let hegel_generator_option g = Generators.optional g
+
+let%template hegel_generator_list g = (Generators.lists [@mode m]) g ()
+[@@mode m = (nonportable, portable)]
+;;
+
+let%template hegel_generator_option g = (Generators.optional [@mode m]) g
+[@@mode m = (nonportable, portable)]
+;;
+
 let sexp_of_int = Sexplib0.Sexp_conv.sexp_of_int
 let sexp_of_bool = Sexplib0.Sexp_conv.sexp_of_bool
 let sexp_of_float = Sexplib0.Sexp_conv.sexp_of_float

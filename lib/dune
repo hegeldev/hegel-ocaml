@@ -23,7 +23,7 @@
   generators_combinators
   generators_functions)
  (preprocess
-  (pps ppx_js_style))
+  (pps ppx_js_style hegel.template))
  (instrumentation
   (backend bisect_ppx)))
 
@@ -136,6 +136,16 @@
    -o
    %{target}
    %{dep:derive.mli.in})))
+
+(rule
+ (target generators_collections.ml)
+ (action
+  (run
+   %{bin:cppo}
+   %{read-strings:cppo-flags}
+   -o
+   %{target}
+   %{dep:generators_collections.ml.in})))
 
 (rule
  (target generators_core.ml)

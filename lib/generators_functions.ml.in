@@ -16,9 +16,9 @@
 open Generators_core
 
 #ifdef OXCAML
-#define PFN @ portable
+#define MODE(m) @ m
 #else
-#define PFN
+#define MODE(m)
 #endif
 
 (* [make ~explicit_name ~sexp_of_arg ~returns ~adapt] builds the shared function
@@ -28,13 +28,13 @@ open Generators_core
    via structural hash/equality. The shown label is [explicit_name] when the
    caller passed [~name], else the draw-site [name] (the binding, via the PPX),
    else ["function"]. *)
-let make
+let%template make
   : type a b c p.
     string option
-    -> (a -> Sexp.t) PFN
-    -> (b, p) generator
-    -> ((a -> b) -> c) PFN
-    -> (c, unprintable) generator
+    -> (a -> Sexp.t) MODE(m)
+    -> (b, p) generator MODE(m)
+    -> ((a -> b) -> c) MODE(m)
+    -> (c, unprintable) generator MODE(m)
   =
   fun explicit_name sexp_of_arg returns adapt ->
   let show_ret =
@@ -42,7 +42,7 @@ let make
     | Printable { sexp_of; _ } -> sexp_of
     | _ -> fun _ -> Sexp.Atom "<opaque>"
   in
-  let ret = core_of returns in
+  let ret = (core_of [@mode m]) returns in
   let result_label = Labels.combine [ Labels.function_result; label_of_core ret ] in
   let build ~name tc =
     let display =
@@ -79,11 +79,13 @@ let make
     { core =
         Function { build; label = Labels.combine [ Labels.function_; label_of_core ret ] }
     }
+[@@mode m = (nonportable, portable)]
 ;;
 
-let sexp_or : type a. (a -> Sexp.t) option PFN -> (a -> Sexp.t) PFN = function
+let%template sexp_or : type a. (a -> Sexp.t) option MODE(m) -> (a -> Sexp.t) MODE(m) = function
   | Some sexp_of_arg -> sexp_of_arg
   | None -> fun _ -> Sexp.Atom "<opaque>"
+[@@mode m = (nonportable, portable)]
 ;;
 
 (** [functions ?name ?sexp_of_arg ~returns ()] creates a generator for functions
@@ -102,8 +104,15 @@ let sexp_or : type a. (a -> Sexp.t) option PFN -> (a -> Sexp.t) PFN = function
     The memo table keys on the argument itself, so distinct arguments always get
     independent results. [sexp_of_arg] only renders the argument in the shown
     pair; an omitted [sexp_of_arg] or an unprintable [returns] shows [<opaque>]. *)
-let functions ?name ?sexp_of_arg ~returns () =
-  make name (sexp_or sexp_of_arg) returns (fun f -> f)
+let%template functions
+      ?name
+      ?(sexp_of_arg : ('a -> Sexp.t) option MODE(m))
+      ~(returns : ('b, _) generator MODE(m))
+      ()
+  : ('a -> 'b, unprintable) generator MODE(m)
+  =
+  (make [@mode m]) name ((sexp_or [@mode m]) sexp_of_arg) returns (fun f -> f)
+[@@mode m = (nonportable, portable)]
 ;;
 
 (** [functions2 ?name ?sexp_of_arg1 ?sexp_of_arg2 ~returns ()] creates a
@@ -112,11 +121,19 @@ let functions ?name ?sexp_of_arg ~returns () =
     Sugar over {!functions} keyed on the argument pair: the two arguments form
     one memo key and are shown uncurried as [name (arg1 arg2) = result] (more
     compact than a curried table). Draw it with {!Hegel.draw_silent}. *)
-let functions2 ?name ?sexp_of_arg1 ?sexp_of_arg2 ~returns () =
-  let sexp_of_arg (a, b) =
-    Sexp.List [ (sexp_or sexp_of_arg1) a; (sexp_or sexp_of_arg2) b ]
-  in
-  make name sexp_of_arg returns (fun f a b -> f (a, b))
+let%template functions2
+      ?name
+      ?(sexp_of_arg1 : ('a -> Sexp.t) option MODE(m))
+      ?(sexp_of_arg2 : ('b -> Sexp.t) option MODE(m))
+      ~(returns : ('c, _) generator MODE(m))
+      ()
+  : ('a -> 'b -> 'c, unprintable) generator MODE(m)
+  =
+  let s1 = (sexp_or [@mode m]) sexp_of_arg1
+  and s2 = (sexp_or [@mode m]) sexp_of_arg2 in
+  let sexp_of_arg (a, b) = Sexp.List [ s1 a; s2 b ] in
+  (make [@mode m]) name sexp_of_arg returns (fun f a b -> f (a, b))
+[@@mode m = (nonportable, portable)]
 ;;
 
 (** [functions3 ?name ?sexp_of_arg1 ?sexp_of_arg2 ?sexp_of_arg3 ~returns ()]
@@ -125,10 +142,19 @@ let functions2 ?name ?sexp_of_arg1 ?sexp_of_arg2 ~returns () =
 
     Like {!functions2}, keyed on the argument triple and shown uncurried as
     [name (arg1 arg2 arg3) = result]. Draw it with {!Hegel.draw_silent}. *)
-let functions3 ?name ?sexp_of_arg1 ?sexp_of_arg2 ?sexp_of_arg3 ~returns () =
-  let sexp_of_arg (a, b, c) =
-    Sexp.List
-      [ (sexp_or sexp_of_arg1) a; (sexp_or sexp_of_arg2) b; (sexp_or sexp_of_arg3) c ]
-  in
-  make name sexp_of_arg returns (fun f a b c -> f (a, b, c))
+let%template functions3
+      ?name
+      ?(sexp_of_arg1 : ('a -> Sexp.t) option MODE(m))
+      ?(sexp_of_arg2 : ('b -> Sexp.t) option MODE(m))
+      ?(sexp_of_arg3 : ('c -> Sexp.t) option MODE(m))
+      ~(returns : ('d, _) generator MODE(m))
+      ()
+  : ('a -> 'b -> 'c -> 'd, unprintable) generator MODE(m)
+  =
+  let s1 = (sexp_or [@mode m]) sexp_of_arg1
+  and s2 = (sexp_or [@mode m]) sexp_of_arg2
+  and s3 = (sexp_or [@mode m]) sexp_of_arg3 in
+  let sexp_of_arg (a, b, c) = Sexp.List [ s1 a; s2 b; s3 c ] in
+  (make [@mode m]) name sexp_of_arg returns (fun f a b c -> f (a, b, c))
+[@@mode m = (nonportable, portable)]
 ;;

@@ -44,38 +44,83 @@ let integers = Generators.integers
 let floats = Generators.floats
 let text = Generators.text
 let characters = Generators.characters
-let make_characters = Generators.make_characters
+
+let%template make_characters = Generators.make_characters [@mode m]
+[@@mode m = (nonportable, portable)]
+;;
+
 let chars = Generators.chars
 let binary = Generators.binary
-let just = Generators.just
-let lists = Generators.lists
-let assoc_lists = Generators.assoc_lists
-let make_hash_tables = Generators.make_hash_tables
-let hash_tables = Generators.hash_tables
-let sampled_from = Generators.sampled_from
-let one_of = Generators.one_of
-let optional = Generators.optional
-let tuples2 = Generators.tuples2
-let tuples3 = Generators.tuples3
-let tuples4 = Generators.tuples4
-let functions = Generators.functions
-let functions2 = Generators.functions2
-let functions3 = Generators.functions3
+
+let%template just = Generators.just [@mode m]
+[@@mode (m, c) = ((nonportable, uncontended), (portable, contended))]
+;;
+
+let%template lists = Generators.lists [@mode m] [@@mode m = (nonportable, portable)]
+
+let%template assoc_lists = Generators.assoc_lists [@mode m]
+[@@mode m = (nonportable, portable)]
+;;
+
+let%template make_hash_tables = Generators.make_hash_tables [@mode m]
+[@@mode m = (nonportable, portable)]
+;;
+
+let%template hash_tables = Generators.hash_tables [@mode m]
+[@@mode m = (nonportable, portable)]
+;;
+
+let%template sampled_from = Generators.sampled_from [@mode m]
+[@@mode (m, c) = ((nonportable, uncontended), (portable, contended))]
+;;
+
+let%template one_of = Generators.one_of [@mode m] [@@mode m = (nonportable, portable)]
+let%template optional = Generators.optional [@mode m] [@@mode m = (nonportable, portable)]
+let%template tuples2 = Generators.tuples2 [@mode m] [@@mode m = (nonportable, portable)]
+let%template tuples3 = Generators.tuples3 [@mode m] [@@mode m = (nonportable, portable)]
+let%template tuples4 = Generators.tuples4 [@mode m] [@@mode m = (nonportable, portable)]
+
+let%template functions = Generators.functions [@mode m]
+[@@mode m = (nonportable, portable)]
+;;
+
+let%template functions2 = Generators.functions2 [@mode m]
+[@@mode m = (nonportable, portable)]
+;;
+
+let%template functions3 = Generators.functions3 [@mode m]
+[@@mode m = (nonportable, portable)]
+;;
+
 let emails = Generators.emails
 let urls = Generators.urls
 let domains = Generators.domains
-let make_dates = Generators.make_dates
-let make_times = Generators.make_times
-let make_datetimes = Generators.make_datetimes
+
+let%template make_dates = Generators.make_dates [@mode m]
+[@@mode m = (nonportable, portable)]
+;;
+
+let%template make_times = Generators.make_times [@mode m]
+[@@mode m = (nonportable, portable)]
+;;
+
+let%template make_datetimes = Generators.make_datetimes [@mode m]
+[@@mode m = (nonportable, portable)]
+;;
+
 let dates = Generators.dates
 let times = Generators.times
 let datetimes = Generators.datetimes
 let ip_addresses = Generators.ip_addresses
 let from_regex = Generators.from_regex
-let composite = Generators.composite
-let map = Generators.map
-let flat_map = Generators.flat_map
-let filter = Generators.filter
+
+let%template composite = Generators.composite [@mode m]
+[@@mode m = (nonportable, portable)]
+;;
+
+let%template map = Generators.map [@mode m] [@@mode m = (nonportable, portable)]
+let%template flat_map = Generators.flat_map [@mode m] [@@mode m = (nonportable, portable)]
+let%template filter = Generators.filter [@mode m] [@@mode m = (nonportable, portable)]
 
 (* Test-case and test-location types re-exported so the whole
    public API lives directly under Hegel. The module re-exports above are
@@ -170,4 +215,6 @@ let clone = Internal.clone
 
 (** [with_printer sexp_of gen] attaches [sexp_of] so [gen] can be drawn with
     {!draw}. See {!Generators.with_printer}. *)
-let with_printer = Generators.with_printer
+let%template with_printer = Generators.with_printer [@mode m]
+[@@mode m = (nonportable, portable)]
+;;

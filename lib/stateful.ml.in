@@ -19,19 +19,31 @@
 #endif
 
 module Pool_gen = Generators.Int_pool
+module Concurrent_pool_gen = Generators.Int_pool_concurrent
 
 module Pool = struct
-#ifdef OXCAML
-  type ('a : value mod portable contended) t : value mod portable contended = 'a Pool_gen.t
-#else
   type 'a t = 'a Pool_gen.t
-#endif
 
   let create ?(clone = Fun.id) tc = Pool_gen.create tc ~clone
   let add = Pool_gen.add
   let size = Pool_gen.size
   let values_reusable t = Pool_gen.pool_values t ~consume:false
   let values_consumed t = Pool_gen.pool_values t ~consume:true
+end
+
+module Concurrent_pool = struct
+#ifdef OXCAML
+  type ('a : value mod portable contended) t : value mod portable contended =
+    'a Concurrent_pool_gen.t
+#else
+  type 'a t = 'a Concurrent_pool_gen.t
+#endif
+
+  let create ?(clone = Fun.id) tc = Concurrent_pool_gen.create tc ~clone
+  let add = Concurrent_pool_gen.add
+  let size = Concurrent_pool_gen.size
+  let values_reusable t = Concurrent_pool_gen.pool_values t ~consume:false
+  let values_consumed t = Concurrent_pool_gen.pool_values t ~consume:true
 end
 
 module Rule = struct

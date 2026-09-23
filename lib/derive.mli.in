@@ -1,5 +1,8 @@
 #ifdef OXCAML
 @@ portable
+#define MODE(m) @ m
+#else
+#define MODE(m)
 #endif
 (** The type [foo] resolves to [hegel_generator_foo], and the type [t] in a
     module [M] resolves to [M.hegel_generator].
@@ -16,6 +19,10 @@
       }
     [@@deriving hegel_generator]
     ]}
+
+    On OxCaml, [[@@deriving hegel_generator ~portable]] makes the generator
+    portable, so a concurrent rule body can capture it. On upstream OCaml,
+    [~portable] is a compile error.
 
     A different module in scope can shadow these names to change the defaults.
     For example, [Hegel_jane.Derive] resolves the same names to [Core]-typed
@@ -54,13 +61,15 @@ val hegel_generator_float : (float, Generators.printable) Generators.generator
 val hegel_generator_string : (string, Generators.printable) Generators.generator
 val hegel_generator_char : (char, Generators.printable) Generators.generator
 
-val hegel_generator_list
-  :  ('a, Generators.printable) Generators.generator
-  -> ('a list, Generators.printable) Generators.generator
+val%template hegel_generator_list
+  :  ('a, Generators.printable) Generators.generator MODE(m)
+  -> ('a list, Generators.printable) Generators.generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
-val hegel_generator_option
-  :  ('a, Generators.printable) Generators.generator
-  -> ('a option, Generators.printable) Generators.generator
+val%template hegel_generator_option
+  :  ('a, Generators.printable) Generators.generator MODE(m)
+  -> ('a option, Generators.printable) Generators.generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 val sexp_of_int : int -> Sexplib0.Sexp.t
 val sexp_of_bool : bool -> Sexplib0.Sexp.t

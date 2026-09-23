@@ -61,3 +61,4 @@ let map_let_value_bindings f e =
 ;;
 
 let portable_value_description vd = vd
+let is_oxcaml = false

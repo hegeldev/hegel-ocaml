@@ -13,7 +13,8 @@
  (name ppx_hegel_generator)
  (public_name ppx_hegel_generator)
  (kind ppx_deriver)
- (libraries ppxlib ppx_hegel_compat)
+ ; hegel.template makes [@mode portable] work for users of this deriver.
+ (libraries ppxlib ppx_hegel_compat hegel.template)
  (modules ppx_hegel_generator)
  (preprocess
   (pps ppx_js_style ppxlib.metaquot)))
@@ -22,7 +23,8 @@
  (name ppx_hegel_test)
  (public_name ppx_hegel_test)
  (kind ppx_rewriter)
- (libraries ppxlib ppx_hegel_compat)
+ ; hegel.template makes [@mode portable] work for users of this rewriter.
+ (libraries ppxlib ppx_hegel_compat hegel.template)
  (modules ppx_hegel_test)
  (preprocess
   (pps ppx_js_style ppxlib.metaquot)))
