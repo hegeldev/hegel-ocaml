@@ -72,7 +72,7 @@ module Domain_pool = struct
   ;;
 
   (* Grows the pool to [min n cap] domains and returns its workers. *)
-  let workers_for n =
+  let get_pool n =
     Mutex.protect pool_lock (fun () ->
       (* minus 1 because runner's domain takes 1 *)
       let cap = Domain.recommended_domain_count () - 1 in
@@ -92,21 +92,22 @@ module Domain_pool = struct
       !workers)
   ;;
 
-  let submit workers job =
-    let w = workers.(Atomic.fetch_and_add next 1 mod Array.length workers) in
+  let submit pool job =
+    let i = Atomic.fetch_and_add next 1 mod Array.length pool in
+    let w = pool.(i) in
     Mutex.protect w.lock (fun () ->
       Queue.push job w.jobs;
       Condition.signal w.ready)
   ;;
 
   let spawn_join_n ~n ~f =
-    let workers = workers_for n in
+    let pool = get_pool n in
     let outcomes = Array.make n None in
     let lock = Mutex.create () in
     let finished = Condition.create () in
     let remaining = ref n in
     for i = 0 to n - 1 do
-      submit workers (fun () ->
+      submit pool (fun () ->
         outcomes.(i) <- guard f i;
         Mutex.protect lock (fun () ->
           decr remaining;
