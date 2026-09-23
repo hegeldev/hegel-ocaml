@@ -3,9 +3,13 @@ module Sexp = Sexplib0.Sexp
 #ifdef OXCAML
 #define CROSSING : value mod contended
 #define MODE(m) @ m
+#define KIND(k) : k
+#define PORTABLE @@ portable
 #else
 #define CROSSING
 #define MODE(m)
+#define KIND(k)
+#define PORTABLE
 #endif
 
 (** Span labels. A label identifies a generator to the engine, which treats
@@ -357,20 +361,17 @@ let pick tc ~find ~remove ~is_empty pool ~consume =
 ;;
 
 (** Defined for convenience *)
+module Int_key = struct
+  type t = int
+
+  let equal = Int.equal
+  let hash = Stdlib.Hashtbl.hash
+end
+
 #ifdef OXCAML
-module Int_table = Stdlib.Hashtbl.MakePortable (struct
-    type t = int
-
-    let equal = Int.equal
-    let hash = Stdlib.Hashtbl.hash
-  end)
+module Int_table = Stdlib.Hashtbl.MakePortable (Int_key)
 #else
-module Int_table = Stdlib.Hashtbl.Make (struct
-    type t = int
-
-    let equal = Int.equal
-    let hash = Stdlib.Hashtbl.hash
-  end)
+module Int_table = Stdlib.Hashtbl.Make (Int_key)
 #endif
 
 (** [resolve_draw values ~consume variable_id] resolves a drawn pool id against
@@ -427,19 +428,11 @@ end
 module Int_pool_concurrent = struct
   module Tbl = Int_table
 
-#ifdef OXCAML
-  type ('a : value mod portable contended) t : value mod portable contended =
+  type ('a KIND(value mod portable contended)) t KIND(value mod portable contended) =
     { pool : Internal.pool
     ; values : 'a Tbl.t Locked.t
-    ; clone : ('a -> 'a) @@ portable
+    ; clone : ('a -> 'a) PORTABLE
     }
-#else
-  type 'a t =
-    { pool : Internal.pool
-    ; values : 'a Tbl.t Locked.t
-    ; clone : 'a -> 'a
-    }
-#endif
 
   let create tc ~clone =
     { pool = Internal.new_pool tc

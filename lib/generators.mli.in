@@ -1,8 +1,10 @@
 #ifdef OXCAML
 @@ portable
 #define MODE(m) @ m
+#define KIND(k) : k
 #else
 #define MODE(m)
+#define KIND(k)
 #endif
 (** This module provides a composable generator API for property-based testing.
     Generators produce typed OCaml values.
@@ -350,12 +352,8 @@ val binary : ?min_size:int -> ?max_size:int -> unit -> (string, printable) gener
         assert (x = 42)
       ;;
     ]} *)
-#ifdef OXCAML
-val%template just : ('a : value mod c). 'a MODE(m) -> ('a, unprintable) generator MODE(m)
+val%template just : ('a KIND(value mod c)) MODE(m) -> ('a, unprintable) generator MODE(m)
 [@@mode (m, c) = ((nonportable, uncontended), (portable, contended))]
-#else
-val just : 'a -> ('a, unprintable) generator
-#endif
 
 (** {2 Collection generators} *)
 
@@ -458,13 +456,9 @@ val%template hash_tables
         ignore color
       ;;
     ]} *)
-#ifdef OXCAML
 val%template sampled_from
-  : ('a : value mod c). 'a list MODE(m) -> ('a, unprintable) generator MODE(m)
+  : ('a KIND(value mod c)) list MODE(m) -> ('a, unprintable) generator MODE(m)
 [@@mode (m, c) = ((nonportable, uncontended), (portable, contended))]
-#else
-val sampled_from : 'a list -> ('a, unprintable) generator
-#endif
 
 (** [one_of generators] creates a generator that picks from one of the given
     printable [generators]. Requires at least one generator. On a failing

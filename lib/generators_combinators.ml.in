@@ -3,8 +3,10 @@ open Generators_primitives
 
 #ifdef OXCAML
 #define MODE(m) @ m
+#define ABSTRACT(a, k) (type (a : k))
 #else
 #define MODE(m)
+#define ABSTRACT(a, k) (type a)
 #endif
 
 (** [sampled_from options] creates a generator that samples from a non-empty
@@ -19,8 +21,7 @@ open Generators_primitives
 
     We use a list instead of an array because arrays are contended inside a
     portable closure, but Array.* operations need uncontended arrays. *)
-#ifdef OXCAML
-let%template sampled_from (type (a : value mod c)) (options : a list MODE(m))
+let%template sampled_from ABSTRACT(a, value mod c) (options : a list MODE(m))
   : (a, unprintable) generator MODE(m)
   =
   let n = List.length options in
@@ -28,13 +29,6 @@ let%template sampled_from (type (a : value mod c)) (options : a list MODE(m))
   (map [@mode m]) (fun i -> List.nth options i) (integers ~min_value:0 ~max_value:(n - 1) ())
 [@@mode (m, c) = ((nonportable, uncontended), (portable, contended))]
 ;;
-#else
-let sampled_from options =
-  let n = List.length options in
-  if n = 0 then raise (Internal.Usage_error "sampled_from requires at least one element");
-  map (fun i -> List.nth options i) (integers ~min_value:0 ~max_value:(n - 1) ())
-;;
-#endif
 
 (** [one_of generators] creates a generator that picks from one of the given
     [generators], all of which must be printable. Requires at least one

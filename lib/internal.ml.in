@@ -12,8 +12,10 @@ module Ffi = Hegel_ffi.Ffi
 
 #ifdef OXCAML
 #define LOCAL(x) (x @ local)
+#define PORTABLE @@ portable
 #else
 #define LOCAL(x) x
+#define PORTABLE
 #endif
 
 #ifdef OXCAML
@@ -486,13 +488,8 @@ let require _tc ?(msg = "require: condition was false") condition =
 (* one-field record b/c render_diff is portable and reads the renderer from
    a global [Atomic], so the stored type must cross portability.
    A function type can't have a modality, but a record field can. *)
-#ifdef OXCAML
 type diff_renderer =
-  { render : (colored:bool -> original:Sexp.t -> updated:Sexp.t -> string) @@ portable }
-#else
-type diff_renderer =
-  { render : colored:bool -> original:Sexp.t -> updated:Sexp.t -> string }
-#endif
+  { render : (colored:bool -> original:Sexp.t -> updated:Sexp.t -> string) PORTABLE }
 
 let diff_renderer : diff_renderer option Atomic.t = Atomic.make None
 

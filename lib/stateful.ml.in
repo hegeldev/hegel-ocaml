@@ -10,12 +10,18 @@
 #define LOCAL(x) (x @ local)
 #define LOCAL_CTX ~(ctx @ local)
 #define NONTAIL [@nontail] (* concurrency is captured as local so the stack frame can't be erased *)
+#define MODE(m) @ m
+#define KIND(k) : k
+#define PORTABLE @@ portable
 #else
 #define CONCURRENCY_PARAM ~(concurrency : _ Concurrency.t)
 #define LOCAL_CONCURRENCY (concurrency : _ Concurrency.t)
 #define LOCAL(x) x
 #define LOCAL_CTX ~ctx
 #define NONTAIL
+#define MODE(m)
+#define KIND(k)
+#define PORTABLE
 #endif
 
 module Pool_gen = Generators.Int_pool
@@ -59,21 +65,13 @@ module Rule = struct
 end
 
 module Concurrent_rule = struct
-#ifdef OXCAML
-  type ('ctx, 'state) t : value mod portable contended =
+  type ('ctx, 'state) t KIND(value mod portable contended) =
     { name : string
     ; group : string
     ; weight : float
-    ; step : (Internal.test_case -> 'ctx @ local -> 'state @ contended -> unit) @@ portable
+    ; step :
+        (Internal.test_case -> 'ctx MODE(local) -> 'state MODE(contended) -> unit) PORTABLE
     }
-#else
-  type ('ctx, 'state) t =
-    { name : string
-    ; group : string
-    ; weight : float
-    ; step : Internal.test_case -> 'ctx -> 'state -> unit
-    }
-#endif
 
   let create ?(group = "<anonymous>") ?(weight = 1.0) ~name ~step () =
     { name; group; weight; step }

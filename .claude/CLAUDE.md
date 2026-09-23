@@ -720,7 +720,14 @@ and `lib/ffi/dune`) the library is mode-checked so a concurrent rule body can
 be `portable`. Upstream OCaml builds the same sources with the annotations
 stripped; every file carrying mode syntax is a cppo `.in`. Macros:
 `PORTABLE` = `@@ portable` (field modality), `MODE(m)` = `@ m` (a mode, or a
-template's mode variable: `MODE(portable)`, `MODE(m)`), `CROSSING` = `: value mod
+template's mode variable: `MODE(portable)`, `MODE(m)`), `KIND(k)` = `: k` (on a
+type variable or type: `('a KIND(value mod c))`, `t KIND(…)`), `ABSTRACT(a, k)`
+= `(type (a : k))` / `(type a)` (a kind-annotated locally abstract type; a
+template's instances share one `let … and …` group, so a named `'a` there
+would leak the portable instance's kind into the plain one). Each expands to
+nothing (or the plain form) upstream, so one copy of the code serves both
+compilers; `#ifdef OXCAML … #else` is kept for code that really differs
+(`[%call_pos]`, `Concurrency.domains`, the ipaddr launder, `Hashtbl.MakePortable`), `CROSSING` = `: value mod
 contended` in the generator files.
 
 Portability is opt-in through `ppx_template` (`let%template`/`val%template`

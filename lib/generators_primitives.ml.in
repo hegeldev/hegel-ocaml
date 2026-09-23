@@ -3,8 +3,10 @@ open Generators_core
 
 #ifdef OXCAML
 #define MODE(m) @ m
+#define ABSTRACT(a, k) (type (a : k))
 #else
 #define MODE(m)
+#define ABSTRACT(a, k) (type a)
 #endif
 
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
@@ -299,14 +301,12 @@ let binary ?(min_size = 0) ?(max_size : int option) (): _ MODE(portable) =
 (** [just value] creates a generator that always produces [value].
 
     The output type is chosen by the caller, so no printer is carried. *)
-#ifdef OXCAML
-let%template just (type (a : value mod c)) (value : a MODE(m)) : (a, unprintable) generator MODE(m) =
+let%template just ABSTRACT(a, value mod c) (value : a MODE(m))
+  : (a, unprintable) generator MODE(m)
+  =
   (leaf_silent [@mode m]) ~name:"just" ~draw:(fun _ -> value)
 [@@mode (m, c) = ((nonportable, uncontended), (portable, contended))]
 ;;
-#else
-let just value = leaf_silent ~name:"just" ~draw:(fun _ -> value)
-#endif
 
 (** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
     a regular expression [pattern], written in the syntax of Python's [re]
