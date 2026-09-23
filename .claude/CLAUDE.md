@@ -27,7 +27,8 @@ just check         # Run check-format + check-docs + check-tests (the full CI ch
 ```
 lib/                         # Library source
   dune                       # Library build config (bisect_ppx instrumented)
-  hegel.ml / hegel.mli.in    # Main module — re-exports the public API.
+  hegel.ml / hegel.mli.in    # Main module — re-exports the public API
+                             #   (the constructors via Generators.Public).
                              #   (.in files are cppo-preprocessed by dune rules
                              #   — `#ifdef OXCAML` compiler compat — into the
                              #   .ml/.mli the library builds from. Most .mli and
@@ -107,8 +108,9 @@ lib/                         # Library source
                              #   executable is still requested by the default alias
 
 template/                    # hegel.template ppx: links ppx_template on
-                             #   OxCaml, a %template-stripping rewriter
-                             #   elsewhere (dune select). NOT instrumented
+                             #   OxCaml; upstream, hegel_template.upstream.ml
+                             #   removes the %template markers; a clear error
+                             #   on OxCaml without ppx_template. NOT instrumented
 
 ppx/                         # PPX rewriters and derivers
   dune                       # PPX library build configs; a rule generates
@@ -209,7 +211,7 @@ the PPX test that parses the engine's `sdk.jsonl`). `core`,
 container or renderer a Jane Street type used to provide, the dependency is
 refunctionalized — the code takes the operations as closures/parameters, and
 each side instantiates them:
-- pools: `Int_pool` (an `Int_table` of values behind a `Locked`) is the only client-side pool; `resolve_pool_draw` (find/remove closures) is the shared id-resolution step
+- pools: `Int_pool` (an `Int_table` of values, no lock: a sequential machine runs its rules one at a time) and `Int_pool_concurrent` (the same table behind a `Locked`) are the client-side pools; `resolve_pool_draw` (find/remove closures) is the shared id-resolution step
 - hash tables: `make_hash_tables ~of_pairs ~sexp_of_t` ← `hash_tables` (Stdlib.Hashtbl) / `Hegel_jane.hash_tables` (Hashtbl.Poly)
 - dates/times: `make_dates ~of_date`/`make_times ~of_time`/`make_datetimes ~of_datetime` (+ `~sexp_of`) (+ `?min_date`/`?min_time`/`?min_datetime` and `max_*` bounds) ← `dates`/`times`/`datetimes` (ISO 8601 strings) / `Hegel_jane.dates`/`ofdays` (Core values)
 - chars: `make_characters ~of_char ~sexp_of` ← `chars` / `Hegel_jane.chars`. `Core.Char.t = char`, so both sides draw the same value and only the printer differs (`sexp_of_char` vs `Core.Char.sexp_of_t`) — unlike the other refunctionalized pairs, `of_char` is `Fun.id` on both sides, kept only for symmetry with `~of_date`
@@ -232,13 +234,19 @@ which don't install `core`/`sexp_diff`) skips it via `HEGEL_SKIP_JANE_TESTS=1`
 The generator type and combinators (`draw`, `map`, `flat_map`, `composite`, …)
 live in `generators_core.ml`; the primitives, collections, and combinators are
 split across the sibling `generators_*.ml` files. `generators.ml` is a thin shim
-that `include`s all four so they surface as one `Hegel.Generators` module.
-`hegel.ml`/`hegel.mli` additionally re-export every `Generators` constructor
-(and the `generator`/`printable`/`unprintable` types) unqualified directly
-under `Hegel`, so `open Hegel` alone is enough — `integers ()` and
-`Generators.integers ()` name the same value. The re-exported `val`s are
-doc-hidden (`(**/**)`) in `hegel.mli` so they aren't listed twice; `Generators`
-stays the documented reference. Project code prefers the unqualified form
+that `include`s all five so they surface as one `Hegel.Generators` module.
+The `generators_*` files have no interfaces, so the constructor signatures
+(`booleans` … `filter`, plus the `date`/`time` types) and their docs live once,
+in the doc-hidden submodule `Generators.Public` (`generators.mli.in`; in
+`generators.ml.in` it includes the five files, the top level does `include
+Public`, and the signature narrows `Public` to the constructors). `Generators` does `include module type of struct include Public
+end`, so odoc lists the constructors on the `Generators` page and never shows
+`Public`. `hegel.mli`/`hegel.ml` re-export them unqualified with the same
+`include` (inside `hegel.mli`'s doc-hidden block, so they aren't listed
+twice), next to the `generator`/`printable`/`unprintable` types, so
+`open Hegel` alone is enough — `integers ()` and `Generators.integers ()`
+name the same value, and the templated portable instances come along. A new
+constructor goes in `Public` only; `Generators` stays the documented reference. Project code prefers the unqualified form
 wherever `open Hegel` is already in scope.
 
 Generators are a discriminated union:
@@ -248,7 +256,7 @@ Generators are a discriminated union:
 - **Filtered** — wraps source + predicate. Up to `max_filter_attempts` retries before `assume false`.
 - **CompositeList** — lists of any element core. Uses the collection protocol (with_collection / collection_more) to generate elements one at a time.
 - **Composite** — a `generate_fn` thunk run inside a labeled span; used by tuples, one_of, `lists ~unique`, and hash tables (all of which now always drive the collection protocol / draw sub-values directly — there is no schema fast path).
-- **Values** — the engine-pool core behind `Stateful.Pool` and `Concurrent_pool`: `{ pool; select : test_case -> 'a }`, where `select` draws an id from the engine pool and resolves it against the client table, all under the pool's `Locked` so the table never disagrees with the engine about which ids exist. `Generators.Int_pool` (doc-hidden) is that client side over `Int_table`; `resolve_pool_draw` is the shared id-resolution step. `hash_tables` is refunctionalized at the API level: `make_hash_tables ~of_pairs ~sexp_of_t` is table-agnostic, `hash_tables` closes it over `Stdlib.Hashtbl`, `Hegel_jane.hash_tables` over `Core.Hashtbl.Poly`.
+- **Values** — the engine-pool core behind `Stateful.Pool` and `Concurrent_pool`: `{ pool; select : test_case -> 'a }`, where `select` draws an id from the engine pool and resolves it against the client table. `Generators.Int_pool_concurrent` does that under the pool's `Locked`, so the table never disagrees with the engine about which ids exist while workers share it; the sequential `Generators.Int_pool` needs no lock. Both are doc-hidden client sides over `Int_table`; `resolve_pool_draw` is the shared id-resolution step. `hash_tables` is refunctionalized at the API level: `make_hash_tables ~of_pairs ~sexp_of_t` is table-agnostic, `hash_tables` closes it over `Stdlib.Hashtbl`, `Hegel_jane.hash_tables` over `Core.Hashtbl.Poly`.
 - **Span labels** (libhegel 0.39.0) — a label is an opaque `uint64_t` (OCaml `int64`) identifying the generator that opened a span; the engine treats two spans with the same label as coming from the same generator when it shrinks and mutates, and does nothing else with it. There are no predefined label constants in the ABI any more. `Generators_core.Labels.from_name`/`combine` compute the engine's own hashes (64-bit FNV-1a over the name's bytes / over the labels' little-endian bytes in order — `hegel_label_from_name`/`hegel_label_combine`, pinned equal by `test_labels_match_engine` through the `Ffi.label_*` bindings) so no context is needed at generator construction. Every core stores its `label`, fixed at construction: a `Leaf` from its primitive's name (`leaf ~name:"integers"` → `hegel_ocaml.integers`), and everything built from other generators as `combine [own kind; components' labels…]` (`lists (integers ())` ≠ `lists (text ())`; `map` on a leaf stays a leaf but combines `Labels.mapped` in; `with_printer` leaves the label alone; `Values` is the constant `Labels.pool`). `label_of_core`/`Ppx_internal.label_of` read it back. The deriver emits `combine [fixed_dict|enum_variant; from_name "<type name>"]` so two derived types of the same shape stay distinct. Names are prefixed `hegel_ocaml.` to keep clear of libhegel's own `hegel.<kind>` spans.
 - **Function** — a generated function (`functions`/`functions2`/`functions3`). `build ~name` returns a fresh per-test-case memoized function that draws each result from `returns` on first application (memoized on the argument via structural hash/equality — a polymorphic `Stdlib.Hashtbl` — so `sexp_of_arg` is display-only and an omitted one shows `<opaque>` without collapsing the key) and shows applied pairs as `name arg = result` in the print region on the final replay. Only *top-level* applications print — a pair applied at draw depth > 0 (inside a span) is suppressed, like a nested draw. A distinct core so `draw_silent_named` / `draw_named` can thread the draw-site binding name into the function (see the PPX note below); the name threads even when the function is drawn nested. Result draws are wrapped in a span labelled `combine [Labels.function_result; label of returns]`.
 
@@ -379,7 +387,10 @@ the base_quickcheck conventions:
    (`M.hegel_generator`, an override) that is not portable is a compile error
    at the use site. A parameterized generator used under `~portable` must be a
    template, as `Hegel.Derive`'s `list`/`option` are. Opt-in, so a user who
-   derives without it meets no modes.
+   derives without it meets no modes. Off OxCaml it is a compile error
+   (`Ppx_compat.is_oxcaml`), so its test lives in
+   `ppx/test/portable_derived_oxcaml.ml`, which a bash rule picks over the empty
+   `portable_derived_upstream.ml` by `%{ocaml_version}`.
 7. **Jane**: `Hegel_jane.Derive` includes `Hegel.Derive`, swaps the char pair
    to the `Core.Char` flavor, and adds wrapper modules (`Date`, `Time_ns`,
    `Time_ns.Span`) that include their Core counterparts plus a
@@ -708,8 +719,8 @@ Under OxCaml (`#ifdef OXCAML`, set by the `cppo-flags` rule in `lib/dune`
 and `lib/ffi/dune`) the library is mode-checked so a concurrent rule body can
 be `portable`. Upstream OCaml builds the same sources with the annotations
 stripped; every file carrying mode syntax is a cppo `.in`. Macros:
-`PORTABLE` = `@@ portable` (field modality), `PFN`/`PRET` = `@ portable`,
-`AT(m)` = `@ m` (a template's mode variable), `CROSSING` = `: value mod
+`PORTABLE` = `@@ portable` (field modality), `MODE(m)` = `@ m` (a mode, or a
+template's mode variable: `MODE(portable)`, `MODE(m)`), `CROSSING` = `: value mod
 contended` in the generator files.
 
 Portability is opt-in through `ppx_template` (`let%template`/`val%template`
@@ -721,12 +732,15 @@ a caller picks the portable instance with `(map [@mode portable])`.
 so the plain instance takes any type. ppx_template names the portable
 instance `f__portable` (the kind axis adds nothing), so references inside
 `(m, c)` templates use `[@mode m]`. The primitives are not templated: they
-return `PRET`. `ppx_template` exists only for OxCaml, and dune allows no
+return `MODE(portable)`. `ppx_template` exists only for OxCaml, and dune allows no
 variables in `pps` library names, so the `hegel.template` ppx (`template/`)
-`select`s it when installed and otherwise links a rewriter that keeps each
-`let%template`/`val%template` item and removes the marker (single items only,
-not `[%%template]` blocks); upstream OCaml ignores the remaining `[@mode]`
-attributes. `lib/`, `lib/jane/`, `test/`, and both hegel PPXes list
+`select`s it when installed and otherwise links the generated
+`hegel_template.fallback.ml`. Upstream, that is a copy of
+`template/hegel_template.upstream.ml`, a rewriter that keeps each `let%template`/`val%template` item and removes the
+marker (single items only, not `[%%template]` blocks), and the compiler ignores
+the remaining `[@mode]` attributes. On OxCaml, reaching the fallback means
+`ppx_template` is missing (it is only a depopt), so the file is an
+`[%%ocaml.error]` telling the user to install it. `lib/`, `lib/jane/`, `test/`, and both hegel PPXes list
 `hegel.template`, the PPXes so users get `[@mode portable]` without adding
 `ppx_template` themselves. cppo still
 guards the syntax upstream cannot parse (`@ m`, kind annotations).

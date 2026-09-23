@@ -183,6 +183,10 @@ val%template leaf
 
 (**/**)
 
+(**/**)
+
+(** The generator constructors. {!Hegel} re-exports them unqualified. *)
+module Public : sig
 (** {2 Primitive generators} *)
 
 (** [booleans ?p ()] creates a generator for boolean values, [true] with
@@ -897,6 +901,13 @@ val%template filter
   -> ('a, 'p) generator MODE(m)
   -> ('a, 'p) generator MODE(m)
 [@@mode m = (nonportable, portable)]
+end
+
+(**/**)
+
+include module type of struct
+  include Public
+end
 
 (**/**)
 (*
@@ -911,7 +922,7 @@ module Int_table : Stdlib.Hashtbl.S with type key = int
 val resolve_draw : 'a Int_table.t -> consume:bool -> int -> 'a
 
 (** [Int_pool] is the client side of an engine pool for a sequential machine:
-    drawn ids resolved against an [Int_table] of values, behind a mutex. Its
+    drawn ids resolved against an [Int_table] of values, with no lock. Its
     element type is unconstrained. *)
 module Int_pool : sig
   type 'a t

@@ -1,8 +1,12 @@
-include Generators_core
-include Generators_primitives
-include Generators_collections
-include Generators_combinators
-include Generators_functions
+module Public = struct
+  include Generators_core
+  include Generators_primitives
+  include Generators_collections
+  include Generators_combinators
+  include Generators_functions
+end
+
+include Public
 
 #ifdef OXCAML
 (* The compiler fills these arguments at the caller, including through aliases

@@ -1,19 +1,27 @@
 ; [ppx_template] rewrites [let%template] and [[@mode ...]] into one definition
 ; per mode. It exists only for OxCaml, and dune allows no variables in [pps]
-; names, so this library links it when it is installed. Otherwise it links a
-; rewriter that keeps each [%template] item and removes the marker. Upstream
-; OCaml ignores the [[@mode]] attributes that remain.
+; names, so this library links it when it is installed. Otherwise it links the
+; generated [hegel_template.fallback.ml].
 
 (library
  (name hegel_template)
  (public_name hegel.template)
  (kind ppx_rewriter)
+ (modules hegel_template)
  (libraries
   ppxlib
   (select
    hegel_template.ml
    from
    (ppx_template -> hegel_template.oxcaml.ml)
-   (-> hegel_template.upstream.ml)))
+   (-> hegel_template.fallback.ml)))
  (preprocess
   (pps ppx_js_style)))
+
+(rule
+ (target hegel_template.fallback.ml)
+ (action
+  (with-stdout-to
+   %{target}
+   (bash
+    "case '%{ocaml_version}' in *+ox*) echo '[%%ocaml.error \"hegel on OxCaml requires ppx_template. Install it with: opam install ppx_template\"]';; *) cat %{dep:hegel_template.upstream.ml};; esac"))))
