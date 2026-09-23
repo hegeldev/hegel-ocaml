@@ -10,28 +10,46 @@
 #define LOCAL(x) (x @ local)
 #define LOCAL_CTX ~(ctx @ local)
 #define NONTAIL [@nontail] (* concurrency is captured as local so the stack frame can't be erased *)
+#define MODE(m) @ m
+#define KIND(k) : k
+#define PORTABLE @@ portable
 #else
 #define CONCURRENCY_PARAM ~(concurrency : _ Concurrency.t)
 #define LOCAL_CONCURRENCY (concurrency : _ Concurrency.t)
 #define LOCAL(x) x
 #define LOCAL_CTX ~ctx
 #define NONTAIL
+#define MODE(m)
+#define KIND(k)
+#define PORTABLE
 #endif
 
 module Pool_gen = Generators.Int_pool
+module Concurrent_pool_gen = Generators.Int_pool_concurrent
 
 module Pool = struct
-#ifdef OXCAML
-  type ('a : value mod portable contended) t : value mod portable contended = 'a Pool_gen.t
-#else
   type 'a t = 'a Pool_gen.t
-#endif
 
   let create ?(clone = Fun.id) tc = Pool_gen.create tc ~clone
   let add = Pool_gen.add
   let size = Pool_gen.size
   let values_reusable t = Pool_gen.pool_values t ~consume:false
   let values_consumed t = Pool_gen.pool_values t ~consume:true
+end
+
+module Concurrent_pool = struct
+#ifdef OXCAML
+  type ('a : value mod portable contended) t : value mod portable contended =
+    'a Concurrent_pool_gen.t
+#else
+  type 'a t = 'a Concurrent_pool_gen.t
+#endif
+
+  let create ?(clone = Fun.id) tc = Concurrent_pool_gen.create tc ~clone
+  let add = Concurrent_pool_gen.add
+  let size = Concurrent_pool_gen.size
+  let values_reusable t = Concurrent_pool_gen.pool_values t ~consume:false
+  let values_consumed t = Concurrent_pool_gen.pool_values t ~consume:true
 end
 
 module Rule = struct
@@ -47,21 +65,13 @@ module Rule = struct
 end
 
 module Concurrent_rule = struct
-#ifdef OXCAML
-  type ('ctx, 'state) t : value mod portable contended =
+  type ('ctx, 'state) t KIND(value mod portable contended) =
     { name : string
     ; group : string
     ; weight : float
-    ; step : (Internal.test_case -> 'ctx @ local -> 'state @ contended -> unit) @@ portable
+    ; step :
+        (Internal.test_case -> 'ctx MODE(local) -> 'state MODE(contended) -> unit) PORTABLE
     }
-#else
-  type ('ctx, 'state) t =
-    { name : string
-    ; group : string
-    ; weight : float
-    ; step : Internal.test_case -> 'ctx -> 'state -> unit
-    }
-#endif
 
   let create ?(group = "<anonymous>") ?(weight = 1.0) ~name ~step () =
     { name; group; weight; step }

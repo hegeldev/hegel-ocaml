@@ -1,17 +1,43 @@
 {0 Mode-annotated API}
 
-This page lists every public signature that has a mode in OxCaml.
+This page lists every public signature that has a mode in OxCaml. Only
+concurrent state machines need modes.
+
+A concurrent rule body is portable. Each combinator has a portable version,
+which you select with [[@mode portable]]:
+
+{[
+  let keys =
+    (map [@mode portable]) Key.of_int (integers ~min_value:0 ~max_value:99 ())
+]}
+
+The primitive generators ({!Hegel.integers}, {!Hegel.text}, ...) are already
+portable. [[@@deriving hegel_generator ~portable]] derives a portable generator:
+
+{[
+  type point =
+    { x : int
+    ; y : int
+    }
+  [@@deriving hegel_generator ~portable]
+]}
+
+[[@mode portable]] requires [ppx_template] in the [pps] of the dune stanza
+that builds the code. [ppx_template] is included in [ppx_jane], [ppx_hegel_test] 
+or [ppx_hegel_generator]. Without it, OxCaml ignores the attribute and uses the
+nonportable version.
 
 {1 Module-level defaults}
 
 These modules declare [@@ portable] as their default:
-{!Hegel}, {!Hegel.Generators}, {!Hegel.Derive}, {!Hegel.Settings}, {!Hegel_jane}, 
-{{!page-hegel_jane_concurrent}[Hegel_jane_concurrent]}, and the {!Hegel.Stateful} submodules
-{!Hegel.Stateful.Pool}, {!Hegel.Stateful.Rule}, {!Hegel.Stateful.Invariant},
-and {!Hegel.Stateful.Concurrent_rule}. The {!Hegel.Stateful} runners
+{!Hegel}, {!Hegel.Generators}, {!Hegel.Derive}, {!Hegel.Settings},
+{!Hegel_jane}, {{!page-hegel_jane_concurrent}[Hegel_jane_concurrent]}, and the
+{!Hegel.Stateful} submodules {!Hegel.Stateful.Concurrent_pool},
+{!Hegel.Stateful.Rule}, {!Hegel.Stateful.Invariant}, and
+{!Hegel.Stateful.Concurrent_rule}. The {!Hegel.Stateful} runners
 ({!Hegel.Stateful.run}, {!Hegel.Stateful.run_concurrent}) are not portable.
 
-{1 Hegel}
+{1 Types}
 
 {!Hegel.test_case}
 
@@ -19,170 +45,50 @@ and {!Hegel.Stateful.Concurrent_rule}. The {!Hegel.Stateful} runners
 type test_case : value mod portable contended
 ]}
 
-{!Hegel.with_printer}
-
-{[
-val with_printer
-  :  ('a -> Sexplib0.Sexp.t) @ portable
-  -> ('a, 'p) generator
-  -> ('a, printable) generator
-]}
-
-{1 Hegel.Generators}
-
 {!Hegel.Generators.generator}
 
 {[
-type ('a, 'p) generator : value mod portable contended
+type ('a, 'p) generator : value mod contended
 ]}
 
-{!Hegel.Generators.just}
-
+{1 Combinators}
 {[
-val just : ('a : value mod portable contended). 'a -> ('a, unprintable) generator
+val%template map
+  :  ('a -> 'b) @ m
+  -> ('a, 'p) generator @ m
+  -> ('b, unprintable) generator @ m
+[@@mode m = (nonportable, portable)]
+
+val%template just : ('a : value mod c). 'a @ m -> ('a, unprintable) generator @ m
+[@@mode (m, c) = ((nonportable, uncontended), (portable, contended))]
+
+val%template sampled_from
+  : ('a : value mod c). 'a list @ m -> ('a, unprintable) generator @ m
+[@@mode (m, c) = ((nonportable, uncontended), (portable, contended))]
 ]}
 
-{!Hegel.Generators.sampled_from}
+[with_printer], [printer], [composite], [flat_map], [filter], [one_of],
+[optional], [tuples2]/[tuples3]/[tuples4], [lists], [assoc_lists],
+[hash_tables], [make_hash_tables], [make_characters], [make_dates],
+[make_times], [make_datetimes], [functions]/[functions2]/[functions3], and
+{!Hegel_jane.hash_tables} use the same template as [map].
 
-{[
-val sampled_from
-  : ('a : value mod portable contended). 'a list -> ('a, unprintable) generator
-]}
-
-{!Hegel.Generators.map}
-
-{[
-val map : ('a -> 'b) @ portable -> ('a, 'p) generator -> ('b, unprintable) generator
-]}
-
-{!Hegel.Generators.flat_map}
-
-{[
-val flat_map
-  :  ('a -> ('b, 'q) generator) @ portable
-  -> ('a, 'p) generator
-  -> ('b, unprintable) generator
-]}
-
-{!Hegel.Generators.filter}
-
-{[
-val filter : ('a -> bool) @ portable -> ('a, 'p) generator -> ('a, 'p) generator
-]}
-
-{!Hegel.Generators.composite}
-
-{[
-val composite : (test_case -> 'a) @ portable -> ('a, unprintable) generator
-]}
-
-{!Hegel.Generators.make_characters}
-
-{[
-val make_characters
-  :  of_char:(char -> 'a) @ portable
-  -> sexp_of:('a -> Sexplib0.Sexp.t) @ portable
-  -> unit
-  -> ('a, printable) generator
-]}
-
-{!Hegel.Generators.make_hash_tables}
-
-{[
-val make_hash_tables
-  :  of_pairs:(('a * 'b) list -> 't) @ portable
-  -> sexp_of_t:
-       (('a -> Sexplib0.Sexp.t) -> ('b -> Sexplib0.Sexp.t) -> 't -> Sexplib0.Sexp.t)
-       @ portable
-  -> ('a, printable) generator
-  -> ('b, printable) generator
-  -> ?min_size:int
-  -> ?max_size:int
-  -> unit
-  -> ('t, printable) generator
-]}
-
-{!Hegel.Generators.make_dates}
-
-{[
-val make_dates
-  :  of_date:(date -> 'a) @ portable
-  -> sexp_of:('a -> Sexplib0.Sexp.t) @ portable
-  -> ?min_date:date
-  -> ?max_date:date
-  -> unit
-  -> ('a, printable) generator
-]}
-
-{!Hegel.Generators.make_times}
-
-{[
-val make_times
-  :  of_time:(time -> 'a) @ portable
-  -> sexp_of:('a -> Sexplib0.Sexp.t) @ portable
-  -> ?min_time:time
-  -> ?max_time:time
-  -> unit
-  -> ('a, printable) generator
-]}
-
-{!Hegel.Generators.make_datetimes}
-
-{[
-val make_datetimes
-  :  of_datetime:(date * time -> 'a) @ portable
-  -> sexp_of:('a -> Sexplib0.Sexp.t) @ portable
-  -> ?min_datetime:date * time
-  -> ?max_datetime:date * time
-  -> unit
-  -> ('a, printable) generator
-]}
-
-{!Hegel.Generators.functions}
-
-{[
-val functions
-  :  ?name:string
-  -> ?sexp_of_arg:('a -> Sexplib0.Sexp.t) @ portable
-  -> returns:('b, _) generator
-  -> unit
-  -> ('a -> 'b, unprintable) generator
-]}
-
-{!Hegel.Generators.functions2}
-
-{[
-val functions2
-  :  ?name:string
-  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t) @ portable
-  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t) @ portable
-  -> returns:('c, _) generator
-  -> unit
-  -> ('a -> 'b -> 'c, unprintable) generator
-]}
-
-{!Hegel.Generators.functions3}
-
-{[
-val functions3
-  :  ?name:string
-  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t) @ portable
-  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t) @ portable
-  -> ?sexp_of_arg3:('c -> Sexplib0.Sexp.t) @ portable
-  -> returns:('d, _) generator
-  -> unit
-  -> ('a -> 'b -> 'c -> 'd, unprintable) generator
-]}
+The primitives return [@ portable] and have one version: {!Hegel.booleans},
+{!Hegel.integers}, {!Hegel.floats}, {!Hegel.text}, {!Hegel.characters},
+{!Hegel.chars}, {!Hegel.binary}, {!Hegel.emails}, {!Hegel.urls},
+{!Hegel.domains}, {!Hegel.from_regex}, {!Hegel.dates}, {!Hegel.times},
+{!Hegel.datetimes}, {!Hegel.ip_addresses}, and the {!Hegel_jane} generators
+other than {!Hegel_jane.hash_tables}.
 
 {1 Hegel.Stateful}
 
-{!Hegel.Stateful.Pool.t}
+{!Hegel.Stateful.Concurrent_pool.t}
 
 {[
 type ('a : value mod portable contended) t : value mod portable contended
 ]}
 
-{!Hegel.Stateful.Pool.create}
+{!Hegel.Stateful.Concurrent_pool.create}
 
 {[
 val create : ?clone:('a -> 'a) @ portable -> test_case -> 'a t

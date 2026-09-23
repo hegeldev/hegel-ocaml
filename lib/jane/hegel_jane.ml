@@ -32,7 +32,7 @@ let to_ofday ({ hour; minute; second; nanosecond } : G.time) =
 ;;
 
 let dates ?(min_date = first_date) ?(max_date = last_date) () =
-  G.make_dates
+  (G.make_dates [@mode portable])
     ~of_date:to_core_date
     ~sexp_of:Date.sexp_of_t
     ~min_date:(to_hegel_date min_date)
@@ -42,7 +42,7 @@ let dates ?(min_date = first_date) ?(max_date = last_date) () =
 
 let ofdays ?(min_ofday = first_ofday) ?(max_ofday = last_ofday) () =
   let ofdays_gen ~max_ofday =
-    G.make_times
+    (G.make_times [@mode portable])
       ~of_time:to_ofday
       ~sexp_of:Time_ns.Ofday.sexp_of_t
       ~min_time:(to_hegel_time min_ofday)
@@ -52,11 +52,14 @@ let ofdays ?(min_ofday = first_ofday) ?(max_ofday = last_ofday) () =
   if Time_ns.Ofday.( < ) max_ofday Time_ns.Ofday.start_of_next_day
   then ofdays_gen ~max_ofday
   else if Time_ns.Ofday.equal min_ofday Time_ns.Ofday.start_of_next_day
-  then G.with_printer Time_ns.Ofday.sexp_of_t (G.just Time_ns.Ofday.start_of_next_day)
-  else
-    G.with_printer
+  then
+    (G.with_printer [@mode portable])
       Time_ns.Ofday.sexp_of_t
-      (G.composite (fun tc ->
+      ((G.just [@mode portable]) Time_ns.Ofday.start_of_next_day)
+  else
+    (G.with_printer [@mode portable])
+      Time_ns.Ofday.sexp_of_t
+      ((G.composite [@mode portable]) (fun tc ->
          if Hegel.draw_silent tc (G.booleans ~p:0.01 ())
          then Time_ns.Ofday.start_of_next_day
          else
@@ -65,7 +68,9 @@ let ofdays ?(min_ofday = first_ofday) ?(max_ofday = last_ofday) () =
              (ofdays_gen ~max_ofday:Time_ns.Ofday.approximate_end_of_day)))
 ;;
 
-let chars () = G.make_characters ~of_char:Fun.id ~sexp_of:Char.sexp_of_t ()
+let chars () =
+  (G.make_characters [@mode portable]) ~of_char:Fun.id ~sexp_of:Char.sexp_of_t ()
+;;
 
 let time_spans
       ?(min_span = Time_ns.Span.min_value_representable)
@@ -78,9 +83,10 @@ let time_spans
       ~max_value:(Time_ns.Span.to_int_ns max_span)
       ()
   in
-  G.with_printer
+  (G.with_printer [@mode portable])
     Time_ns.Span.sexp_of_t
-    (G.composite (fun tc -> Time_ns.Span.of_int_ns (Hegel.draw_silent tc ns_span_gen)))
+    ((G.composite [@mode portable]) (fun tc ->
+       Time_ns.Span.of_int_ns (Hegel.draw_silent tc ns_span_gen)))
 ;;
 
 let times
@@ -93,7 +99,7 @@ let times
     let date, ofday = Time_ns.to_date_ofday ~zone:utc t in
     to_hegel_date date, to_hegel_time ofday
   in
-  G.make_datetimes
+  (G.make_datetimes [@mode portable])
     ~of_datetime:(fun (date, time) ->
       Time_ns.of_date_ofday ~zone:utc (to_core_date date) (to_ofday time))
     ~sexp_of:Time_ns.Alternate_sexp.sexp_of_t
@@ -102,8 +108,8 @@ let times
     ()
 ;;
 
-let hash_tables keys values ?min_size ?max_size () =
-  G.make_hash_tables
+let%template hash_tables keys values ?min_size ?max_size () =
+  (G.make_hash_tables [@mode m])
     ~of_pairs:Hashtbl.Poly.of_alist_exn
     ~sexp_of_t:Hashtbl.Poly.sexp_of_t
     keys
@@ -111,6 +117,7 @@ let hash_tables keys values ?min_size ?max_size () =
     ?min_size
     ?max_size
     ()
+[@@mode m = (nonportable, portable)]
 ;;
 
 let sexp_diff_renderer ~colored ~original ~updated =

@@ -1,8 +1,10 @@
 #ifdef OXCAML
 @@ portable
-#define PFN @ portable
+#define MODE(m) @ m
+#define KIND(k) : k
 #else
-#define PFN
+#define MODE(m)
+#define KIND(k)
 #endif
 (** This module provides a composable generator API for property-based testing.
     Generators produce typed OCaml values.
@@ -43,7 +45,7 @@
     and {!unprintable} otherwise. *)
 type ('a, 'p) generator
 #ifdef OXCAML
-  : value mod portable contended
+  : value mod contended
 #endif
 
 (** Phantom witness that a generator carries a printer; see {!generator}. *)
@@ -162,24 +164,31 @@ val draw_silent_named : name:string -> Internal.test_case -> ('a, 'p) generator 
         assert (n >= 0)
       ;;
     ]} *)
-val with_printer
-  :  ('a -> Sexplib0.Sexp.t) PFN
-  -> ('a, 'p) generator
-  -> ('a, printable) generator
+val%template with_printer
+  :  ('a -> Sexplib0.Sexp.t) MODE(m)
+  -> ('a, 'p) generator MODE(m)
+  -> ('a, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [printer gen] is the printer carried by the printable generator [gen]. *)
-val printer : ('a, printable) generator -> ('a -> Sexplib0.Sexp.t) PFN
+val%template printer : ('a, printable) generator MODE(m) -> ('a -> Sexplib0.Sexp.t) MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [leaf ~name ~draw ~sexp_of] builds a printable generator from a single
     typed engine draw, labeled from [name]. Not part of the public API. *)
-val leaf
+val%template leaf
   :  name:string
-  -> draw:(Internal.test_case -> 'a) PFN
-  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
-  -> ('a, printable) generator
+  -> draw:(Internal.test_case -> 'a) MODE(m)
+  -> sexp_of:('a -> Sexplib0.Sexp.t) MODE(m)
+  -> ('a, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (**/**)
 
+(**/**)
+
+(** The generator constructors. {!Hegel} re-exports them unqualified. *)
+module Public : sig
 (** {2 Primitive generators} *)
 
 (** [booleans ?p ()] creates a generator for boolean values, [true] with
@@ -191,7 +200,7 @@ val leaf
         assert (b = true || b = false)
       ;;
     ]} *)
-val booleans : ?p:float -> unit -> (bool, printable) generator
+val booleans : ?p:float -> unit -> (bool, printable) generator MODE(portable)
 
 (** [integers ?min_value ?max_value ()] creates a generator for integers within
     the given bounds.
@@ -206,7 +215,7 @@ val booleans : ?p:float -> unit -> (bool, printable) generator
         assert (n >= 1 && n <= 6)
       ;;
     ]} *)
-val integers : ?min_value:int -> ?max_value:int -> unit -> (int, printable) generator
+val integers : ?min_value:int -> ?max_value:int -> unit -> (int, printable) generator MODE(portable)
 
 (** [floats ?min_value ?max_value ?exclude_min ?exclude_max ?allow_nan
      ?allow_infinity ()] creates a generator for floating-point values.
@@ -235,7 +244,7 @@ val floats
   -> ?allow_nan:bool
   -> ?allow_infinity:bool
   -> unit
-  -> (float, printable) generator
+  -> (float, printable) generator MODE(portable)
 
 (** [text ?min_size ?max_size ?codec ?min_codepoint ?max_codepoint ?categories
      ?exclude_categories ?include_characters ?exclude_characters ?alphabet ()]
@@ -276,7 +285,7 @@ val text
   -> ?exclude_characters:string
   -> ?alphabet:string
   -> unit
-  -> (string, printable) generator
+  -> (string, printable) generator MODE(portable)
 
 (** [characters ?codec ?min_codepoint ?max_codepoint ?categories
      ?exclude_categories ?include_characters ?exclude_characters ()] creates a
@@ -301,16 +310,17 @@ val characters
   -> ?include_characters:string
   -> ?exclude_characters:string
   -> unit
-  -> (string, printable) generator
+  -> (string, printable) generator MODE(portable)
 
 (** [make_characters ~of_char ~sexp_of ()] builds a generator for single
     characters over any representation ['a], covering the full native [char]
     range (codepoints 0-255, i.e. Latin-1). *)
-val make_characters
-  :  of_char:(char -> 'a) PFN
-  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
+val%template make_characters
+  :  of_char:(char -> 'a) MODE(m)
+  -> sexp_of:('a -> Sexplib0.Sexp.t) MODE(m)
   -> unit
-  -> ('a, printable) generator
+  -> ('a, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [chars ()] creates a generator for single characters (codepoints 0-255,
     i.e. Latin-1) as native [char] values.
@@ -321,7 +331,7 @@ val make_characters
         assert (Char.code c >= 0 && Char.code c <= 0xFF)
       ;;
     ]} *)
-val chars : unit -> (char, printable) generator
+val chars : unit -> (char, printable) generator MODE(portable)
 
 (** [binary ?min_size ?max_size ()] creates a generator for binary byte strings.
 
@@ -331,7 +341,7 @@ val chars : unit -> (char, printable) generator
         assert (String.length bytes <= 16)
       ;;
     ]} *)
-val binary : ?min_size:int -> ?max_size:int -> unit -> (string, printable) generator
+val binary : ?min_size:int -> ?max_size:int -> unit -> (string, printable) generator MODE(portable)
 
 (** [just value] creates a generator that always produces [value]. The output
     type is the caller's, so the result carries no printer.
@@ -342,11 +352,8 @@ val binary : ?min_size:int -> ?max_size:int -> unit -> (string, printable) gener
         assert (x = 42)
       ;;
     ]} *)
-#ifdef OXCAML
-val just : ('a : value mod portable contended). 'a -> ('a, unprintable) generator
-#else
-val just : 'a -> ('a, unprintable) generator
-#endif
+val%template just : ('a KIND(value mod c)) MODE(m) -> ('a, unprintable) generator MODE(m)
+[@@mode (m, c) = ((nonportable, uncontended), (portable, contended))]
 
 (** {2 Collection generators} *)
 
@@ -362,13 +369,14 @@ val just : 'a -> ('a, unprintable) generator
         assert (List.length xs <= 10)
       ;;
     ]} *)
-val lists
-  :  ('a, printable) generator
+val%template lists
+  :  ('a, printable) generator MODE(m)
   -> ?min_size:int
   -> ?max_size:int
   -> ?unique:bool
   -> unit
-  -> ('a list, printable) generator
+  -> ('a list, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [assoc_lists keys values ?min_size ?max_size ()] creates a
     generator for association lists over printable [keys] and [values]:
@@ -387,26 +395,28 @@ val lists
         assert (List.length m <= 5)
       ;;
     ]} *)
-val assoc_lists
-  :  ('a, printable) generator
-  -> ('b, printable) generator
+val%template assoc_lists
+  :  ('a, printable) generator MODE(m)
+  -> ('b, printable) generator MODE(m)
   -> ?min_size:int
   -> ?max_size:int
   -> unit
-  -> (('a * 'b) list, printable) generator
+  -> (('a * 'b) list, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [make_hash_tables ~of_pairs ~sexp_of_t keys values ?min_size ?max_size ()]
     builds a hash-table generator over any table type ['t]. *)
-val make_hash_tables
-  :  of_pairs:(('a * 'b) list -> 't) PFN
+val%template make_hash_tables
+  :  of_pairs:(('a * 'b) list -> 't) MODE(m)
   -> sexp_of_t:
-       (('a -> Sexplib0.Sexp.t) -> ('b -> Sexplib0.Sexp.t) -> 't -> Sexplib0.Sexp.t) PFN
-  -> ('a, printable) generator
-  -> ('b, printable) generator
+       (('a -> Sexplib0.Sexp.t) -> ('b -> Sexplib0.Sexp.t) -> 't -> Sexplib0.Sexp.t) MODE(m)
+  -> ('a, printable) generator MODE(m)
+  -> ('b, printable) generator MODE(m)
   -> ?min_size:int
   -> ?max_size:int
   -> unit
-  -> ('t, printable) generator
+  -> ('t, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [hash_tables keys values ?min_size ?max_size ()] creates a generator for
     [Stdlib.Hashtbl.t] tables over printable [keys] and [values]
@@ -424,13 +434,14 @@ val make_hash_tables
         assert (Hashtbl.length m <= 5)
       ;;
     ]} *)
-val hash_tables
-  :  ('a, printable) generator
-  -> ('b, printable) generator
+val%template hash_tables
+  :  ('a, printable) generator MODE(m)
+  -> ('b, printable) generator MODE(m)
   -> ?min_size:int
   -> ?max_size:int
   -> unit
-  -> (('a, 'b) Stdlib.Hashtbl.t, printable) generator
+  -> (('a, 'b) Stdlib.Hashtbl.t, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [sampled_from options] creates a generator that samples from a non-empty
     list of values. Sampling is {e not} uniform: the engine's bounded-integer
@@ -445,12 +456,9 @@ val hash_tables
         ignore color
       ;;
     ]} *)
-#ifdef OXCAML
-val sampled_from
-  : ('a : value mod portable contended). 'a list -> ('a, unprintable) generator
-#else
-val sampled_from : 'a list -> ('a, unprintable) generator
-#endif
+val%template sampled_from
+  : ('a KIND(value mod c)) list MODE(m) -> ('a, unprintable) generator MODE(m)
+[@@mode (m, c) = ((nonportable, uncontended), (portable, contended))]
 
 (** [one_of generators] creates a generator that picks from one of the given
     printable [generators]. Requires at least one generator. On a failing
@@ -472,7 +480,8 @@ val sampled_from : 'a list -> ('a, unprintable) generator
         assert (n >= 0)
       ;;
     ]} *)
-val one_of : ('a, printable) generator list -> ('a, printable) generator
+val%template one_of : ('a, printable) generator list MODE(m) -> ('a, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [optional gen] creates a generator that produces either [None] or
     [Some value] from the printable [gen].
@@ -485,7 +494,10 @@ val one_of : ('a, printable) generator list -> ('a, printable) generator
         | Some n -> assert (n >= 0)
       ;;
     ]} *)
-val optional : ('a, printable) generator -> ('a option, printable) generator
+val%template optional
+  :  ('a, printable) generator MODE(m)
+  -> ('a option, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** {2 Tuple generators} *)
 
@@ -501,10 +513,11 @@ val optional : ('a, printable) generator -> ('a option, printable) generator
         assert (n >= 0 && (b || not b))
       ;;
     ]} *)
-val tuples2
-  :  ('a, printable) generator
-  -> ('b, printable) generator
-  -> ('a * 'b, printable) generator
+val%template tuples2
+  :  ('a, printable) generator MODE(m)
+  -> ('b, printable) generator MODE(m)
+  -> ('a * 'b, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [tuples3 g1 g2 g3] creates a generator for 3-element tuples of printable
     components.
@@ -521,11 +534,12 @@ val tuples2
         assert (a >= 0 && (b || not b) && String.length c >= 0)
       ;;
     ]} *)
-val tuples3
-  :  ('a, printable) generator
-  -> ('b, printable) generator
-  -> ('c, printable) generator
-  -> ('a * 'b * 'c, printable) generator
+val%template tuples3
+  :  ('a, printable) generator MODE(m)
+  -> ('b, printable) generator MODE(m)
+  -> ('c, printable) generator MODE(m)
+  -> ('a * 'b * 'c, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [tuples4 g1 g2 g3 g4] creates a generator for 4-element tuples of printable
     components.
@@ -543,12 +557,13 @@ val tuples3
         assert (a >= 0 && (b || not b) && String.length c >= 0 && Float.compare d 0.0 >= 0)
       ;;
     ]} *)
-val tuples4
-  :  ('a, printable) generator
-  -> ('b, printable) generator
-  -> ('c, printable) generator
-  -> ('d, printable) generator
-  -> ('a * 'b * 'c * 'd, printable) generator
+val%template tuples4
+  :  ('a, printable) generator MODE(m)
+  -> ('b, printable) generator MODE(m)
+  -> ('c, printable) generator MODE(m)
+  -> ('d, printable) generator MODE(m)
+  -> ('a * 'b * 'c * 'd, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** {2 Function generators} *)
 
@@ -579,12 +594,13 @@ val tuples4
         assert (List.length (List.map f xs) = List.length xs)
       ;;
     ]} *)
-val functions
+val%template functions
   :  ?name:string
-  -> ?sexp_of_arg:('a -> Sexplib0.Sexp.t) PFN
-  -> returns:('b, _) generator
+  -> ?sexp_of_arg:('a -> Sexplib0.Sexp.t) MODE(m)
+  -> returns:('b, _) generator MODE(m)
   -> unit
-  -> ('a -> 'b, unprintable) generator
+  -> ('a -> 'b, unprintable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [functions2 ?name ?sexp_of_arg1 ?sexp_of_arg2 ~returns ()] creates a
     generator for curried two-argument functions ['a -> 'b -> 'c].
@@ -592,13 +608,14 @@ val functions
     Sugar over {!functions} keyed on the argument pair: the two arguments form
     one memo key and are shown uncurried as [name (arg1 arg2) = result]. Draw it
     with {!draw_silent}. *)
-val functions2
+val%template functions2
   :  ?name:string
-  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t) PFN
-  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t) PFN
-  -> returns:('c, _) generator
+  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t) MODE(m)
+  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t) MODE(m)
+  -> returns:('c, _) generator MODE(m)
   -> unit
-  -> ('a -> 'b -> 'c, unprintable) generator
+  -> ('a -> 'b -> 'c, unprintable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [functions3 ?name ?sexp_of_arg1 ?sexp_of_arg2 ?sexp_of_arg3 ~returns ()]
     creates a generator for curried three-argument functions
@@ -606,14 +623,15 @@ val functions2
 
     Like {!functions2}, keyed on the argument triple and shown uncurried as
     [name (arg1 arg2 arg3) = result]. Draw it with {!draw_silent}. *)
-val functions3
+val%template functions3
   :  ?name:string
-  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t) PFN
-  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t) PFN
-  -> ?sexp_of_arg3:('c -> Sexplib0.Sexp.t) PFN
-  -> returns:('d, _) generator
+  -> ?sexp_of_arg1:('a -> Sexplib0.Sexp.t) MODE(m)
+  -> ?sexp_of_arg2:('b -> Sexplib0.Sexp.t) MODE(m)
+  -> ?sexp_of_arg3:('c -> Sexplib0.Sexp.t) MODE(m)
+  -> returns:('d, _) generator MODE(m)
   -> unit
-  -> ('a -> 'b -> 'c -> 'd, unprintable) generator
+  -> ('a -> 'b -> 'c -> 'd, unprintable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** {2 Format generators} *)
 
@@ -629,7 +647,7 @@ val functions3
         assert (String.contains e '@')
       ;;
     ]} *)
-val emails : unit -> (string, printable) generator
+val emails : unit -> (string, printable) generator MODE(portable)
 
 (** [urls ()] creates a generator for valid URL strings.
 
@@ -646,7 +664,7 @@ val emails : unit -> (string, printable) generator
         assert (String.length u > 0)
       ;;
     ]} *)
-val urls : unit -> (string, printable) generator
+val urls : unit -> (string, printable) generator MODE(portable)
 
 (** [domains ?max_length ()] creates a generator for domain name strings.
 
@@ -664,7 +682,7 @@ val urls : unit -> (string, printable) generator
         assert (String.length d <= 64)
       ;;
     ]} *)
-val domains : ?max_length:int -> unit -> (string, printable) generator
+val domains : ?max_length:int -> unit -> (string, printable) generator MODE(portable)
 
 (** A proleptic Gregorian calendar date. [year] is in [\[-999999, 999999\]],
     [month] in [\[1, 12\]], and [day] in [\[1, days-in-month\]]. *)
@@ -692,41 +710,44 @@ type time =
       let core_dates =
         make_dates
           ~of_date:(fun { year; month; day } ->
-            Core.Date.create_exn ~y:year ~m:(Core.Month.of_int_exn month) PFN ~d:day)
+            Core.Date.create_exn ~y:year ~m:(Core.Month.of_int_exn month) ~d:day)
           ~sexp_of:Core.Date.sexp_of_t
           ()
     ]} *)
-val make_dates
-  :  of_date:(date -> 'a) PFN
-  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
+val%template make_dates
+  :  of_date:(date -> 'a) MODE(m)
+  -> sexp_of:('a -> Sexplib0.Sexp.t) MODE(m)
   -> ?min_date:date
   -> ?max_date:date
   -> unit
-  -> ('a, printable) generator
+  -> ('a, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [make_times ~of_time ~sexp_of ?min_time ?max_time ()] builds a generator
     for times of day in [\[min_time, max_time\]] over any representation.
     [of_time] converts each drawn {!time} to the desired representation. The
     default range is [\[00:00:00.000000000, 23:59:59.999999999\]]. *)
-val make_times
-  :  of_time:(time -> 'a) PFN
-  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
+val%template make_times
+  :  of_time:(time -> 'a) MODE(m)
+  -> sexp_of:('a -> Sexplib0.Sexp.t) MODE(m)
   -> ?min_time:time
   -> ?max_time:time
   -> unit
-  -> ('a, printable) generator
+  -> ('a, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [make_datetimes ~of_datetime ~sexp_of ?min_datetime ?max_datetime ()] builds a
     generator for naive datetimes in [\[min_datetime, max_datetime\]] over any
     representation. [of_datetime] converts each drawn [(date, time)] pair to the
     desired representation. The default range is [\[0001-01-01T00:00:00.000000000, 9999-12-31T23:59:59.999999999\]]. *)
-val make_datetimes
-  :  of_datetime:(date * time -> 'a) PFN
-  -> sexp_of:('a -> Sexplib0.Sexp.t) PFN
+val%template make_datetimes
+  :  of_datetime:(date * time -> 'a) MODE(m)
+  -> sexp_of:('a -> Sexplib0.Sexp.t) MODE(m)
   -> ?min_datetime:date * time
   -> ?max_datetime:date * time
   -> unit
-  -> ('a, printable) generator
+  -> ('a, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [dates ?min_date ?max_date ()] creates a generator for ISO 8601
     [YYYY-MM-DD] date strings in [\[min_date, max_date\]]. The default range is
@@ -738,7 +759,7 @@ val make_datetimes
         assert (String.length d = 10)
       ;;
     ]} *)
-val dates : ?min_date:date -> ?max_date:date -> unit -> (string, printable) generator
+val dates : ?min_date:date -> ?max_date:date -> unit -> (string, printable) generator MODE(portable)
 
 (** [times ?min_time ?max_time ()] creates a generator for ISO 8601
     [HH:MM:SS.fffffffff] time-of-day strings in [\[min_time, max_time\]]. The
@@ -752,7 +773,7 @@ val dates : ?min_date:date -> ?max_date:date -> unit -> (string, printable) gene
         assert (String.length t = 18 && String.compare t "09:00:00.000000000" >= 0)
       ;;
     ]} *)
-val times : ?min_time:time -> ?max_time:time -> unit -> (string, printable) generator
+val times : ?min_time:time -> ?max_time:time -> unit -> (string, printable) generator MODE(portable)
 
 (** [datetimes ?min_datetime ?max_datetime ()] creates a generator for naive
     ISO 8601 [YYYY-MM-DDTHH:MM:SS.fffffffff] datetime strings in
@@ -769,7 +790,7 @@ val datetimes
   :  ?min_datetime:date * time
   -> ?max_datetime:date * time
   -> unit
-  -> (string, printable) generator
+  -> (string, printable) generator MODE(portable)
 
 (** [ip_addresses ?version ()] creates a generator for typed [Ipaddr.t] IP
     addresses. [version] selects IPv4 ([`V4], RFC 791) or IPv6 ([`V6],
@@ -783,7 +804,7 @@ val datetimes
         | Ipaddr.V6 _ -> assert false
       ;;
     ]} *)
-val ip_addresses : ?version:[ `V4 | `V6 ] -> unit -> (Ipaddr.t, printable) generator
+val ip_addresses : ?version:[ `V4 | `V6 ] -> unit -> (Ipaddr.t, printable) generator MODE(portable)
 
 (** [from_regex pattern ?fullmatch ()] creates a generator for strings matching
     a regular expression [pattern], written in the syntax of Python's [re]
@@ -796,7 +817,7 @@ val ip_addresses : ?version:[ `V4 | `V6 ] -> unit -> (Ipaddr.t, printable) gener
         assert (String.length s >= 1)
       ;;
     ]} *)
-val from_regex : string -> ?fullmatch:bool -> unit -> (string, printable) generator
+val from_regex : string -> ?fullmatch:bool -> unit -> (string, printable) generator MODE(portable)
 
 (** {2 Generator combinators} *)
 
@@ -812,7 +833,8 @@ val from_regex : string -> ?fullmatch:bool -> unit -> (string, printable) genera
           x, y)
       ;;
     ]} *)
-val composite : (Internal.test_case -> 'a) PFN -> ('a, unprintable) generator
+val%template composite : (Internal.test_case -> 'a) MODE(m) -> ('a, unprintable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [map f gen] transforms values from [gen] using [f].
 
@@ -824,7 +846,11 @@ val composite : (Internal.test_case -> 'a) PFN -> ('a, unprintable) generator
         assert (even mod 2 = 0)
       ;;
     ]} *)
-val map : ('a -> 'b) PFN -> ('a, 'p) generator -> ('b, unprintable) generator
+val%template map
+  :  ('a -> 'b) MODE(m)
+  -> ('a, 'p) generator MODE(m)
+  -> ('b, unprintable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [flat_map f gen] creates a dependent generator. [f] receives the generated
     value and returns a generator whose value is the final result.
@@ -846,10 +872,11 @@ val map : ('a -> 'b) PFN -> ('a, 'p) generator -> ('b, unprintable) generator
         assert (List.length xs <= 5)
       ;;
     ]} *)
-val flat_map
-  :  ('a -> ('b, 'q) generator) PFN
-  -> ('a, 'p) generator
-  -> ('b, unprintable) generator
+val%template flat_map
+  :  ('a -> ('b, 'q) generator) MODE(m)
+  -> ('a, 'p) generator MODE(m)
+  -> ('b, unprintable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
 
 (** [filter predicate gen] filters values from [gen] using [predicate], keeping
     [gen]'s printability. Tries up to three times and rejects the test case if all
@@ -863,7 +890,18 @@ val flat_map
         assert (even mod 2 = 0)
       ;;
     ]} *)
-val filter : ('a -> bool) PFN -> ('a, 'p) generator -> ('a, 'p) generator
+val%template filter
+  :  ('a -> bool) MODE(m)
+  -> ('a, 'p) generator MODE(m)
+  -> ('a, 'p) generator MODE(m)
+[@@mode m = (nonportable, portable)]
+end
+
+(**/**)
+
+include module type of struct
+  include Public
+end
 
 (**/**)
 (*
@@ -873,21 +911,42 @@ val filter : ('a -> bool) PFN -> ('a, 'p) generator -> ('a, 'p) generator
 
 module Int_table : Stdlib.Hashtbl.S with type key = int
 
-(** [Int_pool] is the client side of an engine pool: drawn ids resolved
-    against an [Int_table] of values, behind a lock so concurrent workers can
-    share it. *)
+(** [resolve_draw values ~consume id] resolves a drawn pool id against a client
+    table, removing it when [consume]. *)
+val resolve_draw : 'a Int_table.t -> consume:bool -> int -> 'a
+
+(** [Int_pool] is the client side of an engine pool for a sequential machine:
+    drawn ids resolved against an [Int_table] of values, with no lock. Its
+    element type is unconstrained. *)
 module Int_pool : sig
+  type 'a t
+
+  val create : Internal.test_case -> clone:('a -> 'a) -> 'a t
+  val add : 'a t -> Internal.test_case -> 'a -> unit
+  val size : _ t -> int
+
+  (** Reusable draws apply the pool's clone function. Consumed draws return
+      the stored value directly. *)
+  val pool_values : 'a t -> consume:bool -> ('a, unprintable) generator
+end
+
+(** [Int_pool_concurrent] is the same client side for a machine whose workers
+    share the pool. *)
+module Int_pool_concurrent : sig
 #ifdef OXCAML
   type ('a : value mod portable contended) t : value mod portable contended
 #else
   type 'a t
 #endif
 
-  val create : Internal.test_case -> clone:('a -> 'a) PFN -> 'a t
+#ifdef OXCAML
+  val create : Internal.test_case -> clone:('a -> 'a) @ portable -> 'a t
+#else
+  val create : Internal.test_case -> clone:('a -> 'a) -> 'a t
+#endif
+
   val add : 'a t -> Internal.test_case -> 'a -> unit
   val size : _ t -> int
-
-  val resolve_draw : 'a Int_table.t -> consume:bool -> int -> 'a
 
   (** Reusable draws use the pool's clone function under its lock, if present.
       Consumed draws return the stored value directly. *)
@@ -978,10 +1037,11 @@ module Ppx_internal : sig
   (** [composite_with_label ~label generate_fn] is {!composite} but tags the
       span with [label] instead of the fixed struct/record label. Used by the
       derive PPX to tag composites (e.g. {!Labels.enum_variant}). *)
-  val composite_with_label
+  val%template composite_with_label
     :  label:int64
-    -> (Internal.test_case -> 'a) PFN
-    -> ('a, unprintable) generator
+    -> (Internal.test_case -> 'a) MODE(m)
+    -> ('a, unprintable) generator MODE(m)
+  [@@mode m = (nonportable, portable)]
 end
 
 (**/**)

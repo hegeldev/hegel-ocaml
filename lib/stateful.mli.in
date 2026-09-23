@@ -1,8 +1,10 @@
 #ifdef OXCAML
-#define PFN @ portable
+#define MODE(m) @ m
+#define KIND(k) : k
 #define PORTABLE @@ portable
 #else
-#define PFN
+#define MODE(m)
+#define KIND(k)
 #define PORTABLE
 #endif
 (** {2 Introduction}
@@ -73,7 +75,7 @@
     {!Concurrency.threads}, which puts workers on systhreads. See {!Concurrency}
     for more details.
 
-    A concurrent rule takes a context after the test case. If using {!Concurrency.threads} 
+    A concurrent rule takes a context after the test case. If using {!Concurrency.threads}
     or {!Concurrency.domains} it is [()]. A capability wrapping a scheduler passes
     the scheduler's per-task handle. This can be used by the system under test or the rule
     to spawn its own tasks.
@@ -125,25 +127,25 @@
     module%hegel_concurrent_state_machine Key_value_store = struct
       type state =
         { store : Store.t
-        ; keys : int Stateful.Pool.t
+        ; keys : int Stateful.Concurrent_pool.t
         ; increments : int Atomic.t
         }
 
       let register tc () state =
         let key = draw tc (integers ~min_value:0 ~max_value:3 ()) in
-        if Store.put_if_absent state.store key then Stateful.Pool.add state.keys tc key
+        if Store.put_if_absent state.store key then Stateful.Concurrent_pool.add state.keys tc key
       [@@rule { group = "operations" }]
       ;;
 
       let increment tc () state =
-        let key = draw_silent tc (Stateful.Pool.values_reusable state.keys) in
+        let key = draw_silent tc (Stateful.Concurrent_pool.values_reusable state.keys) in
         Store.increment state.store key;
         Atomic.incr state.increments
       [@@rule { group = "operations" }]
       ;;
 
       let read tc () state =
-        let key = draw_silent tc (Stateful.Pool.values_reusable state.keys) in
+        let key = draw_silent tc (Stateful.Concurrent_pool.values_reusable state.keys) in
         match Store.get state.store key with
         | Some value -> note tc (Printf.sprintf "read %d -> %d" key value)
         | None -> note tc (Printf.sprintf "key %d is absent" key)
@@ -175,7 +177,7 @@
     let%hegel_test concurrent_store tc =
       let init : Key_value_store.state =
         { store = Store.create ()
-        ; keys = Stateful.Pool.create tc
+        ; keys = Stateful.Concurrent_pool.create tc
         ; increments = Atomic.make 0
         }
       in
@@ -226,28 +228,22 @@
 
 (** {3 OxCaml}
 
-    On OxCaml this library is mode-checked. {{!page-oxcaml_api}Mode-annotated API} lists
-    every public signature that has a mode.
+    On OxCaml only concurrent machines have modes.
 
-    {!Concurrent_rule.create}'s [step] is [@@ portable] and receives the state
-    [@ contended], and {!run_concurrent} takes [~init] [@ portable].
+    A concurrent rule body is portable, so a generator it captures must be
+    portable. See {{!page-oxcaml_api}Mode-annotated API} for every public
+    signature that has a mode. A concurrent machine must use {!Concurrent_pool} for pools.
 
-    [map], [filter], [composite], and [with_printer] take portable functions. The
-    element types of [just], [sampled_from], and {!Pool.t} cross modes
-    ([value mod portable contended]). Generators derived with [Hegel_jane.Derive]
-    are portable.
-
-    The [~concurrency] capability and context are [@ local]. Also, see 
+    The [~concurrency] capability and context are [@ local]. See also
     {{!page-hegel_jane_concurrent}hegel.jane.concurrent}. *)
 
 (** {2 Submodules} *)
 
-module Pool : sig PORTABLE
-  (** A pool of previously generated values.
+module Pool : sig
+  (** A pool of previously generated values. Not thread-safe.
 
-      Rules can add to it and draw from it, so a rule can use values that a
-      another rule produced rather than on a new drawn value. Every operation is
-      safe to call from several workers at once.
+      Rules can add to it and draw from it, so a rule can use values that
+      another rule produced rather than a new drawn value.
 
       Create one with {!create} and populate it with {!add}. To draw from the
       pool, use the following generators:
@@ -289,18 +285,14 @@ module Pool : sig PORTABLE
           ()
       ;;
       ]} *)
-#ifdef OXCAML
-  type ('a : value mod portable contended) t : value mod portable contended
-#else
   type 'a t
-#endif
 
   (** Creates an empty pool. Pools are tied to a test case. Do not reuse one
       across test cases. Drawn mutable values are shared by default. Pass a
       copying function for independent mutable values. Consumed draws return
       the stored value directly. [clone] must not call back into the same
       pool. *)
-  val create : ?clone:('a -> 'a) PFN -> Internal.test_case -> 'a t
+  val create : ?clone:('a -> 'a) -> Internal.test_case -> 'a t
 
   (** [add pool tc value] records [value] in [pool].
 
@@ -331,6 +323,32 @@ module Pool : sig PORTABLE
       {[
       let taken = draw_silent tc (Stateful.Pool.values_consumed pool)
       ]} *)
+  val values_consumed : 'a t -> ('a, Generators.unprintable) Generators.generator
+end
+
+module Concurrent_pool : sig PORTABLE
+  (** A thread-safe pool of previously generated values. *)
+  type ('a KIND(value mod portable contended)) t KIND(value mod portable contended)
+
+  (** Creates an empty pool. Pools are tied to a test case. Do not reuse one
+      across test cases. Drawn mutable values are shared by default. Pass a
+      copying function for independent mutable values. Consumed draws return
+      the stored value directly. [clone] must not call back into the same
+      pool. *)
+  val create : ?clone:('a -> 'a) MODE(portable) -> Internal.test_case -> 'a t
+
+  (** [add pool tc value] records [value] in [pool]. *)
+  val add : 'a t -> Internal.test_case -> 'a -> unit
+
+  (** Returns the number of values in the pool. *)
+  val size : _ t -> int
+
+  (** Draws a value without removing it. A draw from an empty pool rejects the
+      current rule. *)
+  val values_reusable : 'a t -> ('a, Generators.unprintable) Generators.generator
+
+  (** Draws and removes a value. A draw from an empty pool rejects the current
+      rule. *)
   val values_consumed : 'a t -> ('a, Generators.unprintable) Generators.generator
 end
 
@@ -435,29 +453,21 @@ module Concurrent_rule : sig PORTABLE
       - [name] is printed in the final output when the rule is run.
       - [step tc ctx state] performs one application of the rule, drawing any
         arguments it needs from [tc] and updating [state] in place. [ctx] is
-        the context the concurrency capability gives the worker. [tc] and [ctx] 
+        the context the concurrency capability gives the worker. [tc] and [ctx]
         are valid only for that step.
 
       With the PPX, a concurrent rule takes the following options:
       [[@@rule { group = "group"; weight = <weight> }]]. The order of the fields
       does not matter and neither are required. *)
-#ifdef OXCAML
   val create
     :  ?group:string
     -> ?weight:float
     -> name:string
-    -> step:(Internal.test_case -> 'ctx @ local -> 'state @ contended -> unit) @ portable
+    -> step:
+         (Internal.test_case -> 'ctx MODE(local) -> 'state MODE(contended) -> unit)
+         MODE(portable)
     -> unit
     -> ('ctx, 'state) t
-#else
-  val create
-    :  ?group:string
-    -> ?weight:float
-    -> name:string
-    -> step:(Internal.test_case -> 'ctx -> 'state -> unit)
-    -> unit
-    -> ('ctx, 'state) t
-#endif
 
   (** Returns the name of the rule. *)
   val name : (_, _) t -> string
@@ -551,7 +561,7 @@ val run_internal
 
 (**/**)
 
-(** A state machine whose rules may run concurrently. [ctx] is the concurrency 
+(** A state machine whose rules may run concurrently. [ctx] is the concurrency
     context its rules take. *)
 module type Concurrent_state_machine = sig
   type ctx
@@ -581,59 +591,32 @@ end
 
     Raises [Hegel.Usage_error] if [M] has no rules, [step_count] is below 1,
     or the bounds do not satisfy [1 <= min_concurrency <= max_concurrency]. *)
-#ifdef OXCAML
 val run_concurrent
-  :  concurrency:'ctx Concurrency.t @ local
+  :  concurrency:'ctx Concurrency.t MODE(local)
   -> ?min_concurrency:int
   -> ?max_concurrency:int
   -> ?step_count:int
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
   -> Internal.test_case
   -> (module Concurrent_state_machine with type ctx = 'ctx and type state = 'state)
-  -> init:'state @ portable
+  -> init:'state MODE(portable)
   -> unit
-#else
-val run_concurrent
-  :  concurrency:'ctx Concurrency.t
-  -> ?min_concurrency:int
-  -> ?max_concurrency:int
-  -> ?step_count:int
-  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
-  -> Internal.test_case
-  -> (module Concurrent_state_machine with type ctx = 'ctx and type state = 'state)
-  -> init:'state
-  -> unit
-#endif
 
 (**/**)
 
 (** [run_concurrent_internal ~init ~rules ~invariants ~concurrency tc] is
     {!run_concurrent} with the rules and invariants passed as lists. The [run]
     that a [module%hegel_concurrent_state_machine] generates calls this. *)
-#ifdef OXCAML
 val run_concurrent_internal
-  :  init:'state @ portable
+  :  init:'state MODE(portable)
   -> rules:('ctx, 'state) Concurrent_rule.t list
   -> invariants:'state Invariant.t list
-  -> concurrency:'ctx Concurrency.t @ local
+  -> concurrency:'ctx Concurrency.t MODE(local)
   -> ?min_concurrency:int
   -> ?max_concurrency:int
   -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
   -> ?step_count:int
   -> Internal.test_case
   -> unit
-#else
-val run_concurrent_internal
-  :  init:'state
-  -> rules:('ctx, 'state) Concurrent_rule.t list
-  -> invariants:'state Invariant.t list
-  -> concurrency:'ctx Concurrency.t
-  -> ?min_concurrency:int
-  -> ?max_concurrency:int
-  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
-  -> ?step_count:int
-  -> Internal.test_case
-  -> unit
-#endif
 
 (**/**)

@@ -1,6 +1,14 @@
 open Generators_core
 open Generators_primitives
 
+#ifdef OXCAML
+#define MODE(m) @ m
+#define ABSTRACT(a, k) (type (a : k))
+#else
+#define MODE(m)
+#define ABSTRACT(a, k) (type a)
+#endif
+
 (** [sampled_from options] creates a generator that samples from a non-empty
     list of values.
 
@@ -13,14 +21,13 @@ open Generators_primitives
 
     We use a list instead of an array because arrays are contended inside a
     portable closure, but Array.* operations need uncontended arrays. *)
-#ifdef OXCAML
-let sampled_from (type (a : value mod portable contended)) (options : a list) =
-#else
-let sampled_from options =
-#endif
+let%template sampled_from ABSTRACT(a, value mod c) (options : a list MODE(m))
+  : (a, unprintable) generator MODE(m)
+  =
   let n = List.length options in
   if n = 0 then raise (Internal.Usage_error "sampled_from requires at least one element");
-  map (fun i -> List.nth options i) (integers ~min_value:0 ~max_value:(n - 1) ())
+  (map [@mode m]) (fun i -> List.nth options i) (integers ~min_value:0 ~max_value:(n - 1) ())
+[@@mode (m, c) = ((nonportable, uncontended), (portable, contended))]
 ;;
 
 (** [one_of generators] creates a generator that picks from one of the given
@@ -34,7 +41,9 @@ let sampled_from options =
     record is per generator value: if one [one_of] generator is drawn several
     times before printing (e.g. as the element generator of [lists]), every
     value renders through the most recently drawn branch's printer. *)
-let one_of (generators : ('a, printable) generator list) : ('a, printable) generator =
+let%template one_of (generators : ('a, printable) generator list MODE(m))
+  : ('a, printable) generator MODE(m)
+  =
   match generators with
   | [] -> failwith "one_of requires at least one generator"
   | _ :: _ ->
@@ -53,13 +62,14 @@ let one_of (generators : ('a, printable) generator list) : ('a, printable) gener
     in
     Printable
       { core; sexp_of = (fun v -> (printer (List.nth generators (Atomic.get drawn))) v) }
+[@@mode m = (nonportable, portable)]
 ;;
 
 (** [optional_core element] is the generation structure behind {!optional}: a
     {!Labels.optional}-spanned draw that yields [None] or [Some] of [element]
     with equal probability. Shared with [Derive.generate_option] so derived
     option fields go through the same machinery. *)
-let optional_core (element : 'a core) : 'a option core =
+let%template optional_core (element : 'a core MODE(m)) : 'a option core MODE(m) =
   Composite
     { label = Labels.combine [ Labels.optional; label_of_core element ]
     ; generate_fn =
@@ -68,6 +78,7 @@ let optional_core (element : 'a core) : 'a option core =
           then Some (do_draw element data)
           else None)
     }
+[@@mode m = (nonportable, portable)]
 ;;
 
 (** [optional element] creates a generator that produces either [None] or
@@ -76,11 +87,14 @@ let optional_core (element : 'a core) : 'a option core =
     The [None]/[(Some v)] value renders through [Option.sexp_of_t] applied to
     [element]'s printer (the round-trippable form: [()] for [None], [(v)] for
     [Some v]). *)
-let optional (element : ('a, printable) generator) : ('a option, printable) generator =
+let%template optional (element : ('a, printable) generator MODE(m))
+  : ('a option, printable) generator MODE(m)
+  =
   Printable
-    { core = optional_core (core_of element)
+    { core = (optional_core [@mode m]) ((core_of [@mode m]) element)
     ; sexp_of = (fun v -> Sexplib0.Sexp_conv.sexp_of_option (printer element) v)
     }
+[@@mode m = (nonportable, portable)]
 ;;
 
 (** [ip_addresses ?version ()] creates a generator for typed [Ipaddr.t] IP
@@ -104,25 +118,28 @@ let ipaddr_v4_of_octets_exn = Ipaddr.V4.of_octets_exn
 let ipaddr_v6_of_octets_exn = Ipaddr.V6.of_octets_exn
 #endif
 
-let ip_addresses ?version () =
+let ip_addresses ?version () : _ MODE(portable) =
   let sexp_of ip = Sexp.Atom (ipaddr_to_string ip) in
   let v4 tc = Ipaddr.V4 (ipaddr_v4_of_octets_exn (Internal.generate_ipv4 tc)) in
   let v6 tc = Ipaddr.V6 (ipaddr_v6_of_octets_exn (Internal.generate_ipv6 tc)) in
-  let v4 = leaf ~name:"ipv4" ~draw:v4 ~sexp_of
-  and v6 = leaf ~name:"ipv6" ~draw:v6 ~sexp_of in
+  let v4 = (leaf [@mode portable]) ~name:"ipv4" ~draw:v4 ~sexp_of
+  and v6 = (leaf [@mode portable]) ~name:"ipv6" ~draw:v6 ~sexp_of in
   match version with
   | Some `V4 -> v4
   | Some `V6 -> v6
-  | None -> one_of [ v4; v6 ]
+  | None -> (one_of [@mode portable]) [ v4; v6 ]
 ;;
 
 (** [tuples2 g1 g2] creates a generator for 2-element tuples of printable
     components: each element is drawn in sequence inside a {!Labels.tuple} span. *)
-let tuples2 (type a b) (g1 : (a, printable) generator) (g2 : (b, printable) generator)
-  : (a * b, printable) generator
+let%template tuples2
+      (type a b)
+      (g1 : (a, printable) generator MODE(m))
+      (g2 : (b, printable) generator MODE(m))
+  : (a * b, printable) generator MODE(m)
   =
-  let p1 = printer g1
-  and p2 = printer g2 in
+  let p1 = (printer [@mode m]) g1
+  and p2 = (printer [@mode m]) g2 in
   let sexp_of (a, b) = Sexp.List [ p1 a; p2 b ] in
   let core =
     Composite
@@ -135,20 +152,21 @@ let tuples2 (type a b) (g1 : (a, printable) generator) (g2 : (b, printable) gene
       }
   in
   Printable { core; sexp_of }
+[@@mode m = (nonportable, portable)]
 ;;
 
 (** [tuples3 g1 g2 g3] creates a generator for 3-element tuples of printable
     components. *)
-let tuples3
+let%template tuples3
       (type a b c)
-      (g1 : (a, printable) generator)
-      (g2 : (b, printable) generator)
-      (g3 : (c, printable) generator)
-  : (a * b * c, printable) generator
+      (g1 : (a, printable) generator MODE(m))
+      (g2 : (b, printable) generator MODE(m))
+      (g3 : (c, printable) generator MODE(m))
+  : (a * b * c, printable) generator MODE(m)
   =
-  let p1 = printer g1
-  and p2 = printer g2
-  and p3 = printer g3 in
+  let p1 = (printer [@mode m]) g1
+  and p2 = (printer [@mode m]) g2
+  and p3 = (printer [@mode m]) g3 in
   let sexp_of (a, b, c) = Sexp.List [ p1 a; p2 b; p3 c ] in
   let core =
     Composite
@@ -162,22 +180,23 @@ let tuples3
       }
   in
   Printable { core; sexp_of }
+[@@mode m = (nonportable, portable)]
 ;;
 
 (** [tuples4 g1 g2 g3 g4] creates a generator for 4-element tuples of printable
     components. *)
-let tuples4
+let%template tuples4
       (type a b c d)
-      (g1 : (a, printable) generator)
-      (g2 : (b, printable) generator)
-      (g3 : (c, printable) generator)
-      (g4 : (d, printable) generator)
-  : (a * b * c * d, printable) generator
+      (g1 : (a, printable) generator MODE(m))
+      (g2 : (b, printable) generator MODE(m))
+      (g3 : (c, printable) generator MODE(m))
+      (g4 : (d, printable) generator MODE(m))
+  : (a * b * c * d, printable) generator MODE(m)
   =
-  let p1 = printer g1
-  and p2 = printer g2
-  and p3 = printer g3
-  and p4 = printer g4 in
+  let p1 = (printer [@mode m]) g1
+  and p2 = (printer [@mode m]) g2
+  and p3 = (printer [@mode m]) g3
+  and p4 = (printer [@mode m]) g4 in
   let sexp_of (a, b, c, d) = Sexp.List [ p1 a; p2 b; p3 c; p4 d ] in
   let core =
     Composite
@@ -194,4 +213,5 @@ let tuples4
       }
   in
   Printable { core; sexp_of }
+[@@mode m = (nonportable, portable)]
 ;;

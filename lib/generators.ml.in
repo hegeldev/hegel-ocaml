@@ -1,8 +1,12 @@
-include Generators_core
-include Generators_primitives
-include Generators_collections
-include Generators_combinators
-include Generators_functions
+module Public = struct
+  include Generators_core
+  include Generators_primitives
+  include Generators_collections
+  include Generators_combinators
+  include Generators_functions
+end
+
+include Public
 
 #ifdef OXCAML
 (* The compiler fills these arguments at the caller, including through aliases
@@ -40,5 +44,7 @@ end
 module Ppx_internal = struct
   module Labels = Generators_core.Labels
 
-  let composite_with_label = Generators_core.composite_with_label
+  let%template composite_with_label = (Generators_core.composite_with_label [@mode m])
+  [@@mode m = (nonportable, portable)]
+  ;;
 end

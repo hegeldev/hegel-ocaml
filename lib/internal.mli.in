@@ -1,5 +1,8 @@
 #ifdef OXCAML
 @@ portable
+#define MODE(m) @ m
+#else
+#define MODE(m)
 #endif
 (** This module implements the client-side logic for running property-based
     tests against the native libhegel engine (via {!Hegel_ffi.Ffi}).
@@ -200,16 +203,10 @@ val stderr_color : string -> string -> string
     delegates to. The optional [hegel.jane] library sets a [sexp_diff]-backed
     renderer through this hook. Without one, {!render_diff} prints both values
     in full. *)
-#ifdef OXCAML
 val set_diff_renderer
   :  (colored:bool -> original:Sexplib0.Sexp.t -> updated:Sexplib0.Sexp.t -> string) option
-     @ portable
+     MODE(portable)
   -> unit
-#else
-val set_diff_renderer
-  :  (colored:bool -> original:Sexplib0.Sexp.t -> updated:Sexplib0.Sexp.t -> string) option
-  -> unit
-#endif
 
 (** [render_diff ~colored ~original ~updated] renders the two differing values:
     both values in full by default ([-]/[+], red/green when [colored]), or a

@@ -58,6 +58,8 @@
    (>= 1.2))
   (ppx_js_style
    (>= v0.17))
+  (ppxlib
+   (>= 0.28))
   (bisect_ppx
    (and
     :with-dev-setup
@@ -72,7 +74,8 @@
    (>= v0.17))
   (sexp_diff
    (>= v0.17))
-  concurrent))
+  concurrent
+  ppx_template))
 
 (package
  (name ppx_hegel_compat)

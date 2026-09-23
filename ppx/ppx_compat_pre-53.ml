@@ -59,3 +59,5 @@ let map_let_value_bindings f e =
     { e with pexp_desc = Pexp_let (rec_flag, f vbs, body) }
   | _ -> e
 ;;
+
+let portable_value_description vd = vd
