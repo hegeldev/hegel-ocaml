@@ -37,6 +37,9 @@ lib/                         # Library source
     locked.capsule.ml        #   locked.mutex.ml (Mutex + value). Core-free.
                              #   locked.capsule.ml is OxCaml syntax and listed in
                              #   .ocamlformat-ignore
+  template/                  # hegel.template ppx: ppx_template on OxCaml, a
+                             #   %template-stripping rewriter elsewhere (dune
+                             #   select). NOT instrumented
   ffi/                       # ctypes bindings to native libhegel (NOT instrumented)
     ffi.ml                   # dlopen + 1:1 C-ABI wrappers; settings/run/test_case
                              #   handles; typed draws + string-generator handles;
@@ -365,7 +368,18 @@ the base_quickcheck conventions:
    reuse the aliased type's generator expression directly. The
    `Ppx_compat.extract_constr_args`/`map_constr_arg_types` helpers abstract
    the constructor-argument representation across the three toolchains.
-6. **Jane**: `Hegel_jane.Derive` includes `Hegel.Derive`, swaps the char pair
+6. **`~portable`**: `[@@deriving hegel_generator ~portable]` wraps every
+   combinator the deriver emits (`composite`, `composite_with_label`,
+   `sampled_from`, `with_printer`, and each applied parameterized generator
+   such as `hegel_generator_list`) in `[@mode portable]`, and marks the
+   generated `val` portable in a signature
+   (`Ppx_compat.portable_value_description`, a no-op off OxCaml). The value
+   keeps its name: a portable value also serves nonportable code. A component
+   (`M.hegel_generator`, an override) that is not portable is a compile error
+   at the use site. A parameterized generator used under `~portable` must be a
+   template, as `Hegel.Derive`'s `list`/`option` are. Opt-in, so a user who
+   derives without it meets no modes.
+7. **Jane**: `Hegel_jane.Derive` includes `Hegel.Derive`, swaps the char pair
    to the `Core.Char` flavor, and adds wrapper modules (`Date`, `Time_ns`,
    `Time_ns.Span`) that include their Core counterparts plus a
    `hegel_generator`. A field must be typed with the wrapper path (`Date.t`,
@@ -693,8 +707,26 @@ Under OxCaml (`#ifdef OXCAML`, set by the `cppo-flags` rule in `lib/dune`
 and `lib/ffi/dune`) the library is mode-checked so a concurrent rule body can
 be `portable`. Upstream OCaml builds the same sources with the annotations
 stripped; every file carrying mode syntax is a cppo `.in`. Macros:
-`PORTABLE` = `@@ portable` (field modality), `PFN` = `@ portable` (function
-parameter or return mode), `CROSSING` = `: value mod portable contended`.
+`PORTABLE` = `@@ portable` (field modality), `PFN`/`PRET` = `@ portable`,
+`AT(m)` = `@ m` (a template's mode variable), `CROSSING` = `: value mod
+contended` in the generator files.
+
+Portability is opt-in through `ppx_template` (`let%template`/`val%template`
+with `[@@mode m = (nonportable, portable)]`): each combinator that takes a
+caller's closure or generator is written once and compiled at both modes, and
+a caller picks the portable instance with `(map [@mode portable])`.
+`just`/`sampled_from` template the element kind as well
+(`[@@mode (m, c) = ((nonportable, uncontended), (portable, contended))]`),
+so the plain instance takes any type. ppx_template names the portable
+instance `f__portable` (the kind axis adds nothing), so references inside
+`(m, c)` templates use `[@mode m]`. The primitives are not templated: they
+return `PRET`. `ppx_template` exists only for OxCaml, so the
+`hegel.template` ppx (`lib/template/`) `select`s it when installed and
+otherwise links a rewriter that strips the `%template` marker; upstream OCaml
+ignores the remaining `[@mode]` attributes. `lib/`, `lib/jane/`, `test/`, and
+both hegel PPXes list `hegel.template`, the PPXes so users get
+`[@mode portable]` without adding `ppx_template` themselves. cppo still
+guards the syntax upstream cannot parse (`@ m`, kind annotations).
 
 - **Interfaces.** `hegel.mli.in`, `generators.mli.in`, `internal.mli.in`,
   `settings.mli.in`, `derive.mli.in`, `ffi.mli.in`, and
@@ -706,19 +738,15 @@ parameter or return mode), `CROSSING` = `: value mod portable contended`.
   `Pool`/`Rule`/`Invariant`/`Concurrent_rule` submodules (`PORTABLE`); the
   runners (`run`, `run_concurrent`, …) stay nonportable since they reference
   `Concurrency.threads`, which uses `Thread.create`.
-  Function-typed parameters that end up stored in a generator (`map`,
-  `flat_map`, `filter`, `composite`, `with_printer`, `leaf ~draw ~sexp_of`,
-  `make_*`, `functions* ?sexp_of_arg*`, `Pool.create ~clone`) are `PFN`;
-  `printer` returns `PFN`. `just`, `sampled_from`, `Int_pool.t`, `Pool.t`
-  constrain their element type to `value mod portable contended`: the value
-  is captured by a closure and read back from a contended context.
-- **Types that cross.** `Generators_core.core`/`generator` are declared
-  `CROSSING`, which holds because every closure field carries `PORTABLE`
-  (`Leaf.draw`, `Mapped.f`, `FlatMapped.f`, `Filtered.predicate`,
-  `Composite.generate_fn`, `Values.select`, `Function.build`,
-  `Printable.sexp_of`). So a module-level generator is portable and a rule
-  body may capture it; a `map` whose closure touches a `ref` is rejected at
-  the `map` call. `Internal.test_case` is `CROSSING` too: handles cross (see
+  `Int_pool_concurrent.t` / `Concurrent_pool.t` constrain their element type
+  to `value mod portable contended` and take a portable `clone`; the
+  sequential `Int_pool`/`Pool` constrain nothing.
+- **Types that cross.** `Generators_core.core`/`generator` cross contention
+  only: a generator holds no mutable state, so a rule body can read one it
+  captured, but whether it is portable depends on the closures it was built
+  from, which the template instance records. A record built from portable
+  fields is portable, so each portable instance is compiler-checked with no
+  cast. `Internal.test_case` crosses portability and contention: handles cross (see
   below), `test_aborted`/`draw_depth` are `Atomic.t`, the draw-name table and
   the `owned` record are `Locked.t` (declared `value mod portable contended`
   in `locked.mli.in`; `protect`'s result type must cross since it leaves the

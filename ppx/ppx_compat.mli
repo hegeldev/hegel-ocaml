@@ -68,3 +68,7 @@ val map_let_value_bindings
   :  (value_binding list -> value_binding list)
   -> expression
   -> expression
+
+(** [portable_value_description vd] marks [vd] portable. On OxCaml, adds the
+    [portable] modality. Elsewhere, returns [vd] unchanged. *)
+val portable_value_description : value_description -> value_description

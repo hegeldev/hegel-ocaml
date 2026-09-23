@@ -12,11 +12,12 @@
   test_generators_collections
   test_generators_combinators
   test_generators_functions
+  test_generators_portable
   test_stateful
   test_loader)
  (libraries hegel hegel_ffi alcotest core core_unix ipaddr threads.posix)
  (preprocess
-  (pps ppx_js_style -- -allow-unannotated-ignores))
+  (pps ppx_js_style hegel.template -- -allow-unannotated-ignores))
  (foreign_stubs
   (language c)
   (names unsetenv_stubs)))

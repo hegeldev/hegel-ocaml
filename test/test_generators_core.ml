@@ -297,21 +297,19 @@ let test_printer_optional_none () =
   check_printer "optional none" (optional (integers ())) None "()"
 ;;
 
-module Pool_gen = Int_pool
-
 let test_resolve_draw () =
   let tbl = Int_table.create 4 in
   Int_table.replace tbl 7 "v";
   (* consume:false keeps the entry *)
-  Alcotest.(check string) "draw" "v" (Pool_gen.resolve_draw tbl ~consume:false 7);
+  Alcotest.(check string) "draw" "v" (resolve_draw tbl ~consume:false 7);
   Alcotest.(check int) "still present" 1 (Int_table.length tbl);
   (* consume:true removes it *)
-  Alcotest.(check string) "consume" "v" (Pool_gen.resolve_draw tbl ~consume:true 7);
+  Alcotest.(check string) "consume" "v" (resolve_draw tbl ~consume:true 7);
   Alcotest.(check int) "removed" 0 (Int_table.length tbl);
   (* unknown id raises Flaky_strategy *)
   let raised =
     try
-      ignore (Pool_gen.resolve_draw tbl ~consume:false 99 : string);
+      ignore (resolve_draw tbl ~consume:false 99 : string);
       false
     with
     | Internal.Flaky_strategy -> true

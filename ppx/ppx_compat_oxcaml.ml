@@ -75,3 +75,7 @@ let map_let_value_bindings f e =
     { e with pexp_desc = Pexp_let (mut, rec_flag, f vbs, body) }
   | _ -> e
 ;;
+
+let portable_value_description vd =
+  { vd with pval_modalities = [ { txt = Modality "portable"; loc = vd.pval_loc } ] }
+;;

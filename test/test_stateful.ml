@@ -692,9 +692,9 @@ let pool_parallel_adds_test ~concurrency () =
   let add =
     S.Concurrent_rule.create
       ~name:"add"
-      ~step:(fun tc () ((pool, next) : int S.Pool.t * int Atomic.t) ->
+      ~step:(fun tc () ((pool, next) : int S.Concurrent_pool.t * int Atomic.t) ->
         let value = Atomic.fetch_and_add next 1 in
-        S.Pool.add pool tc value)
+        S.Concurrent_pool.add pool tc value)
       ()
   in
   Hegel.run_hegel_test
@@ -703,14 +703,14 @@ let pool_parallel_adds_test ~concurrency () =
         database = Hegel.Settings.Disabled
       }
     (fun tc ->
-       let pool = S.Pool.create tc in
+       let pool = S.Concurrent_pool.create tc in
        let next = Atomic.make 0 in
        S.run_concurrent
          ~concurrency
          tc
          (module struct
            type ctx = unit
-           type state = int S.Pool.t * int Atomic.t
+           type state = int S.Concurrent_pool.t * int Atomic.t
 
            let rules = [ add ]
            let invariants = []
@@ -720,10 +720,23 @@ let pool_parallel_adds_test ~concurrency () =
          ~min_concurrency:8
          ~max_concurrency:8;
        let value_count = Atomic.get next in
-       Alcotest.(check int) "all additions retained" value_count (S.Pool.size pool);
+       Alcotest.(check int)
+         "all additions retained"
+         value_count
+         (S.Concurrent_pool.size pool);
+       (* a reusable draw leaves the pool as it found it *)
+       let reused = Hegel.draw_silent tc (S.Concurrent_pool.values_reusable pool) in
+       Alcotest.(check bool)
+         "reusable draw returns an added value"
+         true
+         (reused >= 0 && reused < value_count);
+       Alcotest.(check int)
+         "reusable draw does not consume"
+         value_count
+         (S.Concurrent_pool.size pool);
        let consumed =
          List.init value_count ~f:(fun _ ->
-           Hegel.draw_silent tc (S.Pool.values_consumed pool))
+           Hegel.draw_silent tc (S.Concurrent_pool.values_consumed pool))
          |> List.sort ~compare:Int.compare
        in
        Alcotest.(check (list int))
@@ -745,8 +758,8 @@ let pool_parallel_consumes_test ~concurrency () =
   let consume =
     S.Concurrent_rule.create
       ~name:"consume"
-      ~step:(fun tc () ((pool, consumed) : int S.Pool.t * int list Atomic.t) ->
-        let value = Hegel.draw_silent tc (S.Pool.values_consumed pool) in
+      ~step:(fun tc () ((pool, consumed) : int S.Concurrent_pool.t * int list Atomic.t) ->
+        let value = Hegel.draw_silent tc (S.Concurrent_pool.values_consumed pool) in
         atomic_push consumed value)
       ()
   in
@@ -756,15 +769,15 @@ let pool_parallel_consumes_test ~concurrency () =
         database = Hegel.Settings.Disabled
       }
     (fun tc ->
-       let pool = S.Pool.create tc in
-       List.iter (List.range 0 initial_size) ~f:(S.Pool.add pool tc);
+       let pool = S.Concurrent_pool.create tc in
+       List.iter (List.range 0 initial_size) ~f:(S.Concurrent_pool.add pool tc);
        let consumed : int list Atomic.t = Atomic.make [] in
        S.run_concurrent
          ~concurrency
          tc
          (module struct
            type ctx = unit
-           type state = int S.Pool.t * int list Atomic.t
+           type state = int S.Concurrent_pool.t * int list Atomic.t
 
            let rules = [ consume ]
            let invariants = []
@@ -782,10 +795,10 @@ let pool_parallel_consumes_test ~concurrency () =
        Alcotest.(check int)
          "size tracks successful consumes"
          (initial_size - consumed_count)
-         (S.Pool.size pool);
+         (S.Concurrent_pool.size pool);
        let remaining =
          List.init (initial_size - consumed_count) ~f:(fun _ ->
-           Hegel.draw_silent tc (S.Pool.values_consumed pool))
+           Hegel.draw_silent tc (S.Concurrent_pool.values_consumed pool))
        in
        Alcotest.(check (list int))
          "consumed and remaining values partition the initial pool"
@@ -802,11 +815,14 @@ let pool_parallel_adds_and_consumes_test ~concurrency () =
         (fun
           tc
           ()
-          ((pool, next, consumed) : int S.Pool.t * int Atomic.t * int list Atomic.t) ->
+          ((pool, next, consumed) :
+            int S.Concurrent_pool.t * int Atomic.t * int list Atomic.t) ->
         let value = Atomic.fetch_and_add next 1 in
-        S.Pool.add pool tc value;
+        S.Concurrent_pool.add pool tc value;
         Domain.cpu_relax ();
-        let consumed_value = Hegel.draw_silent tc (S.Pool.values_consumed pool) in
+        let consumed_value =
+          Hegel.draw_silent tc (S.Concurrent_pool.values_consumed pool)
+        in
         atomic_push consumed consumed_value)
       ()
   in
@@ -816,7 +832,7 @@ let pool_parallel_adds_and_consumes_test ~concurrency () =
         database = Hegel.Settings.Disabled
       }
     (fun tc ->
-       let pool = S.Pool.create tc in
+       let pool = S.Concurrent_pool.create tc in
        let next = Atomic.make 0 in
        let consumed : int list Atomic.t = Atomic.make [] in
        S.run_concurrent
@@ -824,7 +840,7 @@ let pool_parallel_adds_and_consumes_test ~concurrency () =
          tc
          (module struct
            type ctx = unit
-           type state = int S.Pool.t * int Atomic.t * int list Atomic.t
+           type state = int S.Concurrent_pool.t * int Atomic.t * int list Atomic.t
 
            let rules = [ exchange ]
            let invariants = []
@@ -843,7 +859,7 @@ let pool_parallel_adds_and_consumes_test ~concurrency () =
          "each added value was consumed exactly once"
          (List.range 0 value_count)
          (List.sort consumed ~compare:Int.compare);
-       Alcotest.(check int) "pool is empty" 0 (S.Pool.size pool))
+       Alcotest.(check int) "pool is empty" 0 (S.Concurrent_pool.size pool))
 ;;
 
 exception Concurrent_boom of int
