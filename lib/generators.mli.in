@@ -925,8 +925,8 @@ module Int_pool : sig
   val add : 'a t -> Internal.test_case -> 'a -> unit
   val size : _ t -> int
 
-  (** Reusable draws use the pool's clone function under its lock, if present.
-      Consumed draws return the stored value directly. *)
+  (** Reusable draws apply the pool's clone function. Consumed draws return
+      the stored value directly. *)
   val pool_values : 'a t -> consume:bool -> ('a, unprintable) generator
 end
 

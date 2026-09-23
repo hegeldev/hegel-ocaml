@@ -3,7 +3,7 @@
 This page lists every public signature that has a mode in OxCaml. Only
 concurrent state machines need modes.
 
-A concurrent rule body is portable. Each combinator has a portable version, 
+A concurrent rule body is portable. Each combinator has a portable version,
 which you select with [[@mode portable]]:
 
 {[
@@ -21,6 +21,11 @@ portable. [[@@deriving hegel_generator ~portable]] derives a portable generator:
     }
   [@@deriving hegel_generator ~portable]
 ]}
+
+[[@mode portable]] requires [ppx_template] in the [pps] of the dune stanza
+that builds the code. [ppx_template] is included in [ppx_jane], [ppx_hegel_test] 
+or [ppx_hegel_generator]. Without it, OxCaml ignores the attribute and uses the
+nonportable version.
 
 {1 Module-level defaults}
 

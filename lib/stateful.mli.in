@@ -1,8 +1,10 @@
 #ifdef OXCAML
 #define MODE(m) @ m
+#define KIND(k) : k
 #define PORTABLE @@ portable
 #else
 #define MODE(m)
+#define KIND(k)
 #define PORTABLE
 #endif
 (** {2 Introduction}
@@ -73,7 +75,7 @@
     {!Concurrency.threads}, which puts workers on systhreads. See {!Concurrency}
     for more details.
 
-    A concurrent rule takes a context after the test case. If using {!Concurrency.threads} 
+    A concurrent rule takes a context after the test case. If using {!Concurrency.threads}
     or {!Concurrency.domains} it is [()]. A capability wrapping a scheduler passes
     the scheduler's per-task handle. This can be used by the system under test or the rule
     to spawn its own tasks.
@@ -228,9 +230,9 @@
 
     On OxCaml only concurrent machines have modes.
 
-    A concurrent rule body is portable, so generators inside it must be portable.
-    See {{!page-oxcaml_api}Mode-annotated API} for every public signature that 
-    has a mode. A concurrent machine must use {!Concurrent_pool} for pools.
+    A concurrent rule body is portable, so a generator it captures must be
+    portable. See {{!page-oxcaml_api}Mode-annotated API} for every public
+    signature that has a mode. A concurrent machine must use {!Concurrent_pool} for pools.
 
     The [~concurrency] capability and context are [@ local]. See also
     {{!page-hegel_jane_concurrent}hegel.jane.concurrent}. *)
@@ -326,11 +328,7 @@ end
 
 module Concurrent_pool : sig PORTABLE
   (** A thread-safe pool of previously generated values. *)
-#ifdef OXCAML
-  type ('a : value mod portable contended) t : value mod portable contended
-#else
-  type 'a t
-#endif
+  type ('a KIND(value mod portable contended)) t KIND(value mod portable contended)
 
   (** Creates an empty pool. Pools are tied to a test case. Do not reuse one
       across test cases. Drawn mutable values are shared by default. Pass a
@@ -455,7 +453,7 @@ module Concurrent_rule : sig PORTABLE
       - [name] is printed in the final output when the rule is run.
       - [step tc ctx state] performs one application of the rule, drawing any
         arguments it needs from [tc] and updating [state] in place. [ctx] is
-        the context the concurrency capability gives the worker. [tc] and [ctx] 
+        the context the concurrency capability gives the worker. [tc] and [ctx]
         are valid only for that step.
 
       With the PPX, a concurrent rule takes the following options:
@@ -563,7 +561,7 @@ val run_internal
 
 (**/**)
 
-(** A state machine whose rules may run concurrently. [ctx] is the concurrency 
+(** A state machine whose rules may run concurrently. [ctx] is the concurrency
     context its rules take. *)
 module type Concurrent_state_machine = sig
   type ctx
