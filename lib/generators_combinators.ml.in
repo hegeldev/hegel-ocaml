@@ -97,16 +97,6 @@ let%template optional (element : ('a, printable) generator MODE(m))
 [@@mode m = (nonportable, portable)]
 ;;
 
-(** [ip_addresses ?version ()] creates a generator for typed [Ipaddr.t] IP
-    addresses.
-
-    - [version = Some `V4]: generates IPv4 addresses (RFC 791).
-    - [version = Some `V6]: generates IPv6 addresses (RFC 4291).
-    - [version = None] (default): generates either version.
-
-    The engine returns the address's raw network-order bytes, which [ipaddr]
-    parses into a typed value; render with [Ipaddr.to_string] (RFC 5952
-    canonical form for v6). *)
 #ifdef OXCAML
 (* The ipaddr library has no mode annotations. *)
 let ipaddr_to_string = Obj.magic_portable Ipaddr.to_string
@@ -118,6 +108,16 @@ let ipaddr_v4_of_octets_exn = Ipaddr.V4.of_octets_exn
 let ipaddr_v6_of_octets_exn = Ipaddr.V6.of_octets_exn
 #endif
 
+(** [ip_addresses ?version ()] creates a generator for typed [Ipaddr.t] IP
+    addresses.
+
+    - [version = Some `V4]: generates IPv4 addresses (RFC 791).
+    - [version = Some `V6]: generates IPv6 addresses (RFC 4291).
+    - [version = None] (default): generates either version.
+
+    The engine returns the address's raw network-order bytes, which [ipaddr]
+    parses into a typed value; render with [Ipaddr.to_string] (RFC 5952
+    canonical form for v6). *)
 let ip_addresses ?version () : _ MODE(portable) =
   let sexp_of ip = Sexp.Atom (ipaddr_to_string ip) in
   let v4 tc = Ipaddr.V4 (ipaddr_v4_of_octets_exn (Internal.generate_ipv4 tc)) in

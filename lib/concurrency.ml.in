@@ -1,13 +1,17 @@
-type outcome = (exn * Printexc.raw_backtrace) option
 #ifdef OXCAML
+#define MODE(m) @ m
+#else
+#define MODE(m)
+#endif
+
+type outcome = (exn * Printexc.raw_backtrace) option
+
 type 'ctx t =
   { spawn_join_n :
       n:int
-      -> (f:('ctx @ local -> int -> outcome) @ portable -> outcome list @ contended) @ local
+      -> (f:('ctx MODE(local) -> int -> outcome) MODE(portable) -> outcome list MODE(contended))
+         MODE(local)
   }
-#else
-type 'ctx t = { spawn_join_n : n:int -> f:('ctx -> int -> outcome) -> outcome list }
-#endif
 
 (* we use an outcome list because arrays are contended in OxCaml *)
 
