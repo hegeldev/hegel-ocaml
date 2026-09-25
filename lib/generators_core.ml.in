@@ -5,11 +5,13 @@ module Sexp = Sexplib0.Sexp
 #define MODE(m) @ m
 #define KIND(k) : k
 #define PORTABLE @@ portable
+#define MODALITY(m) @@ m
 #else
 #define CROSSING
 #define MODE(m)
 #define KIND(k)
 #define PORTABLE
+#define MODALITY(m)
 #endif
 
 (** Span labels. A label identifies a generator to the engine, which treats
@@ -424,30 +426,40 @@ module Int_pool = struct
   ;;
 end
 
-(** [Int_pool_concurrent] is the thread-safe pool for a concurrent machine *)
-module Int_pool_concurrent = struct
-  module Tbl = Int_table
+#ifdef OXCAML
+module%template [@mode portable] Lock = Locked
+module%template [@mode nonportable] Lock = Locked.Nonportable
+#else
+module Lock = Locked
+#endif
 
-  type ('a KIND(value mod portable contended)) t KIND(value mod portable contended) =
+(** [Int_pool_concurrent] is the thread-safe pool for a concurrent machine. Its
+    portable instance locks with a capsule, and its nonportable one with a
+    mutex. *)
+module%template Int_pool_concurrent = struct
+  module Tbl = Int_table
+  module L = Lock [@mode m]
+
+  type ('a KIND(value mod m c)) t KIND(value mod m c) =
     { pool : Internal.pool
-    ; values : 'a Tbl.t Locked.t
-    ; clone : ('a -> 'a) PORTABLE
+    ; values : 'a Tbl.t L.t
+    ; clone : ('a -> 'a) MODALITY(m)
     }
 
   let create tc ~clone =
     { pool = Internal.new_pool tc
-    ; values = Locked.create (fun () -> Tbl.create 16)
+    ; values = L.create (fun () -> Tbl.create 16)
     ; clone
     }
   ;;
 
   let add t tc value =
-    Locked.protect t.values (fun values ->
+    L.protect t.values (fun values ->
       let variable_id = Internal.pool_add tc ~pool:t.pool in
       Tbl.replace values variable_id value)
   ;;
 
-  let size t = Locked.protect t.values Tbl.length
+  let size t = L.protect t.values Tbl.length
 
   let pool_values { pool; values; clone } ~consume =
     let clone = if consume then Fun.id else clone in
@@ -457,7 +469,7 @@ module Int_pool_concurrent = struct
             { pool
             ; select =
                 (fun tc ->
-                  Locked.protect values (fun values ->
+                  L.protect values (fun values ->
                     pick
                       tc
                       ~find:(fun id -> Option.map clone (Tbl.find_opt values id))
@@ -469,6 +481,7 @@ module Int_pool_concurrent = struct
       }
   ;;
 end
+[@@mode (m, c) = ((portable, contended), (nonportable, uncontended))]
 
 (** [do_draw core data] produces a typed value from generation structure [core]
     using the given test case [data]. *)

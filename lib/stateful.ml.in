@@ -25,7 +25,7 @@
 #endif
 
 module Pool_gen = Generators.Int_pool
-module Concurrent_pool_gen = Generators.Int_pool_concurrent
+module Concurrent_pool_gen = Generators.Int_pool_concurrent [@mode portable]
 
 module Pool = struct
   type 'a t = 'a Pool_gen.t

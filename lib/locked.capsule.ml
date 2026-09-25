@@ -26,3 +26,13 @@ let protect (type (b : value mod contended portable)) (Locked (mutex, data)) f :
   | Ok result -> result
   | Error (exn, backtrace) -> Printexc.raise_with_backtrace exn backtrace
 ;;
+
+module Nonportable = struct
+  type 'a t =
+    { lock : Mutex.t
+    ; value : 'a
+    }
+
+  let create init = { lock = Mutex.create (); value = init () }
+  let protect t f = Mutex.protect t.lock (fun () -> f t.value)
+end
