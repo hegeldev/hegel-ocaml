@@ -1,0 +1,11 @@
+; The optional Async companion library: hegel's Io functor applied to Async.
+
+(library
+ (name hegel_jane_async)
+ (public_name hegel.jane.async)
+ (optional)
+ (libraries hegel async)
+ (preprocess
+  (pps ppx_js_style))
+ (instrumentation
+  (backend bisect_ppx)))

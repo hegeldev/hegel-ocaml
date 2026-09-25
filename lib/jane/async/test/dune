@@ -1,0 +1,6 @@
+(executable
+ (name test_hegel_jane_async)
+ (optional)
+ (libraries hegel hegel_jane_async alcotest async core)
+ (preprocess
+  (pps ppx_js_style -- -allow-unannotated-ignores)))

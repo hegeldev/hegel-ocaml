@@ -16,6 +16,7 @@
    (capsule0.prim capsule0.blocking_sync -> locked.capsule.ml)
    (-> locked.mutex.ml)))
  (private_modules
+  io
   locked
   generators_core
   generators_primitives

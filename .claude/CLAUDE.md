@@ -83,6 +83,12 @@ lib/                         # Library source
                              #   run_internal/run_concurrent_internal take the lists
                              #   directly and are what the PPX-generated run calls.
                              #   Rule and invariant bodies run on indent-2 block handles
+  io.ml / io.mli             # Hegel.Io + Hegel.Make: the functor over how a body
+                             #   returning ['a t] is waited on (run_loop hands the
+                             #   engine loop a [wait]). Make's run_hegel_test and
+                             #   sequential Stateful wrap each body with [wait] and
+                             #   call the existing runners; Hegel itself does not
+                             #   use it. Private module, re-exported from hegel.ml
   concurrency.ml.in/.mli.in  # Hegel.Concurrency: the capability record
                              #   (spawn_join_n), threads (the default) and, upstream
                              #   only (#ifndef OXCAML), the pooled domains
@@ -94,6 +100,14 @@ lib/                         # Library source
                              #   test/ dir, gated behind HEGEL_SKIP_JANE_TESTS in
                              #   check-tests-no-coverage since it needs the core/
                              #   sexp_diff opam depopts — see justfile)
+    async/                   # Optional hegel.jane.async sublibrary (async depopt):
+      hegel_jane_async       #   Async_io (run_loop captures the execution context,
+        .ml/.mli, test/      #   In_thread.run's the engine loop, and blocks each body
+                             #   on the scheduler with the Jane Street bridge's
+                             #   block_on + Monitor.extract_exn) and
+                             #   include Hegel.Make (Async_io). Builds on both
+                             #   compilers; instrumented + coverage-gated; its
+                             #   suite is skipped with HEGEL_SKIP_JANE_TESTS
     concurrent/              # Optional hegel.jane.concurrent sublibrary (OxCaml
       hegel_jane_concurrent  #   only: depends on Jane Street's concurrent; a
         .ml/.mli, test/      #   sibling of hegel.jane, which must keep building
