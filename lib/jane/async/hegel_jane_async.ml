@@ -19,9 +19,9 @@ module Async_io = struct
   type body = unit -> unit t
   type wait = body -> unit
 
-  let run_loop loop =
+  let run_loop (loop : wait -> unit) : unit t =
     let execution_context = Scheduler.current_execution_context () in
-    In_thread.run (fun () -> loop (fun body -> block_on ~execution_context body))
+    In_thread.run (fun () -> loop (fun (body : body) -> block_on ~execution_context body))
   ;;
 end
 
