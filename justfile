@@ -28,8 +28,10 @@ check-tests:
     dune runtest lib/jane/test --instrument-with bisect_ppx --force
     dune build --instrument-with bisect_ppx ppx/test/test_ppx_derive_jane.exe
     ./_build/default/ppx/test/test_ppx_derive_jane.exe
-    dune build --instrument-with bisect_ppx lib/jane/async/test/test_hegel_jane_async.exe
+    dune build --instrument-with bisect_ppx lib/jane/async/test/test_hegel_jane_async.exe \
+      ppx/test/test_ppx_hegel_test_async.exe
     ./_build/default/lib/jane/async/test/test_hegel_jane_async.exe
+    ./_build/default/ppx/test/test_ppx_hegel_test_async.exe
     python3 scripts/check-coverage.py
     
 format:
@@ -94,8 +96,10 @@ check-tests-no-coverage:
       dune runtest lib/jane/test --force
       dune build ppx/test/test_ppx_derive_jane.exe
       ./_build/default/ppx/test/test_ppx_derive_jane.exe
-      dune build lib/jane/async/test/test_hegel_jane_async.exe
+      dune build lib/jane/async/test/test_hegel_jane_async.exe \
+        ppx/test/test_ppx_hegel_test_async.exe
       ./_build/default/lib/jane/async/test/test_hegel_jane_async.exe
+      ./_build/default/ppx/test/test_ppx_hegel_test_async.exe
     fi
     dune runtest lib/jane/concurrent/test --force
 

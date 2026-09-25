@@ -309,6 +309,13 @@ the expanded module need not declare `type state` and the public
 the module's own when it binds one or derives it on `type state`
 (`defines_sexp_of_state`). The markers are stripped from the emitted items,
 every other item is kept, and a module with no `[@@rule]` is a compile error.
+`[@async]` before the name (`let%hegel_test [@async] t tc`,
+`module%hegel_state_machine [@async] M`; the trailing `[@@async]` is the same
+AST and works too, undocumented) swaps the `Hegel` prefix in every generated
+name for `Hegel_jane_async` (`runner_prefix`: `run_hegel_test_ppx`,
+`Stateful.Rule.create`/`Invariant.create`/`run_internal`), so bodies return
+`unit Deferred.t`; the concurrent form rejects it. Its tests are the optional
+`ppx/test/test_ppx_hegel_test_async.exe`, run from the justfile jane blocks.
 Marked bodies get the same draw-name injection as a test body, judged at
 depth 0. A rule or invariant body runs in its own naming scope each step (see
 Pretty printing), so `let n = draw tc g` prints as `n`, not `n_1`. Invariants

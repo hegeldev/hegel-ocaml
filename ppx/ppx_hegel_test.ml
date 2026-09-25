@@ -60,6 +60,13 @@
     whose capability must supply that context. Otherwise, [type ctx = unit] and
     [concurrency] defaults to [Hegel.Concurrency.threads].
 
+    [[@async]] before the name, as in [let%hegel_test [@async] my_test tc = ...]
+    or [module%hegel_state_machine [@async] M = struct ... end], makes the test
+    body, rules, and invariants return [unit Deferred.t], and routes the
+    generated calls through [Hegel_jane_async] instead of [Hegel]. The
+    produced test is [unit -> unit Deferred.t]. It is not supported on
+    [module%hegel_concurrent_state_machine] yet.
+
     In a test body and in a marked rule or invariant body, a
     [let x = draw tc gen] binding has its name injected so the drawn value
     prints as [x = value]. *)
@@ -126,6 +133,26 @@ let invariant_attribute =
     Fun.id
 ;;
 
+let async_test_attribute =
+  Attribute.declare
+    "hegel.async"
+    Attribute.Context.value_binding
+    Ast_pattern.(pstr nil)
+    ()
+;;
+
+let async_machine_attribute =
+  Attribute.declare
+    "hegel.async"
+    Attribute.Context.module_binding
+    Ast_pattern.(pstr nil)
+    ()
+;;
+
+(** [runner_prefix ~async] is the module the generated code runs through:
+    [Hegel], or [Hegel_jane_async] when the item is marked [[@async]]. *)
+let runner_prefix ~async = if async then "Hegel_jane_async" else "Hegel"
+
 let consume attr node =
   match Attribute.consume attr node with
   | Some (node, payload) -> node, Some payload
@@ -178,17 +205,18 @@ let set_attributes (attrs : attributes) (item : structure_item) : structure_item
 
     [attrs] are the attributes of the original binding that the expander did not
     consume. *)
-let build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn ~attrs
+let build_items ~loc ~function_name ~settings_expr ~failure_blobs ~body_fn ~attrs ~async
   : structure_item list
   =
   let loc = { loc with loc_ghost = true } in
   let location_record = build_location_record ~loc ~function_name in
+  let run =
+    Ast_builder.Default.evar ~loc (runner_prefix ~async ^ ".run_hegel_test_ppx")
+  in
   let base_call =
     match settings_expr with
-    | Some s ->
-      [%expr
-        Hegel.run_hegel_test_ppx ~settings:[%e s] ~test_location:[%e location_record]]
-    | None -> [%expr Hegel.run_hegel_test_ppx ~test_location:[%e location_record]]
+    | Some s -> [%expr [%e run] ~settings:[%e s] ~test_location:[%e location_record]]
+    | None -> [%expr [%e run] ~test_location:[%e location_record]]
   in
   let call =
     match failure_blobs with
@@ -380,6 +408,7 @@ let expand_value_binding ~loc (vb : value_binding) : structure_item list =
   let function_name = extract_function_name ~what:"test" vb.pvb_pat in
   let vb, settings_expr = consume settings_attribute vb in
   let vb, failure_blobs = consume failure_blobs_attribute vb in
+  let vb, async = consume async_test_attribute vb in
   let failure_blobs =
     Option.map
       (fun (attr_loc, blobs) ->
@@ -401,6 +430,7 @@ let expand_value_binding ~loc (vb : value_binding) : structure_item list =
     ~failure_blobs
     ~body_fn
     ~attrs:vb.pvb_attributes
+    ~async:(Option.is_some async)
 ;;
 
 (** A marker attribute on a binding inside a [module%hegel_state_machine]. *)
@@ -526,6 +556,19 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
   let extension_name =
     if concurrent then "hegel_concurrent_state_machine" else "hegel_state_machine"
   in
+  let mb, async = consume async_machine_attribute mb in
+  let async = Option.is_some async in
+  if async && concurrent
+  then
+    Location.raise_errorf
+      ~loc
+      "ppx_hegel_test: [@async] is not supported on \
+       module%%hegel_concurrent_state_machine yet";
+  let stateful name =
+    Ast_builder.Default.evar
+      ~loc:{ loc with loc_ghost = true }
+      (runner_prefix ~async ^ ".Stateful." ^ name)
+  in
   let items =
     match mb.pmb_expr.pmod_desc with
     | Pmod_structure items -> items
@@ -572,7 +615,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
                ()]
          else
            [%expr
-             Hegel.Stateful.Rule.create
+             [%e stateful "Rule.create"]
                ~name:[%e estring ~loc name]
                ~weight:[%e efloat ~loc weight]
                ~step:[%e evar ~loc name]
@@ -583,7 +626,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
     List.map
       (fun (name, always_check) ->
          [%expr
-           Hegel.Stateful.Invariant.create
+           [%e stateful "Invariant.create"]
              ~name:[%e estring ~loc name]
              ~inv:[%e evar ~loc name]
              ~always_check:[%e ebool ~loc always_check]
@@ -625,7 +668,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
     else
       [%stri
         let run ?step_count ?sexp_of_state:override tc ~init =
-          Hegel.Stateful.run_internal
+          [%e stateful "run_internal"]
             ~init
             ~rules
             ~invariants

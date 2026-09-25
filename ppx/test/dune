@@ -52,3 +52,17 @@
    -allow-unannotated-ignores
    -check
    -locations-check)))
+
+(executable
+ (name test_ppx_hegel_test_async)
+ (modules test_ppx_hegel_test_async)
+ (optional)
+ (libraries hegel hegel_jane_async alcotest async core)
+ (preprocess
+  (pps
+   ppx_js_style
+   ppx_hegel_test
+   --
+   -allow-unannotated-ignores
+   -check
+   -locations-check)))

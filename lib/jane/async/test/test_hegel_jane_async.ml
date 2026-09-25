@@ -75,9 +75,7 @@ module Counter = struct
     ; buggify : bool
     }
 
-  let create ~buggify =
-    Scheduler.yield () >>| fun () -> { value = 0; calls = 0; buggify }
-  ;;
+  let create ~buggify = Scheduler.yield () >>| fun () -> { value = 0; calls = 0; buggify }
 
   let incr t =
     Scheduler.yield ()
