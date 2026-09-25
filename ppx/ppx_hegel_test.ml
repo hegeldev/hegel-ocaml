@@ -64,8 +64,10 @@
     or [module%hegel_state_machine [@async] M = struct ... end], makes the test
     body, rules, and invariants return [unit Deferred.t], and routes the
     generated calls through [Hegel_jane_async] instead of [Hegel]. The
-    produced test is [unit -> unit Deferred.t]. It is not supported on
-    [module%hegel_concurrent_state_machine] yet.
+    produced test is [unit -> unit Deferred.t]. On
+    [module%hegel_concurrent_state_machine] it needs OxCaml with Jane Street's
+    [concurrent] library. Its rules take [tc state], with no context, and its
+    [run] takes no [~concurrency].
 
     In a test body and in a marked rule or invariant body, a
     [let x = draw tc gen] binding has its name injected so the drawn value
@@ -558,12 +560,6 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
   in
   let mb, async = consume async_machine_attribute mb in
   let async = Option.is_some async in
-  if async && concurrent
-  then
-    Location.raise_errorf
-      ~loc
-      "ppx_hegel_test: [@async] is not supported on \
-       module%%hegel_concurrent_state_machine yet";
   let stateful name =
     Ast_builder.Default.evar
       ~loc:{ loc with loc_ghost = true }
@@ -603,7 +599,7 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
          if concurrent
          then
            [%expr
-             Hegel.Stateful.Concurrent_rule.create
+             [%e stateful "Concurrent_rule.create"]
                ?group:
                  [%e
                    match group with
@@ -640,6 +636,11 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
   let run =
     if concurrent
     then (
+      let run_concurrent =
+        if async
+        then stateful "run_concurrent_internal"
+        else [%expr [%e stateful "run_concurrent_internal"] ~concurrency]
+      in
       let body =
         [%expr
           fun ?min_concurrency
@@ -648,11 +649,10 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
             ?sexp_of_state:override
             tc
             ~init ->
-            Hegel.Stateful.run_concurrent_internal
+            [%e run_concurrent]
               ~init
               ~rules
               ~invariants
-              ~concurrency
               ?min_concurrency
               ?max_concurrency
               ?sexp_of_state:
@@ -662,7 +662,9 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
               ?step_count
               tc]
       in
-      if declares_ctx
+      if async
+      then [%stri let run = [%e body]]
+      else if declares_ctx
       then [%stri let run ~concurrency = [%e body]]
       else [%stri let run ?(concurrency = Hegel.Concurrency.threads) = [%e body]])
     else
@@ -681,7 +683,9 @@ let expand_state_machine ~concurrent ~loc (mb : module_binding) : structure_item
         ;;]
   in
   let generated =
-    (if concurrent && not declares_ctx then [ [%stri type ctx = unit] ] else [])
+    (if concurrent && (not async) && not declares_ctx
+     then [ [%stri type ctx = unit] ]
+     else [])
     @ [ [%stri let rules = [%e elist ~loc rule_exprs]]
       ; [%stri let invariants = [%e elist ~loc invariant_exprs]]
       ; run
