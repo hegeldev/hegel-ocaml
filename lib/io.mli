@@ -70,7 +70,11 @@ module Make (B : S) : sig
     (** A property that must always be true in a stateful test. See
         {!Hegel.Stateful.Invariant}. *)
     module Invariant : sig
-      type 'state t
+      type 'state t = private
+        { name : string
+        ; inv : Internal.test_case -> 'state -> unit B.t
+        ; always_check : bool
+        }
 
       (** Same as {!Hegel.Stateful.Invariant.create}, for an [inv] returning
           [unit B.t]. *)

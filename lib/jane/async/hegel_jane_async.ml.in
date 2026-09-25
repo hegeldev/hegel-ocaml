@@ -1,0 +1,163 @@
+open Async
+
+module Async_io = struct
+  let block_on ~execution_context body =
+    try
+      Thread_safe.block_on_async_exn (fun () ->
+        let execution_context =
+          Execution_context.create_like execution_context ~monitor:(Monitor.current ())
+        in
+        match Scheduler.within_context execution_context body with
+        | Ok result -> result
+        (* [within_context] already sent the exception to this monitor. *)
+        | Error () -> Deferred.never ())
+    with
+    | exn -> raise (Monitor.extract_exn exn)
+  ;;
+
+  type 'a t = 'a Deferred.t
+  type body = unit -> unit t
+  type wait = body -> unit
+
+  let run_loop (loop : wait -> unit) : unit t =
+    let execution_context = Scheduler.current_execution_context () in
+    In_thread.run (fun () -> loop (fun (body : body) -> block_on ~execution_context body))
+  ;;
+end
+
+module Sequential = Hegel.Make (Async_io)
+
+let run_hegel_test = Sequential.run_hegel_test
+let run_hegel_test_ppx = Sequential.run_hegel_test_ppx
+
+module Stateful = struct
+  include Sequential.Stateful
+
+#ifdef CONCURRENT
+  module Concurrent_rule = struct
+    type 'state t =
+      { name : string
+      ; group : string
+      ; weight : float
+      ; step : Hegel.test_case -> 'state -> unit Deferred.t
+      }
+
+    let create ?(group = "<anonymous>") ?(weight = 1.0) ~name ~step () =
+      { name; group; weight; step }
+    ;;
+
+    let name t = t.name
+    let group t = t.group
+    let weight t = t.weight
+  end
+
+  module type Concurrent_state_machine = sig
+    type state
+
+    val rules : state Concurrent_rule.t list
+    val invariants : state Invariant.t list
+  end
+
+  (* A body's Deferred failing goes to the enclosing monitor, not to the task
+     waiting on it, so run it under [try_with] and re-raise in the task. *)
+  let wait (await : Await.Await.t @ local) body =
+    match Await_in_async.await_deferred await (Monitor.try_with ~extract_exn:true body) with
+    | Ok () -> ()
+    | Error exn -> raise exn
+  ;;
+
+  let spawn_join_n
+        (conc @ local)
+        ~n
+        ~(f : Await.Await.t @ local -> int -> Hegel.Concurrency.outcome)
+    =
+    let outcomes = Array.make n None in
+    Concurrent.with_scope conc () ~f:(fun scope ->
+      for i = 0 to n - 1 do
+        Concurrent.spawn_onto_initial scope ~f:(fun _scope _access worker ->
+          outcomes.(i) <- f (Concurrent.await worker) i)
+      done);
+    Array.to_list outcomes
+  ;;
+
+  let run_concurrent_internal
+        ~init
+        ~rules
+        ~invariants
+        ?min_concurrency
+        ?max_concurrency
+        ?sexp_of_state
+        ?step_count
+        tc
+    =
+    Concurrent_in_async.schedule_with_concurrent Await.Terminator.unkillable ~f:(fun conc ->
+      Hegel.Stateful.run_concurrent_core
+        ~init
+        ~rule_names:(List.map Concurrent_rule.name rules)
+        ~rule_groups:(List.map Concurrent_rule.group rules)
+        ~rule_weights:(List.map Concurrent_rule.weight rules)
+        ~invariant_names:(List.map (fun (inv : _ Invariant.t) -> inv.name) invariants)
+        ~invariants_always_check:
+          (List.map (fun (inv : _ Invariant.t) -> inv.always_check) invariants)
+        ~check_invariant:(fun i tc ->
+          let inv = List.nth invariants i in
+          wait (Concurrent.await conc) (fun () -> inv.Invariant.inv tc init) [@nontail])
+        ~run_round:(fun ~state_machine ~num_workers ->
+          Hegel.Stateful.dispatch_round
+            (spawn_join_n conc)
+            tc
+            ~num_workers
+            ~work:(fun await ~worker_index tc ->
+              Hegel.Stateful.run_worker
+                tc
+                ~state_machine
+                ~worker_index
+                ~ctx:await
+                ~rule:(fun rule_index ->
+                  let rule = List.nth rules rule_index in
+                  ( rule.Concurrent_rule.name
+                  , fun tc await ->
+                      wait await (fun () -> rule.Concurrent_rule.step tc init) [@nontail] ))
+              [@nontail])
+          [@nontail])
+        ?min_concurrency
+        ?max_concurrency
+        ?sexp_of_state
+        ?step_count
+        tc [@nontail])
+  ;;
+
+  let run_concurrent
+        (type s)
+        ?min_concurrency
+        ?max_concurrency
+        ?step_count
+        ?sexp_of_state
+        tc
+        (module Machine : Concurrent_state_machine with type state = s)
+        ~(init : s)
+    =
+    run_concurrent_internal
+      ~init
+      ~rules:Machine.rules
+      ~invariants:Machine.invariants
+      ?min_concurrency
+      ?max_concurrency
+      ?sexp_of_state
+      ?step_count
+      tc
+  ;;
+
+  module Concurrent_pool = struct
+    module Gen = Hegel.Generators.Int_pool_concurrent
+
+    type 'a t = 'a Gen.t
+
+    let create ?(clone = Fun.id) tc = Gen.create tc ~clone
+    let add = Gen.add
+    let size = Gen.size
+    let values_reusable t = Gen.pool_values t ~consume:false
+    let values_consumed t = Gen.pool_values t ~consume:true
+  end
+#endif
+end

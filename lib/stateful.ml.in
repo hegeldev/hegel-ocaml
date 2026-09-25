@@ -6,7 +6,6 @@
 
 #ifdef OXCAML
 #define CONCURRENCY_PARAM ~(concurrency : _ Concurrency.t @ local)
-#define LOCAL_CONCURRENCY (concurrency : _ Concurrency.t @ local)
 #define LOCAL(x) (x @ local)
 #define LOCAL_CTX ~(ctx @ local)
 #define NONTAIL [@nontail] (* concurrency is captured as local so the stack frame can't be erased *)
@@ -15,7 +14,6 @@
 #define PORTABLE @@ portable
 #else
 #define CONCURRENCY_PARAM ~(concurrency : _ Concurrency.t)
-#define LOCAL_CONCURRENCY (concurrency : _ Concurrency.t)
 #define LOCAL(x) x
 #define LOCAL_CTX ~ctx
 #define NONTAIL
@@ -155,12 +153,23 @@ let run_worker tc ~state_machine ~worker_index LOCAL_CTX ~rule =
   ()
 ;;
 
-let dispatch_round LOCAL_CONCURRENCY tc ~num_workers ~work =
+let%template dispatch_round
+  (spawn_join_n :
+    (n:int
+     -> (f:('ctx MODE(local) -> int -> Concurrency.outcome) MODE(m)
+         -> Concurrency.outcome list MODE(c))
+        MODE(local))
+    MODE(local))
+  tc
+  ~num_workers
+  ~work
+  =
   let cases = init_worker_tcs tc ~num_workers in
-  concurrency.spawn_join_n ~n:num_workers ~f:(fun ctx worker_index ->
+  spawn_join_n ~n:num_workers ~f:(fun ctx worker_index ->
     match work ctx ~worker_index (List.nth cases worker_index) with
     | () -> None
     | exception exn -> Some (exn, Printexc.get_raw_backtrace ()))
+[@@mode (m, c) = ((portable, contended), (nonportable, uncontended))]
 ;;
 
 let reraise_worker_failure (outcomes : Concurrency.outcome list) =
@@ -417,7 +426,7 @@ let run_concurrent_internal
           let rule = List.nth rules rule_index in
           rule.Concurrent_rule.name, fun tc ctx -> rule.Concurrent_rule.step tc ctx init)
       in
-      dispatch_round concurrency tc ~num_workers ~work)
+      (dispatch_round [@mode portable]) concurrency.spawn_join_n tc ~num_workers ~work)
     ?min_concurrency
     ?max_concurrency
     ?sexp_of_state

@@ -1,0 +1,165 @@
+(** Hegel tests whose bodies are Async code.
+
+    A test body, rule, or invariant returns [unit Deferred.t]. Hegel waits on
+    each one before moving on. Test bodies run in the execution context of the
+    code that started the test.
+
+    {[
+    let test () =
+      Hegel_jane_async.run_hegel_test (fun tc ->
+        let n = Hegel.draw tc (Hegel.integers ~min_value:0 ~max_value:9 ()) in
+        Store.put_and_get store n >>| fun stored -> assert (stored = n))
+    ;;
+    ]}
+
+    Sequential state machines have rules and invariants that return [unit Deferred.t]:
+
+    {[
+    module Counter_machine = struct
+      type state =
+        { counter : Counter.t
+        ; mutable model : int
+        }
+
+      let rules =
+        [ Hegel_jane_async.Stateful.Rule.create
+            ~name:"incr"
+            ~step:(fun _tc s ->
+              s.model <- s.model + 1;
+              Counter.incr s.counter)
+            ()
+        ]
+      ;;
+
+      let invariants =
+        [ Hegel_jane_async.Stateful.Invariant.create
+            ~name:"matches"
+            ~inv:(fun _tc s -> Counter.read s.counter >>| fun n -> assert (n = s.model))
+            ()
+        ]
+      ;;
+    end
+
+    let test () =
+      Hegel_jane_async.run_hegel_test (fun tc ->
+        Counter.create ()
+        >>= fun counter ->
+        Hegel_jane_async.Stateful.run
+          tc
+          (module Counter_machine)
+          ~init:{ counter; model = 0 })
+    ;;
+    ]} *)
+
+(** Same as {!Hegel.run_hegel_test}, for a body returning [unit Deferred.t]. *)
+val run_hegel_test
+  :  ?settings:Hegel.Settings.t
+  -> ?test_location:Hegel.test_location
+  -> ?database_key:string
+  -> ?failure_blobs:string list
+  -> (Hegel.test_case -> unit Async.Deferred.t)
+  -> unit Async.Deferred.t
+
+(**/**)
+
+(** The [Hegel.Io] instance for Async. *)
+module Async_io : Hegel.Io with type 'a t = 'a Async.Deferred.t
+
+module Sequential : module type of struct
+  include Hegel.Make (Async_io)
+end
+
+(** Same as [Hegel.run_hegel_test_ppx]. The [let%hegel_test [@async]] PPX
+    targets it. *)
+val run_hegel_test_ppx
+  :  ?settings:Hegel.Settings.t
+  -> ?test_location:Hegel.test_location
+  -> ?database_key:string
+  -> ?failure_blobs:string list
+  -> (Hegel.test_case -> unit Async.Deferred.t)
+  -> unit Async.Deferred.t
+
+(**/**)
+
+(** Stateful testing with Async rules and invariants. On OxCaml with Jane
+    Street's [concurrent] library installed, it also has concurrent state
+    machines, whose workers on the Async scheduler. *)
+module Stateful : sig
+  include module type of struct
+    include Sequential.Stateful
+  end
+
+#ifdef CONCURRENT
+  (** One possible action in a concurrent stateful test. See
+      {!Hegel.Stateful.Concurrent_rule}. *)
+  module Concurrent_rule : sig
+    type 'state t
+
+    (** Same as {!Hegel.Stateful.Concurrent_rule.create}, for a [step] that takes
+        no context and returns [unit Deferred.t]. *)
+    val create
+      :  ?group:string
+      -> ?weight:float
+      -> name:string
+      -> step:(Hegel.test_case -> 'state -> unit Async.Deferred.t)
+      -> unit
+      -> 'state t
+
+    (** Returns the name of the rule. *)
+    val name : _ t -> string
+
+    (** Returns the concurrency group of the rule. *)
+    val group : _ t -> string
+
+    (** Returns the weight of the rule. *)
+    val weight : _ t -> float
+  end
+
+  (** A state machine whose Async rules may run concurrently. *)
+  module type Concurrent_state_machine = sig
+    type state
+
+    val rules : state Concurrent_rule.t list
+    val invariants : state Invariant.t list
+  end
+
+  (** Same as {!Hegel.Stateful.run_concurrent}, but each worker runs as a task
+      on the Async scheduler. *)
+  val run_concurrent
+    :  ?min_concurrency:int
+    -> ?max_concurrency:int
+    -> ?step_count:int
+    -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+    -> Hegel.test_case
+    -> (module Concurrent_state_machine with type state = 'state)
+    -> init:'state
+    -> unit Async.Deferred.t
+
+  (**/**)
+
+  (** [run_concurrent] with the rules and invariants passed as lists. *)
+  val run_concurrent_internal
+    :  init:'state
+    -> rules:'state Concurrent_rule.t list
+    -> invariants:'state Invariant.t list
+    -> ?min_concurrency:int
+    -> ?max_concurrency:int
+    -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+    -> ?step_count:int
+    -> Hegel.test_case
+    -> unit Async.Deferred.t
+
+  (**/**)
+
+  (** Nonportable version of {!Hegel.Stateful.Concurrent_pool} for OxCaml. *)
+  module Concurrent_pool : sig
+    type 'a t
+
+    val create : ?clone:('a -> 'a) -> Hegel.test_case -> 'a t
+    val add : 'a t -> Hegel.test_case -> 'a -> unit
+    val size : _ t -> int
+    val values_reusable : 'a t -> ('a, Hegel.unprintable) Hegel.generator
+    val values_consumed : 'a t -> ('a, Hegel.unprintable) Hegel.generator
+  end
+#endif
+end
