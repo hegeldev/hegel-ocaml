@@ -102,6 +102,13 @@ check-tests-no-coverage:
       ./_build/default/ppx/test/test_ppx_hegel_test_async.exe
     fi
     dune runtest lib/jane/concurrent/test --force
+    # Concurrent Async machines (OxCaml only), opt-in with
+    # HEGEL_CONCURRENT_TESTS=1 like lib/jane/concurrent/test.
+    dune runtest lib/jane/async/test --force
+    if [ "${HEGEL_CONCURRENT_TESTS:-}" = "1" ]; then
+      dune build ppx/test/test_ppx_hegel_test_async_concurrent.exe
+      ./_build/default/ppx/test/test_ppx_hegel_test_async_concurrent.exe
+    fi
 
 # these aliases are provided as ux improvements for local developers. CI should use the longer
 # forms.

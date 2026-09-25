@@ -28,29 +28,37 @@ let%hegel_test[@async] runs_machine tc =
 [@@settings Hegel.Settings.create ~test_cases:5 ()]
 ;;
 
+let test_runs_as_a_deferred () = run_async async_hegel_test
+
+let test_collects_rules_and_invariants () =
+  let module S = Hegel_jane_async.Stateful in
+  Alcotest.(check (list string))
+    "rules"
+    [ "incr" ]
+    (List.map Counter_machine.rules ~f:S.Rule.name);
+  Alcotest.(check (list (float 0.)))
+    "weights"
+    [ 3.0 ]
+    (List.map Counter_machine.rules ~f:S.Rule.weight);
+  Alcotest.(check (list string))
+    "invariants"
+    [ "non_negative" ]
+    (List.map Counter_machine.invariants ~f:S.Invariant.name)
+;;
+
+let test_generated_run () = run_async runs_machine
+
 let () =
   Alcotest.run
     "hegel-ppx-hegel-test-async"
     [ ( "let%hegel_test [@async]"
-      , [ Alcotest.test_case "runs as a Deferred" `Quick (fun () ->
-            run_async async_hegel_test)
-        ] )
+      , [ Alcotest.test_case "runs as a Deferred" `Quick test_runs_as_a_deferred ] )
     ; ( "module%hegel_state_machine [@async]"
-      , [ Alcotest.test_case "collects rules and invariants" `Quick (fun () ->
-            let module S = Hegel_jane_async.Stateful in
-            Alcotest.(check (list string))
-              "rules"
-              [ "incr" ]
-              (List.map Counter_machine.rules ~f:S.Rule.name);
-            Alcotest.(check (list (float 0.)))
-              "weights"
-              [ 3.0 ]
-              (List.map Counter_machine.rules ~f:S.Rule.weight);
-            Alcotest.(check (list string))
-              "invariants"
-              [ "non_negative" ]
-              (List.map Counter_machine.invariants ~f:S.Invariant.name))
-        ; Alcotest.test_case "generated run" `Quick (fun () -> run_async runs_machine)
+      , [ Alcotest.test_case
+            "collects rules and invariants"
+            `Quick
+            test_collects_rules_and_invariants
+        ; Alcotest.test_case "generated run" `Quick test_generated_run
         ] )
     ]
 ;;
