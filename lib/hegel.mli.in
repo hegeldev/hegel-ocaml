@@ -368,6 +368,12 @@ include module type of Derive
 
 module Internal = Internal
 
+(* [Hegel_jane_async] applies [Make] to Async. *)
+
+module type Io = Io.S
+
+module Make (B : Io) : module type of Io.Make (B)
+
 type ('a, 'p) generator = ('a, 'p) Generators.generator
 type printable = Generators.printable
 type unprintable = Generators.unprintable

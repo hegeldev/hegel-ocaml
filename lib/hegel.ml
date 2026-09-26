@@ -22,6 +22,10 @@ include Derive
     tests, not for direct use. *)
 module Internal = Internal
 
+module type Io = Io.S
+
+module Make = Io.Make
+
 type ('a, 'p) generator = ('a, 'p) Generators.generator
 type printable = Generators.printable
 type unprintable = Generators.unprintable

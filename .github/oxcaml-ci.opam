@@ -11,6 +11,7 @@ license: "MIT"
 homepage: "https://github.com/hegeldev/hegel-ocaml"
 bug-reports: "https://github.com/hegeldev/hegel-ocaml/issues"
 depends: [
+  "async"
   "capsule0"
   "concurrent"
   "parallel"

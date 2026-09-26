@@ -1,0 +1,56 @@
+; The optional Async companion library: hegel's Io functor applied to Async.
+; Concurrent machines need Jane Street's concurrent library (OxCaml only). The
+; module is run through cppo with and without CONCURRENT, and the select picks
+; the variant that matches what is installed.
+
+(library
+ (name hegel_jane_async)
+ (public_name hegel.jane.async)
+ (optional)
+ (libraries
+  hegel
+  async
+  (select
+   hegel_jane_async.ml
+   from
+   (concurrent
+    concurrent.in_async
+    await
+    await.in_async
+    ->
+    hegel_jane_async.concurrent.ml)
+   (-> hegel_jane_async.sequential.ml))
+  (select
+   hegel_jane_async.mli
+   from
+   (concurrent
+    concurrent.in_async
+    await
+    await.in_async
+    ->
+    hegel_jane_async.concurrent.mli)
+   (-> hegel_jane_async.sequential.mli)))
+ (preprocess
+  (pps ppx_js_style))
+ (instrumentation
+  (backend bisect_ppx)))
+
+(rule
+ (target hegel_jane_async.concurrent.ml)
+ (action
+  (run %{bin:cppo} -D CONCURRENT -o %{target} %{dep:hegel_jane_async.ml.in})))
+
+(rule
+ (target hegel_jane_async.sequential.ml)
+ (action
+  (run %{bin:cppo} -U CONCURRENT -o %{target} %{dep:hegel_jane_async.ml.in})))
+
+(rule
+ (target hegel_jane_async.concurrent.mli)
+ (action
+  (run %{bin:cppo} -D CONCURRENT -o %{target} %{dep:hegel_jane_async.mli.in})))
+
+(rule
+ (target hegel_jane_async.sequential.mli)
+ (action
+  (run %{bin:cppo} -U CONCURRENT -o %{target} %{dep:hegel_jane_async.mli.in})))

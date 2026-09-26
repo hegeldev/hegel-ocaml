@@ -157,10 +157,7 @@ jobs:
       - name: Install hegel.jane test dependencies
         run: |
           eval $(opam env)
-          # core/sexp_diff are opam depopts (not pulled by --deps-only
-          # --with-test); install them so the hegel.jane sublibrary and its
-          # regression suite (lib/jane/test) build and run here.
-          opam install core sexp_diff --yes
+          opam install core sexp_diff async --yes
 
       - name: Stage libhegel from the matching GitHub release
         id: libhegel
@@ -218,10 +215,11 @@ jobs:
       - name: Install hegel.jane doc dependencies
         run: |
           eval $(opam env)
-          # core/sexp_diff are opam depopts (not pulled by --deps-only
-          # --with-doc); install them so hegel_jane builds and lib/hegel.mli's
-          # {!Hegel_jane...} cross-references resolve instead of erroring.
-          opam install core sexp_diff --yes
+          # core/sexp_diff/async are opam depopts (not pulled by --deps-only
+          # --with-doc); install them so hegel_jane and hegel_jane_async build
+          # and lib/hegel.mli's {!Hegel_jane...} cross-references resolve
+          # instead of erroring.
+          opam install core sexp_diff async --yes
 
       - name: Check docs
         run: just check-docs

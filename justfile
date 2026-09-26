@@ -28,6 +28,10 @@ check-tests:
     dune runtest lib/jane/test --instrument-with bisect_ppx --force
     dune build --instrument-with bisect_ppx ppx/test/test_ppx_derive_jane.exe
     ./_build/default/ppx/test/test_ppx_derive_jane.exe
+    dune build --instrument-with bisect_ppx lib/jane/async/test/test_hegel_jane_async.exe \
+      ppx/test/test_ppx_hegel_test_async.exe
+    ./_build/default/lib/jane/async/test/test_hegel_jane_async.exe
+    ./_build/default/ppx/test/test_ppx_hegel_test_async.exe
     python3 scripts/check-coverage.py
     
 format:
@@ -82,8 +86,8 @@ check-tests-no-coverage:
     else
       dune runtest ppx/test/expect_tests --force
     fi
-    # The hegel.jane regression suite needs the core/sexp_diff opam depopts;
-    # skip it on environments that don't install them.
+    # The hegel.jane and hegel.jane.async suites need the core/sexp_diff/async
+    # opam depopts; skip them on environments that don't install them.
     if [ "${HEGEL_SKIP_JANE_TESTS:-}" = "1" ]; then
       echo "Skipping hegel.jane suite (HEGEL_SKIP_JANE_TESTS=1)"
     else
@@ -92,8 +96,19 @@ check-tests-no-coverage:
       dune runtest lib/jane/test --force
       dune build ppx/test/test_ppx_derive_jane.exe
       ./_build/default/ppx/test/test_ppx_derive_jane.exe
+      dune build lib/jane/async/test/test_hegel_jane_async.exe \
+        ppx/test/test_ppx_hegel_test_async.exe
+      ./_build/default/lib/jane/async/test/test_hegel_jane_async.exe
+      ./_build/default/ppx/test/test_ppx_hegel_test_async.exe
     fi
     dune runtest lib/jane/concurrent/test --force
+    # Concurrent Async machines (OxCaml only), opt-in with
+    # HEGEL_CONCURRENT_TESTS=1 like lib/jane/concurrent/test.
+    dune runtest lib/jane/async/test --force
+    if [ "${HEGEL_CONCURRENT_TESTS:-}" = "1" ]; then
+      dune build ppx/test/test_ppx_hegel_test_async_concurrent.exe
+      ./_build/default/ppx/test/test_ppx_hegel_test_async_concurrent.exe
+    fi
 
 # these aliases are provided as ux improvements for local developers. CI should use the longer
 # forms.

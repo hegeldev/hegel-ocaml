@@ -1,0 +1,27 @@
+(executable
+ (name test_hegel_jane_async)
+ (modules test_hegel_jane_async)
+ (optional)
+ (libraries hegel hegel_jane_async alcotest async core)
+ (preprocess
+  (pps ppx_js_style -- -allow-unannotated-ignores)))
+
+; Concurrent Async machines need Jane Street's concurrent library, which only
+; builds on OxCaml. Opt-in with HEGEL_CONCURRENT_TESTS=1, like
+; lib/jane/concurrent/test.
+
+(executable
+ (name test_hegel_jane_async_concurrent)
+ (modules test_hegel_jane_async_concurrent)
+ (enabled_if
+  (= %{env:HEGEL_CONCURRENT_TESTS=0} 1))
+ (libraries hegel hegel_jane_async alcotest async core)
+ (preprocess
+  (pps ppx_js_style -- -allow-unannotated-ignores)))
+
+(rule
+ (alias runtest)
+ (enabled_if
+  (= %{env:HEGEL_CONCURRENT_TESTS=0} 1))
+ (action
+  (run %{exe:test_hegel_jane_async_concurrent.exe})))

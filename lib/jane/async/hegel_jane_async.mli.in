@@ -1,0 +1,99 @@
+(** Hegel tests whose bodies are Async code. See
+    {{!page-hegel_jane_async}Hegel_jane_async} for a guide,
+    examples, and the interface. *)
+
+val run_hegel_test
+  :  ?settings:Hegel.Settings.t
+  -> ?test_location:Hegel.test_location
+  -> ?database_key:string
+  -> ?failure_blobs:string list
+  -> (Hegel.test_case -> unit Async.Deferred.t)
+  -> unit Async.Deferred.t
+
+(**/**)
+
+(** The [Hegel.Io] instance for Async. *)
+module Async_io : Hegel.Io with type 'a t = 'a Async.Deferred.t
+
+module Sequential : module type of struct
+  include Hegel.Make (Async_io)
+end
+
+(** Same as [Hegel.run_hegel_test_ppx]. The [let%hegel_test [@async]] PPX
+    targets it. *)
+val run_hegel_test_ppx
+  :  ?settings:Hegel.Settings.t
+  -> ?test_location:Hegel.test_location
+  -> ?database_key:string
+  -> ?failure_blobs:string list
+  -> (Hegel.test_case -> unit Async.Deferred.t)
+  -> unit Async.Deferred.t
+
+(**/**)
+
+module Stateful : sig
+  include module type of struct
+    include Sequential.Stateful
+  end
+
+#ifdef CONCURRENT
+  module Concurrent_rule : sig
+    type 'state t
+
+    val create
+      :  ?group:string
+      -> ?weight:float
+      -> name:string
+      -> step:(Hegel.test_case -> 'state -> unit Async.Deferred.t)
+      -> unit
+      -> 'state t
+
+    val name : _ t -> string
+    val group : _ t -> string
+    val weight : _ t -> float
+  end
+
+  module type Concurrent_state_machine = sig
+    type state
+
+    val rules : state Concurrent_rule.t list
+    val invariants : state Invariant.t list
+  end
+
+  val run_concurrent
+    :  ?min_concurrency:int
+    -> ?max_concurrency:int
+    -> ?step_count:int
+    -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+    -> Hegel.test_case
+    -> (module Concurrent_state_machine with type state = 'state)
+    -> init:'state
+    -> unit Async.Deferred.t
+
+  (**/**)
+
+  (** [run_concurrent] with the rules and invariants passed as lists. *)
+  val run_concurrent_internal
+    :  init:'state
+    -> rules:'state Concurrent_rule.t list
+    -> invariants:'state Invariant.t list
+    -> ?min_concurrency:int
+    -> ?max_concurrency:int
+    -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+    -> ?step_count:int
+    -> Hegel.test_case
+    -> unit Async.Deferred.t
+
+  (**/**)
+
+  module Concurrent_pool : sig
+    type 'a t
+
+    val create : ?clone:('a -> 'a) -> Hegel.test_case -> 'a t
+    val add : 'a t -> Hegel.test_case -> 'a -> unit
+    val size : _ t -> int
+    val values_reusable : 'a t -> ('a, Hegel.unprintable) Hegel.generator
+    val values_consumed : 'a t -> ('a, Hegel.unprintable) Hegel.generator
+  end
+#endif
+end
