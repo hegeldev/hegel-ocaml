@@ -703,36 +703,6 @@ let test_render_diff () =
     (Internal.render_diff ~colored:false ~original ~updated)
 ;;
 
-let test_run_flaky_on_replay () =
-  let calls = ref 0 in
-  let msg =
-    try
-      run_hegel_test
-        ~settings:
-          { (Hegel.Settings.default ()) with
-            phases = [ Settings.Generate ]
-          ; database = Settings.Disabled
-          ; verbosity = Settings.Quiet
-          }
-        (fun tc ->
-           ignore (Hegel.draw tc int_gen : int);
-           let i = !calls in
-           Int.incr calls;
-           assert (i <> 0));
-      None
-    with
-    | Failure m -> Some m
-    | _ -> None
-  in
-  match msg with
-  | Some m ->
-    Alcotest.(check bool)
-      "flaky detected"
-      true
-      (Test_helpers.contains_substring m "Flaky test detected")
-  | None -> Alcotest.fail "expected a flaky failure"
-;;
-
 (** A health-check failure is a run-level error (no counterexample), surfaced as
     a [Failure] carrying the engine's error message. *)
 let test_run_health_check_failure () =
@@ -809,7 +779,6 @@ let tests =
   ; Alcotest.test_case "stderr_color_enabled" `Quick test_stderr_color_enabled
   ; Alcotest.test_case "stderr_color" `Quick test_stderr_color
   ; Alcotest.test_case "render_diff" `Quick test_render_diff
-  ; Alcotest.test_case "run flaky on replay" `Quick test_run_flaky_on_replay
   ; Alcotest.test_case
       "test_location reports result"
       `Quick

@@ -43,6 +43,34 @@ let%expect_test "failure report prints the shrunk counterexample" =
     |}]
 ;;
 
+(* The failure does not reproduce, so the report has a caveat. *)
+let%expect_test "a flaky failure is reported with a caveat" =
+  let calls = ref 0 in
+  (match
+     Hegel.run_hegel_test
+       ~settings:
+         { (Hegel.Settings.create ~test_cases:10 ~seed:0 ()) with
+           database = Hegel.Settings.Disabled
+         ; phases = [ Hegel.Settings.Generate ]
+         }
+       (fun tc ->
+          ignore (Hegel.draw tc int_gen : int);
+          let call = !calls in
+          incr calls;
+          if call = 0 then failwith "first call only")
+   with
+   | () -> print_endline "passed"
+   | exception Failure message -> print_endline message);
+  print_string (Expect_scrub.scrub_report [%expect.output]);
+  [%expect
+    {|
+    --- Failure --------------------------------------------------------------------
+    Exception: Failure("first call only")
+    note: unconfirmed failure: failed 0 of 10 replays after the observed failure — a rare failure, or the environment changed between executions
+    first call only
+    |}]
+;;
+
 (* A fixed explicit position keeps wrapping identical across compilers.
    Continuation lines align under the sexp, including the location prefix. *)
 let%expect_test "a multiline drawn value aligns under its name" =

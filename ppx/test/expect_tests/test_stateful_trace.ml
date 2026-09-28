@@ -124,42 +124,6 @@ module%hegel_concurrent_state_machine Concurrent_boom = struct
   ;;
 end
 
-let%expect_test "nondeterministic failure reports the discovering execution" =
-  (try
-     Hegel.run_hegel_test
-       ~settings:
-         { (Settings.create ~test_cases:20 ~seed:0 ()) with
-           database = Settings.Disabled
-         ; verbosity = Settings.Normal
-         }
-       (fun tc ->
-          Hegel.note tc "preamble";
-          Concurrent_boom.run
-            tc
-            ~step_count:5
-            ~init:()
-            ~min_concurrency:2
-            ~max_concurrency:2)
-   with
-   | Failure message as exn ->
-     if String.equal message "concurrent boom" then () else raise exn
-   | exn -> raise exn);
-  print_string (Expect_scrub.scrub_concurrent_report [%expect.output]);
-  [%expect
-    {|
-    Concurrent state machine detected: this run is nondeterministic, so failures are reported from the execution that discovered them, without shrinking, replay, database persistence, or a reproduce blob.
-    --- Failure --------------------------------------------------------------------
-
-    preamble
-    Concurrency level: 2
-    ---------------- Round 1: group "<anonymous>" ----------------
-    [worker 0 +time] Rule: boom
-    [worker 0 +time]   draw_1 = 3881432
-
-    Exception: Failure("concurrent boom")
-    |}]
-;;
-
 let%expect_test "one concurrent worker remains deterministic" =
   (try
      Hegel.run_hegel_test
@@ -189,34 +153,9 @@ let%expect_test "one concurrent worker remains deterministic" =
     [worker 0 +time]   draw_1 = 0
 
     Exception: Failure("concurrent boom")
+    note: nondeterministic failure, confirmed: failed 20 of 20 replays at confirmation and 1 of 1 at report time
     rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
-;;
-
-let%expect_test "quiet nondeterministic failure stays quiet" =
-  let raised = ref false in
-  (try
-     Hegel.run_hegel_test
-       ~settings:
-         { (Settings.create ~test_cases:20 ~seed:0 ()) with
-           database = Settings.Disabled
-         ; verbosity = Settings.Quiet
-         }
-       (fun tc ->
-          Concurrent_boom.run
-            tc
-            ~step_count:5
-            ~init:()
-            ~min_concurrency:1
-            ~max_concurrency:4)
-   with
-   | Failure message as exn ->
-     if String.equal message "concurrent boom" then raised := true else raise exn
-   | exn -> raise exn);
-  let output = [%expect.output] in
-  if not !raised then failwith "expected concurrent failure";
-  print_string (Expect_scrub.scrub_concurrent_report output);
-  [%expect {||}]
 ;;
 
 module%hegel_concurrent_state_machine Concurrent_counter = struct
@@ -246,21 +185,22 @@ let%expect_test "concurrent invariant failures retain their names" =
   print_string (Expect_scrub.scrub_concurrent_report [%expect.output]);
   [%expect
     {|
-    Concurrent state machine detected: this run is nondeterministic, so failures are reported from the execution that discovered them, without shrinking, replay, database persistence, or a reproduce blob.
     --- Failure --------------------------------------------------------------------
 
     Concurrency level: 3
     state = 0
     ---------------- Round 1: group "writes" ----------------
-    [worker 1 +time] Rule: increment
-    [worker 1 +time] Rule: increment
-    [worker 1 +time] Rule: increment
-    [worker 1 +time] Rule: increment
-    [worker 1 +time] Rule: increment
+    [worker 0 +time] Rule: increment
+    [worker 0 +time] Rule: increment
+    [worker 0 +time] Rule: increment
+    [worker 0 +time] Rule: increment
+    [worker 0 +time] Rule: increment
     [worker 2 +time] Rule: increment
     state = 6
     Invariant stays_zero violated after round 1.
 
     Exception: Failure("invariant boom")
+    note: nondeterministic failure, confirmed: failed 20 of 20 replays at confirmation and 1 of 1 at report time
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;

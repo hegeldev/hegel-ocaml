@@ -261,7 +261,7 @@ let%expect_test "function call only prints the first time in normal verbosity" =
     {|
     --- Failure --------------------------------------------------------------------
 
-    function 10 = 315
+    function 10 = 586
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -276,15 +276,30 @@ let%expect_test "function call prints every time in verbose/debug verbosity" =
     {|
     Starting phase: Generate
     Running test case
-    function 10 = 315
-    function 10 = 315
-    function 10 = 315
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
     Ending phase: Generate
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
     --- Failure --------------------------------------------------------------------
 
-    function 10 = 315
-    function 10 = 315
-    function 10 = 315
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
@@ -296,18 +311,32 @@ let%expect_test "function call prints every time in verbose/debug verbosity" =
     {|
     no config file loaded
     Starting phase: Generate
-    function 10 = 315
-    function 10 = 315
-    function 10 = 315
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
     test case #1: status = Interesting, choices = 1
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
     Ending phase: Generate
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
     Test done. interesting_test_cases=1
     --- Failure --------------------------------------------------------------------
-    replaying failure blob: choices = 1
 
-    function 10 = 315
-    function 10 = 315
-    function 10 = 315
+    function 10 = 586
+    function 10 = 586
+    function 10 = 586
 
     Exception: File "ppx/test/expect_tests/test_functions_printing.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]
