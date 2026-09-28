@@ -83,6 +83,12 @@ lib/                         # Library source
                              #   run_internal/run_concurrent_internal take the lists
                              #   directly and are what the PPX-generated run calls.
                              #   Rule and invariant bodies run on indent-2 block handles
+  io.ml / io.mli             # Hegel.Io + Hegel.Make: the functor over how a body
+                             #   returning ['a t] is waited on (run_loop hands the
+                             #   engine loop a [wait]). Make's run_hegel_test and
+                             #   sequential Stateful wrap each body with [wait] and
+                             #   call the existing runners; Hegel itself does not
+                             #   use it. Private module, re-exported from hegel.ml
   concurrency.ml.in/.mli.in  # Hegel.Concurrency: the capability record
                              #   (spawn_join_n), threads (the default) and, upstream
                              #   only (#ifndef OXCAML), the pooled domains
@@ -94,6 +100,22 @@ lib/                         # Library source
                              #   test/ dir, gated behind HEGEL_SKIP_JANE_TESTS in
                              #   check-tests-no-coverage since it needs the core/
                              #   sexp_diff opam depopts — see justfile)
+    async/                   # Optional hegel.jane.async sublibrary (async depopt):
+      hegel_jane_async       #   Async_io (run_loop captures the execution context,
+        .ml.in/.mli.in, test/#   In_thread.run's the engine loop, and blocks each body
+                             #   on the scheduler with the Jane Street bridge's
+                             #   block_on + Monitor.extract_exn), Sequential =
+                             #   Hegel.Make (Async_io), and Stateful. Under
+                             #   #ifdef CONCURRENT, Stateful also has the Async
+                             #   concurrent API (Concurrent_rule, run_concurrent,
+                             #   Concurrent_pool). Each .in is run through cppo
+                             #   with and without -D CONCURRENT; a select on
+                             #   concurrent.in_async + await.in_async picks the
+                             #   variant and links them only when installed.
+                             #   Builds on both compilers; instrumented +
+                             #   coverage-gated; the sequential suite is skipped
+                             #   with HEGEL_SKIP_JANE_TESTS, the concurrent one
+                             #   (OxCaml) needs HEGEL_CONCURRENT_TESTS=1
     concurrent/              # Optional hegel.jane.concurrent sublibrary (OxCaml
       hegel_jane_concurrent  #   only: depends on Jane Street's concurrent; a
         .ml/.mli, test/      #   sibling of hegel.jane, which must keep building
@@ -295,6 +317,20 @@ the expanded module need not declare `type state` and the public
 the module's own when it binds one or derives it on `type state`
 (`defines_sexp_of_state`). The markers are stripped from the emitted items,
 every other item is kept, and a module with no `[@@rule]` is a compile error.
+`[@async]` before the name (`let%hegel_test [@async] t tc`,
+`module%hegel_state_machine [@async] M`; the trailing `[@@async]` is the same
+AST and works too, undocumented) swaps the `Hegel` prefix in every generated
+name for `Hegel_jane_async` (`runner_prefix`: `run_hegel_test_ppx`,
+`Stateful.Rule.create`/`Invariant.create`/`run_internal`), so bodies return
+`unit Deferred.t`. On `module%hegel_concurrent_state_machine` the rules come
+from `Hegel_jane_async.Stateful.Concurrent_rule.create` (taking `tc state`, no
+context), a declared `type ctx` is ignored, and the one shared concurrent
+`run` body calls `Hegel_jane_async.Stateful.run_concurrent_internal` with no
+`~concurrency` (the plain form applies `~concurrency` to
+`Hegel.Stateful.run_concurrent_internal`). Its tests are the optional
+`ppx/test/test_ppx_hegel_test_async.exe`, run from the justfile jane blocks,
+and `test_ppx_hegel_test_async_concurrent.exe` (OxCaml, gated with
+`HEGEL_CONCURRENT_TESTS=1`).
 Marked bodies get the same draw-name injection as a test body, judged at
 depth 0. A rule or invariant body runs in its own naming scope each step (see
 Pretty printing), so `let n = draw tc g` prints as `n`, not `n_1`. Invariants
@@ -765,9 +801,15 @@ guards the syntax upstream cannot parse (`@ m`, kind annotations).
   `Pool`/`Rule`/`Invariant`/`Concurrent_rule` submodules (`PORTABLE`); the
   runners (`run`, `run_concurrent`, …) stay nonportable since they reference
   `Concurrency.threads`, which uses `Thread.create`.
-  `Int_pool_concurrent.t` / `Concurrent_pool.t` constrain their element type
-  to `value mod portable contended` and take a portable `clone`; the
-  sequential `Int_pool`/`Pool` constrain nothing.
+  `Int_pool_concurrent` is a `module%template` over `(m, c)`: its portable
+  instance (`[@mode portable]`, behind `Stateful.Concurrent_pool`) constrains
+  its element type to `value mod portable contended` and takes a portable
+  `clone`; the bare nonportable one (behind `Hegel_jane_async`'s
+  `Concurrent_pool`) takes any element type. It selects its lock with
+  `module L = Lock [@mode m]`, where `generators_core.ml.in` defines `Lock`
+  per mode: the capsule `Locked` for portable, `Locked.Nonportable` (a mutex;
+  in `locked.mutex.ml` just aliases) for nonportable. The sequential
+  `Int_pool`/`Pool` constrain nothing.
 - **Types that cross.** `Generators_core.core`/`generator` cross contention
   only: a generator holds no mutable state, so a rule body can read one it
   captured, but whether it is portable depends on the closures it was built
@@ -802,6 +844,24 @@ guards the syntax upstream cannot parse (`@ m`, kind annotations).
   does not work: its data values (`Ctypes.int` …) stay contended inside
   portable code. The only other launder is three `ipaddr` functions in
   `generators_combinators.ml.in`.
+- **Concurrent core.** `run_concurrent_core` is the concurrent runner with the
+  rules as plain data (names, groups, weights) and two local callbacks from
+  the caller: `run_round` (run one round, return one outcome per worker) and
+  `check_invariant i tc`. `run_machine` takes invariant names, always-check
+  flags, and that `check_invariant`, not invariant closures, because the
+  Async runner's invariants wait through the scheduler scope's local
+  `Concurrent.t`. Local closures are passed down the step loops, not
+  captured, and iteration uses `iteri_local` (`Stdlib.List.iteri` takes a
+  global closure). `dispatch_round` is a `let%template` over
+  `(m, c) = ((portable, contended), (nonportable, uncontended))` that takes a
+  `spawn_join_n` function, not a `Concurrency.t`: templating the record would
+  move the bare `Concurrency.t` name to the nonportable instance.
+  `run_concurrent_internal` calls `(dispatch_round [@mode portable])
+  concurrency.spawn_join_n`; the Async runner calls the bare nonportable one
+  with its own `spawn_join_n conc` (`with_scope` + `spawn_onto_initial`,
+  bodies waiting on Deferreds under `Monitor.try_with` so a failure stays with
+  its worker). `init_worker_tcs` and `run_worker` are exported doc-hidden for
+  it.
 - **Runner shape.** `run_rules` is the shared rule loop (next rule from the
   engine, heading, block, rejection report), parameterized by a heading
   function, a `~ctx @ local` (`()` sequentially), and a

@@ -619,4 +619,54 @@ val run_concurrent_internal
   -> Internal.test_case
   -> unit
 
+(** [run_concurrent_core] is the concurrent runner with the rules passed as
+    their fields and the round supplied by the caller. [run_round] runs one
+    round on [num_workers] workers and returns their outcomes. 
+    [check_invariant i tc] checks invariant [i]. *)
+val run_concurrent_core
+  :  init:'state
+  -> rule_names:string list
+  -> rule_groups:string list
+  -> rule_weights:float list
+  -> invariant_names:string list
+  -> invariants_always_check:bool list
+  -> check_invariant:(int -> Internal.test_case -> unit) MODE(local)
+  -> run_round:
+       (state_machine:Internal.state_machine -> num_workers:int -> Concurrency.outcome list)
+       MODE(local)
+  -> ?min_concurrency:int
+  -> ?max_concurrency:int
+  -> ?sexp_of_state:('state -> Sexplib0.Sexp.t)
+  -> ?step_count:int
+  -> Internal.test_case
+  -> unit
+
+(** [dispatch_round spawn_join_n tc ~num_workers ~work] runs one round of a concurrent
+    stateful test. An exception from [work] becomes the worker's outcome. *)
+val%template dispatch_round
+  :  (n:int
+      -> (f:('ctx MODE(local) -> int -> Concurrency.outcome) MODE(m)
+          -> Concurrency.outcome list MODE(c))
+         MODE(local))
+     MODE(local)
+  -> Internal.test_case
+  -> num_workers:int
+  -> work:('ctx MODE(local) -> worker_index:int -> Internal.test_case -> unit) MODE(m)
+  -> Concurrency.outcome list
+[@@mode (m, c) = ((portable, contended), (nonportable, uncontended))]
+
+(** [init_worker_tcs tc ~num_workers] is one clone of [tc] per worker, each tagged
+    with its worker index. *)
+val init_worker_tcs : Internal.test_case -> num_workers:int -> Internal.test_case list
+
+(** [run_worker tc ~state_machine ~worker_index ~ctx ~rule] runs one worker's
+    rules for the round on [tc], looking each rule up with [rule]. *)
+val run_worker
+  :  Internal.test_case
+  -> state_machine:Internal.state_machine
+  -> worker_index:int
+  -> ctx:'ctx MODE(local)
+  -> rule:(int -> string * (Internal.test_case -> 'ctx MODE(local) -> unit))
+  -> unit
+
 (**/**)

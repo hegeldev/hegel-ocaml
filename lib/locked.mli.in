@@ -17,3 +17,15 @@ val create : (unit -> 'a) MODE(portable) -> 'a t
 (** [protect t f] runs [f] on the data while holding the lock and returns its
     result. *)
 val protect : 'a t -> ('a -> ('b KIND(value mod contended portable))) MODE(portable) -> 'b
+
+(** [Nonportable] is a lock for data and callbacks that do not cross modes. *)
+module Nonportable : sig
+  type 'a t
+
+  (** [create init] makes a locked cell holding [init ()]. *)
+  val create : (unit -> 'a) -> 'a t
+
+  (** [protect t f] runs [f] on the data while holding the lock and returns its
+      result. *)
+  val protect : 'a t -> ('a -> 'b) -> 'b
+end

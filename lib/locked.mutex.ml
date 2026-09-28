@@ -7,3 +7,10 @@ type 'a t =
 
 let create init = { lock = Mutex.create (); value = init () }
 let protect t f = Mutex.protect t.lock (fun () -> f t.value)
+
+module Nonportable = struct
+  type nonrec 'a t = 'a t
+
+  let create = create
+  let protect = protect
+end

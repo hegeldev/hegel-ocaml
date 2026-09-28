@@ -52,3 +52,35 @@
    -allow-unannotated-ignores
    -check
    -locations-check)))
+
+(executable
+ (name test_ppx_hegel_test_async)
+ (modules test_ppx_hegel_test_async)
+ (optional)
+ (libraries hegel hegel_jane_async alcotest async core)
+ (preprocess
+  (pps
+   ppx_js_style
+   ppx_hegel_test
+   --
+   -allow-unannotated-ignores
+   -check
+   -locations-check)))
+
+; [@async] on module%hegel_concurrent_state_machine needs Jane Street's
+; concurrent library (OxCaml only). Opt-in with HEGEL_CONCURRENT_TESTS=1.
+
+(executable
+ (name test_ppx_hegel_test_async_concurrent)
+ (modules test_ppx_hegel_test_async_concurrent)
+ (enabled_if
+  (= %{env:HEGEL_CONCURRENT_TESTS=0} 1))
+ (libraries hegel hegel_jane_async alcotest async core)
+ (preprocess
+  (pps
+   ppx_js_style
+   ppx_hegel_test
+   --
+   -allow-unannotated-ignores
+   -check
+   -locations-check)))

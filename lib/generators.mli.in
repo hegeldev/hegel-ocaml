@@ -932,15 +932,15 @@ end
 
 (** [Int_pool_concurrent] is the same client side for a machine whose workers
     share the pool. *)
-module Int_pool_concurrent : sig
+module%template Int_pool_concurrent : sig
 #ifdef OXCAML
-  type ('a : value mod portable contended) t : value mod portable contended
+  type ('a : value mod m c) t : value mod m c
 #else
   type 'a t
 #endif
 
 #ifdef OXCAML
-  val create : Internal.test_case -> clone:('a -> 'a) @ portable -> 'a t
+  val create : Internal.test_case -> clone:('a -> 'a) @ m -> 'a t
 #else
   val create : Internal.test_case -> clone:('a -> 'a) -> 'a t
 #endif
@@ -952,6 +952,7 @@ module Int_pool_concurrent : sig
       Consumed draws return the stored value directly. *)
   val pool_values : 'a t -> consume:bool -> ('a, unprintable) generator
 end
+[@@mode (m, c) = ((portable, contended), (nonportable, uncontended))]
 
 (** Implementation helpers for library modules and white-box tests. Not for
     direct use — no stability guarantees. *)
