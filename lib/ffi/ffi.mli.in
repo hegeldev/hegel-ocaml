@@ -321,7 +321,8 @@ val settings_get_nondeterminism_strictness
 val run_start : context -> settings -> run
 
 (** [run_start_blob ctx s blob] starts a run that replays [blob] until a replay
-    fails. The handle must be freed with {!run_free}. *)
+    fails. Raises {!Usage_error} if [blob] cannot be decoded. The handle must be
+    freed with {!run_free}. *)
 val run_start_blob : context -> settings -> string -> run
 
 (** [next_test_case ctx run] blocks until the engine produces the next test

@@ -182,13 +182,13 @@ let%expect_test "stale blobs that pass, reject, or overrun do not reproduce an e
 
 let%hegel_test invalid_blob = prop [@@failure_blobs [ "INVALID_BLOB" ]]
 
-let%expect_test "an invalid supplied blob fails the run" =
+let%expect_test "an invalid supplied blob raises a usage error" =
   match invalid_blob () with
   | () -> failwith "expected invalid blob failure"
-  | exception Failure msg ->
+  | exception Hegel.Usage_error msg ->
     print_endline msg;
     [%expect
-      {| the supplied failure blob could not be decoded. It may be corrupt or from an incompatible Hegel version. |}]
+      {| hegel_run_start_blob: the supplied failure blob could not be decoded. It may be corrupt or from an incompatible Hegel version. |}]
 ;;
 
 let%expect_test "only the first blob is actually replayed" =

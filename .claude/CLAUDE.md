@@ -599,7 +599,8 @@ the run with `hegel_run_start_blob` on the first blob (pair it with
 print by default). The engine replays the blob until a replay fails; the run
 goes through the same loop and report as a normal run, with no `rerun with:`
 line, and a run that passes raises "The failure blob did not reproduce an
-error". An undecodable blob is a run error, raised as `Failure`. `from_ppx` selects that line's syntax: a
+error". `hegel_run_start_blob` rejects an undecodable blob with
+`HEGEL_E_INVALID_ARG`, so `check_rc` raises `Usage_error`. `from_ppx` selects that line's syntax: a
 `[@@failure_blobs [...]]` attribute under the PPX, a `~failure_blobs:[...]`
 argument for a plain `run_hegel_test` caller. For persisting and replaying
 failing examples across runs, use `database` / `database_key`.
