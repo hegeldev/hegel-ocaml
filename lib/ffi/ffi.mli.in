@@ -114,6 +114,19 @@ type verbosity =
   | Verbose
   | Debug
 
+(** How a run handles nondeterministic test behavior
+    ([hegel_nondeterminism_strictness_t]), set via
+    {!settings_nondeterminism_strictness}.
+
+    - [Nondeterminism_quiet]: switch to nondeterministic handling silently.
+      The default.
+    - [Nondeterminism_warn]: [Nondeterminism_quiet], but print a notice per run.
+    - [Nondeterminism_error]: abort the run with a flaky-test error. *)
+type nondeterminism_strictness =
+  | Nondeterminism_quiet
+  | Nondeterminism_warn
+  | Nondeterminism_error
+
 (** Per-test-case outcome ([hegel_status_t]) passed to {!mark_complete}. *)
 type status =
   | Valid
@@ -227,6 +240,12 @@ val settings_backend : context -> settings -> backend -> unit
 val settings_test_cases : context -> settings -> int -> unit
 val settings_verbosity : context -> settings -> verbosity -> unit
 
+val settings_nondeterminism_strictness
+  :  context
+  -> settings
+  -> nondeterminism_strictness
+  -> unit
+
 (** [settings_seed ctx s seed] sets the RNG seed ([None] picks a fresh random
     seed at run start). *)
 val settings_seed : context -> settings -> int option -> unit
@@ -290,12 +309,24 @@ val settings_get_report_multiple_failures : context -> settings -> bool
 val settings_get_show_statistics : context -> settings -> bool
 val settings_get_print_blob : context -> settings -> bool
 val settings_get_backend : context -> settings -> backend
+val settings_get_nondeterminism_strictness
+  :  context
+  -> settings
+  -> nondeterminism_strictness
 
 (** {2 Run lifecycle} *)
 
 (** [run_start ctx s] starts a run with the given settings. Raises
     {!Internal_error} on failure. The handle must be freed with {!run_free}. *)
 val run_start : context -> settings -> run
+
+(** [run_start_blob ctx s blob] starts a run that replays the base64 failure
+    [blob] instead of exploring. The engine replays the blob until a replay
+    fails, under a bounded budget, and handles both blob formats. Drive it like
+    a {!run_start} run: a reproducing replay is the failure of the run (with no
+    blob), a run with no failures means the blob is stale, and an undecodable
+    blob is the error of the run. The handle must be freed with {!run_free}. *)
+val run_start_blob : context -> settings -> string -> run
 
 (** [next_test_case ctx run] blocks until the engine produces the next test
     case, or returns [None] when the run is finished. Raises {!Internal_error} on
@@ -729,4 +760,9 @@ val result_failure : context -> run_result -> int -> failure option
 val result_failures : context -> run_result -> failure list
 
 val failure_blob : context -> failure -> string option
+
+(** [failure_caveat ctx f] is the confirmation caveat of [f] under the run's
+    nondeterministic handling, which quotes the replay evidence of the run.
+    [None] for a deterministic failure. *)
+val failure_caveat : context -> failure -> string option
 val failure_origin : context -> failure -> string option
