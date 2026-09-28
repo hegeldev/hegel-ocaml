@@ -888,7 +888,11 @@ let run_test
   let handle_result ~is_replay result =
     match Ffi.result_status ctx result with
     | Run_passed ->
-      if is_replay then failwith "The failure blob did not reproduce an error"
+      if is_replay
+      then
+        failwith
+          "The failure blob did not reproduce an error. The failure is fixed, or a \
+           nondeterministic failure did not occur again in the replays."
     | Run_error ->
       raise
         (Failure

@@ -174,9 +174,9 @@ let%expect_test "stale blobs that pass, reject, or overrun do not reproduce an e
     ];
   [%expect
     {|
-    The failure blob did not reproduce an error
-    The failure blob did not reproduce an error
-    The failure blob did not reproduce an error
+    The failure blob did not reproduce an error. The failure is fixed, or a nondeterministic failure did not occur again in the replays.
+    The failure blob did not reproduce an error. The failure is fixed, or a nondeterministic failure did not occur again in the replays.
+    The failure blob did not reproduce an error. The failure is fixed, or a nondeterministic failure did not occur again in the replays.
     |}]
 ;;
 
