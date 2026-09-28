@@ -559,18 +559,6 @@ let c_generate_ipv6 =
   foreign "hegel_generate_ipv6" (handle_t @-> handle_t @-> ptr uint8_t @-> returning int)
 ;;
 
-let c_test_case_from_blob =
-  foreign
-    "hegel_test_case_from_blob"
-    (handle_t
-     @-> handle_t
-     @-> string_opt
-     @-> handle_t
-     @-> handle_t
-     @-> ptr handle_t
-     @-> returning int)
-;;
-
 let c_start_span =
   foreign "hegel_start_span" (handle_t @-> handle_t @-> uint64_t @-> returning int)
 ;;
@@ -1174,12 +1162,6 @@ let next_test_case ctx run =
   let out = allocate handle_t null_handle in
   check_rc ctx (c_next_test_case ctx run out);
   if is_null (raw !@out) then None else Some !@out
-;;
-
-let test_case_from_blob ctx s b =
-  let out = allocate handle_t null_handle in
-  check_rc ctx (c_test_case_from_blob ctx s b null_handle null_handle out);
-  !@out
 ;;
 
 let run_result ctx run =
@@ -1857,7 +1839,6 @@ let settings_get_nondeterminism_strictness =
 let run_start = Obj.magic_portable run_start
 let run_start_blob = Obj.magic_portable run_start_blob
 let next_test_case = Obj.magic_portable next_test_case
-let test_case_from_blob = Obj.magic_portable test_case_from_blob
 let run_result = Obj.magic_portable run_result
 let run_free = Obj.magic_portable run_free
 let run_result_free = Obj.magic_portable run_result_free
