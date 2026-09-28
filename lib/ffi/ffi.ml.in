@@ -362,9 +362,9 @@ let c_test_case_free =
   foreign "hegel_test_case_free" (handle_t @-> handle_t @-> returning int)
 ;;
 
-let c_test_case_is_nondeterministic =
+let c_test_case_should_capture =
   foreign
-    "hegel_test_case_is_nondeterministic"
+    "hegel_test_case_should_capture"
     (handle_t @-> handle_t @-> ptr bool @-> returning int)
 ;;
 
@@ -838,7 +838,6 @@ type run_status =
   | Run_passed
   | Run_failed
   | Run_error
-  | Run_failed_nondeterministic
 
 exception Stop_test
 exception Assume_rejected
@@ -1143,9 +1142,9 @@ let test_case_block ctx tc ~indent =
   !@out
 ;;
 
-let test_case_is_nondeterministic ctx tc =
+let test_case_should_capture ctx tc =
   let out = allocate bool false in
-  check_rc ctx (c_test_case_is_nondeterministic ctx tc out);
+  check_rc ctx (c_test_case_should_capture ctx tc out);
   !@out
 ;;
 
@@ -1700,7 +1699,6 @@ let result_status ctx r =
   match !@out with
   | 0 -> Run_passed
   | 1 -> Run_failed
-  | 3 -> Run_failed_nondeterministic
   | _ -> Run_error
 ;;
 
@@ -1788,7 +1786,7 @@ let test_case_free = Obj.magic_portable test_case_free
 let test_case_clone = Obj.magic_portable test_case_clone
 let test_case_block = Obj.magic_portable test_case_block
 let test_case_set_worker = Obj.magic_portable test_case_set_worker
-let test_case_is_nondeterministic = Obj.magic_portable test_case_is_nondeterministic
+let test_case_should_capture = Obj.magic_portable test_case_should_capture
 let generate_boolean = Obj.magic_portable generate_boolean
 let generate_integer = Obj.magic_portable generate_integer
 let generate_float = Obj.magic_portable generate_float

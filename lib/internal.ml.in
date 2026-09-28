@@ -70,7 +70,7 @@ type test_case KIND(value mod portable contended) =
   { handle : Ffi.test_case
   ; context : Ffi.context
   ; is_final : bool
-  ; is_nondeterministic : bool
+  ; should_capture : bool
   ; verbosity : Settings.verbosity
   ; test_aborted : bool Atomic.t
   ; draw_depth : int Atomic.t
@@ -138,7 +138,7 @@ let clone (tc : test_case) =
   { handle
   ; context
   ; is_final = tc.is_final
-  ; is_nondeterministic = tc.is_nondeterministic
+  ; should_capture = tc.should_capture
   ; verbosity = tc.verbosity
   ; test_aborted = Atomic.make false
   ; draw_depth = Atomic.make (Atomic.get tc.draw_depth)
@@ -156,7 +156,7 @@ let with_block (tc : test_case) ~indent LOCAL(f) =
     { handle
     ; context
     ; is_final = tc.is_final
-    ; is_nondeterministic = tc.is_nondeterministic
+    ; should_capture = tc.should_capture
     ; verbosity = tc.verbosity
     ; test_aborted = Atomic.make false
     ; draw_depth = Atomic.make 0
@@ -429,7 +429,7 @@ let assume _tc condition = if not condition then raise Assume_rejected
 let should_print tc =
   match tc.verbosity with
   | Quiet -> false
-  | Normal -> tc.is_final || tc.is_nondeterministic
+  | Normal -> tc.is_final || tc.should_capture
   | Verbose | Debug -> true
 ;;
 
@@ -837,12 +837,12 @@ let run_test
   let ctx = Ffi.context_new () in
   let ffi_settings = build_ffi_settings ctx settings ~database_key ~test_location in
   let run_case handle ~is_final =
-    let is_nondeterministic = Ffi.test_case_is_nondeterministic ctx handle in
+    let should_capture = Ffi.test_case_should_capture ctx handle in
     let (tc : test_case) =
       { handle
       ; context = ctx
       ; is_final
-      ; is_nondeterministic
+      ; should_capture
       ; verbosity = settings.verbosity
       ; test_aborted = Atomic.make false
       ; draw_depth = Atomic.make 0
@@ -914,7 +914,7 @@ let run_test
          Printf.eprintf "The failure blob reproduced an error:\n%!";
          reraise failure)
   in
-  let handle_result failure_candidate result =
+  let handle_result result =
     match Ffi.result_status ctx result with
     | Run_passed -> ()
     | Run_error ->
@@ -923,20 +923,6 @@ let run_test
            (Option.value
               (Ffi.result_error ctx result)
               ~default:"hegel: run error (no message)"))
-    | Run_failed_nondeterministic ->
-      let failure, output =
-        match failure_candidate with
-        | Some failure -> failure
-        | None ->
-          (* libhegel cannot accept a failure that the frontend never reported. *)
-          failwith
-            "hegel: nondeterministic failure has no captured exception" [@coverage off]
-      in
-      if settings.verbosity <> Quiet
-      then (
-        print_failure_header test_location;
-        print_failure_body ~settings ~from_ppx ~blob:None ~exn:failure.exn ~output);
-      reraise failure
     | Run_failed ->
       let failures = Ffi.result_failures ctx result in
       Fun.protect
@@ -978,9 +964,9 @@ let run_test
     Fun.protect
       ~finally:(fun () -> Ffi.run_free ctx run)
       (fun () ->
-         let rec loop failure_candidate =
+         let rec loop () =
            match Ffi.next_test_case ctx run with
-           | None -> failure_candidate
+           | None -> ()
            | Some handle ->
              (* Free the case before moving on to the next one. *)
              let outcome =
@@ -991,19 +977,13 @@ let run_test
              (match settings.verbosity with
               | Verbose | Debug -> Printf.eprintf "%s%!" outcome.output
               | Quiet | Normal -> ());
-             (* save failure candidate *)
-             let failure_candidate =
-               match outcome.result with
-               | Failed failure -> Some (failure, outcome.output)
-               | Valid | Invalid | Overrun -> failure_candidate
-             in
-             loop failure_candidate
+             loop ()
          in
-         let failure_candidate = loop None in
+         loop ();
          let result = Ffi.run_result ctx run in
          Fun.protect
            ~finally:(fun () -> Ffi.run_result_free ctx result)
-           (fun () -> handle_result failure_candidate result))
+           (fun () -> handle_result result))
   in
   let run_body () =
     match failure_blobs with

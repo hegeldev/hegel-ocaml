@@ -126,10 +126,8 @@ type status =
     - [Run_passed]: the property held across every generated test case.
     - [Run_failed]: the property failed; inspect each distinct counterexample
       via {!result_failures}.
-    - [Run_failed_nondeterministic]: the property failed during a run declared
-      nondeterministic. There is no replay blob.
     - [Run_error]: the run itself failed: a failed health check, a
-      nondeterministic test, a run-scoped client mistake, or a violated internal
+      nondeterminism abort, a run-scoped client mistake, or a violated internal
       engine invariant (a bug in hegel, reported with a bug-report diagnostic).
       It produced no verdict on the property. There are no failures to inspect;
       the message is read via {!result_error}. *)
@@ -137,7 +135,6 @@ type run_status =
   | Run_passed
   | Run_failed
   | Run_error
-  | Run_failed_nondeterministic
 
 (** Raised when a primitive returns [HEGEL_E_STOP_TEST]. The engine has
     exhausted its choice budget for the current test case. *)
@@ -357,9 +354,10 @@ val test_case_block : context -> test_case -> indent:int -> test_case
     derived blocks and clones inherit the attribution. *)
 val test_case_set_worker : context -> test_case -> worker_index:int -> unit
 
-(** [test_case_is_nondeterministic ctx tc] reports whether [tc] belongs to a
-    run already declared nondeterministic. *)
-val test_case_is_nondeterministic : context -> test_case -> bool
+(** [test_case_should_capture ctx tc] reports whether libhegel marked [tc]
+    for capture. The caller keeps the output of the case and if it fails, its
+    failure report. *)
+val test_case_should_capture : context -> test_case -> bool
 
 (** {2 Per-test-case primitives} *)
 
@@ -716,7 +714,7 @@ val note : context -> test_case -> string -> unit
 val result_status : context -> run_result -> run_status
 
 (** [result_error ctx r] is the run-level error message when the run ended in
-    {!Run_error}: a failed health check, a nondeterministic test, a run-scoped
+    {!Run_error}: a failed health check, a nondeterminism abort, a run-scoped
     client mistake, or a violated internal engine invariant. [None] when the run
     completed normally. *)
 val result_error : context -> run_result -> string option
