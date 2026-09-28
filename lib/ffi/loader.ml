@@ -15,7 +15,7 @@
    filesystem/network branches are not subject to the coverage gate. *)
 
 (** The libhegel version these bindings target. *)
-let version = "0.43.1"
+let version = "0.44.0"
 
 (* Baked-in SHA-256 checksums of the published [libhegel-<os>-<arch>.<ext>]
    artifacts for {!version}, keyed by "<os>-<arch>". Platforms without an entry
@@ -23,11 +23,11 @@ let version = "0.43.1"
 
    Regenerate after bumping {!version} with: scripts/update-checksums.py *)
 let checksums =
-  [ "darwin-arm64", "2af6ffbbefe35da9c8e5b6b01eb5b838627a8636d3db2fff7f051ffd37b637ef"
-  ; "linux-amd64", "a229d08aeaa8282cf45e6e906ea65427a908496a131804338ae3adb0e5ec758e"
-  ; "linux-arm64", "7849daa92a56bbe7a763772ccea5b9af39ee0b962dc49ff472178a138cf999d3"
-  ; "windows-amd64", "16fdf7eb220bf4bdf1463e106c402f5f8aa979b24ad26b35c0deb7ce9a023b8d"
-  ; "windows-arm64", "857ba42e0533fe521435fd397d1f13606c777f7f463ca47b1b922694313c0a65"
+  [ "darwin-arm64", "5139ce933fd9bdc4e8565a070090a026024c39691eb19f9740b07a406586e4ca"
+  ; "linux-amd64", "c2baf69815c3cb7ebbcc690f6d721e21056ce278651d26e9e8c5ba795e2ce48c"
+  ; "linux-arm64", "06a058f29d9ac46d95f85eec6b7e80f4472f1bf6ae854867ac9b59f2f2061032"
+  ; "windows-amd64", "307534568d6a26effae8fe0204815a47e91cd1162f5623267cd84581d56c115b"
+  ; "windows-arm64", "6bdbd19480b3eef8a771231babd211a0cc5087742c2a55ab0a83002ed1fee3f9"
   ]
 ;;
 
