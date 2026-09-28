@@ -69,7 +69,6 @@ type owned = owned_state Locked.t
 type test_case KIND(value mod portable contended) =
   { handle : Ffi.test_case
   ; context : Ffi.context
-  ; is_final : bool
   ; should_capture : bool
   ; verbosity : Settings.verbosity
   ; test_aborted : bool Atomic.t
@@ -137,7 +136,6 @@ let clone (tc : test_case) =
   own_clone tc context handle;
   { handle
   ; context
-  ; is_final = tc.is_final
   ; should_capture = tc.should_capture
   ; verbosity = tc.verbosity
   ; test_aborted = Atomic.make false
@@ -155,8 +153,7 @@ let with_block (tc : test_case) ~indent LOCAL(f) =
   let b =
     { handle
     ; context
-    ; is_final = tc.is_final
-    ; should_capture = tc.should_capture
+      ; should_capture = tc.should_capture
     ; verbosity = tc.verbosity
     ; test_aborted = Atomic.make false
     ; draw_depth = Atomic.make 0
@@ -429,7 +426,7 @@ let assume _tc condition = if not condition then raise Assume_rejected
 let should_print tc =
   match tc.verbosity with
   | Quiet -> false
-  | Normal -> tc.is_final || tc.should_capture
+  | Normal -> tc.should_capture
   | Verbose | Debug -> true
 ;;
 
@@ -744,16 +741,6 @@ let capture_document (tc : test_case) =
          | exception Usage_error _ -> Ffi.printer_value tc.context printer))
 ;;
 
-(** Diagnostic raised when the engine's shrunk counterexample no longer fails on
-    the client-driven final replay: the test produced a different outcome for the
-    same generated data and is therefore non-deterministic. *)
-let flaky_diagnostic =
-  "Flaky test detected: Your test produced different outcomes when run with the same \
-   generated data — it failed when it previously succeeded, or succeeded when it \
-   previously failed. This usually means your test depends on external state such as \
-   global variables, system time, or external random number generators."
-;;
-
 (** Width the framed failure report's header rule is padded to. *)
 let frame_width = 80
 
@@ -769,9 +756,10 @@ let print_failure_header test_location =
   Printf.eprintf "%s\n%!" (stderr_color ansi_red rule)
 ;;
 
-let print_failure_body ~(settings : Settings.t) ~from_ppx ~blob ~exn ~output =
+let print_failure_body ~(settings : Settings.t) ~from_ppx ~blob ~caveat ~exn ~output =
   if not (String.equal output "") then Printf.eprintf "\n%s\n%!" output;
   Printf.eprintf "Exception: %s\n%!" (Stdlib.Printexc.to_string exn);
+  Option.iter (fun caveat -> Printf.eprintf "note: %s\n%!" caveat) caveat;
   if settings.print_blob
   then
     Option.iter
@@ -787,11 +775,10 @@ let reraise failure = Printexc.raise_with_backtrace failure.exn failure.backtrac
 (** [run_test ~settings ?test_location ?database_key ?failure_blobs test_fn] runs
     a property test using the given settings against the native engine.
 
-    With an empty [failure_blobs] (the default) it performs a normal engine run —
-    generation, shrinking, and database replay. With a non-empty [failure_blobs]
-    it instead replays the first blob as a standalone deterministic case and
-    reports whether it reproduced the original failure (subsequent blobs are
-    ignored); no engine worker, shrinking, or database is involved.
+    With an empty [failure_blobs] (the default) it executes the database replay, 
+    generation, and shrinking phases. With a non-empty [failure_blobs]
+    the engine replays the first blob until a replay fails, and ignores the
+    other blobs.
 
     @param test_location
       source location of the test. Passed to libhegel, which inside Antithesis
@@ -836,12 +823,11 @@ let run_test
   in
   let ctx = Ffi.context_new () in
   let ffi_settings = build_ffi_settings ctx settings ~database_key ~test_location in
-  let run_case handle ~is_final =
+  let run_case handle =
     let should_capture = Ffi.test_case_should_capture ctx handle in
     let (tc : test_case) =
       { handle
       ; context = ctx
-      ; is_final
       ; should_capture
       ; verbosity = settings.verbosity
       ; test_aborted = Atomic.make false
