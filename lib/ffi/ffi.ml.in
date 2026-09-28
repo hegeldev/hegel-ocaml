@@ -352,7 +352,6 @@ let c_run_start =
     (handle_t @-> handle_t @-> handle_t @-> handle_t @-> ptr handle_t @-> returning int)
 ;;
 
-(* As [hegel_run_start], with the blob as the third argument. *)
 let c_run_start_blob =
   foreign
     "hegel_run_start_blob"

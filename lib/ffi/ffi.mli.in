@@ -320,12 +320,8 @@ val settings_get_nondeterminism_strictness
     {!Internal_error} on failure. The handle must be freed with {!run_free}. *)
 val run_start : context -> settings -> run
 
-(** [run_start_blob ctx s blob] starts a run that replays the base64 failure
-    [blob] instead of exploring. The engine replays the blob until a replay
-    fails, under a bounded budget, and handles both blob formats. Drive it like
-    a {!run_start} run: a reproducing replay is the failure of the run (with no
-    blob), a run with no failures means the blob is stale, and an undecodable
-    blob is the error of the run. The handle must be freed with {!run_free}. *)
+(** [run_start_blob ctx s blob] starts a run that replays [blob] until a replay
+    fails. The handle must be freed with {!run_free}. *)
 val run_start_blob : context -> settings -> string -> run
 
 (** [next_test_case ctx run] blocks until the engine produces the next test
@@ -761,8 +757,7 @@ val result_failures : context -> run_result -> failure list
 
 val failure_blob : context -> failure -> string option
 
-(** [failure_caveat ctx f] is the confirmation caveat of [f] under the run's
-    nondeterministic handling, which quotes the replay evidence of the run.
-    [None] for a deterministic failure. *)
+(** [failure_caveat ctx f] is the caveat of [f] under nondeterministic
+    handling. [None] for a deterministic failure. *)
 val failure_caveat : context -> failure -> string option
 val failure_origin : context -> failure -> string option

@@ -163,6 +163,7 @@
     phases = ["explicit", "reuse", "generate", "target", "shrink"]
     database = "default"
     backend = "default"
+    nondeterminism_strictness = "warn"
     v}
 
     [seed = "none"] clears an inherited seed, and [database = "default"]
@@ -221,6 +222,15 @@ type backend =
   (** Reads bytes from [/dev/urandom] on every draw, so Antithesis's fuzzer
       controls every choice. Selected by the [workload] profile. You almost
       certainly don't want it otherwise. *)
+
+(** How a run handles nondeterministic test behavior. In [hegel.toml]:
+    [quiet], [warn], or [error]. *)
+module Nondeterminism_strictness : sig
+  type t =
+    | Quiet (** Switch to nondeterministic handling silently. *)
+    | Warn (** [Quiet], but print a notice per run. *)
+    | Error (** Abort the run with a flaky-test error. *)
+end
 
 (** Phases of a test run that can be enabled or disabled via the [phases]
     field. In [hegel.toml]: [explicit], [reuse], [generate], [target], or [shrink]. *)
@@ -282,6 +292,9 @@ type t =
   ; backend : backend
     (** The source of randomness. [Default] in the [base] profile, [Urandom]
         in the [workload] profile. *)
+  ; nondeterminism_strictness : Nondeterminism_strictness.t
+    (** How a run handles nondeterministic test behavior. [Quiet] in the
+        [base] profile. *)
   }
 
 (** {2:functions Functions} *)

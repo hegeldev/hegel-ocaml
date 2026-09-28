@@ -59,6 +59,10 @@ let test_default_settings_not_ci () =
       (Poly.equal s (Settings.from_profile "development"));
     Alcotest.(check bool) "backend default" true (Poly.equal s.backend Settings.Default);
     Alcotest.(check bool)
+      "nondeterminism_strictness quiet"
+      true
+      (Poly.equal s.nondeterminism_strictness Settings.Nondeterminism_strictness.Quiet);
+    Alcotest.(check bool)
       "workload backend urandom"
       true
       (Poly.equal (Settings.from_profile "workload").backend Settings.Urandom))
@@ -113,6 +117,11 @@ let test_register_profile_round_trip () =
         ; report_multiple_failures = true
         ; show_statistics = true
         ; backend = (if i mod 2 = 0 then Settings.Default else Settings.Urandom)
+        ; nondeterminism_strictness =
+            (match i mod 3 with
+             | 0 -> Quiet
+             | 1 -> Warn
+             | _ -> Error)
         }
       in
       Settings.register_profile name s;
@@ -146,7 +155,13 @@ let config_child () =
   if n <> 100 then failwithf "base: expected the base 100 test cases, got %d" n ();
   if not (Settings.default ()).print_blob then failwith "default: expected print_blob on";
   if (Settings.from_profile "noblob").print_blob
-  then failwith "noblob: expected print_blob off from hegel.toml"
+  then failwith "noblob: expected print_blob off from hegel.toml";
+  if
+    not
+      (Poly.equal
+         (Settings.from_profile "noblob").nondeterminism_strictness
+         Settings.Nondeterminism_strictness.Warn)
+  then failwith "noblob: expected nondeterminism_strictness warn from hegel.toml"
 ;;
 
 let test_hegel_toml_config () =
@@ -159,7 +174,8 @@ let test_hegel_toml_config () =
          [profiles.nightly]\n\
          test_cases = 7\n\n\
          [profiles.noblob]\n\
-         print_blob = false\n";
+         print_blob = false\n\
+         nondeterminism_strictness = \"warn\"\n";
     let pid =
       Unix.create_process_env
         ~prog:Stdlib.Sys.executable_name
