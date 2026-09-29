@@ -27,6 +27,8 @@
       Immutable, and available by name as the reserved [base] profile.
     + {b The profile}: a named set of overrides resolved by libhegel from
       {{!builtin}built-in profiles}, [hegel.toml], and {!register_profile}.
+    + {b The settings environment variables}: see
+      {{!env}Environment variables}.
     + {b Settings in the test code}: {!create}'s arguments and record
       updates on the value the profile produced.
 
@@ -172,13 +174,23 @@
     {2:env Environment variables}
 
     {t
-      | Variable                    | Read by               | Effect                                                                         |
-      |-----------------------------|-----------------------|--------------------------------------------------------------------------------|
-      | [HEGEL_DEFAULT_PROFILE]     | profile resolution    | The default profile, unless {!set_default_profile} set one.                    |
-      | [HEGEL_CONFIG]              | config loading        | Path of the [hegel.toml] to load                                               |
-      | [ANTITHESIS_OUTPUT_DIR]     | environment detection | Selects the [workload] profile. A run fails if the named directory is missing. |
-      | [CI], [GITHUB_ACTIONS], ... | environment detection | Selects the [ci] profile.                                                      |
-    } *)
+      | Variable                          | Read by               | Sets                                                                           |
+      |-----------------------------------|-----------------------|--------------------------------------------------------------------------------|
+      | [HEGEL_DEFAULT_PROFILE]           | profile resolution    | The default profile, unless {!set_default_profile} set one.                    |
+      | [HEGEL_CONFIG]                    | config loading        | Path of the [hegel.toml] to load                                               |
+      | [ANTITHESIS_OUTPUT_DIR]           | environment detection | The [workload] profile. A run fails if the directory is missing.               |
+      | [CI], [GITHUB_ACTIONS], ...       | environment detection | The [ci] profile.                                                              |
+      | [HEGEL_TEST_CASES]                | settings              | [test_cases]: a positive integer.                                              |
+      | [HEGEL_DATABASE]                  | settings              | [database]: [disabled], or a path.                                             |
+      | [HEGEL_STATISTICS]                | settings              | [show_statistics]: any value except [0] enables it.                            |
+      | [HEGEL_SEED]                      | settings              | [seed]: an integer, or [none].                                                 |
+      | [HEGEL_DERANDOMIZE]               | settings              | [derandomize]: [true], [1], [yes], [false], [0], or [no].                      |
+      | [HEGEL_PRINT_BLOB]                | settings              | [print_blob]: the same values as [HEGEL_DERANDOMIZE].                          |
+      | [HEGEL_NONDETERMINISM_STRICTNESS] | settings              | [nondeterminism_strictness]: [quiet], [warn], or [error].                      |
+    }
+
+    An empty variable is ignored. A malformed variable makes {!default} and {!from_profile}
+    raise [Usage_error]. *)
 
 (** {2:types Types} *)
 

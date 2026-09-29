@@ -187,16 +187,22 @@ let in_test_context : bool DLS.key = DLS.new_key (fun () -> false)
     groups probes for the same bug while keeping failures at distinct source
     lines apart (see {!Ffi.mark_complete}).
 
-    [failwith] and [invalid_arg] raise from within the runtime ([stdlib.ml]),
-    and [require]/[require_equal] raise from within this file, so the innermost
-    backtrace slot is not the assertion's true source. Such frames are skipped
-    so the origin points at the caller's line; without this, every same-typed
-    exception in a run would collapse to one origin. *)
+    Frames of the stdlib and of the hegel libraries are skipped. Their code
+    paths can change between replays of the same failure, and the engine then
+    treats the failure as nondeterministic. *)
 let extract_origin exn =
   let bt = Stdlib.Printexc.get_raw_backtrace () in
-  let is_runtime_file file =
-    String.ends_with file ~suffix:"stdlib.ml"
-    || String.ends_with file ~suffix:"internal.ml.in"
+  let library_modules =
+    [ "Hegel"; "Hegel_ffi"; "Hegel_jane"; "Hegel_jane_async"; "Hegel_jane_concurrent" ]
+  in
+  let is_library_frame name =
+    String.starts_with name ~prefix:"Stdlib"
+    || String.starts_with name ~prefix:"Camlinternal"
+    || List.exists
+         (fun m ->
+            String.starts_with name ~prefix:(m ^ ".")
+            || String.starts_with name ~prefix:(m ^ "__"))
+         library_modules
   in
   let user_location =
     match Stdlib.Printexc.backtrace_slots bt with
@@ -204,9 +210,9 @@ let extract_origin exn =
     | Some slots ->
       Array.find_map
         (fun slot ->
-           match Stdlib.Printexc.Slot.location slot with
-           | Some (loc : Stdlib.Printexc.location) when not (is_runtime_file loc.filename)
-             -> Some (loc.filename, loc.line_number)
+           match Stdlib.Printexc.Slot.(name slot, location slot) with
+           | Some name, Some (loc : Stdlib.Printexc.location)
+             when not (is_library_frame name) -> Some (loc.filename, loc.line_number)
            | _ -> None)
         slots
   in

@@ -273,6 +273,19 @@ let test_extract_origin_distinct_lines () =
     (String.equal a b)
 ;;
 
+(* [Lazy.force] raises through [CamlinternalLazy] frames. The origin skips them
+   and points at this file. *)
+let test_extract_origin_skips_stdlib_internal_frames () =
+  let origin =
+    try Lazy.force (lazy (failwith "boom")) with
+    | e -> Internal.extract_origin e
+  in
+  Alcotest.(check bool)
+    "origin is in this file"
+    true
+    (Test_helpers.contains_substring origin "test_client.ml")
+;;
+
 (* ==== Sexp renderer tests ==== *)
 
 let render_to_string ~max_width sexp =
@@ -771,6 +784,10 @@ let tests =
       "extract_origin distinct lines"
       `Quick
       test_extract_origin_distinct_lines
+  ; Alcotest.test_case
+      "extract_origin skips stdlib internal frames"
+      `Quick
+      test_extract_origin_skips_stdlib_internal_frames
   ; Alcotest.test_case "color_enabled" `Quick test_color_enabled
   ; Alcotest.test_case
       "Stop_test does not fail the run"

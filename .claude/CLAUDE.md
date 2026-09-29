@@ -716,7 +716,13 @@ engine's flaky-test error). The engine switches on observed evidence only — a
 replay that does not fail with the same origin, a verdict flip, a
 nondeterministic blob or database entry — so a stable origin is essential:
 an origin that changes between replays of the same failure makes the engine
-switch.
+switch. `extract_origin` therefore takes the exception constructor plus the
+innermost backtrace frame whose function (`Printexc.Slot.name`) is not in
+`Stdlib*`, `Camlinternal*`, or a hegel library (`Hegel`, `Hegel_ffi`,
+`Hegel_jane*`, matched as `M.` / `M__` prefixes). Hegel's own frames vary with
+the print path: `run_rules` calls a rule body from two lines depending on
+`should_print`, so a rule that raises from a tail call used to get two
+origins. With backtrace recording off the origin is `<Exn> at :0`.
 
 ### Concurrent stateful testing (lib/stateful.ml.in, lib/concurrency.ml.in)
 

@@ -114,6 +114,49 @@ let%expect_test "state trace across multiple rules" =
     |}]
 ;;
 
+(* The rule raises from a tail call, so its own frame is not in the backtrace. *)
+module%hegel_state_machine Tail_boom = struct
+  type state = unit
+
+  let boom tc () =
+    ignore (Hegel.draw tc (integers ()) : int);
+    failwith "tail boom"
+  [@@rule]
+  ;;
+end
+
+let%expect_test "a rule failure keeps its origin between replays" =
+  let recording = Printexc.backtrace_status () in
+  Printexc.record_backtrace true;
+  Exn.protect
+    ~finally:(fun () -> Printexc.record_backtrace recording)
+    ~f:(fun () ->
+      match
+        Hegel.run_hegel_test
+          ~settings:
+            { (Settings.create ~test_cases:20 ~seed:0 ()) with
+              database = Settings.Disabled
+            ; verbosity = Settings.Normal
+            ; nondeterminism_strictness = Error
+            }
+          (fun tc -> Tail_boom.run tc ~step_count:3 ~init:())
+      with
+      | () -> print_endline "passed"
+      | exception Failure message -> print_endline message);
+  print_string (Expect_scrub.scrub_report [%expect.output]);
+  [%expect
+    {|
+    --- Failure --------------------------------------------------------------------
+
+    Step 1: boom
+      draw_1 = 0
+
+    Exception: Failure("tail boom")
+    rerun with: ~failure_blobs:[ "<BLOB>" ]
+    tail boom
+    |}]
+;;
+
 module%hegel_concurrent_state_machine Concurrent_boom = struct
   type state = unit
 
@@ -153,7 +196,6 @@ let%expect_test "one concurrent worker remains deterministic" =
     [worker 0 +time]   draw_1 = 0
 
     Exception: Failure("concurrent boom")
-    note: nondeterministic failure, confirmed: failed 20 of 20 replays at confirmation and 1 of 1 at report time
     rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
@@ -187,20 +229,13 @@ let%expect_test "concurrent invariant failures retain their names" =
     {|
     --- Failure --------------------------------------------------------------------
 
-    Concurrency level: 3
     state = 0
     ---------------- Round 1: group "writes" ----------------
     [worker 0 +time] Rule: increment
-    [worker 0 +time] Rule: increment
-    [worker 0 +time] Rule: increment
-    [worker 0 +time] Rule: increment
-    [worker 0 +time] Rule: increment
-    [worker 2 +time] Rule: increment
-    state = 6
+    state = 1
     Invariant stays_zero violated after round 1.
 
     Exception: Failure("invariant boom")
-    note: nondeterministic failure, confirmed: failed 20 of 20 replays at confirmation and 1 of 1 at report time
     rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;
