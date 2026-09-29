@@ -183,6 +183,12 @@ let c_settings_verbosity =
   foreign "hegel_settings_set_verbosity" (handle_t @-> handle_t @-> int @-> returning int)
 ;;
 
+let c_settings_nondeterminism_strictness =
+  foreign
+    "hegel_settings_set_nondeterminism_strictness"
+    (handle_t @-> handle_t @-> int @-> returning int)
+;;
+
 let c_settings_seed =
   foreign
     "hegel_settings_set_seed"
@@ -319,6 +325,12 @@ let c_settings_get_backend =
     (handle_t @-> handle_t @-> ptr int @-> returning int)
 ;;
 
+let c_settings_get_nondeterminism_strictness =
+  foreign
+    "hegel_settings_get_nondeterminism_strictness"
+    (handle_t @-> handle_t @-> ptr int @-> returning int)
+;;
+
 let c_settings_phases =
   foreign
     "hegel_settings_set_phases"
@@ -338,6 +350,18 @@ let c_run_start =
   foreign
     "hegel_run_start"
     (handle_t @-> handle_t @-> handle_t @-> handle_t @-> ptr handle_t @-> returning int)
+;;
+
+let c_run_start_blob =
+  foreign
+    "hegel_run_start_blob"
+    (handle_t
+     @-> handle_t
+     @-> string
+     @-> handle_t
+     @-> handle_t
+     @-> ptr handle_t
+     @-> returning int)
 ;;
 
 let c_next_test_case =
@@ -362,9 +386,9 @@ let c_test_case_free =
   foreign "hegel_test_case_free" (handle_t @-> handle_t @-> returning int)
 ;;
 
-let c_test_case_is_nondeterministic =
+let c_test_case_should_capture =
   foreign
-    "hegel_test_case_is_nondeterministic"
+    "hegel_test_case_should_capture"
     (handle_t @-> handle_t @-> ptr bool @-> returning int)
 ;;
 
@@ -533,18 +557,6 @@ let c_generate_ipv4 =
 
 let c_generate_ipv6 =
   foreign "hegel_generate_ipv6" (handle_t @-> handle_t @-> ptr uint8_t @-> returning int)
-;;
-
-let c_test_case_from_blob =
-  foreign
-    "hegel_test_case_from_blob"
-    (handle_t
-     @-> handle_t
-     @-> string_opt
-     @-> handle_t
-     @-> handle_t
-     @-> ptr handle_t
-     @-> returning int)
 ;;
 
 let c_start_span =
@@ -789,6 +801,12 @@ let c_failure_blob =
     (handle_t @-> handle_t @-> ptr (ptr char) @-> returning int)
 ;;
 
+let c_failure_caveat =
+  foreign
+    "hegel_failure_caveat"
+    (handle_t @-> handle_t @-> ptr (ptr char) @-> returning int)
+;;
+
 let c_failure_origin =
   foreign
     "hegel_failure_origin"
@@ -828,6 +846,11 @@ type verbosity =
   | Verbose
   | Debug
 
+type nondeterminism_strictness =
+  | Nondeterminism_quiet
+  | Nondeterminism_warn
+  | Nondeterminism_error
+
 type status =
   | Valid
   | Invalid
@@ -838,7 +861,6 @@ type run_status =
   | Run_passed
   | Run_failed
   | Run_error
-  | Run_failed_nondeterministic
 
 exception Stop_test
 exception Assume_rejected
@@ -892,6 +914,20 @@ let verbosity_of_int = function
   | 2 -> Verbose
   | 3 -> Debug
   | n -> raise (Internal_error (Printf.sprintf "hegel: unknown verbosity %d" n))
+;;
+
+let nondeterminism_strictness_to_int = function
+  | Nondeterminism_quiet -> 0
+  | Nondeterminism_warn -> 1
+  | Nondeterminism_error -> 2
+;;
+
+let nondeterminism_strictness_of_int = function
+  | 0 -> Nondeterminism_quiet
+  | 1 -> Nondeterminism_warn
+  | 2 -> Nondeterminism_error
+  | n ->
+    raise (Internal_error (Printf.sprintf "hegel: unknown nondeterminism strictness %d" n))
 ;;
 
 let backend_of_int = function
@@ -985,6 +1021,12 @@ let settings_test_cases ctx s n =
 
 let settings_verbosity ctx s v =
   check_rc ctx (c_settings_verbosity ctx s (verbosity_to_int v))
+;;
+
+let settings_nondeterminism_strictness ctx s n =
+  check_rc
+    ctx
+    (c_settings_nondeterminism_strictness ctx s (nondeterminism_strictness_to_int n))
 ;;
 
 let settings_seed ctx s = function
@@ -1094,6 +1136,12 @@ let settings_get_backend ctx s =
   backend_of_int !@out
 ;;
 
+let settings_get_nondeterminism_strictness ctx s =
+  let out = allocate int 0 in
+  check_rc ctx (c_settings_get_nondeterminism_strictness ctx s out);
+  nondeterminism_strictness_of_int !@out
+;;
+
 (* ------------------------------------------------------------------ *)
 (* Run lifecycle                                                       *)
 (* ------------------------------------------------------------------ *)
@@ -1104,16 +1152,16 @@ let run_start ctx s =
   !@out
 ;;
 
+let run_start_blob ctx s blob =
+  let out = allocate handle_t null_handle in
+  check_rc ctx (c_run_start_blob ctx s blob null_handle null_handle out);
+  !@out
+;;
+
 let next_test_case ctx run =
   let out = allocate handle_t null_handle in
   check_rc ctx (c_next_test_case ctx run out);
   if is_null (raw !@out) then None else Some !@out
-;;
-
-let test_case_from_blob ctx s b =
-  let out = allocate handle_t null_handle in
-  check_rc ctx (c_test_case_from_blob ctx s b null_handle null_handle out);
-  !@out
 ;;
 
 let run_result ctx run =
@@ -1143,9 +1191,9 @@ let test_case_block ctx tc ~indent =
   !@out
 ;;
 
-let test_case_is_nondeterministic ctx tc =
+let test_case_should_capture ctx tc =
   let out = allocate bool false in
-  check_rc ctx (c_test_case_is_nondeterministic ctx tc out);
+  check_rc ctx (c_test_case_should_capture ctx tc out);
   !@out
 ;;
 
@@ -1700,7 +1748,6 @@ let result_status ctx r =
   match !@out with
   | 0 -> Run_passed
   | 1 -> Run_failed
-  | 3 -> Run_failed_nondeterministic
   | _ -> Run_error
 ;;
 
@@ -1742,6 +1789,12 @@ let failure_blob ctx f =
   coerce (ptr char) string_opt !@out
 ;;
 
+let failure_caveat ctx f =
+  let out = allocate (ptr char) (from_voidp char null) in
+  check_rc ctx (c_failure_caveat ctx f out);
+  coerce (ptr char) string_opt !@out
+;;
+
 #ifdef OXCAML
 (* ctypes 0.24.0+ox doesn't have mode annotations. libhegel's threading
    contract makes these safe to call from any thread or domain *)
@@ -1756,6 +1809,7 @@ let settings_free = Obj.magic_portable settings_free
 let settings_backend = Obj.magic_portable settings_backend
 let settings_test_cases = Obj.magic_portable settings_test_cases
 let settings_verbosity = Obj.magic_portable settings_verbosity
+let settings_nondeterminism_strictness = Obj.magic_portable settings_nondeterminism_strictness
 let settings_seed = Obj.magic_portable settings_seed
 let settings_derandomize = Obj.magic_portable settings_derandomize
 let settings_report_multiple_failures = Obj.magic_portable settings_report_multiple_failures
@@ -1777,9 +1831,14 @@ let settings_get_report_multiple_failures = Obj.magic_portable settings_get_repo
 let settings_get_show_statistics = Obj.magic_portable settings_get_show_statistics
 let settings_get_print_blob = Obj.magic_portable settings_get_print_blob
 let settings_get_backend = Obj.magic_portable settings_get_backend
+
+let settings_get_nondeterminism_strictness =
+  Obj.magic_portable settings_get_nondeterminism_strictness
+;;
+
 let run_start = Obj.magic_portable run_start
+let run_start_blob = Obj.magic_portable run_start_blob
 let next_test_case = Obj.magic_portable next_test_case
-let test_case_from_blob = Obj.magic_portable test_case_from_blob
 let run_result = Obj.magic_portable run_result
 let run_free = Obj.magic_portable run_free
 let run_result_free = Obj.magic_portable run_result_free
@@ -1788,7 +1847,7 @@ let test_case_free = Obj.magic_portable test_case_free
 let test_case_clone = Obj.magic_portable test_case_clone
 let test_case_block = Obj.magic_portable test_case_block
 let test_case_set_worker = Obj.magic_portable test_case_set_worker
-let test_case_is_nondeterministic = Obj.magic_portable test_case_is_nondeterministic
+let test_case_should_capture = Obj.magic_portable test_case_should_capture
 let generate_boolean = Obj.magic_portable generate_boolean
 let generate_integer = Obj.magic_portable generate_integer
 let generate_float = Obj.magic_portable generate_float
@@ -1855,5 +1914,6 @@ let result_failure_count = Obj.magic_portable result_failure_count
 let result_failure = Obj.magic_portable result_failure
 let result_failures = Obj.magic_portable result_failures
 let failure_blob = Obj.magic_portable failure_blob
+let failure_caveat = Obj.magic_portable failure_caveat
 let failure_origin = Obj.magic_portable failure_origin
 #endif

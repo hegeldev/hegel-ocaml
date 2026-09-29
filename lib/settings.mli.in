@@ -27,6 +27,8 @@
       Immutable, and available by name as the reserved [base] profile.
     + {b The profile}: a named set of overrides resolved by libhegel from
       {{!builtin}built-in profiles}, [hegel.toml], and {!register_profile}.
+    + {b The settings environment variables}: see
+      {{!env}Environment variables}.
     + {b Settings in the test code}: {!create}'s arguments and record
       updates on the value the profile produced.
 
@@ -163,6 +165,7 @@
     phases = ["explicit", "reuse", "generate", "target", "shrink"]
     database = "default"
     backend = "default"
+    nondeterminism_strictness = "warn"
     v}
 
     [seed = "none"] clears an inherited seed, and [database = "default"]
@@ -171,13 +174,23 @@
     {2:env Environment variables}
 
     {t
-      | Variable                    | Read by               | Effect                                                                         |
-      |-----------------------------|-----------------------|--------------------------------------------------------------------------------|
-      | [HEGEL_DEFAULT_PROFILE]     | profile resolution    | The default profile, unless {!set_default_profile} set one.                    |
-      | [HEGEL_CONFIG]              | config loading        | Path of the [hegel.toml] to load                                               |
-      | [ANTITHESIS_OUTPUT_DIR]     | environment detection | Selects the [workload] profile. A run fails if the named directory is missing. |
-      | [CI], [GITHUB_ACTIONS], ... | environment detection | Selects the [ci] profile.                                                      |
-    } *)
+      | Variable                          | Read by               | Sets                                                                           |
+      |-----------------------------------|-----------------------|--------------------------------------------------------------------------------|
+      | [HEGEL_DEFAULT_PROFILE]           | profile resolution    | The default profile, unless {!set_default_profile} set one.                    |
+      | [HEGEL_CONFIG]                    | config loading        | Path of the [hegel.toml] to load                                               |
+      | [ANTITHESIS_OUTPUT_DIR]           | environment detection | The [workload] profile. A run fails if the directory is missing.               |
+      | [CI], [GITHUB_ACTIONS], ...       | environment detection | The [ci] profile.                                                              |
+      | [HEGEL_TEST_CASES]                | settings              | [test_cases]: a positive integer.                                              |
+      | [HEGEL_DATABASE]                  | settings              | [database]: [disabled], or a path.                                             |
+      | [HEGEL_STATISTICS]                | settings              | [show_statistics]: any value except [0] enables it.                            |
+      | [HEGEL_SEED]                      | settings              | [seed]: an integer, or [none].                                                 |
+      | [HEGEL_DERANDOMIZE]               | settings              | [derandomize]: [true], [1], [yes], [false], [0], or [no].                      |
+      | [HEGEL_PRINT_BLOB]                | settings              | [print_blob]: the same values as [HEGEL_DERANDOMIZE].                          |
+      | [HEGEL_NONDETERMINISM_STRICTNESS] | settings              | [nondeterminism_strictness]: [quiet], [warn], or [error].                      |
+    }
+
+    An empty variable is ignored. A malformed variable makes {!default} and {!from_profile}
+    raise [Usage_error]. *)
 
 (** {2:types Types} *)
 
@@ -221,6 +234,15 @@ type backend =
   (** Reads bytes from [/dev/urandom] on every draw, so Antithesis's fuzzer
       controls every choice. Selected by the [workload] profile. You almost
       certainly don't want it otherwise. *)
+
+(** How a run handles nondeterministic test behavior. In [hegel.toml]:
+    [quiet], [warn], or [error]. *)
+module Nondeterminism_strictness : sig
+  type t =
+    | Quiet (** Switch to nondeterministic handling silently. *)
+    | Warn (** [Quiet], but print a notice per run. *)
+    | Error (** Abort the run with a flaky-test error. *)
+end
 
 (** Phases of a test run that can be enabled or disabled via the [phases]
     field. In [hegel.toml]: [explicit], [reuse], [generate], [target], or [shrink]. *)
@@ -282,6 +304,9 @@ type t =
   ; backend : backend
     (** The source of randomness. [Default] in the [base] profile, [Urandom]
         in the [workload] profile. *)
+  ; nondeterminism_strictness : Nondeterminism_strictness.t
+    (** How a run handles nondeterministic test behavior. [Quiet] in the
+        [base] profile. *)
   }
 
 (** {2:functions Functions} *)

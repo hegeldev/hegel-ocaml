@@ -59,6 +59,10 @@ let test_default_settings_not_ci () =
       (Poly.equal s (Settings.from_profile "development"));
     Alcotest.(check bool) "backend default" true (Poly.equal s.backend Settings.Default);
     Alcotest.(check bool)
+      "nondeterminism_strictness quiet"
+      true
+      (Poly.equal s.nondeterminism_strictness Settings.Nondeterminism_strictness.Quiet);
+    Alcotest.(check bool)
       "workload backend urandom"
       true
       (Poly.equal (Settings.from_profile "workload").backend Settings.Urandom))
@@ -113,6 +117,11 @@ let test_register_profile_round_trip () =
         ; report_multiple_failures = true
         ; show_statistics = true
         ; backend = (if i mod 2 = 0 then Settings.Default else Settings.Urandom)
+        ; nondeterminism_strictness =
+            (match i mod 3 with
+             | 0 -> Quiet
+             | 1 -> Warn
+             | _ -> Error)
         }
       in
       Settings.register_profile name s;
@@ -146,7 +155,13 @@ let config_child () =
   if n <> 100 then failwithf "base: expected the base 100 test cases, got %d" n ();
   if not (Settings.default ()).print_blob then failwith "default: expected print_blob on";
   if (Settings.from_profile "noblob").print_blob
-  then failwith "noblob: expected print_blob off from hegel.toml"
+  then failwith "noblob: expected print_blob off from hegel.toml";
+  if
+    not
+      (Poly.equal
+         (Settings.from_profile "noblob").nondeterminism_strictness
+         Settings.Nondeterminism_strictness.Warn)
+  then failwith "noblob: expected nondeterminism_strictness warn from hegel.toml"
 ;;
 
 let test_hegel_toml_config () =
@@ -159,7 +174,8 @@ let test_hegel_toml_config () =
          [profiles.nightly]\n\
          test_cases = 7\n\n\
          [profiles.noblob]\n\
-         print_blob = false\n";
+         print_blob = false\n\
+         nondeterminism_strictness = \"warn\"\n";
     let pid =
       Unix.create_process_env
         ~prog:Stdlib.Sys.executable_name
@@ -255,6 +271,19 @@ let test_extract_origin_distinct_lines () =
     "same-typed exceptions at different lines get distinct origins"
     false
     (String.equal a b)
+;;
+
+(* [Lazy.force] raises through [CamlinternalLazy] frames. The origin skips them
+   and points at this file. *)
+let test_extract_origin_skips_stdlib_internal_frames () =
+  let origin =
+    try Lazy.force (lazy (failwith "boom")) with
+    | e -> Internal.extract_origin e
+  in
+  Alcotest.(check bool)
+    "origin is in this file"
+    true
+    (Test_helpers.contains_substring origin "test_client.ml")
 ;;
 
 (* ==== Sexp renderer tests ==== *)
@@ -687,36 +716,6 @@ let test_render_diff () =
     (Internal.render_diff ~colored:false ~original ~updated)
 ;;
 
-let test_run_flaky_on_replay () =
-  let calls = ref 0 in
-  let msg =
-    try
-      run_hegel_test
-        ~settings:
-          { (Hegel.Settings.default ()) with
-            phases = [ Settings.Generate ]
-          ; database = Settings.Disabled
-          ; verbosity = Settings.Quiet
-          }
-        (fun tc ->
-           ignore (Hegel.draw tc int_gen : int);
-           let i = !calls in
-           Int.incr calls;
-           assert (i <> 0));
-      None
-    with
-    | Failure m -> Some m
-    | _ -> None
-  in
-  match msg with
-  | Some m ->
-    Alcotest.(check bool)
-      "flaky detected"
-      true
-      (Test_helpers.contains_substring m "Flaky test detected")
-  | None -> Alcotest.fail "expected a flaky failure"
-;;
-
 (** A health-check failure is a run-level error (no counterexample), surfaced as
     a [Failure] carrying the engine's error message. *)
 let test_run_health_check_failure () =
@@ -785,6 +784,10 @@ let tests =
       "extract_origin distinct lines"
       `Quick
       test_extract_origin_distinct_lines
+  ; Alcotest.test_case
+      "extract_origin skips stdlib internal frames"
+      `Quick
+      test_extract_origin_skips_stdlib_internal_frames
   ; Alcotest.test_case "color_enabled" `Quick test_color_enabled
   ; Alcotest.test_case
       "Stop_test does not fail the run"
@@ -793,7 +796,6 @@ let tests =
   ; Alcotest.test_case "stderr_color_enabled" `Quick test_stderr_color_enabled
   ; Alcotest.test_case "stderr_color" `Quick test_stderr_color
   ; Alcotest.test_case "render_diff" `Quick test_render_diff
-  ; Alcotest.test_case "run flaky on replay" `Quick test_run_flaky_on_replay
   ; Alcotest.test_case
       "test_location reports result"
       `Quick

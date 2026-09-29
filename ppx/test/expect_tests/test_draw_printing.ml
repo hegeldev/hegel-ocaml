@@ -1,4 +1,4 @@
-(** On the final replay of a failing test ([is_final = true]) an outermost
+(** On the replay that reports a failing test, an outermost
     [draw] prints its value through the [note] channel (stderr, captured here by
     ppx_expect). [draw_silent] never prints, and draws nested inside a span
     (depth > 0) are suppressed so only the outermost value shows. The printer is

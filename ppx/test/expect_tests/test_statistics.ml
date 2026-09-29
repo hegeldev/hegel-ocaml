@@ -33,7 +33,7 @@ let%expect_test "statistics aggregate events and numeric observations" =
     {|
     Statistics (over 5 test cases):
       * always: 100.0% of test cases
-      * big draw: 40.0% of test cases
+      * big draw: 60.0% of test cases
       * obs: count 10, min 1, median 2, mean 2.00, p90 3, max 3
     |}]
 ;;
@@ -59,7 +59,8 @@ let%expect_test "shrink replays are excluded from the statistics" =
   [%expect
     {|
     Statistics (over 2 test cases):
-      * v: count 2, min 0, median 26.5, mean 26.50, p90 53, max 53
+      * v: count 2, min 0, median 39.5, mean 39.50, p90 79, max 79
+      * nondeterministic handling: measurement replays 4, failing 4
     --- Failure --------------------------------------------------------------------
     Exception: File "ppx/test/expect_tests/test_statistics.ml", line LINE, characters C1-C2: Assertion failed
     rerun with: ~failure_blobs:[ "<BLOB>" ]

@@ -69,8 +69,7 @@ type owned = owned_state Locked.t
 type test_case KIND(value mod portable contended) =
   { handle : Ffi.test_case
   ; context : Ffi.context
-  ; is_final : bool
-  ; is_nondeterministic : bool
+  ; should_capture : bool
   ; verbosity : Settings.verbosity
   ; test_aborted : bool Atomic.t
   ; draw_depth : int Atomic.t
@@ -137,8 +136,7 @@ let clone (tc : test_case) =
   own_clone tc context handle;
   { handle
   ; context
-  ; is_final = tc.is_final
-  ; is_nondeterministic = tc.is_nondeterministic
+  ; should_capture = tc.should_capture
   ; verbosity = tc.verbosity
   ; test_aborted = Atomic.make false
   ; draw_depth = Atomic.make (Atomic.get tc.draw_depth)
@@ -155,8 +153,7 @@ let with_block (tc : test_case) ~indent LOCAL(f) =
   let b =
     { handle
     ; context
-    ; is_final = tc.is_final
-    ; is_nondeterministic = tc.is_nondeterministic
+      ; should_capture = tc.should_capture
     ; verbosity = tc.verbosity
     ; test_aborted = Atomic.make false
     ; draw_depth = Atomic.make 0
@@ -190,16 +187,22 @@ let in_test_context : bool DLS.key = DLS.new_key (fun () -> false)
     groups probes for the same bug while keeping failures at distinct source
     lines apart (see {!Ffi.mark_complete}).
 
-    [failwith] and [invalid_arg] raise from within the runtime ([stdlib.ml]),
-    and [require]/[require_equal] raise from within this file, so the innermost
-    backtrace slot is not the assertion's true source. Such frames are skipped
-    so the origin points at the caller's line; without this, every same-typed
-    exception in a run would collapse to one origin. *)
+    Frames of the stdlib and of the hegel libraries are skipped. Their code
+    paths can change between replays of the same failure, and the engine then
+    treats the failure as nondeterministic. *)
 let extract_origin exn =
   let bt = Stdlib.Printexc.get_raw_backtrace () in
-  let is_runtime_file file =
-    String.ends_with file ~suffix:"stdlib.ml"
-    || String.ends_with file ~suffix:"internal.ml.in"
+  let library_modules =
+    [ "Hegel"; "Hegel_ffi"; "Hegel_jane"; "Hegel_jane_async"; "Hegel_jane_concurrent" ]
+  in
+  let is_library_frame name =
+    String.starts_with name ~prefix:"Stdlib"
+    || String.starts_with name ~prefix:"Camlinternal"
+    || List.exists
+         (fun m ->
+            String.starts_with name ~prefix:(m ^ ".")
+            || String.starts_with name ~prefix:(m ^ "__"))
+         library_modules
   in
   let user_location =
     match Stdlib.Printexc.backtrace_slots bt with
@@ -207,9 +210,9 @@ let extract_origin exn =
     | Some slots ->
       Array.find_map
         (fun slot ->
-           match Stdlib.Printexc.Slot.location slot with
-           | Some (loc : Stdlib.Printexc.location) when not (is_runtime_file loc.filename)
-             -> Some (loc.filename, loc.line_number)
+           match Stdlib.Printexc.Slot.(name slot, location slot) with
+           | Some name, Some (loc : Stdlib.Printexc.location)
+             when not (is_library_frame name) -> Some (loc.filename, loc.line_number)
            | _ -> None)
         slots
   in
@@ -429,7 +432,7 @@ let assume _tc condition = if not condition then raise Assume_rejected
 let should_print tc =
   match tc.verbosity with
   | Quiet -> false
-  | Normal -> tc.is_final || tc.is_nondeterministic
+  | Normal -> tc.should_capture
   | Verbose | Debug -> true
 ;;
 
@@ -726,6 +729,7 @@ type result =
 type case_outcome =
   { result : result
   ; output : string
+  ; should_capture : bool
   }
 
 (** [capture_document tc] renders the document of a test case, its clones,
@@ -744,16 +748,6 @@ let capture_document (tc : test_case) =
          | exception Usage_error _ -> Ffi.printer_value tc.context printer))
 ;;
 
-(** Diagnostic raised when the engine's shrunk counterexample no longer fails on
-    the client-driven final replay: the test produced a different outcome for the
-    same generated data and is therefore non-deterministic. *)
-let flaky_diagnostic =
-  "Flaky test detected: Your test produced different outcomes when run with the same \
-   generated data — it failed when it previously succeeded, or succeeded when it \
-   previously failed. This usually means your test depends on external state such as \
-   global variables, system time, or external random number generators."
-;;
-
 (** Width the framed failure report's header rule is padded to. *)
 let frame_width = 80
 
@@ -769,9 +763,10 @@ let print_failure_header test_location =
   Printf.eprintf "%s\n%!" (stderr_color ansi_red rule)
 ;;
 
-let print_failure_body ~(settings : Settings.t) ~from_ppx ~blob ~exn ~output =
+let print_failure_body ~(settings : Settings.t) ~from_ppx ~blob ~caveat ~exn ~output =
   if not (String.equal output "") then Printf.eprintf "\n%s\n%!" output;
   Printf.eprintf "Exception: %s\n%!" (Stdlib.Printexc.to_string exn);
+  Option.iter (fun caveat -> Printf.eprintf "note: %s\n%!" caveat) caveat;
   if settings.print_blob
   then
     Option.iter
@@ -787,11 +782,10 @@ let reraise failure = Printexc.raise_with_backtrace failure.exn failure.backtrac
 (** [run_test ~settings ?test_location ?database_key ?failure_blobs test_fn] runs
     a property test using the given settings against the native engine.
 
-    With an empty [failure_blobs] (the default) it performs a normal engine run —
-    generation, shrinking, and database replay. With a non-empty [failure_blobs]
-    it instead replays the first blob as a standalone deterministic case and
-    reports whether it reproduced the original failure (subsequent blobs are
-    ignored); no engine worker, shrinking, or database is involved.
+    With an empty [failure_blobs] (the default) it executes the database replay, 
+    generation, and shrinking phases. With a non-empty [failure_blobs]
+    the engine replays the first blob until a replay fails, and ignores the
+    other blobs.
 
     @param test_location
       source location of the test. Passed to libhegel, which inside Antithesis
@@ -836,13 +830,13 @@ let run_test
   in
   let ctx = Ffi.context_new () in
   let ffi_settings = build_ffi_settings ctx settings ~database_key ~test_location in
-  let run_case handle ~is_final =
-    let is_nondeterministic = Ffi.test_case_is_nondeterministic ctx handle in
+  let captured = Hashtbl.create 4 in
+  let run_case handle =
+    let should_capture = Ffi.test_case_should_capture ctx handle in
     let (tc : test_case) =
       { handle
       ; context = ctx
-      ; is_final
-      ; is_nondeterministic
+      ; should_capture
       ; verbosity = settings.verbosity
       ; test_aborted = Atomic.make false
       ; draw_depth = Atomic.make 0
@@ -877,85 +871,50 @@ let run_test
       | Failed failure -> Ffi.Interesting, Some failure.origin
     in
     Ffi.mark_complete ctx handle status origin;
-    { result; output = capture_document tc }
+    { result; output = capture_document tc; should_capture }
   in
-  let replay_blob blob =
-    match Ffi.test_case_from_blob ctx ffi_settings (Some blob) with
-    | exception Usage_error msg -> Error msg
-    | handle ->
-      Ok
-        (Fun.protect
-           ~finally:(fun () -> Ffi.test_case_free ctx handle)
-           (fun () -> run_case handle ~is_final:true))
+  (* Keep the newest stamped failure of each origin for the report. *)
+  let update_captured failure outcome =
+    match Hashtbl.find_opt captured failure.origin with
+    | Some (_, curr_outcome) when curr_outcome.should_capture && not outcome.should_capture -> ()
+    | Some _ | None -> Hashtbl.replace captured failure.origin (failure, outcome)
   in
-  (* Engine-discovered failures must still fail on their final replay. *)
-  let final_replay failure =
-    let blob = Option.get (Ffi.failure_blob ctx failure) in
-    match replay_blob blob with
-    | Error msg ->
-      (* Requires libhegel to corrupt its own generated blob. *)
-      failwith
-        ("libhegel generated an invalid failure blob: "
-         ^ msg
-         ^ " Please report this at https://github.com/hegeldev/hegel-rust/issues")
-      [@coverage off]
-    | Ok { result = Failed failure; output; _ } -> blob, failure, output
-    | Ok _ -> failwith flaky_diagnostic
+  let report_failure failure =
+    let origin = Option.value (Ffi.failure_origin ctx failure) ~default:"" in
+    let failure_case, outcome = Hashtbl.find captured origin in
+    print_failure_body
+      ~settings
+      ~from_ppx
+      ~blob:(Ffi.failure_blob ctx failure)
+      ~caveat:(Ffi.failure_caveat ctx failure)
+      ~exn:failure_case.exn
+      ~output:outcome.output;
+    failure_case
   in
-  let run_from_blob blob =
-    match replay_blob blob with
-    | Error msg -> raise (Usage_error msg)
-    | Ok outcome ->
-      Printf.eprintf "%s%!" outcome.output;
-      (match outcome.result with
-       | Valid | Invalid | Overrun ->
-         failwith "The failure blob did not reproduce an error"
-       | Failed failure ->
-         Printf.eprintf "The failure blob reproduced an error:\n%!";
-         reraise failure)
-  in
-  let handle_result failure_candidate result =
+  let handle_result ~is_replay result =
     match Ffi.result_status ctx result with
-    | Run_passed -> ()
+    | Run_passed ->
+      if is_replay
+      then
+        failwith
+          "The failure blob did not reproduce an error. The failure is fixed, or a \
+           nondeterministic failure did not occur again in the replays."
     | Run_error ->
       raise
         (Failure
            (Option.value
               (Ffi.result_error ctx result)
               ~default:"hegel: run error (no message)"))
-    | Run_failed_nondeterministic ->
-      let failure, output =
-        match failure_candidate with
-        | Some failure -> failure
-        | None ->
-          (* libhegel cannot accept a failure that the frontend never reported. *)
-          failwith
-            "hegel: nondeterministic failure has no captured exception" [@coverage off]
-      in
-      if settings.verbosity <> Quiet
-      then (
-        print_failure_header test_location;
-        print_failure_body ~settings ~from_ppx ~blob:None ~exn:failure.exn ~output);
-      reraise failure
     | Run_failed ->
       let failures = Ffi.result_failures ctx result in
       Fun.protect
         ~finally:(fun () -> List.iter (fun f -> Ffi.failure_free ctx f) failures)
         (fun () ->
+           print_failure_header test_location;
            match failures with
-           | [ failure ] ->
-             print_failure_header test_location;
-             let blob, failure, output = final_replay failure in
-             print_failure_body
-               ~settings
-               ~from_ppx
-               ~blob:(Some blob)
-               ~exn:failure.exn
-               ~output;
-             reraise failure
+           | [ failure ] -> reraise (report_failure failure)
            | failures ->
              let count = List.length failures in
-             print_failure_header test_location;
              List.iteri
                (fun i failure ->
                   Printf.eprintf
@@ -963,58 +922,46 @@ let run_test
                     (stderr_color
                        ansi_red
                        (Printf.sprintf "Failure %d of %d:" (i + 1) count));
-                  let blob, failure, output = final_replay failure in
-                  print_failure_body
-                    ~settings
-                    ~from_ppx
-                    ~blob:(Some blob)
-                    ~exn:failure.exn
-                    ~output)
+                  (* print failure messages but don't reraise exn *)
+                  ignore (report_failure failure : interesting_case))
                failures;
              failwith (Printf.sprintf "%d failures found!" count))
   in
-  let run_from_engine () =
-    let run = Ffi.run_start ctx ffi_settings in
+  let drive ~is_replay run =
     Fun.protect
       ~finally:(fun () -> Ffi.run_free ctx run)
       (fun () ->
-         let rec loop failure_candidate =
+         let rec loop () =
            match Ffi.next_test_case ctx run with
-           | None -> failure_candidate
+           | None -> ()
            | Some handle ->
              (* Free the case before moving on to the next one. *)
              let outcome =
                Fun.protect
                  ~finally:(fun () -> Ffi.test_case_free ctx handle)
-                 (fun () -> run_case handle ~is_final:false)
+                 (fun () -> run_case handle)
              in
              (match settings.verbosity with
               | Verbose | Debug -> Printf.eprintf "%s%!" outcome.output
               | Quiet | Normal -> ());
-             (* save failure candidate *)
-             let failure_candidate =
-               match outcome.result with
-               | Failed failure -> Some (failure, outcome.output)
-               | Valid | Invalid | Overrun -> failure_candidate
-             in
-             loop failure_candidate
+             (match outcome.result with
+              | Failed failure -> update_captured failure outcome
+              | Valid | Invalid | Overrun -> ());
+             loop ()
          in
-         let failure_candidate = loop None in
+         loop ();
          let result = Ffi.run_result ctx run in
          Fun.protect
            ~finally:(fun () -> Ffi.run_result_free ctx result)
-           (fun () -> handle_result failure_candidate result))
-  in
-  let run_body () =
-    match failure_blobs with
-    | [] -> run_from_engine ()
-    | blob :: _ -> run_from_blob blob
+           (fun () -> handle_result ~is_replay result))
   in
   Fun.protect
     ~finally:(fun () ->
       Ffi.settings_free ctx ffi_settings;
       Ffi.context_free ctx)
-    run_body
+    (fun () -> match failure_blobs with
+    | [] -> drive ~is_replay:false (Ffi.run_start ctx ffi_settings)
+    | blob :: _ -> drive ~is_replay:true (Ffi.run_start_blob ctx ffi_settings blob))
 ;;
 
 (** [run_hegel_test ?settings ?test_location ?database_key ?failure_blobs test_fn]

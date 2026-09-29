@@ -28,6 +28,13 @@ type backend =
   | Default
   | Urandom
 
+module Nondeterminism_strictness = struct
+  type t =
+    | Quiet
+    | Warn
+    | Error
+end
+
 type phase =
   | Explicit
   | Reuse
@@ -55,6 +62,7 @@ type t =
   ; report_multiple_failures : bool
   ; show_statistics : bool
   ; backend : backend
+  ; nondeterminism_strictness : Nondeterminism_strictness.t
   }
 
 (* ------------------------------------------------------------------ *)
@@ -76,6 +84,18 @@ let ffi_backend = function
 let backend_of_ffi = function
   | Ffi.Default -> Default
   | Ffi.Urandom -> Urandom
+;;
+
+let ffi_nondeterminism_strictness : Nondeterminism_strictness.t -> _ = function
+  | Quiet -> Ffi.Nondeterminism_quiet
+  | Warn -> Ffi.Nondeterminism_warn
+  | Error -> Ffi.Nondeterminism_error
+;;
+
+let nondeterminism_strictness_of_ffi : _ -> Nondeterminism_strictness.t = function
+  | Ffi.Nondeterminism_quiet -> Quiet
+  | Ffi.Nondeterminism_warn -> Warn
+  | Ffi.Nondeterminism_error -> Error
 ;;
 
 let verbosity_of_ffi = function
@@ -129,6 +149,8 @@ let of_ffi ctx s =
   ; report_multiple_failures = Ffi.settings_get_report_multiple_failures ctx s
   ; show_statistics = Ffi.settings_get_show_statistics ctx s
   ; backend = backend_of_ffi (Ffi.settings_get_backend ctx s)
+  ; nondeterminism_strictness =
+      nondeterminism_strictness_of_ffi (Ffi.settings_get_nondeterminism_strictness ctx s)
   }
 ;;
 
@@ -141,6 +163,10 @@ let to_ffi ctx t ~database_key =
   Ffi.settings_report_multiple_failures ctx s t.report_multiple_failures;
   Ffi.settings_show_statistics ctx s t.show_statistics;
   Ffi.settings_backend ctx s (ffi_backend t.backend);
+  Ffi.settings_nondeterminism_strictness
+    ctx
+    s
+    (ffi_nondeterminism_strictness t.nondeterminism_strictness);
   Ffi.settings_print_blob ctx s t.print_blob;
   Ffi.settings_database
     ctx

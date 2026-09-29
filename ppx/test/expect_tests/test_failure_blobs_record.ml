@@ -76,8 +76,11 @@ let%expect_test "recording then replay round-trips the failure blob" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
+    --- Failure --------------------------------------------------------------------
+
     draw_1 = true
-    The failure blob reproduced an error:
+
+    Exception: Failure("deliberate failure")
     |}]
 ;;
 
@@ -122,7 +125,11 @@ let%expect_test "blob replay preserves the original failure backtrace" =
        assert (not (String.equal !original ""));
        assert (String.starts_with backtrace ~prefix:!original);
        print_string (Expect_scrub.scrub_report [%expect.output]);
-       [%expect {| The failure blob reproduced an error: |}])
+       [%expect
+         {|
+         --- Failure --------------------------------------------------------------------
+         Exception: Failure("replay backtrace")
+         |}])
 ;;
 
 let%expect_test "usage errors from a replayed body stay usage errors" =
@@ -167,9 +174,9 @@ let%expect_test "stale blobs that pass, reject, or overrun do not reproduce an e
     ];
   [%expect
     {|
-    The failure blob did not reproduce an error
-    The failure blob did not reproduce an error
-    The failure blob did not reproduce an error
+    The failure blob did not reproduce an error. The failure is fixed, or a nondeterministic failure did not occur again in the replays.
+    The failure blob did not reproduce an error. The failure is fixed, or a nondeterministic failure did not occur again in the replays.
+    The failure blob did not reproduce an error. The failure is fixed, or a nondeterministic failure did not occur again in the replays.
     |}]
 ;;
 
@@ -181,7 +188,7 @@ let%expect_test "an invalid supplied blob raises a usage error" =
   | exception Hegel.Usage_error msg ->
     print_endline msg;
     [%expect
-      {| hegel_test_case_from_blob: the supplied failure blob could not be decoded. It may be corrupt or from an incompatible Hegel version. |}]
+      {| hegel_run_start_blob: the supplied failure blob could not be decoded. It may be corrupt or from an incompatible Hegel version. |}]
 ;;
 
 let%expect_test "only the first blob is actually replayed" =
@@ -207,8 +214,11 @@ let%expect_test "only the first blob is actually replayed" =
   print_string (Expect_scrub.scrub_report [%expect.output]);
   [%expect
     {|
+    --- Failure --------------------------------------------------------------------
+
     draw_1 = true
-    The failure blob reproduced an error:
+
+    Exception: Failure("deliberate failure")
     |}]
 ;;
 

@@ -585,9 +585,8 @@ end
     [step_count] defaults to 50 and bounds the number of rounds per test case.
     Each worker may execute multiple rules in a round.
 
-    A [max_concurrency] greater than one makes the run nondeterministic. libhegel
-    consequently reports a failure without replaying, shrinking or producing a failure
-    blob.
+    Thread scheduling can make a run nondeterministic. [Settings.nondeterminism_strictness] 
+    controls how Hegel handles nondeterminism.
 
     Raises [Hegel.Usage_error] if [M] has no rules, [step_count] is below 1,
     or the bounds do not satisfy [1 <= min_concurrency <= max_concurrency]. *)
