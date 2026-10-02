@@ -103,7 +103,7 @@ jobs:
         env:
           HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
           # This job installs deps via `--deps-only --with-test`, which
-          # doesn't pull the core/sexp_diff opam depopts that hegel.jane
+          # doesn't pull the core opam depopt that hegel.jane
           # needs.
           HEGEL_SKIP_JANE_TESTS: "1"
         run: just check-tests-no-coverage
@@ -157,7 +157,7 @@ jobs:
       - name: Install hegel.jane test dependencies
         run: |
           eval $(opam env)
-          opam install core sexp_diff async --yes
+          opam install core async --yes
 
       - name: Stage libhegel from the matching GitHub release
         id: libhegel
@@ -215,11 +215,11 @@ jobs:
       - name: Install hegel.jane doc dependencies
         run: |
           eval $(opam env)
-          # core/sexp_diff/async are opam depopts (not pulled by --deps-only
+          # core/async are opam depopts (not pulled by --deps-only
           # --with-doc); install them so hegel_jane and hegel_jane_async build
           # and lib/hegel.mli's {!Hegel_jane...} cross-references resolve
           # instead of erroring.
-          opam install core sexp_diff async --yes
+          opam install core async --yes
 
       - name: Check docs
         run: just check-docs

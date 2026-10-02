@@ -1,11 +1,11 @@
 ; The optional Core companion library
-; Core-typed generators and the sexp_diff-backed require_equal renderer.
+; Core-typed generators.
 
 (library
  (name hegel_jane)
  (public_name hegel.jane)
  (optional)
- (libraries hegel core sexp_diff)
+ (libraries hegel core)
  (preprocess
   (pps ppx_js_style hegel.template))
  (instrumentation

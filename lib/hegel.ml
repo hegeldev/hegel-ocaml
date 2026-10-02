@@ -82,11 +82,6 @@ let note = Internal.note
     [false]. See {!Internal.require}. *)
 let require = Internal.require
 
-(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when the
-    two values render to different sexps, printing a sexp diff in the failure
-    report. See {!Internal.require_equal}. *)
-let require_equal = Internal.require_equal
-
 (** [target tc ~label ~value] sends a target command to guide the search engine
     toward higher values. *)
 let target = Internal.target

@@ -200,13 +200,6 @@ let test_printer_hash_table () =
     "((1 2))"
 ;;
 
-let test_sexp_diff_renderer_colored () =
-  let original = Core.Sexp.of_string "(1 2 3)" in
-  let updated = Core.Sexp.of_string "(1 9 3)" in
-  let rendered = Hegel_jane.sexp_diff_renderer ~colored:true ~original ~updated in
-  Alcotest.(check bool) "contains an SGR code" true (String.contains rendered '\027')
-;;
-
 let () =
   Alcotest.run
     "hegel_jane"
@@ -234,10 +227,6 @@ let () =
             `Quick
             test_hash_tables_min_greater_than_max
         ; Alcotest.test_case "printer hash table" `Quick test_printer_hash_table
-        ; Alcotest.test_case
-            "sexp_diff_renderer colored"
-            `Quick
-            test_sexp_diff_renderer_colored
         ]
         @ time_bounds_tests )
     ]

@@ -246,39 +246,10 @@ let%hegel_test remainder_below_divisor tc =
 ;;
 ```
 
-## Assert with `require` and `require_equal`
+## Assert with `require`
 
-When `assert (a = b)` fails, the report shows only the failed assertion and
-the drawn inputs. It does not show the two compared values. `require_equal`
-shows both values in the report. The `-` line shows the first value. The `+`
-line shows the second value. `require_equal` takes a printer
-(`'a -> Sexplib0.Sexp.t`) for the values. Write the printer by hand, or use
-`[%sexp_of: ...]` from `ppx_sexp_conv`:
-
-```ocaml
-let%hegel_test reverse_is_identity tc =
-  let xs = draw tc (lists (integers ()) ()) in
-  require_equal tc [%sexp_of: int list] xs (List.rev xs)
-;;
-```
-
-On failure, the report body shows the two values:
-
-```
-  xs = (0 1)
-  require_equal: values differ (- lhs / + rhs):
-  - (0 1)
-  + (1 0)
-```
-
-If your project uses Jane Street's `Core`, you can show a structural
-s-expression diff instead. Add the optional `hegel.jane` library to your test
-stanza. Then call `Hegel_jane.set_sexp_diff ()` before your tests run.
-`require_equal` failures will then show a two-column `sexp_diff` of the two
-values.
-
-For a plain boolean check with a custom message, use `require`, which raises
-`Failure msg` when the condition is false:
+For a check with a custom message, use `require`, which raises `Failure msg`
+when the condition is false:
 
 ```ocaml
 require tc ~msg:"list must stay sorted" (is_sorted xs)

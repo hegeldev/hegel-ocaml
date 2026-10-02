@@ -120,16 +120,6 @@ let%template hash_tables keys values ?min_size ?max_size () =
 [@@mode m = (nonportable, portable)]
 ;;
 
-let sexp_diff_renderer ~colored ~original ~updated =
-  let diff = Sexp_diff.Algo.diff ~original ~updated () in
-  let display_options = Sexp_diff.Display.Display_options.create Two_column in
-  if colored
-  then Sexp_diff.Display.display_with_ansi_colors display_options diff
-  else Sexp_diff.Display.display_as_plain_string display_options diff
-;;
-
-let set_sexp_diff () = Hegel.Internal.set_diff_renderer (Some sexp_diff_renderer)
-
 module Derive = struct
   include Hegel.Derive
 

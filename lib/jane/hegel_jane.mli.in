@@ -6,7 +6,7 @@
 #endif
 (** Jane Street [Core] companion library for Hegel ([hegel.jane]).
 
-    It requires the [core] and [sexp_diff] opam packages. Each typed generator
+    It requires the [core] opam package. Each typed generator
     draws through the corresponding [hegel] generator and converts the result.
 
     To use [hegel.jane], add [hegel.jane] and [core] to your dune [libraries]:
@@ -22,9 +22,6 @@
 
     {[
     open Hegel
-
-    (* Optional: show a structural [sexp_diff] on [require_equal] failures. *)
-    let () = Hegel_jane.set_sexp_diff ()
 
     let%hegel_test dates_are_in_range tc =
       let d = draw tc (Hegel_jane.dates ()) in
@@ -84,25 +81,6 @@ val%template hash_tables
   -> unit
   -> (('a, 'b) Core.Hashtbl.Poly.t, Hegel.printable) Hegel.generator MODE(m)
 [@@mode m = (nonportable, portable)]
-
-(**/**)
-
-(** [sexp_diff_renderer ~colored ~original ~updated] renders a structural
-    [sexp_diff] two-column diff of the two values: red/green markings when
-    [colored], [-]/[+] otherwise. The renderer {!set_sexp_diff} installs;
-    doc-hidden — use {!set_sexp_diff}. *)
-val sexp_diff_renderer
-  :  colored:bool
-  -> original:Sexplib0.Sexp.t
-  -> updated:Sexplib0.Sexp.t
-  -> string
-
-(**/**)
-
-(** [set_sexp_diff ()] makes [Hegel.require_equal] failures print a structural
-    [sexp_diff] diff instead of the default both-values rendering. Call it once.
-    It stays installed for the rest of the process. *)
-val set_sexp_diff : unit -> unit
 
 (** Auxiliary submodule for [@@deriving hegel_generator] for [Core] generators.
 
