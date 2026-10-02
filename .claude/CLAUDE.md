@@ -93,13 +93,12 @@ lib/                         # Library source
                              #   (spawn_join_n), threads (the default) and, upstream
                              #   only (#ifndef OXCAML), the pooled domains
   jane/                      # Optional hegel.jane sublibrary ((optional) in dune).
-    hegel_jane.ml/.mli.in    #   Core.Hashtbl hash_tables + pool helpers and the
-    test/                    #   sexp_diff require_equal renderer (set_sexp_diff);
-                             #   (.mli.in: cppo, the OxCaml portable default)
+    hegel_jane.ml/.mli.in    #   Core.Hashtbl hash_tables + pool helpers
+    test/                    #   (.mli.in: cppo, the OxCaml portable default)
                              #   instrumented + coverage-gated like lib/ (its own
                              #   test/ dir, gated behind HEGEL_SKIP_JANE_TESTS in
-                             #   check-tests-no-coverage since it needs the core/
-                             #   sexp_diff opam depopts — see justfile)
+                             #   check-tests-no-coverage since it needs the core
+                             #   opam depopt — see justfile)
     async/                   # Optional hegel.jane.async sublibrary (async depopt):
       hegel_jane_async       #   Async_io (run_loop captures the execution context,
         .ml.in/.mli.in, test/#   In_thread.run's the engine loop, and blocks each body
@@ -226,9 +225,9 @@ typed-draw migrations.
 The `hegel` library depends on the stdlib plus `sexplib0` (printer type
 `'a -> Sexplib0.Sexp.t`, the same type as `Core.Sexp.t`), `unix` (isatty for
 color detection), `threads.posix`, ctypes/ipaddr/dune-site (`yojson` is a test-only dependency of
-the PPX test that parses the engine's `sdk.jsonl`). `core`,
-`core_unix`, and `sexp_diff` are NOT dependencies of the library: `core` and
-`sexp_diff` are opam depopts that gate the `(optional)` sublibrary
+the PPX test that parses the engine's `sdk.jsonl`). `core`
+and `core_unix` are NOT dependencies of the library: `core` is an opam
+depopt that gates the `(optional)` sublibrary
 `hegel.jane` (`lib/jane/`, module `Hegel_jane`). Anywhere the library needs a
 container or renderer a Jane Street type used to provide, the dependency is
 refunctionalized — the code takes the operations as closures/parameters, and
@@ -237,18 +236,16 @@ each side instantiates them:
 - hash tables: `make_hash_tables ~of_pairs ~sexp_of_t` ← `hash_tables` (Stdlib.Hashtbl) / `Hegel_jane.hash_tables` (Hashtbl.Poly)
 - dates/times: `make_dates ~of_date`/`make_times ~of_time`/`make_datetimes ~of_datetime` (+ `~sexp_of`) (+ `?min_date`/`?min_time`/`?min_datetime` and `max_*` bounds) ← `dates`/`times`/`datetimes` (ISO 8601 strings) / `Hegel_jane.dates`/`ofdays` (Core values)
 - chars: `make_characters ~of_char ~sexp_of` ← `chars` / `Hegel_jane.chars`. `Core.Char.t = char`, so both sides draw the same value and only the printer differs (`sexp_of_char` vs `Core.Char.sexp_of_t`) — unlike the other refunctionalized pairs, `of_char` is `Fun.id` on both sides, kept only for symmetry with `~of_date`
-- require_equal diff: `Internal.set_diff_renderer` hook ← default prints both values (`-`/`+`, red/green); `Hegel_jane.set_sexp_diff ()` installs the `sexp_diff` two-column renderer
 
 The test suite still links `core`/`core_unix` (test-only dependencies; users
-never install them). `core`/`sexp_diff` being opam depopts is about the
+never install them). `core` being an opam depopt is about the
 published `hegel` package's dependency footprint for its *users* — a hegel
 *developer* running `just check` is still expected to have them installed:
 `lib/jane/` is bisect_ppx-instrumented and 100%-coverage-gated like `lib/`
 (unlike `ffi`/the PPXes, which stay excluded), with its own `lib/jane/test/`
-suite (`test_hegel_jane.ml` Alcotest, `test_require_jane.ml` a
-[sexp_diff] snapshot). `just check-tests` (the coverage-enforcing recipe)
+suite (`test_hegel_jane.ml` Alcotest). `just check-tests` (the coverage-enforcing recipe)
 always runs it; `just check-tests-no-coverage` (the `compat`/`oxcaml` CI jobs,
-which don't install `core`/`sexp_diff`) skips it via `HEGEL_SKIP_JANE_TESTS=1`
+which don't install `core`) skips it via `HEGEL_SKIP_JANE_TESTS=1`
 — see the justfile.
 
 ### Generator System (generators_core.ml + generators_{primitives,collections,combinators}.ml)
@@ -535,8 +532,7 @@ lists no destructors for these three. The authority is
 
 ### Pretty printing (engine-side layout)
 
-All user-visible test output — notes, drawn values, stateful traces, the
-require_equal diff — is assembled in libhegel's per-test-case *document*
+All user-visible test output — notes, drawn values, stateful traces — is assembled in libhegel's per-test-case *document*
 (`hegel_test_case_printer` / `hegel_note`), not streamed to stderr as it
 happens. `Internal.note` appends verbatim (pre-indented, possibly multi-line)
 lines; `Internal.print_line` assembles a draw line from `Text`/`Value`

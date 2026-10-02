@@ -72,8 +72,6 @@
  (depopts
   (core
    (>= v0.17))
-  (sexp_diff
-   (>= v0.17))
   async
   concurrent
   ppx_template))

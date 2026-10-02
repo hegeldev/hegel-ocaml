@@ -61,7 +61,7 @@
       let%hegel_test commutative_addition tc =
         let a = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
         let b = draw tc (integers ~min_value:(-1000) ~max_value:1000 ()) in
-        require_equal tc [%sexp_of: int] (a + b) (b + a)
+        require tc (a + b = b + a)
 
       let () =
         Alcotest.run
@@ -69,12 +69,9 @@
           [ "properties", [ Alcotest.test_case "commutative addition" `Quick commutative_addition ] ]
     ]}
 
-    We check the property with {!require_equal} rather than
-    [assert (a + b = b + a)]. It takes a printer for the values and, when they
-    differ, shows a structural diff of the two sides in the failure report
-    instead of a bare "assertion failed". Use {!require} for a boolean check with
-    a custom message. An [assert] can be used as well, but it does not provide
-    as much information as {!require_equal} and {!require}.
+    We check the property with {!require} rather than
+    [assert (a + b = b + a)]. {!require} takes an optional [~msg] for the
+    failure report. An [assert] can be used as well.
 
     Run [dune runtest]. You should see Alcotest report the test as passing.
     Hegel generates up to 100 random input pairs and reports the minimal
@@ -262,7 +259,7 @@
       let%hegel_test commutative_addition tc =
         let a = draw tc (integers ()) in
         let b = draw tc (integers ()) in
-        require_equal tc [%sexp_of: int] (a + b) (b + a)
+        require tc (a + b = b + a)
       [@@settings Settings.create ~test_cases:500 ()]
     ]}
 
@@ -274,7 +271,7 @@
       let%hegel_test commutative_addition tc =
         let a = draw tc (integers ()) in
         let b = draw tc (integers ()) in
-        require_equal tc [%sexp_of: int] (a + b) (b + a)
+        require tc (a + b = b + a)
       [@@settings { (Settings.create ~test_cases:500 ()) with verbosity = Settings.Verbose }]
     ]}
 
@@ -292,13 +289,8 @@
     A failing run prints a framed report: the shrunk counterexample's draws
     and notes, the exception, and a copy-pasteable [rerun with:] line whose
     base64 blob encodes the choice sequence that caused the failure (disable
-    it with [print_blob = false]). On a terminal the report headers (and
-    {!require_equal} diffs) print in color; set [HEGEL_COLOR] to [1] or [0]
-    to force colors on or off.
-
-    For an equality property, prefer {!require_equal} over [assert (x = y)]: it
-    adds a structural diff of the two values to this report, so you see exactly
-    how they differ. {!require} is the message-carrying boolean variant.
+    it with [print_blob = false]). On a terminal the report headers print in
+    color. Set [HEGEL_COLOR] to [1] or [0] to force colors on or off.
 
     {[
       let%hegel_test every_int_is_small tc =
@@ -644,28 +636,6 @@ val note : test_case -> string -> unit
         require tc ~msg:"sum must stay non-negative" (running_sum l >= 0)
     ]} *)
 val require : test_case -> ?msg:string -> bool -> unit
-
-(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
-    the two values render to different sexps under [sexp_of]. With the optional
-    [hegel.jane] library's structural diff set ({!Hegel_jane.set_sexp_diff}), a
-    [sexp_diff] two-column diff is printed.
-
-    {[
-      let%hegel_test sort_is_stable tc =
-        let l = draw tc (lists (integers ()) ()) in
-        require_equal
-          tc
-          [%sexp_of: int list]
-          (List.sort compare l)
-          (stable_sort l)
-    ]} *)
-val require_equal
-  :  test_case
-  -> ?msg:string
-  -> ('a -> Sexplib0.Sexp.t)
-  -> 'a
-  -> 'a
-  -> unit
 
 (** [with_printer sexp_of gen] attaches (or replaces) [gen]'s printer, yielding a
     printable generator that {!draw} accepts. This is how a

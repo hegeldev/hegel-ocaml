@@ -687,35 +687,6 @@ let test_stderr_color () =
     Alcotest.(check string) "disabled is identity" "x" (Internal.stderr_color "31" "x"))
 ;;
 
-(** [render_diff]'s default rendering prints both values in full, [-]/[+]
-    prefixed (red/green when [colored]); an installed renderer (the [hegel.jane]
-    [sexp_diff] hook) replaces it until uninstalled. *)
-let test_render_diff () =
-  let original = Sexp.of_string "(1 2 3)" in
-  let updated = Sexp.of_string "(1 9 3)" in
-  let colored = Internal.render_diff ~colored:true ~original ~updated in
-  Alcotest.(check string)
-    "colored renders both values in red/green"
-    "\027[31m- (1 2 3)\027[0m\n\027[32m+ (1 9 3)\027[0m"
-    colored;
-  let plain = Internal.render_diff ~colored:false ~original ~updated in
-  Alcotest.(check string) "plain renders both values" "- (1 2 3)\n+ (1 9 3)" plain;
-  (* An installed renderer takes over; uninstalling restores the default. *)
-  Internal.set_diff_renderer
-    (Some (fun ~colored ~original:_ ~updated:_ -> if colored then "custom!" else "custom"));
-  Exn.protect
-    ~finally:(fun () -> Internal.set_diff_renderer None)
-    ~f:(fun () ->
-      Alcotest.(check string)
-        "installed renderer takes over"
-        "custom"
-        (Internal.render_diff ~colored:false ~original ~updated));
-  Alcotest.(check string)
-    "uninstalling restores the default"
-    "- (1 2 3)\n+ (1 9 3)"
-    (Internal.render_diff ~colored:false ~original ~updated)
-;;
-
 (** A health-check failure is a run-level error (no counterexample), surfaced as
     a [Failure] carrying the engine's error message. *)
 let test_run_health_check_failure () =
@@ -795,7 +766,6 @@ let tests =
       test_stop_test_does_not_fail_run
   ; Alcotest.test_case "stderr_color_enabled" `Quick test_stderr_color_enabled
   ; Alcotest.test_case "stderr_color" `Quick test_stderr_color
-  ; Alcotest.test_case "render_diff" `Quick test_render_diff
   ; Alcotest.test_case
       "test_location reports result"
       `Quick

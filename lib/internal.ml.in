@@ -390,10 +390,8 @@ let generate_ipv6 tc =
 (* ANSI colors                                                         *)
 (* ------------------------------------------------------------------ *)
 
-(** ANSI color codes for {!stderr_color} and the default {!render_diff}. *)
+(** ANSI color code for {!stderr_color}. *)
 let ansi_red = "31"
-
-let ansi_green = "32"
 
 (** [color_enabled ~override ~isatty] decides whether ANSI colors are on: an
     [override] of ["1"]/["0"] (the [HEGEL_COLOR] variable) forces it on/off;
@@ -484,66 +482,6 @@ let print_line tc segments =
     [false] by raising [Failure msg]. *)
 let require _tc ?(msg = "require: condition was false") condition =
   if not condition then failwith msg
-;;
-
-(* one-field record b/c render_diff is portable and reads the renderer from
-   a global [Atomic], so the stored type must cross portability.
-   A function type can't have a modality, but a record field can. *)
-type diff_renderer =
-  { render : (colored:bool -> original:Sexp.t -> updated:Sexp.t -> string) PORTABLE }
-
-let diff_renderer : diff_renderer option Atomic.t = Atomic.make None
-
-(** [set_diff_renderer renderer] sets the renderer {!render_diff} delegates to.
-    CANNOT use Option.map because the function parameter is at legacy mode, so
-    render would become nonportable. *)
-let set_diff_renderer renderer =
-  Atomic.set
-    diff_renderer
-    (match renderer with
-     | None -> None
-     | Some render -> Some { render })
-;;
-
-(* [render_values_line ~colored ~code ~prefix sexp] renders one side of the
-   default diff: the value prefixed with [-]/[+], wrapped in the ANSI SGR
-   [code] when [colored]. *)
-let render_values_line ~colored ~code ~prefix sexp =
-  let line = Printf.sprintf "%s %s" prefix (Sexp.to_string_hum sexp) in
-  if colored then Printf.sprintf "\027[%sm%s\027[0m" code line else line
-;;
-
-(** [render_diff ~colored ~original ~updated] renders the two differing values.
-    By default both values print in full ([-] the original, [+] the updated,
-    red/green when [colored]). When a structural diff renderer is installed
-    (see {!set_diff_renderer}, it renders the diff instead. *)
-let render_diff ~colored ~original ~updated =
-  match Atomic.get diff_renderer with
-  | Some { render } -> render ~colored ~original ~updated
-  | None ->
-    String.concat
-      "\n"
-      [ render_values_line ~colored ~code:ansi_red ~prefix:"-" original
-      ; render_values_line ~colored ~code:ansi_green ~prefix:"+" updated
-      ]
-;;
-
-(** [require_equal tc ?msg sexp_of lhs rhs] fails the current test case when
-    the two values render to different sexps under [sexp_of]. The failure
-    report's body shows a structural sexp diff of the two values ([-] lines
-    only in [lhs], [+] lines only in [rhs]; red/green on a terminal) before
-    [Failure msg] is raised. The diff is only rendered when notes are visible
-    (see {!should_print}), so shrink probes don't pay for it. *)
-let require_equal tc ?(msg = "require_equal: values differ") sexp_of lhs rhs =
-  let original = sexp_of lhs in
-  let updated = sexp_of rhs in
-  if not (Sexp.equal original updated)
-  then (
-    if should_print tc
-    then (
-      let rendered = render_diff ~colored:(stderr_color_enabled ()) ~original ~updated in
-      note tc (Printf.sprintf "%s (- lhs / + rhs):\n%s" msg rendered));
-    failwith msg)
 ;;
 
 (** [draw_display_name tc ~label ~repeatable] returns the display name to print

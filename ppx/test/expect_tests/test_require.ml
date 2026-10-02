@@ -1,9 +1,6 @@
-(** Snapshot tests for [Hegel.require] and [Hegel.require_equal]: the failure
-    messages, the sexp diff printed in the report body, and the caller-derived
-    failure origins. Tests call [run_hegel_test] directly with the database
+(** Snapshot tests for [Hegel.require]: the failure messages and the
+    caller-derived failure origins. Tests call [run_hegel_test] directly with the database
     disabled to avoid persisted examples affecting the report. *)
-
-let sexp_of_int_list = Core.List.sexp_of_t Core.Int.sexp_of_t
 
 let settings () =
   { (Hegel.Settings.create ~test_cases:10 ()) with database = Hegel.Settings.Disabled }
@@ -36,27 +33,6 @@ let%expect_test "require fails with a custom message" =
     {|
     --- Failure --------------------------------------------------------------------
     Exception: Failure("the invariant broke")
-    rerun with: ~failure_blobs:[ "<BLOB>" ]
-    |}]
-;;
-
-let%expect_test "require_equal prints a sexp diff of the two values" =
-  (try
-     Hegel.run_hegel_test ~settings:(settings ()) (fun tc ->
-       Hegel.require_equal tc sexp_of_int_list [ 1; 2; 3 ] [ 1; 2; 3 ];
-       Hegel.require_equal tc sexp_of_int_list [ 1; 2; 3 ] [ 1; 9; 3 ])
-   with
-   | _ -> ());
-  print_string (Expect_scrub.scrub_report [%expect.output]);
-  [%expect
-    {|
-    --- Failure --------------------------------------------------------------------
-
-    require_equal: values differ (- lhs / + rhs):
-    - (1 2 3)
-    + (1 9 3)
-
-    Exception: Failure("require_equal: values differ")
     rerun with: ~failure_blobs:[ "<BLOB>" ]
     |}]
 ;;

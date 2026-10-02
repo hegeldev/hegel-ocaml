@@ -86,7 +86,7 @@ check-tests-no-coverage:
     else
       dune runtest ppx/test/expect_tests --force
     fi
-    # The hegel.jane and hegel.jane.async suites need the core/sexp_diff/async
+    # The hegel.jane and hegel.jane.async suites need the core/async
     # opam depopts; skip them on environments that don't install them.
     if [ "${HEGEL_SKIP_JANE_TESTS:-}" = "1" ]; then
       echo "Skipping hegel.jane suite (HEGEL_SKIP_JANE_TESTS=1)"

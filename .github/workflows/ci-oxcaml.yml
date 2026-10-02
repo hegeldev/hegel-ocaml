@@ -111,7 +111,7 @@ jobs:
         env:
           HEGEL_LIBHEGEL_PATH: ${{ steps.libhegel.outputs.path }}
           HEGEL_SKIP_EXPECT_TESTS: "1"
-          # hegel.jane's optional sexp_diff dependency isn't installed by
+          # hegel.jane's optional core dependency isn't installed by
           # --deps-only --with-test.
           HEGEL_SKIP_JANE_TESTS: "1"
           HEGEL_CONCURRENT_TESTS: "1"
