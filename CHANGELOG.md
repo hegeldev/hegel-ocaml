@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.26.0 - 2026-10-02
+
+This release removes `require_equal` and `Hegel_jane.set_sexp_diff`.
+Use `require` with an equality predicate instead.
+
+`hegel.jane` no longer depends on `sexp_diff`.
+
 ## 0.25.0 - 2026-09-29
 
 This release changes how Hegel handles nondeterminism.
