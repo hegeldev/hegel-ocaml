@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.26.1 - 2026-10-07
+
+This patch makes `from_regex` match Python's `re` semantics. A pattern may now contain the NUL character.
+
 ## 0.26.0 - 2026-10-02
 
 This release removes `require_equal` and `Hegel_jane.set_sexp_diff`.
