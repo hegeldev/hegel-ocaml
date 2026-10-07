@@ -481,8 +481,9 @@ let c_string_generator_regex =
   foreign
     "hegel_string_generator_regex"
     (handle_t
-     @-> string
-     (* pattern *) @-> bool (* fullmatch *)
+     @-> string (* pattern *)
+     @-> size_t (* pattern_len *)
+     @-> bool (* fullmatch *)
      @-> handle_t (* alphabet (nullable) *)
      @-> ptr handle_t
      @-> returning int)
@@ -974,6 +975,8 @@ let check_rc ctx rc =
     raise (Internal_error (label ^ detail)))
 ;;
 
+let byte_len s = Unsigned.Size_t.of_int (String.length s)
+
 (* ------------------------------------------------------------------ *)
 (* Diagnostics                                                         *)
 (* ------------------------------------------------------------------ *)
@@ -1354,7 +1357,9 @@ let string_generator_text
 
 let string_generator_regex ctx ~pattern ~fullmatch =
   let out = allocate handle_t null_handle in
-  check_rc ctx (c_string_generator_regex ctx pattern fullmatch null_handle out);
+  check_rc
+    ctx
+    (c_string_generator_regex ctx pattern (byte_len pattern) fullmatch null_handle out);
   !@out
 ;;
 
@@ -1644,8 +1649,6 @@ let event_value ctx tc value label = check_rc ctx (c_event_value ctx tc value la
 (* ------------------------------------------------------------------ *)
 (* Pretty printer                                                      *)
 (* ------------------------------------------------------------------ *)
-
-let byte_len s = Unsigned.Size_t.of_int (String.length s)
 
 let opt_handle = function
   | Some p -> p

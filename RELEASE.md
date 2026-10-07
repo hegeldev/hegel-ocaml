@@ -1,3 +1,3 @@
 RELEASE_TYPE: patch
 
-This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.44.1](https://github.com/hegeldev/hegel-rust/releases/tag/libhegel-v0.44.1) to [0.45.1](https://github.com/hegeldev/hegel-rust/releases/tag/libhegel-v0.45.1).
+This patch makes `from_regex` match Python's `re` semantics. A pattern may now contain the NUL character. 

@@ -232,6 +232,14 @@ let test_from_regex_e2e () =
     assert (String.for_all (fun c -> c >= '0' && c <= '9') v))
 ;;
 
+(** Test: a NUL in the pattern reaches the engine (the pattern is passed with
+    its byte length, not NUL-terminated). *)
+let test_from_regex_nul_e2e () =
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
+    let v = Hegel.draw tc (from_regex "a\000b" ()) in
+    Alcotest.(check string) "a NUL b" "a\000b" v)
+;;
+
 (** Test: emails generates strings containing at-sign. *)
 let test_emails_e2e () =
   Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
@@ -562,6 +570,7 @@ let tests =
   ; Alcotest.test_case "binary default e2e" `Quick test_binary_default_e2e
   ; Alcotest.test_case "just e2e" `Quick test_just_e2e
   ; Alcotest.test_case "from_regex e2e" `Quick test_from_regex_e2e
+  ; Alcotest.test_case "from_regex NUL e2e" `Quick test_from_regex_nul_e2e
   ; Alcotest.test_case "emails e2e" `Quick test_emails_e2e
   ; Alcotest.test_case "urls e2e" `Quick test_urls_e2e
   ; Alcotest.test_case "domains e2e" `Quick test_domains_e2e
