@@ -432,7 +432,7 @@ val string_generator_text
   -> string_generator
 
 (** [string_generator_regex ctx ~pattern ~fullmatch] builds a regex string
-    generator (Python-[re] syntax). Raises {!Internal_error} on an invalid
+    generator (Python-[re] syntax). Raises {!Usage_error} on an invalid
     pattern. The handle must be freed with {!string_generator_free}. *)
 val string_generator_regex
   :  context
