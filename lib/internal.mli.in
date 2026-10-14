@@ -130,6 +130,26 @@ val generate_url : test_case -> string
 (** [generate_domain tc ~max_length] draws an RFC 1035 domain name. *)
 val generate_domain : test_case -> max_length:int -> string
 
+(** A compiled Lark grammar. *)
+type grammar = Hegel_ffi.Ffi.grammar
+
+(** Compiles a Lark grammar, returning it with each explicit terminal's marker. *)
+val grammar_new
+  :  test_case
+  -> text:string
+  -> start:string option
+  -> max_size:int
+  -> max_depth:int
+  -> explicit:string list
+  -> import:(base_path:string option -> string -> (string * string) option)
+  -> grammar * string list
+
+(** Frees a grammar. *)
+val grammar_free : grammar -> unit
+
+(** Draws a string of a grammar. *)
+val generate_grammar : test_case -> grammar -> max_size:int -> string
+
 (** A proleptic Gregorian calendar date, as drawn by {!generate_date}. *)
 type date = Hegel_ffi.Ffi.date =
   { year : int

@@ -719,19 +719,22 @@ let test_run_primitive_defaults () =
     assert (v >= 0 && a >= 0 && b >= 0))
 ;;
 
-let test_stop_test_does_not_fail_run () =
-  run_hegel_test
-    ~settings:
-      { (Hegel.Settings.create ~test_cases:1 ()) with
-        suppress_health_check =
-          [ Settings.Test_cases_too_large
-          ; Settings.Filter_too_much
-          ; Settings.Large_initial_test_case
-          ]
-      }
-    (fun tc ->
-       ignore (Hegel.draw_silent tc int_gen : int);
-       raise Internal.Stop_test)
+let test_stop_test_overruns () =
+  Test_helpers.expect_unsatisfiable
+    (fun () ->
+       run_hegel_test
+         ~settings:
+           { (Hegel.Settings.create ~test_cases:1 ()) with
+             suppress_health_check =
+               [ Settings.Test_cases_too_large
+               ; Settings.Filter_too_much
+               ; Settings.Large_initial_test_case
+               ]
+           }
+         (fun tc ->
+            ignore (Hegel.draw_silent tc int_gen : int);
+            raise Internal.Stop_test))
+    "overran the choice limit"
 ;;
 
 let tests =
@@ -760,10 +763,7 @@ let tests =
       `Quick
       test_extract_origin_skips_stdlib_internal_frames
   ; Alcotest.test_case "color_enabled" `Quick test_color_enabled
-  ; Alcotest.test_case
-      "Stop_test does not fail the run"
-      `Quick
-      test_stop_test_does_not_fail_run
+  ; Alcotest.test_case "Stop_test overruns the case" `Quick test_stop_test_overruns
   ; Alcotest.test_case "stderr_color_enabled" `Quick test_stderr_color_enabled
   ; Alcotest.test_case "stderr_color" `Quick test_stderr_color
   ; Alcotest.test_case

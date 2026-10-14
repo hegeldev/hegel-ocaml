@@ -168,15 +168,18 @@ let test_filter_e2e () =
 
 (** Test: filter exhaustion through engine (always false → assume false). *)
 let test_filter_exhaustion_e2e () =
-  Hegel.run_hegel_test
-    ~settings:
-      { (Hegel.Settings.create ~test_cases:10 ()) with
-        suppress_health_check = [ Settings.Filter_too_much ]
-      }
-    (fun tc ->
-       let gen = filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ()) in
-       ignore (Hegel.draw tc gen : int);
-       Alcotest.fail "an always-false filter returned a value")
+  Test_helpers.expect_unsatisfiable
+    (fun () ->
+       Hegel.run_hegel_test
+         ~settings:
+           { (Hegel.Settings.create ~test_cases:10 ()) with
+             suppress_health_check = [ Settings.Filter_too_much ]
+           }
+         (fun tc ->
+            let gen = filter (fun _ -> false) (integers ~min_value:0 ~max_value:10 ()) in
+            ignore (Hegel.draw tc gen : int);
+            Alcotest.fail "an always-false filter returned a value"))
+    "filtered out by assume()"
 ;;
 
 (** Test: group helper through engine. *)

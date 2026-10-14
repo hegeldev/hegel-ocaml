@@ -4,9 +4,13 @@ open Generators_primitives
 #ifdef OXCAML
 #define MODE(m) @ m
 #define ABSTRACT(a, k) (type (a : k))
+#define KIND(k) : k
+#define FINALISE Gc.Safe.finalise
 #else
 #define MODE(m)
 #define ABSTRACT(a, k) (type a)
+#define KIND(k)
+#define FINALISE Gc.finalise
 #endif
 
 (** [sampled_from options] creates a generator that samples from a non-empty
@@ -213,5 +217,141 @@ let%template tuples4
       }
   in
   Printable { core; sexp_of }
+[@@mode m = (nonportable, portable)]
+;;
+
+type lark_compiled KIND(value mod portable contended) =
+  { grammar : Internal.grammar
+  ; markers : string list
+  }
+
+let lark_default_max_size = 8192
+let lark_attempts = 3
+
+let utf8_length s =
+  String.fold_left (fun n c -> if Char.code c land 0xC0 = 0x80 then n else n + 1) 0 s
+;;
+
+let lark_import import_paths ~base_path path =
+  List.find_map
+    (fun dir ->
+       let file = Filename.concat dir path in
+       match In_channel.with_open_bin file In_channel.input_all with
+       | text -> Some (file, text)
+       | exception Sys_error _ -> None)
+    (import_paths @ Option.to_list base_path)
+;;
+
+let lark_splice tc grammar terminals budget =
+  let drawn = Internal.generate_grammar tc grammar ~max_size:budget in
+  let len = String.length drawn in
+  let matches_at i marker =
+    i + String.length marker <= len && String.sub drawn i (String.length marker) = marker
+  in
+  let rec go pieces start i own count size =
+    let flush stop =
+      let piece = String.sub drawn start (stop - start) in
+      piece :: pieces, own + utf8_length piece
+    in
+    if i >= len
+    then (
+      let pieces, own = flush len in
+      String.concat "" (List.rev pieces), own, count, size + own)
+    else (
+      match
+        if drawn.[i] = '<'
+        then List.find_opt (fun (marker, _) -> matches_at i marker) terminals
+        else None
+      with
+      | None -> go pieces start (i + 1) own count size
+      | Some (marker, g) ->
+        let pieces, own = flush i in
+        let value = do_draw (core_of g) tc in
+        let next = i + String.length marker in
+        go (value :: pieces) next next own (count + 1) (size + utf8_length value))
+  in
+  go [] 0 0 0 0 0
+;;
+
+let%template from_lark
+      grammar
+      ?start
+      ?(explicit : (string * (string, _) generator) list MODE(m) = [])
+      ?(max_size = lark_default_max_size)
+      ?max_depth
+      ?(import_paths = [])
+      ()
+  : (string, printable) generator MODE(m)
+  =
+  if max_size < 1
+  then raise (Internal.Usage_error (Printf.sprintf "max_size=%d must be at least 1" max_size));
+  (match max_depth with
+   | Some d when d < 1 ->
+     raise (Internal.Usage_error (Printf.sprintf "max_depth=%d must be at least 1" d))
+   | _ -> ());
+  let names = List.map fst explicit in
+  (match List.find_opt (fun n -> List.length (List.filter (String.equal n) names) > 1) names with
+   | Some name ->
+     raise
+       (Internal.Usage_error
+          (Printf.sprintf "explicit terminal '%s' is given more than one generator" name))
+   | None -> ());
+  let cache = Locked.create (fun () -> ref None) in
+  let compile tc =
+    Locked.protect cache (fun cell ->
+      match !cell with
+      | Some compiled -> compiled
+      | None ->
+        let grammar, markers =
+          Internal.grammar_new
+            tc
+            ~text:grammar
+            ~start
+            ~max_size
+            ~max_depth:(Option.value max_depth ~default:0)
+            ~explicit:names
+            ~import:(lark_import import_paths)
+        in
+        let compiled = { grammar; markers } in
+        FINALISE (fun c -> Internal.grammar_free c.grammar) compiled;
+        cell := Some compiled;
+        compiled)
+  in
+  let draw tc =
+    let compiled = compile tc in
+    let value =
+      match explicit with
+      | [] -> Internal.generate_grammar tc compiled.grammar ~max_size:0
+      | _ :: _ ->
+        let terminals = List.map2 (fun marker (_, g) -> marker, g) compiled.markers explicit in
+        let rec attempt k budget =
+          if k = 0 then raise Internal.Assume_rejected;
+          Internal.start_span ~label:Labels.lark_attempt tc;
+          let out, own, count, size = lark_splice tc compiled.grammar terminals budget in
+          if size <= max_size
+          then (
+            Internal.stop_span tc;
+            out)
+          else (
+            Internal.stop_span ~discard:true tc;
+            attempt
+              (k - 1)
+              (max 1 (min (max_size * (own + count) / size) (budget - 1))))
+        in
+        attempt lark_attempts max_size
+    in
+    ignore (Sys.opaque_identity compiled : lark_compiled);
+    value
+  in
+  let label =
+    Labels.combine
+      (Labels.lark
+       :: Labels.from_name grammar
+       :: Labels.from_name (Option.value start ~default:"start")
+       :: List.concat_map
+            (fun (name, g) -> [ Labels.from_name name; label_of g ])
+            explicit)
+  in
+  Printable { core = Leaf { draw; label }; sexp_of = Sexplib0.Sexp_conv.sexp_of_string }
 [@@mode m = (nonportable, portable)]
 ;;

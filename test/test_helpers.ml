@@ -44,6 +44,17 @@ let expect_usage_error gen substring =
   | () -> Alcotest.fail "expected Usage_error"
 ;;
 
+let expect_unsatisfiable run substring =
+  match run () with
+  | exception Failure msg ->
+    Alcotest.(check bool)
+      (Printf.sprintf "diagnostic %S contains %S" msg substring)
+      true
+      (String.is_substring msg ~substring:"Unsatisfiable"
+       && String.is_substring msg ~substring)
+  | () -> Alcotest.fail "expected the run to be unsatisfiable"
+;;
+
 (** [contains_substring s sub] returns [true] if [sub] appears anywhere in [s]. *)
 let contains_substring s sub =
   let slen = String.length s

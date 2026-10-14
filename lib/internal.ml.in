@@ -340,6 +340,33 @@ let generate_domain tc ~max_length =
   with_string_generator tc (fun ctx -> Ffi.string_generator_domain ctx ~max_length)
 ;;
 
+type grammar = Ffi.grammar
+
+let grammar_new tc ~text ~start ~max_size ~max_depth ~explicit ~import =
+  with_stop_guard tc (fun () ->
+    let g =
+      Ffi.grammar_new
+        tc.context
+        ~text
+        ~start
+        ~max_size
+        ~max_depth
+        ~explicit
+        ~import:(Some import)
+    in
+    g, List.map (Ffi.grammar_placeholder tc.context g) explicit)
+;;
+
+let grammar_free g =
+  let ctx = Ffi.context_new () in
+  Ffi.grammar_free ctx g;
+  Ffi.context_free ctx
+;;
+
+let generate_grammar tc g ~max_size =
+  with_stop_guard tc (fun () -> Ffi.generate_grammar tc.context tc.handle g ~max_size)
+;;
+
 (** A proleptic Gregorian calendar date, as drawn by {!generate_date}. *)
 type date = Ffi.date =
   { year : int

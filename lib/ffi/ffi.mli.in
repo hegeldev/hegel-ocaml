@@ -57,6 +57,9 @@ type failure
     / … constructors, drawn from with {!generate_string}, and freed with
     {!string_generator_free}. *)
 type string_generator
+
+(** A compiled Lark grammar ([hegel_grammar_t]). *)
+type grammar
 #ifdef OXCAML
   : value mod portable contended
 #endif
@@ -458,6 +461,26 @@ val string_generator_free : context -> string_generator -> unit
     {!Stop_test} on budget exhaustion and {!Assume_rejected} when the draw
     rejects itself (e.g. an over-length email). *)
 val generate_string : context -> test_case -> string_generator -> string
+
+(** [hegel_grammar_new]; an exception from [import] is re-raised once it returns. *)
+val grammar_new
+  :  context
+  -> text:string
+  -> start:string option
+  -> max_size:int
+  -> max_depth:int
+  -> explicit:string list
+  -> import:(base_path:string option -> string -> (string * string) option) option
+  -> grammar
+
+(** [hegel_grammar_free]. *)
+val grammar_free : context -> grammar -> unit
+
+(** [hegel_grammar_placeholder]. *)
+val grammar_placeholder : context -> grammar -> string -> string
+
+(** [hegel_generate_grammar]. *)
+val generate_grammar : context -> test_case -> grammar -> max_size:int -> string
 
 (** [generate_date ctx tc ~min_value ~max_value] draws a Gregorian date in the
     inclusive range. Raises {!Stop_test} on budget exhaustion. *)

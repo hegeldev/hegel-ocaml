@@ -819,6 +819,57 @@ val ip_addresses : ?version:[ `V4 | `V6 ] -> unit -> (Ipaddr.t, printable) gener
     ]} *)
 val from_regex : string -> ?fullmatch:bool -> unit -> (string, printable) generator MODE(portable)
 
+(** [from_lark grammar ?start ?explicit ?max_size ?max_depth ?import_paths ()]
+    creates a generator for strings of [grammar], written in the syntax of the
+    {{:https://lark-parser.readthedocs.io/en/stable/grammar.html}Lark} parsing
+    library, starting from the rule [start] (default ["start"]).
+
+    The whole grammar language is supported, including [%import] of Lark's
+    bundled [common], [python], [unicode] and [lark] grammars, [%ignore],
+    [%declare], [%override], [%extend] and templates. Generated strings are ones
+    Lark's Earley parser accepts, with [%ignore]d terminals inserted where a
+    lexer would skip them. A draw that cannot produce such a string rejects the
+    test case, as [assume false] does. The grammar is checked on the first
+    draw: an invalid one raises {!Hegel.Usage_error}.
+
+    - [explicit] draws each named terminal from its generator instead of from
+      its pattern; it is required for a terminal the grammar [%declare]s. The
+      values count toward [max_size], and must read as the terminal where they
+      land.
+    - [max_size] caps the length in characters (default 8192, at most
+      1048576).
+    - [max_depth] caps how deeply rules nest (default 200, at most 500).
+    - [import_paths] are the directories searched, in order, for grammar files
+      the grammar [%import]s.
+
+    {[
+      let arithmetic =
+        {|
+          ?start: sum
+          ?sum: product | sum "+" product
+          ?product: atom | product "*" atom
+          ?atom: NUMBER | "(" sum ")"
+          %import common.NUMBER
+          %import common.WS
+          %ignore WS
+        |}
+
+      let%hegel_test from_lark_example tc =
+        let s = draw tc (from_lark arithmetic ~max_size:100 ()) in
+        assert (String.length s <= 100)
+      ;;
+    ]} *)
+val%template from_lark
+  :  string
+  -> ?start:string
+  -> ?explicit:(string * (string, 'p) generator) list MODE(m)
+  -> ?max_size:int
+  -> ?max_depth:int
+  -> ?import_paths:string list
+  -> unit
+  -> (string, printable) generator MODE(m)
+[@@mode m = (nonportable, portable)]
+
 (** {2 Generator combinators} *)
 
 (** [composite generate_fn] builds a generator from an imperative [generate_fn]

@@ -55,6 +55,8 @@ module Labels = struct
   let function_ = from_name "hegel_ocaml.function"
   let function_result = from_name "hegel_ocaml.function_result"
   let stateful_rule = from_name "hegel_ocaml.stateful.rule"
+  let lark = from_name "hegel_ocaml.from_lark"
+  let lark_attempt = from_name "hegel_ocaml.from_lark.attempt"
 end
 
 (** The pure generation structure of a generator, carrying no printer. A

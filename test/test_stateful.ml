@@ -752,6 +752,41 @@ let rec atomic_push cell v =
   if not (Stdlib.Atomic.compare_and_set cell old (v :: old)) then atomic_push cell v
 ;;
 
+let lark_parallel_test ~concurrency () =
+  let module S = Hegel.Stateful in
+  let gen =
+    (Hegel.from_lark [@mode portable])
+      "start: \"a\" DIGIT\n%declare DIGIT\n"
+      ~explicit:[ "DIGIT", Hegel.from_regex "[0-9]" () ]
+      ()
+  in
+  let draw =
+    S.Concurrent_rule.create
+      ~name:"draw"
+      ~step:(fun tc () (drawn : string list Atomic.t) ->
+        atomic_push drawn (Hegel.draw_silent tc gen))
+      ()
+  in
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
+    let drawn : string list Atomic.t = Atomic.make [] in
+    S.run_concurrent
+      ~concurrency
+      tc
+      (module struct
+        type ctx = unit
+        type state = string list Atomic.t
+
+        let rules = [ draw ]
+        let invariants = []
+      end)
+      ~step_count:5
+      ~init:drawn
+      ~min_concurrency:4
+      ~max_concurrency:4;
+    List.iter (Atomic.get drawn) ~f:(fun s ->
+      assert (String.length s = 2 && Char.equal s.[0] 'a' && Char.is_digit s.[1])))
+;;
+
 let pool_parallel_consumes_test ~concurrency () =
   let module S = Hegel.Stateful in
   let initial_size = 16 in
@@ -1311,6 +1346,10 @@ let tests =
       "stateful: pool retains parallel additions (sequential)"
       `Quick
       (pool_parallel_adds_test ~concurrency:Test_helpers.sequential_concurrency)
+  ; Alcotest.test_case
+      "stateful: from_lark shared by parallel workers"
+      `Quick
+      (lark_parallel_test ~concurrency:Test_helpers.parallel_concurrency)
   ; Alcotest.test_case
       "stateful: pool consumes each value once (threads)"
       `Quick

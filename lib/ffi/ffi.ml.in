@@ -519,6 +519,48 @@ let c_generate_string_result_free =
     (handle_t @-> ptr String_result.t @-> returning int)
 ;;
 
+let grammar_import_t =
+  Foreign.funptr_opt
+    (ptr void
+     @-> string_opt (* base_path *)
+     @-> string (* grammar_path *)
+     @-> ptr (ptr char) (* out_path *)
+     @-> ptr (ptr char) (* out_text *)
+     @-> ptr size_t (* out_text_len *)
+     @-> returning bool)
+;;
+
+let c_grammar_new =
+  foreign
+    "hegel_grammar_new"
+    (handle_t
+     @-> string (* text *)
+     @-> string_opt (* start *)
+     @-> uint64_t (* max_size *)
+     @-> uint32_t (* max_depth *)
+     @-> handle_t (* alphabet (nullable) *)
+     @-> ptr (ptr char) (* explicit_names *)
+     @-> size_t
+     @-> grammar_import_t
+     @-> ptr void (* import_data *)
+     @-> ptr handle_t
+     @-> returning int)
+;;
+
+let c_grammar_free = foreign "hegel_grammar_free" (handle_t @-> handle_t @-> returning int)
+
+let c_grammar_placeholder =
+  foreign
+    "hegel_grammar_placeholder"
+    (handle_t @-> handle_t @-> string @-> ptr (ptr char) @-> returning int)
+;;
+
+let c_generate_grammar =
+  foreign
+    "hegel_generate_grammar"
+    (handle_t @-> handle_t @-> handle_t @-> uint64_t @-> ptr String_result.t @-> returning int)
+;;
+
 let c_generate_date =
   foreign
     "hegel_generate_date"
@@ -836,6 +878,7 @@ type pool = handle
 type state_machine = handle
 type printer = handle
 type printer_options = handle
+type grammar = handle
 
 type backend =
   | Default
@@ -1393,6 +1436,69 @@ let generate_string ctx tc sg =
   s
 ;;
 
+(* An exception raised by [import] is held across the C call, which sees the
+   import as unresolved, and re-raised once [hegel_grammar_new] returns. *)
+let grammar_new ctx ~text ~start ~max_size ~max_depth ~explicit ~import =
+  let keep = ref [] in
+  let raised = ref None in
+  let callback =
+    Option.map
+      (fun import _ base_path grammar_path out_path out_text out_len ->
+         match import ~base_path grammar_path with
+         | None -> false
+         | Some (path, contents) ->
+           let path_buf = CArray.of_string path in
+           let text_buf = CArray.of_string contents in
+           keep := path_buf :: text_buf :: !keep;
+           out_path <-@ CArray.start path_buf;
+           out_text <-@ CArray.start text_buf;
+           out_len <-@ byte_len contents;
+           true
+         | exception e ->
+           raised := Some e;
+           false)
+      import
+  in
+  let names, names_root = to_string_array explicit in
+  let out = allocate handle_t null_handle in
+  let rc =
+    c_grammar_new
+      ctx
+      text
+      start
+      (Unsigned.UInt64.of_int max_size)
+      (Unsigned.UInt32.of_int max_depth)
+      null_handle
+      names
+      (Unsigned.Size_t.of_int (List.length explicit))
+      callback
+      null
+      out
+  in
+  Root.release names_root;
+  ignore (Sys.opaque_identity (callback, !keep) : _ * _);
+  Option.iter raise !raised;
+  check_rc ctx rc;
+  !@out
+;;
+
+let grammar_free ctx g = ignore (c_grammar_free ctx g : int)
+
+let grammar_placeholder ctx g name =
+  let out = allocate (ptr char) (from_voidp char null) in
+  check_rc ctx (c_grammar_placeholder ctx g name out);
+  coerce (ptr char) string !@out
+;;
+
+let generate_grammar ctx tc g ~max_size =
+  let result = make String_result.t in
+  check_rc ctx (c_generate_grammar ctx tc g (Unsigned.UInt64.of_int max_size) (addr result));
+  let n = Unsigned.Size_t.to_int (getf result String_result.len) in
+  let s = string_from_ptr (getf result String_result.data) ~length:n in
+  ignore (c_generate_string_result_free ctx (addr result) : int);
+  s
+;;
+
 type date =
   { year : int
   ; month : int
@@ -1862,6 +1968,10 @@ let string_generator_url = Obj.magic_portable string_generator_url
 let string_generator_domain = Obj.magic_portable string_generator_domain
 let string_generator_free = Obj.magic_portable string_generator_free
 let generate_string = Obj.magic_portable generate_string
+let grammar_new = Obj.magic_portable grammar_new
+let grammar_free = Obj.magic_portable grammar_free
+let grammar_placeholder = Obj.magic_portable grammar_placeholder
+let generate_grammar = Obj.magic_portable generate_grammar
 let generate_date = Obj.magic_portable generate_date
 let generate_time = Obj.magic_portable generate_time
 let generate_datetime = Obj.magic_portable generate_datetime

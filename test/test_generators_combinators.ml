@@ -193,6 +193,135 @@ let test_tuples4_composite_e2e () =
     assert (d >= 0.0 && d <= 1.0))
 ;;
 
+let arithmetic =
+  {|
+?start: sum
+?sum: product | sum "+" product
+?product: atom | product "*" atom
+?atom: NUMBER | "(" sum ")"
+%import common.NUMBER
+%import common.WS
+%ignore WS
+|}
+;;
+
+let test_from_lark_e2e () =
+  let gen = from_lark arithmetic ~max_size:40 ~max_depth:20 () in
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ()) (fun tc ->
+    let a = Hegel.draw tc gen in
+    let b = Hegel.draw tc gen in
+    List.iter
+      (fun s ->
+         assert (String.length s <= 40);
+         assert (String.for_all (fun c -> not (Char.equal c '<')) s))
+      [ a; b ])
+;;
+
+let test_from_lark_start_e2e () =
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:10 ()) (fun tc ->
+    let s = Hegel.draw tc (from_lark "start: \"a\" | b\nb: \"b\"\n" ~start:"b" ()) in
+    Alcotest.(check string) "rule b" "b" s)
+;;
+
+let test_from_lark_explicit_e2e () =
+  let gen =
+    from_lark
+      "start: \"<\" NAME \"\195\169>\"\n%declare NAME\n"
+      ~explicit:[ "NAME", from_regex "[a-z]{1,3}" () ]
+      ()
+  in
+  Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:20 ()) (fun tc ->
+    let s = Hegel.draw tc gen in
+    let n = String.length s in
+    assert (n >= 5 && n <= 7);
+    Alcotest.(check string) "prefix" "<" (String.sub s 0 1);
+    Alcotest.(check string) "suffix" "\195\169>" (String.sub s (n - 3) 3);
+    assert (String.for_all (fun c -> c >= 'a' && c <= 'z') (String.sub s 1 (n - 4))))
+;;
+
+let test_from_lark_explicit_retry_e2e () =
+  let gen =
+    from_lark
+      "start: NAME (\",\" NAME)*\n%declare NAME\n"
+      ~max_size:12
+      ~explicit:[ "NAME", from_regex "[a-z]{0,10}" () ]
+      ()
+  in
+  let settings =
+    { (Hegel.Settings.create ~test_cases:100 ()) with
+      suppress_health_check = [ Hegel.Settings.Filter_too_much ]
+    }
+  in
+  Hegel.run_hegel_test ~settings (fun tc ->
+    assert (String.length (Hegel.draw tc gen) <= 12))
+;;
+
+let test_from_lark_explicit_never_fits () =
+  let gen =
+    from_lark
+      "start: \"x\" NAME\n%declare NAME\n"
+      ~max_size:5
+      ~explicit:[ "NAME", just (String.make 30 'a') ]
+      ()
+  in
+  let settings =
+    { (Hegel.Settings.create ~test_cases:10 ()) with
+      suppress_health_check = [ Hegel.Settings.Filter_too_much ]
+    }
+  in
+  Test_helpers.expect_unsatisfiable
+    (fun () -> Hegel.run_hegel_test ~settings (fun tc -> ignore (Hegel.draw tc gen)))
+    "filtered out by assume()"
+;;
+
+let test_from_lark_import_paths_e2e () =
+  Test_helpers.with_tempdir ~prefix:"hegel_lark" ~f:(fun dir ->
+    let write name text =
+      Out_channel.with_open_bin (Filename.concat dir name) (fun oc ->
+        Out_channel.output_string oc text)
+    in
+    write "words.lark" "%import .marks.BANG\nWORD: \"hello\" BANG\n";
+    write "marks.lark" "BANG: \"!\"\n";
+    let gen =
+      from_lark
+        "%import words.WORD\nstart: WORD\n"
+        ~import_paths:[ Filename.concat dir "missing"; dir ]
+        ()
+    in
+    Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:5 ()) (fun tc ->
+      Alcotest.(check string) "imported" "hello!" (Hegel.draw tc gen)))
+;;
+
+let test_from_lark_finalised () =
+  let run () =
+    let gen = from_lark "start: \"a\"\n" () in
+    Hegel.run_hegel_test ~settings:(Hegel.Settings.create ~test_cases:2 ()) (fun tc ->
+      Alcotest.(check string) "a" "a" (Hegel.draw tc gen))
+  in
+  run ();
+  Gc.full_major ()
+;;
+
+let test_from_lark_usage_errors () =
+  Test_helpers.expect_usage_error (from_lark "start: foo\n" ()) "foo";
+  Test_helpers.expect_usage_error (from_lark "start: NAME\n%declare NAME\n" ()) "NAME";
+  let raises f substring =
+    match f () with
+    | exception Hegel.Usage_error msg ->
+      assert (Test_helpers.contains_substring msg substring)
+    | _ -> Alcotest.fail "expected Usage_error"
+  in
+  raises (fun () -> from_lark "start: \"a\"" ~max_size:0 ()) "max_size";
+  raises (fun () -> from_lark "start: \"a\"" ~max_depth:0 ()) "max_depth";
+  raises
+    (fun () ->
+       from_lark
+         "start: A\n%declare A\n"
+         ~explicit:[ "A", from_regex "a" (); "A", from_regex "b" () ]
+         ())
+    "more than one generator"
+;;
+
 let tests =
   [ Alcotest.test_case "sampled_from empty" `Quick test_sampled_from_empty
   ; Alcotest.test_case "one_of empty" `Quick test_one_of_empty
@@ -209,5 +338,19 @@ let tests =
   ; Alcotest.test_case "tuples3 composite e2e" `Quick test_tuples3_composite_e2e
   ; Alcotest.test_case "tuples4 e2e" `Quick test_tuples4_e2e
   ; Alcotest.test_case "tuples4 composite e2e" `Quick test_tuples4_composite_e2e
+  ; Alcotest.test_case "from_lark e2e" `Quick test_from_lark_e2e
+  ; Alcotest.test_case "from_lark start e2e" `Quick test_from_lark_start_e2e
+  ; Alcotest.test_case "from_lark explicit e2e" `Quick test_from_lark_explicit_e2e
+  ; Alcotest.test_case
+      "from_lark explicit retry e2e"
+      `Quick
+      test_from_lark_explicit_retry_e2e
+  ; Alcotest.test_case
+      "from_lark explicit never fits"
+      `Quick
+      test_from_lark_explicit_never_fits
+  ; Alcotest.test_case "from_lark import paths e2e" `Quick test_from_lark_import_paths_e2e
+  ; Alcotest.test_case "from_lark finalised" `Quick test_from_lark_finalised
+  ; Alcotest.test_case "from_lark usage errors" `Quick test_from_lark_usage_errors
   ]
 ;;
